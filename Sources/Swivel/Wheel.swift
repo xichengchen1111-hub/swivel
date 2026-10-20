@@ -38,6 +38,7 @@ final class WheelController {
             return
         }
         mode = newMode
+        panel.wheel.style = Prefs.style
         pages = stride(from: 0, to: items.count, by: Self.perPage).map {
             Array(items[$0..<min($0 + Self.perPage, items.count)])
         }
@@ -60,6 +61,7 @@ final class WheelController {
     private func refresh() {
         guard let mode else { return }
         panel.wheel.configure(items: pages[page], mode: mode, page: page, pageCount: pages.count)
+        panel.relayout()
     }
 
     private func close() {
@@ -108,13 +110,33 @@ final class WheelPanel: NSPanel {
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
 
-        // A clear glass disc under the segments: see-through, but lightly frosted so labels stay readable.
+        // Clear glass under styles that want a frosted backdrop (wheel, list).
         let container = NSView(frame: wheel.frame)
-        let r = wheel.outerRadius
-        let disc = NSRect(x: wheel.frame.midX - r, y: wheel.frame.midY - r, width: r * 2, height: r * 2)
-        container.addSubview(Self.makeGlass(frame: disc, radius: r))
+        container.addSubview(glass)
         container.addSubview(wheel)
         contentView = container
+    }
+
+    private let glass = WheelPanel.makeGlass(frame: .zero, radius: 0)
+
+    /// Resizes the panel and its glass for the menu's current style and item count.
+    func relayout() {
+        let size = WheelView.size(for: wheel.style, count: wheel.items.count)
+        setContentSize(size)
+        contentView?.frame = NSRect(origin: .zero, size: size)
+        wheel.frame = NSRect(origin: .zero, size: size)
+        if let (rect, radius) = wheel.backdrop {
+            glass.isHidden = false
+            glass.frame = rect
+            if #available(macOS 26.0, *), let glass = glass as? NSGlassEffectView {
+                glass.cornerRadius = radius
+            } else {
+                glass.layer?.cornerRadius = radius
+            }
+        } else {
+            glass.isHidden = true
+        }
+        wheel.needsDisplay = true
     }
 
     private static func makeGlass(frame: NSRect, radius: CGFloat) -> NSView {
@@ -140,7 +162,13 @@ final class WheelPanel: NSPanel {
 
     func show(at point: NSPoint) {
         let size = frame.size
-        var origin = NSPoint(x: point.x - size.width / 2, y: point.y - size.height / 2)
+        // The wheel centres on the cursor (its hub is a cancel zone); other styles open beside it so the
+        // pointer doesn't land on an item straight away.
+        var origin: NSPoint = switch wheel.style {
+        case .wheel: NSPoint(x: point.x - size.width / 2, y: point.y - size.height / 2)
+        case .list: NSPoint(x: point.x + 28, y: point.y - size.height / 2)
+        default: NSPoint(x: point.x - size.width / 2, y: point.y + 28)
+        }
         if let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) {
             let bounds = screen.visibleFrame
             origin.x = min(max(origin.x, bounds.minX), bounds.maxX - size.width)

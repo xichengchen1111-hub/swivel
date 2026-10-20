@@ -1,0 +1,141 @@
+import AppKit
+
+/// A modifier key that can open a menu while dragging.
+enum TriggerKey: String, CaseIterable {
+    case shift, command, control, option, fn
+
+    var flag: NSEvent.ModifierFlags {
+        switch self {
+        case .shift: .shift
+        case .command: .command
+        case .control: .control
+        case .option: .option
+        case .fn: .function
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .shift: "⇧"
+        case .command: "⌘"
+        case .control: "⌃"
+        case .option: "⌥"
+        case .fn: "fn"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .shift: "⇧ Shift"
+        case .command: "⌘ Command"
+        case .control: "⌃ Control"
+        case .option: "⌥ Option"
+        case .fn: "fn / 🌐"
+        }
+    }
+}
+
+/// How the menu that pops up under the cursor is laid out.
+enum MenuStyle: String, CaseIterable {
+    case wheel, list, shelf, notes, clothesline
+
+    var title: String {
+        switch self {
+        case .wheel: "Wheel"
+        case .list: "List"
+        case .shelf: "Bookshelf"
+        case .notes: "Sticky Notes"
+        case .clothesline: "Clothesline"
+        }
+    }
+
+    var blurb: String {
+        switch self {
+        case .wheel: "A ring of keycaps around the cursor."
+        case .list: "A tidy column, like a context menu."
+        case .shelf: "Book spines standing on a wooden shelf."
+        case .notes: "Colourful sticky notes pinned in a grid."
+        case .clothesline: "Tags pegged on a rope, swaying gently."
+        }
+    }
+}
+
+/// User settings, stored in UserDefaults. Posts `Prefs.changed` whenever anything is saved.
+@MainActor
+enum Prefs {
+    static let changed = Notification.Name("SwivelPrefsChanged")
+    private static let defaults = UserDefaults.standard
+
+    private static func post() { NotificationCenter.default.post(name: changed, object: nil) }
+
+    static var isEnabled: Bool {
+        get { defaults.object(forKey: "enabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "enabled"); post() }
+    }
+
+    static var style: MenuStyle {
+        get { MenuStyle(rawValue: defaults.string(forKey: "style") ?? "") ?? .wheel }
+        set { defaults.set(newValue.rawValue, forKey: "style"); post() }
+    }
+
+    private static let defaultKeys: [WheelMode: TriggerKey] = [.convert: .shift, .tools: .command, .actions: .control]
+
+    static func key(for mode: WheelMode) -> TriggerKey {
+        TriggerKey(rawValue: defaults.string(forKey: "key.\(mode.id)") ?? "") ?? defaultKeys[mode]!
+    }
+
+    /// Assigns a key; if another menu already used it, that menu takes this one's old key.
+    static func setKey(_ key: TriggerKey, for mode: WheelMode) {
+        let old = self.key(for: mode)
+        if let clash = WheelMode.allCases.first(where: { $0 != mode && self.key(for: $0) == key }) {
+            defaults.set(old.rawValue, forKey: "key.\(clash.id)")
+        }
+        defaults.set(key.rawValue, forKey: "key.\(mode.id)")
+        post()
+    }
+
+    static func resetKeys() {
+        for mode in WheelMode.allCases { defaults.removeObject(forKey: "key.\(mode.id)") }
+        post()
+    }
+
+    // MARK: Menu contents
+
+    private static func slot(_ mode: WheelMode, _ kind: FileKind) -> String { "\(mode.id).\(kind.rawValue)" }
+
+    static func hidden(_ mode: WheelMode, _ kind: FileKind) -> Set<String> {
+        Set(defaults.stringArray(forKey: "hidden.\(slot(mode, kind))") ?? [])
+    }
+
+    static func setHidden(_ titles: Set<String>, _ mode: WheelMode, _ kind: FileKind) {
+        defaults.set(Array(titles), forKey: "hidden.\(slot(mode, kind))")
+        post()
+    }
+
+    static func order(_ mode: WheelMode, _ kind: FileKind) -> [String] {
+        defaults.stringArray(forKey: "order.\(slot(mode, kind))") ?? []
+    }
+
+    static func setOrder(_ titles: [String], _ mode: WheelMode, _ kind: FileKind) {
+        defaults.set(titles, forKey: "order.\(slot(mode, kind))")
+        post()
+    }
+
+    static func resetContents(_ mode: WheelMode, _ kind: FileKind) {
+        defaults.removeObject(forKey: "hidden.\(slot(mode, kind))")
+        defaults.removeObject(forKey: "order.\(slot(mode, kind))")
+        post()
+    }
+
+    /// Applies the user's order and hidden set to a menu's default items.
+    static func arrange(_ items: [WheelItem], _ mode: WheelMode, _ kind: FileKind) -> [WheelItem] {
+        let hidden = self.hidden(mode, kind)
+        let order = self.order(mode, kind)
+        let visible = items.filter { !hidden.contains($0.title) }
+        return visible.enumerated().sorted { a, b in
+            let ia = order.firstIndex(of: a.element.title) ?? (order.count + a.offset)
+            let ib = order.firstIndex(of: b.element.title) ?? (order.count + b.offset)
+            return ia < ib
+        }.map(\.element)
+    }
+}

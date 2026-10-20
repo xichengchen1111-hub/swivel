@@ -54,9 +54,10 @@ MainActor.assumeIsolated {
         app.run()
     }
 
-    // `Swivel --demo <mode> <file>` shows the wheel at the cursor without a drag (for screenshots).
+    // `Swivel --demo <mode> <file> [hover index] [style]` shows the wheel at the cursor without a drag (for screenshots).
     if args.count >= 4, args[1] == "--demo" {
         let mode: WheelMode = args[2] == "tools" ? .tools : args[2] == "actions" ? .actions : .convert
+        if args.count >= 6, let style = MenuStyle(rawValue: args[5]) { Prefs.style = style }
         let controller = WheelController()
         controller.keyTapped(mode, urls: [URL(fileURLWithPath: args[3])])
         if args.count >= 5, let index = Int(args[4]) { controller.demoHover(index) }

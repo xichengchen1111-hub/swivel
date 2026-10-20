@@ -12,6 +12,16 @@ Tap the same key again to page through a wheel that has more than eight options.
 
 Everything runs locally, using built-in macOS frameworks (ImageIO, AVFoundation, PDFKit, AppKit text system) and `afconvert` / `ditto` / `tar`. No third-party dependencies.
 
+## The app window
+
+Open Swivel from Launchpad or Finder (or choose **Open Swivel…** from the ◎ menu) for:
+
+- **General**: turn Swivel on or off, open at login.
+- **Shortcuts**: pick which key (⇧ ⌘ ⌃ ⌥ fn) opens each menu.
+- **Style**: menu templates — Wheel, List, Bookshelf, Sticky Notes, Clothesline.
+- **Customize**: choose which options each menu shows per file type, and their order.
+- **晾图**: the screenshot clothesline from `../clipline/index.html`, bundled into the app by `build.sh`. Images can be hung on it from the ⌃ Actions menu.
+
 ## Formats
 
 - **Images**: JPG, PNG, HEIC, TIFF, AVIF, GIF, BMP, PDF (WebP is read but only written where macOS supports it)

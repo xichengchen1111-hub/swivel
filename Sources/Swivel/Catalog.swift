@@ -1,8 +1,48 @@
 import AppKit
 import UniformTypeIdentifiers
 
-enum FileKind {
+enum FileKind: String, CaseIterable {
     case image, video, audio, pdf, document, archive, folder, other
+
+    var title: String {
+        switch self {
+        case .image: "Images"
+        case .video: "Video"
+        case .audio: "Audio"
+        case .pdf: "PDF"
+        case .document: "Documents"
+        case .archive: "Archives"
+        case .folder: "Folders"
+        case .other: "Other files"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .image: "photo"
+        case .video: "film"
+        case .audio: "music.note"
+        case .pdf: "doc.richtext"
+        case .document: "doc.text"
+        case .archive: "archivebox"
+        case .folder: "folder"
+        case .other: "doc"
+        }
+    }
+
+    /// A made-up file of this kind, for listing a menu's default contents.
+    var sampleURLs: [URL] {
+        let names: [String] = switch self {
+        case .image: ["a.jpg", "b.jpg"]
+        case .video: ["a.mov", "b.mov"]
+        case .audio: ["a.mp3", "b.mp3"]
+        case .pdf: ["a.pdf", "b.pdf"]
+        case .document: ["a.docx"]
+        case .archive: ["a.zip"]
+        case .folder, .other: ["a.unknownext"]
+        }
+        return names.map { URL(fileURLWithPath: "/nonexistent/\($0)") }
+    }
 
     static func of(_ url: URL) -> FileKind {
         let ext = url.pathExtension.lowercased()
@@ -26,7 +66,18 @@ enum FileKind {
 
 /// Decides which wheel items a drag gets, per file kind and key.
 enum Catalog {
+    /// The menu for a drag, in the user's order with hidden items removed.
+    @MainActor
     static func items(for urls: [URL], mode: WheelMode) -> [WheelItem] {
+        Prefs.arrange(defaultItems(for: urls, mode: mode), mode, FileKind.of(urls))
+    }
+
+    /// Everything a menu can offer for a kind of file, used by the Customize settings.
+    static func allItems(mode: WheelMode, kind: FileKind) -> [String] {
+        defaultItems(for: kind.sampleURLs, mode: mode).map(\.title)
+    }
+
+    static func defaultItems(for urls: [URL], mode: WheelMode) -> [WheelItem] {
         guard !urls.isEmpty else { return [] }
         let kind = FileKind.of(urls)
         let sourceExt = Set(urls.map { $0.pathExtension.lowercased() })
@@ -34,7 +85,15 @@ enum Catalog {
 
         switch mode {
         case .actions:
-            return actions(multi: multi)
+            var list = actions(multi: multi)
+            if kind == .image {
+                list.insert(WheelItem(title: "晾图") { urls in
+                    AppWindow.shared.show(.clipline)
+                    AppWindow.shared.clipline.hang(urls)
+                    return ActionResult(message: urls.count == 1 ? "Hung on 晾图" : "Hung \(urls.count) images on 晾图")
+                }, at: 1)
+            }
+            return list
 
         case .convert:
             switch kind {

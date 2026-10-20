@@ -3,8 +3,16 @@ import os
 
 let log = Logger(subsystem: "local.swivel.app", category: "drag")
 
-enum WheelMode {
+enum WheelMode: CaseIterable {
     case convert, tools, actions
+
+    var id: String {
+        switch self {
+        case .convert: "convert"
+        case .tools: "tools"
+        case .actions: "actions"
+        }
+    }
 
     var title: String {
         switch self {
@@ -14,13 +22,7 @@ enum WheelMode {
         }
     }
 
-    var key: String {
-        switch self {
-        case .convert: "⇧"
-        case .tools: "⌘"
-        case .actions: "⌃"
-        }
-    }
+    @MainActor var key: String { Prefs.key(for: self).symbol }
 }
 
 /// Notices when a file drag is in progress anywhere on screen and reports modifier-key taps during it.
@@ -52,7 +54,7 @@ final class DragWatcher {
 
     private func tick() {
         let down = NSEvent.pressedMouseButtons & 1 != 0
-        let flags = NSEvent.modifierFlags.intersection([.shift, .command, .control])
+        let flags = NSEvent.modifierFlags.intersection([.shift, .command, .control, .option, .function])
         defer {
             wasDown = down
             lastFlags = flags
@@ -92,12 +94,8 @@ final class DragWatcher {
 
         let pressed = flags.subtracting(lastFlags)
         if !pressed.isEmpty { log.info("key tap during drag: \(pressed.rawValue)") }
-        if pressed.contains(.shift) {
-            onKeyTap?(.convert)
-        } else if pressed.contains(.command) {
-            onKeyTap?(.tools)
-        } else if pressed.contains(.control) {
-            onKeyTap?(.actions)
+        if let mode = WheelMode.allCases.first(where: { pressed.contains(Prefs.key(for: $0).flag) }) {
+            onKeyTap?(mode)
         }
     }
 }
