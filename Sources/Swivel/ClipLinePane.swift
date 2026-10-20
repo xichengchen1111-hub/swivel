@@ -56,11 +56,17 @@ final class ClipLinePane: NSViewController, WKUIDelegate, WKScriptMessageHandler
             ready = true
             flush()
         case ("liangtuNative", "copy"):
-            guard let dataURL = body["dataURL"] as? String, let comma = dataURL.firstIndex(of: ","),
-                  let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])),
-                  let image = NSImage(data: data) else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.writeObjects([image])
+            guard let dataURL = body["dataURL"] as? String else { return }
+            // Retina screenshots arrive as multi-megabyte base64; decode off the main thread.
+            Task.detached(priority: .userInitiated) {
+                guard let comma = dataURL.firstIndex(of: ","),
+                      let png = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])) else { return }
+                await MainActor.run {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setData(png, forType: .png)
+                }
+            }
         default:
             break
         }
