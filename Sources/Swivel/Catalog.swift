@@ -157,7 +157,8 @@ enum Catalog {
                     list.insert(WheelItem(title: "Extract Text") { urls in
                         guard Feature.textCapture.isOn, let url = urls.first else { throw ToolError(L("This feature is turned off.")) }
                         TextCaptureWindow.present(url)
-                        return ActionResult(message: L("Opened Text Capture"))
+                        // The window opening is the feedback; no toast.
+                        return ActionResult(message: "")
                     }, at: 0)
                 }
                 if Feature.imagePresets.isOn {

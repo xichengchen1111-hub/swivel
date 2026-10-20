@@ -303,7 +303,7 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
             do {
                 let result = try await command.run()
                 busy.cancel()
-                if let result {
+                if let result, !(result.message.isEmpty && result.files.isEmpty) {
                     if !result.files.isEmpty { Feedback.done() }
                     Toast.shared.show(result.message, symbol: "checkmark.circle.fill", files: result.files)
                 } else if self?.busyToastRun == run {

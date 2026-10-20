@@ -181,6 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleFeature(_ sender: NSMenuItem) {
         let feature = Feature.allCases[sender.tag]
         feature.isOn.toggle()
+        Feedback.toggle(feature.isOn)
         launchToast.show(L(feature.isOn ? "%@ is on" : "%@ is off", feature.title), symbol: feature.isOn ? feature.symbol : "circle.dashed")
     }
 

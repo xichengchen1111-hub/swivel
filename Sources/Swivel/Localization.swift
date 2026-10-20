@@ -82,7 +82,6 @@ enum Strings {
         "Already on the shelf": ["已在暂存架上", "已在暫存架上", "すでにシェルフにあります"],
         "%d removed · ⌘Z to undo": ["已移除 %d 项 · 按 ⌘Z 撤销", "已移除 %d 項 · 按 ⌘Z 還原", "%d 件を取り除きました · ⌘Z で取り消す"],
         "Drop to use these files": ["松开即可使用这些文件", "放開即可使用這些檔案", "ドロップしてこれらのファイルを使う"],
-        "Copied": ["已复制", "已複製", "コピーしました"],
         "Copy Selection": ["复制所选文字", "複製所選文字", "選択部分をコピー"],
         "Press ⌘Return to copy while editing the text.": ["编辑文字时，按 ⌘回车 复制。", "編輯文字時，按 ⌘Return 複製。", "テキストの編集中は ⌘Return でコピーできます。"],
         "Processing %d of %d…": ["正在处理第 %d 个，共 %d 个…", "正在處理第 %d 個，共 %d 個…", "%d / %d を処理中…"],
@@ -484,6 +483,5 @@ enum Strings {
         "If another app uses the same shortcut, choose a different one. You can always reopen Swivel from Finder or Spotlight to reach Settings.": ["如果与其他应用的快捷键冲突，请换一个。始终可以从访达或 Spotlight 重新打开 Swivel 进入设置。", "如果與其他應用程式的快速鍵衝突，請換一個。隨時可從 Finder 或 Spotlight 重新開啟 Swivel 進入設定。", "他のアプリと重なる場合は別のキーを選んでください。Finder や Spotlight で Swivel を開き直せば設定に戻れます。"],
         "Shortcut is ready": ["快捷键已就绪", "快速鍵已就緒", "ショートカットを使用できます"],
         "This shortcut is unavailable. Choose another shortcut or open the panel below.": ["这个快捷键不可用。请选择其他组合，或用下方按钮打开面板。", "這個快速鍵無法使用。請選擇其他組合，或用下方按鈕開啟面板。", "このショートカットは使用できません。別のキーを選ぶか、下のボタンで開いてください。"],
-        "Opened Text Capture": ["已打开文字提取", "已開啟文字擷取", "テキスト認識を開きました"],
     ]
 }

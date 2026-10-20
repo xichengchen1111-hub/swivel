@@ -431,16 +431,16 @@ final class GeneralPane: Pane {
 
     @objc private func toggleHaptics() {
         Prefs.haptics = haptics.state == .on
-        Feedback.press()
+        // Let the user feel what they turned on.
+        if Prefs.haptics { Haptics.press() }
     }
 
     @objc private func toggleSounds() {
         Prefs.soundEffects = sounds.state == .on
         // Let the user hear what they turned on.
         if Prefs.soundEffects {
-            Feedback.prepare()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { Sounds.play(.press) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { Sounds.play(.done) }
+            Feedback.toggle(true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { Sounds.play(.done) }
         }
     }
 
@@ -1039,8 +1039,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
 
     private func save() {
         isSaving = true
-        Prefs.setOrder(rows.map(\.title), mode, kind)
-        Prefs.setHidden(Set(rows.filter { !$0.shown }.map(\.title)), mode, kind)
+        Prefs.setArrangement(order: rows.map(\.title), hidden: Set(rows.filter { !$0.shown }.map(\.title)), mode, kind)
         isSaving = false
         updatePreview(crossfade: true)
     }

@@ -184,6 +184,13 @@ enum Prefs {
         post()
     }
 
+    /// Saves order and hidden items together, posting one change.
+    static func setArrangement(order: [String], hidden: Set<String>, _ mode: WheelMode, _ kind: FileKind) {
+        defaults.set(order, forKey: "order.\(slot(mode, kind))")
+        defaults.set(Array(hidden), forKey: "hidden.\(slot(mode, kind))")
+        post()
+    }
+
     static func resetContents(_ mode: WheelMode, _ kind: FileKind) {
         defaults.removeObject(forKey: "hidden.\(slot(mode, kind))")
         defaults.removeObject(forKey: "order.\(slot(mode, kind))")

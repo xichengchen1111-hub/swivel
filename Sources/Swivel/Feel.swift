@@ -145,6 +145,10 @@ enum Feedback {
     /// Nothing to do, or something failed.
     static func refuse() { Haptics.tick(.generic) }
 
+    /// A feature switch was flipped: the click of a light switch, a little brighter for on than for off. No haptic:
+    /// the click that flipped it already gave one.
+    static func toggle(_ on: Bool) { Sounds.play(on ? .switchOn : .switchOff) }
+
     /// A drag started or a menu is opening: get the actuator and sounds ready so the first tap is on time.
     static func prepare() {
         Haptics.prepare()
@@ -273,12 +277,14 @@ enum TrackpadActuator {
 /// effects” is off.
 @MainActor
 enum Sounds {
-    enum Effect: String, CaseIterable { case hover, page, press, done }
+    enum Effect: String, CaseIterable { case hover, page, press, done, switchOn, switchOff }
 
     private static var ids: [Effect: [SystemSoundID]] = [:]
     private static var lastHover: CFTimeInterval = 0
     private static var variant = 0
     private static var preparing = false
+    /// A sound asked for before the sounds were ready (the first one after launch or after turning sounds on).
+    private static var pending: (Effect, CFTimeInterval)?
 
     static func play(_ effect: Effect) {
         guard Prefs.soundEffects else { return }
@@ -288,6 +294,7 @@ enum Sounds {
             lastHover = now
         }
         guard let choices = ids[effect], !choices.isEmpty else {
+            pending = (effect, CACurrentMediaTime())
             prepare()
             return
         }
@@ -309,6 +316,9 @@ enum Sounds {
                 MainActor.assumeIsolated {
                     ids = made
                     preparing = false
+                    // Play what was asked for meanwhile, unless it's now too late to belong to its moment.
+                    if let (effect, at) = pending, CACurrentMediaTime() - at < 0.4 { play(effect) }
+                    pending = nil
                 }
             }
         }
@@ -347,6 +357,7 @@ enum SoundSynth {
         case .page: (length, peak) = (0.07, 0.09)       // −21 dBFS
         case .press: (length, peak) = (0.11, 0.22)      // −13 dBFS
         case .done: (length, peak) = (0.26, 0.14)       // −17 dBFS
+        case .switchOn, .switchOff: (length, peak) = (0.06, 0.16)   // −16 dBFS
         }
         let count = Int(rate * length)
         var noise = SystemRandomNumberGenerator()
@@ -375,6 +386,15 @@ enum SoundSynth {
                 let attack = min(t / 0.004, 1)
                 out[i] = attack * (0.55 * (ping(t, 1046.5, 0.07) + 0.25 * ping(t, 2093, 0.03))
                     + 0.6 * (ping(t - 0.075, 1568, 0.09) + 0.2 * ping(t - 0.075, 3136, 0.035)))
+            case .switchOn, .switchOff:
+                // A rocker light switch: the lever's soft first contact, then the snap 9 ms later, a sharp crack of
+                // noise over two plastic resonances and a short low thump. "On" is a little higher and crisper.
+                let up: Double = effect == .switchOn ? 1.12 : 0.88
+                let snap = t - 0.009
+                let crack = snap < 0 ? 0 : hiss() * exp(-snap / 0.0006)
+                out[i] = 0.18 * ping(t, 2900 * up, 0.0015)
+                    + 0.55 * crack + 0.5 * ping(snap, 1750 * up, 0.004) + 0.3 * ping(snap, 3400 * up, 0.0025)
+                    + 0.45 * ping(snap, 150 * up, 0.012)
             }
             // Fade the last few milliseconds so nothing clicks at the cut.
             out[i] *= min(Double(count - i) / (rate * 0.004), 1)

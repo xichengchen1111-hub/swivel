@@ -122,6 +122,12 @@ struct FeelTests {
         }
     }
 
+    @Test func testStringsTableLoads() {
+        // A duplicate key in the table's dictionary literal traps on first use, i.e. at launch.
+        #expect(Strings.table.count > 300)
+        #expect(Strings.table.values.allSatisfy { $0.count == 3 })
+    }
+
     @Test func testInterfaceSoundsAreShortQuietAndStartImmediately() {
         for effect in Sounds.Effect.allCases {
             let samples = SoundSynth.samples(effect, pitch: 1, gain: 1)

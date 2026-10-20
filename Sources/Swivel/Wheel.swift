@@ -125,7 +125,11 @@ final class WheelController {
                 let result = try await item.run(urls)
                 busy.cancel()
                 if !result.files.isEmpty { Feedback.done() }
-                toast.show(result.message, symbol: "checkmark.circle.fill", files: result.files)
+                if result.message.isEmpty, result.files.isEmpty {
+                    toast.hide()
+                } else {
+                    toast.show(result.message, symbol: "checkmark.circle.fill", files: result.files)
+                }
             } catch is Cancelled {
                 busy.cancel()
                 // Closing an editor window is its own confirmation; only say "Cancelled" for other actions.

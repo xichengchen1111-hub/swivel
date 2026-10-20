@@ -298,7 +298,10 @@ final class FeatureHeader: NSView {
         state.stringValue = feature.isOn ? L("On") : L("Off")
     }
 
-    @objc private func flipped() { feature.isOn = toggle.state == .on }
+    @objc private func flipped() {
+        feature.isOn = toggle.state == .on
+        Feedback.toggle(feature.isOn)
+    }
 }
 
 // MARK: - Pages
