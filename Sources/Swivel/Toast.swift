@@ -108,6 +108,9 @@ final class Toast {
 
         hideWork?.cancel()
         autoHideDelay = autoHide ? (files.isEmpty ? 2.2 : 4) : nil
+        // A toast that went away under the pointer (clicked, faded) never got a mouse-exited; start from where the
+        // pointer really is, so an old hover can't hold this toast up forever.
+        background.syncHover(NSMouseInRect(NSEvent.mouseLocation, frame, false))
         scheduleHide()
     }
 
@@ -197,6 +200,8 @@ final class ToastView: NSVisualEffectView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                        owner: self, userInfo: nil))
     }
+
+    func syncHover(_ inside: Bool) { isHovered = inside }
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
