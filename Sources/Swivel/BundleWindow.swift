@@ -95,6 +95,7 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
     var onSelect: ((BundleSplit.Page) -> Void)?
     private let table = NSTableView()
     private var selecting = false
+    private var dots: [BundleSplit.Page: StatusDot] = [:]
 
     static func title(_ page: BundleSplit.Page) -> String {
         switch page {
@@ -148,14 +149,15 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         scroll.hasVerticalScroller = false
         view = scroll
         NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                let selected = self.table.selectedRow
-                self.selecting = true
-                self.table.reloadData()
-                self.table.selectRowIndexes([selected], byExtendingSelection: false)
-                self.selecting = false
-            }
+            MainActor.assumeIsolated { self?.refreshDots() }
+        }
+    }
+
+    /// Only the dots follow the switches. Reloading the table here rebuilt every row on any settings change, which
+    /// could flash the selection.
+    private func refreshDots() {
+        for (page, dot) in dots {
+            if let feature = Self.feature(page) { dot.setOn(feature.isOn, animated: true) }
         }
     }
 
@@ -176,14 +178,9 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         name.font = .systemFont(ofSize: 13)
         var views: [NSView] = [icon, name]
         if let feature = Self.feature(page) {
-            // A small status dot, like PowerToys' enabled indicator.
-            let dot = NSView()
-            dot.wantsLayer = true
-            dot.layer?.cornerRadius = 3.5
-            dot.layer?.backgroundColor = (feature.isOn ? NSColor.systemGreen : NSColor.tertiaryLabelColor).cgColor
-            dot.widthAnchor.constraint(equalToConstant: 7).isActive = true
-            dot.heightAnchor.constraint(equalToConstant: 7).isActive = true
-            dot.toolTip = feature.isOn ? L("On") : L("Off")
+            let dot = StatusDot()
+            dot.setOn(feature.isOn, animated: false)
+            dots[page] = dot
             views.append(dot)
         }
         let row = NSStackView(views: views)
@@ -195,6 +192,51 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard !selecting, table.selectedRow >= 0 else { return }
         onSelect?(BundleSplit.Page.allCases[table.selectedRow])
+    }
+}
+
+/// A feature's small status dot, like PowerToys' enabled indicator. It fades along with the switch instead of
+/// popping, and resolves its colour per appearance (a stored CGColor would stay light or dark).
+final class StatusDot: NSView {
+    private(set) var isOn = false
+    private var configured = false
+    private var fadeNext = false
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        translatesAutoresizingMaskIntoConstraints = false
+        widthAnchor.constraint(equalToConstant: 7).isActive = true
+        heightAnchor.constraint(equalToConstant: 7).isActive = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    func setOn(_ on: Bool, animated: Bool) {
+        guard on != isOn || !configured else { return }
+        isOn = on
+        configured = true
+        fadeNext = animated && window != nil
+        toolTip = on ? L("On") : L("Off")
+        needsDisplay = true
+    }
+
+    override func updateLayer() {
+        guard let layer else { return }
+        layer.cornerRadius = 3.5
+        let color = (isOn ? NSColor.systemGreen : NSColor.tertiaryLabelColor).cgColor
+        if fadeNext {
+            fadeNext = false
+            let fade = CABasicAnimation(keyPath: "backgroundColor")
+            fade.fromValue = layer.presentation()?.backgroundColor ?? layer.backgroundColor
+            fade.toValue = color
+            fade.duration = 0.2
+            fade.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            layer.add(fade, forKey: "fade")
+        }
+        layer.backgroundColor = color
     }
 }
 
