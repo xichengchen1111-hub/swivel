@@ -81,6 +81,13 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 - Clothesline: dragging the corner card up to the rope, persistence of hung prints, and whether the calmer swing feels right.
 - The original feature switches and language picker were checked by screenshot, not clicked.
 
+### Version 1.2.0 feel overhaul (2026-10-21)
+
+- Every feature's interaction feel was reworked from a research pass (feel/motion skills, pie-menu and macOS haptics research, per-feature audits) and then a 10-lens code review whose findings were each checked by three verifiers; all confirmed findings were fixed. Summary of the rules is under *Feel* above.
+- Verified automatically: 82 Swift Testing checks (`./test.sh`); `--frames` renders of all five menu templates (mean draw 1.4–3.8 ms at Retina scale); `--feedback check` (actuator usable, 8 sounds registered); haptic requests seen reaching WindowServer (`AppKitActuateWithID`) from a background process; a real on-screen `--demo` recording of the wheel.
+- Installed 1.2.0 to `/Applications/Swivel.app` and the desktop copy after quitting both 1.1.1 processes normally (screenshot settings restored, then re-taken by the new build). Previous apps and preferences are in ignored `build/previous-1.1.1-before-1.2/`.
+- Still needs a person: how the haptics and sounds feel during a real Finder drag; the Force Click press during a drag; whether Finder's icon visibly flies into the chosen sector; the rope and card on real hardware (hover wake-up, card click while pinned, click-to-hang flight); editor snapping and detents with a real trackpad; Shelf / Quick Actions keyboard focus after the global shortcut.
+
 ### Version 1.1.1 interaction tuning (2026-10-20)
 
 - Touching the top two points of a screen starts lowering the rope without a hover delay (50 ms polling). Moving away rearms the gesture, so hiding it while at the edge does not immediately reopen it.
