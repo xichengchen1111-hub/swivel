@@ -7,24 +7,59 @@ private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
 /// Exposure, contrast, saturation, warmth, vignette and sharpness with a live preview.
 final class AdjustEditor: Editor {
+    private struct Adjustment {
+        let slider: DetentSlider
+        let label: NSTextField
+        let neutral: Double
+        let describe: (Double) -> String
+    }
+
     private let preview = ImagePreview()
-    private let small: CGImage
-    private var sliders: [(NSSlider, Double)] = []
+    private var small: CGImage?
+    private var adjustments: [Adjustment] = []
+    private lazy var renderer = LiveRender<CGImage?> { [weak self] image in
+        if let image { self?.preview.image = image }
+    }
 
     init(source: URL) throws {
-        small = try Images.load(source, maxPixels: 1400)
         super.init(title: "Edit Photo", source: source, canvas: preview)
-        for (name, min, max, value) in [("Exposure", -2.0, 2.0, 0.0), ("Contrast", 0.5, 1.5, 1.0),
-                                         ("Saturation", 0.0, 2.0, 1.0), ("Warmth", -1.0, 1.0, 0.0),
-                                         ("Vignette", 0.0, 2.0, 0.0), ("Sharpen", 0.0, 2.0, 0.0)] {
-            let control = slider(min, max, value)
-            sliders.append((control, value))
-            addRow(name, control)
+        let percent: (Double) -> String = { Self.signed(($0 - 1) * 100, decimals: 0) + "%" }
+        let specs: [(String, Double, Double, Double, (Double) -> String)] = [
+            ("Exposure", -2, 2, 0, { Self.signed($0, decimals: 1) + " EV" }),
+            ("Contrast", 0.5, 1.5, 1, percent),
+            ("Saturation", 0, 2, 1, percent),
+            ("Warmth", -1, 1, 0, { Self.signed($0 * 100, decimals: 0) }),
+            ("Vignette", 0, 2, 0, { "\(Int(($0 / 2 * 100).rounded()))%" }),
+            ("Sharpen", 0, 2, 0, { "\(Int(($0 / 2 * 100).rounded()))%" }),
+        ]
+        for (name, min, max, neutral, describe) in specs {
+            let control = slider(min, max, neutral)
+            // The value beside each slider greys out at neutral: with the detent, that's how you find it again.
+            let label = NSTextField(labelWithString: "")
+            label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            label.alignment = .right
+            label.widthAnchor.constraint(equalToConstant: 52).isActive = true
+            adjustments.append(Adjustment(slider: control, label: label, neutral: neutral, describe: describe))
+            addRow(name, control, label)
         }
     }
 
-    private func render(_ image: CGImage) -> CGImage? {
-        let v = sliders.map { $0.0.doubleValue }
+    /// "+0.7", "−0.3", or "0" at neutral, with a real minus sign.
+    private static func signed(_ value: Double, decimals: Int) -> String {
+        let text = String(format: "%.\(decimals)f", abs(value))
+        if Double(text) == 0 { return "0" }
+        return (value > 0 ? "+" : "−") + text
+    }
+
+    override func load() async throws {
+        let source = self.source
+        let image = try await Images.detached { try Images.load(source, maxPixels: 1400) }
+        small = image
+        preview.image = image
+        preview.original = image
+    }
+
+    private nonisolated static func render(_ image: CGImage, _ v: [Double]) -> CGImage? {
         var ci = CIImage(cgImage: image)
         let extent = ci.extent
         func filter(_ name: String, _ params: [String: Any]) {
@@ -44,23 +79,46 @@ final class AdjustEditor: Editor {
         return ciContext.createCGImage(ci.cropped(to: extent), from: extent)
     }
 
-    override func update() { preview.image = render(small) }
+    override func update() {
+        let values = adjustments.map { $0.slider.doubleValue }
+        for adjustment in adjustments {
+            let value = adjustment.slider.doubleValue
+            adjustment.label.stringValue = adjustment.describe(value)
+            // Grey at neutral, so the detent reads at a glance too.
+            adjustment.label.textColor = value == adjustment.neutral ? .tertiaryLabelColor : .secondaryLabelColor
+        }
+        guard let small else { return }
+        renderer.request { Self.render(small, values) }
+    }
 
-    override func reset() { for (control, value) in sliders { control.doubleValue = value } }
+    override func reset() { for adjustment in adjustments { adjustment.slider.doubleValue = adjustment.neutral } }
+
+    override func didClose() { renderer.cancel() }
 
     override func apply() async throws -> [URL] {
-        guard let result = render(try Images.load(source)) else { throw ToolError("Couldn't render") }
-        let (type, ext) = Images.writableType(for: source)
-        let out = Paths.output(for: source, ext: ext, suffix: " edited")
-        try Images.write(result, to: out, type: type, quality: 0.95)
-        return [out]
+        let values = adjustments.map { $0.slider.doubleValue }, source = self.source
+        return try await Images.detached {
+            guard let result = Self.render(try Images.load(source), values) else { throw ToolError("Couldn't render") }
+            let (type, ext) = Images.writableType(for: source)
+            let out = Paths.output(for: source, ext: ext, suffix: " edited")
+            try Images.write(result, to: out, type: type, quality: 0.95)
+            return [out]
+        }
     }
 }
 
 /// Places the photo on a colour or gradient backdrop with padding, rounded corners and a shadow.
 final class BackgroundEditor: Editor {
+    private struct Look: Sendable {
+        var padding: Double
+        var radius: Double
+        var ratio: CGFloat?
+        var colors: [CGColor]
+        var shadow: Bool
+    }
+
     private let preview = ImagePreview()
-    private let small: CGImage
+    private var small: CGImage?
     private let styles: [(String, [NSColor])] = [
         ("Sunset", [NSColor(srgbRed: 1, green: 0.55, blue: 0.3, alpha: 1), NSColor(srgbRed: 0.93, green: 0.3, blue: 0.45, alpha: 1)]),
         ("Ocean", [NSColor(srgbRed: 0.25, green: 0.6, blue: 0.95, alpha: 1), NSColor(srgbRed: 0.35, green: 0.3, blue: 0.85, alpha: 1)]),
@@ -78,9 +136,10 @@ final class BackgroundEditor: Editor {
     private var radius: NSSlider!
     private var shadow: NSButton!
     private var aspect: NSPopUpButton!
+    private var lastAspect = 0
+    private lazy var renderer = LiveRender<CGImage?> { [weak self] image in self?.show(image) }
 
     init(source: URL) throws {
-        small = try Images.load(source, maxPixels: 1000)
         super.init(title: "Add Background", source: source, canvas: preview)
         style = popup(styles.map(\.0))
         colorWell.color = .systemTeal
@@ -97,11 +156,29 @@ final class BackgroundEditor: Editor {
         addRow("", shadow)
     }
 
-    private func render(_ image: CGImage) -> CGImage? {
+    private var look: Look {
+        var colors = styles[style.indexOfSelectedItem].1
+        if colors.isEmpty { colors = [colorWell.color] }
+        return Look(padding: padding.doubleValue, radius: radius.doubleValue, ratio: aspects[aspect.indexOfSelectedItem].1,
+                    colors: colors.map(\.cgColor), shadow: shadow.state == .on)
+    }
+
+    override func load() async throws {
+        // Decode and compose the first preview together, so the window opens on the finished picture.
+        let source = self.source, look = self.look
+        let (image, first) = try await Images.detached { () throws -> (CGImage, CGImage?) in
+            let image = try Images.load(source, maxPixels: 1000)
+            return (image, Self.render(image, look))
+        }
+        small = image
+        preview.image = first
+    }
+
+    private nonisolated static func render(_ image: CGImage, _ look: Look) -> CGImage? {
         let w = CGFloat(image.width), h = CGFloat(image.height)
-        let pad = padding.doubleValue * max(w, h)
+        let pad = look.padding * max(w, h)
         var canvas = CGSize(width: w + pad * 2, height: h + pad * 2)
-        if let ratio = aspects[aspect.indexOfSelectedItem].1 {
+        if let ratio = look.ratio {
             if canvas.width / canvas.height > ratio { canvas.height = canvas.width / ratio }
             else { canvas.width = canvas.height * ratio }
         }
@@ -109,24 +186,22 @@ final class BackgroundEditor: Editor {
                                   bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         let full = CGRect(origin: .zero, size: canvas)
-        var colors = styles[style.indexOfSelectedItem].1
-        if colors.isEmpty { colors = [colorWell.color] }
-        if colors.count == 1 {
-            ctx.setFillColor(colors[0].cgColor)
+        if look.colors.count == 1 {
+            ctx.setFillColor(look.colors[0])
             ctx.fill(full)
         } else if let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                                            colors: colors.map(\.cgColor) as CFArray, locations: nil) {
+                                            colors: look.colors as CFArray, locations: nil) {
             ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: canvas.height), end: CGPoint(x: canvas.width, y: 0),
                                    options: [])
         }
 
         let frame = CGRect(x: (canvas.width - w) / 2, y: (canvas.height - h) / 2, width: w, height: h)
-        let corner = radius.doubleValue * min(w, h)
+        let corner = look.radius * min(w, h)
         let path = CGPath(roundedRect: frame, cornerWidth: corner, cornerHeight: corner, transform: nil)
-        if shadow.state == .on {
+        if look.shadow {
             ctx.saveGState()
             ctx.setShadow(offset: CGSize(width: 0, height: -max(w, h) * 0.012), blur: max(w, h) * 0.04,
-                          color: NSColor.black.withAlphaComponent(0.4).cgColor)
+                          color: CGColor(gray: 0, alpha: 0.4))
             ctx.addPath(path)
             ctx.setFillColor(.white)
             ctx.fillPath()
@@ -139,9 +214,24 @@ final class BackgroundEditor: Editor {
         return ctx.makeImage()
     }
 
+    private var fadeNext = false
+
+    private func show(_ image: CGImage?) {
+        guard let image else { return }
+        preview.setImage(image, fade: fadeNext)
+        fadeNext = false
+    }
+
     override func update() {
         colorWell.isHidden = style.indexOfSelectedItem != styles.count - 1
-        preview.image = render(small)
+        // A new aspect reshapes the whole picture: crossfade it rather than cut.
+        if aspect.indexOfSelectedItem != lastAspect {
+            lastAspect = aspect.indexOfSelectedItem
+            fadeNext = true
+        }
+        guard let small else { return }
+        let look = self.look
+        renderer.request { Self.render(small, look) }
     }
 
     override func reset() {
@@ -152,29 +242,42 @@ final class BackgroundEditor: Editor {
         shadow.state = .on
     }
 
+    override func didClose() { renderer.cancel() }
+
     override func apply() async throws -> [URL] {
-        guard let result = render(try Images.load(source)) else { throw ToolError("Couldn't render") }
-        let out = Paths.output(for: source, ext: "png", suffix: " background")
-        try Images.write(result, to: out, type: .png, quality: 1)
-        return [out]
+        let look = self.look, source = self.source
+        return try await Images.detached {
+            guard let result = Self.render(try Images.load(source), look) else { throw ToolError("Couldn't render") }
+            let out = Paths.output(for: source, ext: "png", suffix: " background")
+            try Images.write(result, to: out, type: .png, quality: 1)
+            return [out]
+        }
     }
 }
 
 /// Finds faces and text on-device and covers them; drag on the photo to add a box, click a box to remove it.
+/// Every change can be undone (⌘Z), Reset included.
 final class RedactEditor: Editor {
-    private enum Kind { case face, text, manual }
-    private struct Box { var rect: CGRect; var kind: Kind }  // normalized, bottom-left origin (Vision space)
+    private enum Kind: Sendable { case face, text, manual }
+    private struct Box: Equatable, Sendable { var rect: CGRect; var kind: Kind }  // normalized, bottom-left origin (Vision space)
+    private struct Snapshot { var boxes: [Box]; var faces: Bool; var text: Bool; var style: Int }
 
     private let preview = RedactCanvas()
-    private let small: CGImage
+    private var small: CGImage?
     private var boxes: [Box] = []
+    /// What detection found, which Reset returns to.
+    private var detected: [Box] = []
     private var faces: NSButton!
     private var text: NSButton!
     private var style: NSSegmentedControl!
     private let status = NSTextField(labelWithString: L("Looking for faces and text…"))
+    private let spinner = NSProgressIndicator()
+    private var detection: Task<Void, Never>?
+    private lazy var renderer = LiveRender<CGImage?> { [weak self] image in
+        if let image { self?.preview.image = image }
+    }
 
     init(source: URL) throws {
-        small = try Images.load(source, maxPixels: 1400)
         super.init(title: "Redact Photo", source: source, canvas: preview)
         faces = checkbox("Faces", true)
         text = checkbox("Text", true)
@@ -182,26 +285,39 @@ final class RedactEditor: Editor {
         style = segments(["Blur", "Pixelate", "Solid"])
         addRow("Style", style)
         status.textColor = .secondaryLabelColor
-        addRow("", status)
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        addRow("", spinner, status)
 
         preview.onAdd = { [weak self] rect in
-            self?.boxes.append(Box(rect: rect, kind: .manual))
-            self?.update()
+            self?.change { $0.boxes.append(Box(rect: rect, kind: .manual)) }
         }
-        preview.onRemove = { [weak self] point in
-            guard let self, let index = self.active.lastIndex(where: { $0.rect.contains(point) }) else { return }
-            let target = self.active[index].rect
-            self.boxes.removeAll { $0.rect == target }
-            self.update()
+        preview.onRemove = { [weak self] index in
+            guard let self, self.active.indices.contains(index) else { return }
+            let target = self.active[index]
+            self.change { editor in
+                if let at = editor.boxes.firstIndex(of: target) { editor.boxes.remove(at: at) }
+            }
         }
+    }
 
-        let image = small
-        Task { @MainActor [weak self] in
+    override func load() async throws {
+        let source = self.source
+        let image = try await Images.detached { try Images.load(source, maxPixels: 1400) }
+        small = image
+        spinner.startAnimation(nil)
+        detection = Task { @MainActor [weak self] in
             let found = await Task.detached { Self.detect(image) }.value
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
+            self.detected = found
             self.boxes += found
+            // Undoing an edit made before detection finished would also drop what it found: start the history here.
+            self.window.undoManager?.removeAllActions(withTarget: self)
+            self.spinner.stopAnimation(nil)
+            self.spinner.isHidden = true
             let f = found.filter { $0.kind == .face }.count, t = found.filter { $0.kind == .text }.count
             self.status.stringValue = L("Found %d faces and %d text areas. Drag to add a box, click one to remove it.", f, t)
+            self.preview.revealOutlines()
             self.update()
         }
     }
@@ -226,12 +342,48 @@ final class RedactEditor: Editor {
         }
     }
 
-    private func render(_ image: CGImage) -> CGImage? {
+    // MARK: Undo
+
+    private var snapshot: Snapshot {
+        Snapshot(boxes: boxes, faces: faces.state == .on, text: text.state == .on, style: style.selectedSegment)
+    }
+
+    /// Makes a change that ⌘Z can take back.
+    private func change(_ mutate: (RedactEditor) -> Void) {
+        let before = snapshot
+        mutate(self)
+        registerUndo(returningTo: before)
+        update()
+        noteEdited()
+    }
+
+    private func registerUndo(returningTo state: Snapshot) {
+        window.undoManager?.registerUndo(withTarget: self) { editor in
+            MainActor.assumeIsolated { editor.restore(state) }
+        }
+    }
+
+    private func restore(_ state: Snapshot) {
+        let current = snapshot
+        boxes = state.boxes
+        faces.state = state.faces ? .on : .off
+        text.state = state.text ? .on : .off
+        style.selectedSegment = state.style
+        registerUndo(returningTo: current)  // registered while undoing, so it becomes the redo
+        update()
+        noteEdited()
+    }
+
+    override var hasUnsavedWork: Bool { boxes != detected }
+
+    // MARK: Rendering
+
+    private nonisolated static func render(_ image: CGImage, rects normalized: [CGRect], style: Int) -> CGImage? {
         let w = CGFloat(image.width), h = CGFloat(image.height)
-        let rects = active.map { CGRect(x: $0.rect.minX * w, y: $0.rect.minY * h, width: $0.rect.width * w, height: $0.rect.height * h) }
+        let rects = normalized.map { CGRect(x: $0.minX * w, y: $0.minY * h, width: $0.width * w, height: $0.height * h) }
         guard !rects.isEmpty else { return image }
 
-        if style.selectedSegment == 2 {
+        if style == 2 {
             guard let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
                                       bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
@@ -243,56 +395,119 @@ final class RedactEditor: Editor {
 
         let original = CIImage(cgImage: image)
         let effect: CIImage
-        if style.selectedSegment == 0 {
+        if style == 0 {
             effect = original.clampedToExtent().applyingGaussianBlur(sigma: max(w, h) * 0.02).cropped(to: original.extent)
         } else {
-            let pixellate = CIFilter(name: "CIPixellate")!
+            guard let pixellate = CIFilter(name: "CIPixellate") else { return nil }
             pixellate.setValue(original.clampedToExtent(), forKey: kCIInputImageKey)
             pixellate.setValue(max(w, h) / 70, forKey: kCIInputScaleKey)
-            effect = pixellate.outputImage!.cropped(to: original.extent)
+            guard let output = pixellate.outputImage else { return nil }
+            effect = output.cropped(to: original.extent)
         }
         var mask = CIImage(color: .black).cropped(to: original.extent)
         for rect in rects { mask = CIImage(color: .white).cropped(to: rect).composited(over: mask) }
-        let blend = CIFilter(name: "CIBlendWithMask")!
+        guard let blend = CIFilter(name: "CIBlendWithMask") else { return nil }
         blend.setValue(effect, forKey: kCIInputImageKey)
         blend.setValue(original, forKey: kCIInputBackgroundImageKey)
         blend.setValue(mask, forKey: kCIInputMaskImageKey)
-        return ciContext.createCGImage(blend.outputImage!, from: original.extent)
+        guard let output = blend.outputImage else { return nil }
+        return ciContext.createCGImage(output, from: original.extent)
     }
 
     override func update() {
-        preview.image = render(small)
-        preview.outlines = active.map(\.rect)
+        guard let small else { return }
+        let rects = active.map(\.rect), style = self.style.selectedSegment
+        preview.outlines = rects
+        if preview.image == nil { preview.image = small }
+        renderer.request { Self.render(small, rects: rects, style: style) }
     }
 
     override func reset() {
-        boxes.removeAll { $0.kind == .manual }
-        faces.state = .on
-        text.state = .on
-        style.selectedSegment = 0
+        change { editor in
+            editor.boxes = editor.detected
+            editor.faces.state = .on
+            editor.text.state = .on
+            editor.style.selectedSegment = 0
+        }
+    }
+
+    override func didClose() {
+        detection?.cancel()
+        renderer.cancel()
+        preview.stop()
     }
 
     override func apply() async throws -> [URL] {
-        guard let result = render(try Images.load(source)) else { throw ToolError("Couldn't render") }
-        let (type, ext) = Images.writableType(for: source)
-        let out = Paths.output(for: source, ext: ext, suffix: " redacted")
-        try Images.write(result, to: out, type: type, quality: 0.95)
-        return [out]
+        let rects = active.map(\.rect), style = self.style.selectedSegment, source = self.source
+        return try await Images.detached {
+            guard let result = Self.render(try Images.load(source), rects: rects, style: style) else { throw ToolError("Couldn't render") }
+            let (type, ext) = Images.writableType(for: source)
+            let out = Paths.output(for: source, ext: ext, suffix: " redacted")
+            try Images.write(result, to: out, type: type, quality: 0.95)
+            return [out]
+        }
     }
 }
 
 /// Image preview that outlines redaction boxes and lets you draw or remove them. Rects are normalized, bottom-left origin.
+///
+/// The box under the pointer lights up with a × badge (and a pointing hand); elsewhere on the photo the crosshair
+/// says "drag to add". A box is removed only by a click that starts and ends on it without moving, so a shaky
+/// press meant to draw never un-redacts anything.
 final class RedactCanvas: NSView {
-    var image: CGImage? { didSet { needsDisplay = true } }
-    var outlines: [CGRect] = [] { didSet { needsDisplay = true } }
+    var image: CGImage? {
+        didSet {
+            picture.image = image
+            needsLayout = true
+        }
+    }
+    var outlines: [CGRect] = [] {
+        didSet {
+            if let hovered, hovered >= outlines.count { self.hovered = nil }
+            overlay.needsDisplay = true
+        }
+    }
     var onAdd: ((CGRect) -> Void)?
-    var onRemove: ((CGPoint) -> Void)?
+    /// Index into `outlines`.
+    var onRemove: ((Int) -> Void)?
+
+    private let picture = PictureView()
+    private let overlay = OverlayView()
     private var dragStart: NSPoint?
     private var dragRect: NSRect?
+    private var pressedBox: Int?
+    private var hovered: Int?
+    private var hoverAmount = Spring(0, response: 0.12, damping: 1)
+    private var pressAmount = Spring(0, response: 0.1, damping: 1)
+    private var reveal = Spring(1, response: 0.2, damping: 1)
+    private lazy var driver: FrameDriver = {
+        let driver = FrameDriver(view: self)
+        driver.onFrame = { [weak self] dt in self?.advance(dt) ?? false }
+        return driver
+    }()
+    private static let badgeRadius: CGFloat = 8
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        overlay.drawer = { [unowned self] in self.drawOverlay() }
+        addSubview(picture)
+        addSubview(overlay)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .cursorUpdate,
+                                                              .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
 
     private var imageRect: NSRect {
         guard let image else { return .zero }
         return fit(CGSize(width: image.width, height: image.height), in: bounds.insetBy(dx: 12, dy: 12))
+    }
+
+    override func layout() {
+        super.layout()
+        picture.frame = imageRect
+        overlay.frame = bounds
     }
 
     private func toView(_ r: CGRect) -> NSRect {
@@ -305,49 +520,174 @@ final class RedactCanvas: NSView {
         return CGPoint(x: (p.x - i.minX) / i.width, y: (p.y - i.minY) / i.height)
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let image else { return }
-        NSGraphicsContext.current?.imageInterpolation = .high
-        NSImage(cgImage: image, size: imageRect.size).draw(in: imageRect)
-        NSColor.controlAccentColor.setStroke()
-        for rect in outlines {
-            let path = NSBezierPath(rect: toView(rect))
-            path.lineWidth = 1.5
-            path.stroke()
+    /// The hovered box is lit (not just fading out), so its × badge is live.
+    private var badgeLive: Bool { hovered != nil && hoverAmount.target > 0.5 }
+
+    /// The topmost box at a point, counting the hovered box's × badge as part of it.
+    private func box(at p: NSPoint) -> Int? {
+        if badgeLive, let hovered, outlines.indices.contains(hovered) {
+            let r = toView(outlines[hovered])
+            if hypot(p.x - r.maxX, p.y - r.maxY) <= Self.badgeRadius + 2 { return hovered }
         }
-        if let dragRect {
-            let path = NSBezierPath(rect: dragRect)
-            path.setLineDash([4, 3], count: 2, phase: 0)
-            path.stroke()
+        return outlines.indices.last { toView(outlines[$0]).contains(p) }
+    }
+
+    /// Detection finished: the outlines fade in rather than appear in one frame.
+    func revealOutlines() {
+        reveal.snap(Motion.reduced ? 1 : 0)
+        reveal.target = 1
+        kick()
+    }
+
+    private func kick() {
+        overlay.needsDisplay = true
+        driver.start()
+    }
+
+    private func advance(_ dt: CGFloat) -> Bool {
+        hoverAmount.step(dt)
+        pressAmount.step(dt)
+        reveal.step(dt)
+        overlay.needsDisplay = true
+        return !(hoverAmount.isSettled && pressAmount.isSettled && reveal.isSettled)
+    }
+
+    func stop() { driver.stop() }
+
+    // MARK: Pointer
+
+    private func updateHover(_ p: NSPoint) {
+        let box = box(at: p)
+        let target: CGFloat = box == nil ? 0 : 1
+        if let box, box != hovered || hoverAmount.target == 0 {
+            // A newly hovered box lights up from nothing; one left behind keeps `hovered` while it fades out.
+            if box != hovered { hoverAmount.snap(0) }
+            hovered = box
         }
+        if hoverAmount.target != target {
+            hoverAmount.target = target
+            kick()
+        }
+        (box != nil ? NSCursor.pointingHand : imageRect.contains(p) ? NSCursor.crosshair : NSCursor.arrow).set()
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updateHover(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard dragStart == nil else { return }
+        updateHover(convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard dragStart == nil else { return }
+        if hoverAmount.target != 0 {
+            hoverAmount.target = 0
+            kick()
+        }
+        NSCursor.arrow.set()
     }
 
     override func mouseDown(with event: NSEvent) {
-        dragStart = convert(event.locationInWindow, from: nil)
+        guard image != nil else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        dragStart = p
         dragRect = nil
+        pressedBox = box(at: p)
+        pressAmount.target = pressedBox == nil ? 0 : 1
+        kick()
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let start = dragStart else { return }
         let p = convert(event.locationInWindow, from: nil)
+        // Past a few points it's a drag: draw a new box, even if it started on an existing one.
+        guard dragRect != nil || hypot(p.x - start.x, p.y - start.y) > 3 else { return }
+        if pressedBox != nil {
+            pressedBox = nil
+            pressAmount.target = 0
+            kick()
+        }
+        NSCursor.crosshair.set()
         dragRect = NSRect(x: min(start.x, p.x), y: min(start.y, p.y), width: abs(p.x - start.x), height: abs(p.y - start.y))
             .intersection(imageRect)
-        needsDisplay = true
+        overlay.needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { dragStart = nil; dragRect = nil; needsDisplay = true }
+        let p = convert(event.locationInWindow, from: nil)
+        defer {
+            dragStart = nil
+            dragRect = nil
+            pressedBox = nil
+            pressAmount.target = 0
+            kick()
+            updateHover(p)
+        }
         if let rect = dragRect, rect.width > 4, rect.height > 4 {
             let a = toNormalized(rect.origin), b = toNormalized(NSPoint(x: rect.maxX, y: rect.maxY))
             onAdd?(CGRect(x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y))
-        } else if let start = dragStart {
-            onRemove?(toNormalized(start))
+        } else if dragRect == nil, let pressed = pressedBox, box(at: p) == pressed {
+            onRemove?(pressed)
+        }
+    }
+
+    // MARK: Drawing
+
+    private func drawOverlay() {
+        guard image != nil else { return }
+        let accent = NSColor.controlAccentColor
+        for (index, rect) in outlines.enumerated() {
+            let frame = toView(rect)
+            let lit = index == hovered ? hoverAmount.value : 0
+            let pressed = index == pressedBox ? pressAmount.value : 0
+            if lit + pressed > 0.01 {
+                accent.withAlphaComponent(0.15 * lit + 0.15 * pressed).setFill()
+                frame.fill()
+            }
+            accent.withAlphaComponent(reveal.value).setStroke()
+            let path = NSBezierPath(rect: frame)
+            path.lineWidth = 1.5 + lit
+            path.stroke()
+        }
+        if let hovered, outlines.indices.contains(hovered), hoverAmount.value > 0.01, dragRect == nil {
+            // The × badge says what a click on this box does.
+            let r = toView(outlines[hovered])
+            let radius = Self.badgeRadius * (Motion.reduced ? 1 : 0.7 + 0.3 * hoverAmount.value)
+            let badge = NSRect(x: r.maxX - radius, y: r.maxY - radius, width: radius * 2, height: radius * 2)
+            accent.withAlphaComponent(hoverAmount.value).setFill()
+            NSBezierPath(ovalIn: badge).fill()
+            NSColor.white.withAlphaComponent(hoverAmount.value).setStroke()
+            let cross = NSBezierPath()
+            let d = radius * 0.38
+            cross.move(to: NSPoint(x: badge.midX - d, y: badge.midY - d))
+            cross.line(to: NSPoint(x: badge.midX + d, y: badge.midY + d))
+            cross.move(to: NSPoint(x: badge.midX - d, y: badge.midY + d))
+            cross.line(to: NSPoint(x: badge.midX + d, y: badge.midY - d))
+            cross.lineWidth = 1.5
+            cross.lineCapStyle = .round
+            cross.stroke()
+        }
+        if let dragRect {
+            accent.setStroke()
+            let path = NSBezierPath(rect: dragRect)
+            path.setLineDash([4, 3], count: 2, phase: 0)
+            path.stroke()
         }
     }
 }
 
 /// Shows camera, date and location tags and removes the chosen groups without re-encoding where possible.
 final class MetadataEditor: Editor {
+    private struct Removal: Sendable {
+        var location: Bool
+        var camera: Bool
+        var date: Bool
+        var author: Bool
+        var everything: Bool
+    }
+
     private let preview = ImagePreview()
     private var location: NSButton!
     private var camera: NSButton!
@@ -357,7 +697,6 @@ final class MetadataEditor: Editor {
 
     init(source: URL) throws {
         super.init(title: "Edit Metadata", source: source, canvas: preview)
-        preview.image = try Images.load(source, maxPixels: 900)
 
         let props = Self.properties(source)
         let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
@@ -399,6 +738,11 @@ final class MetadataEditor: Editor {
         addRow("", everything)
     }
 
+    override func load() async throws {
+        let source = self.source
+        preview.image = try await Images.detached { try Images.load(source, maxPixels: 900) }
+    }
+
     private static func properties(_ url: URL) -> [CFString: Any] {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return [:] }
         return CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] ?? [:]
@@ -413,55 +757,57 @@ final class MetadataEditor: Editor {
         for box in [camera, date, author, everything] { box?.state = .off }
     }
 
-    private func shouldRemove(_ name: String) -> Bool {
+    private nonisolated static func shouldRemove(_ name: String, _ removal: Removal) -> Bool {
         if name == "Orientation" { return false }  // keeps photos upright
-        if everything.state == .on { return true }
+        if removal.everything { return true }
         let cameraTags: Set<String> = ["Make", "Model", "LensModel", "LensMake", "LensSpecification", "BodySerialNumber",
                                        "SerialNumber", "LensSerialNumber", "FNumber", "ExposureTime", "ISOSpeedRatings",
                                        "PhotographicSensitivity", "FocalLength", "FocalLenIn35mmFilm", "Flash",
                                        "ExposureProgram", "MeteringMode", "WhiteBalance", "ApertureValue",
                                        "ShutterSpeedValue", "ExposureBiasValue", "BrightnessValue", "Software", "HostComputer"]
         let authorTags: Set<String> = ["Artist", "Copyright", "creator", "Byline", "rights", "CameraOwnerName"]
-        if location.state == .on && name.hasPrefix("GPS") { return true }
-        if camera.state == .on && cameraTags.contains(name) { return true }
-        if date.state == .on && (name.contains("Date") || name.hasPrefix("OffsetTime") || name.hasPrefix("SubsecTime")) { return true }
-        if author.state == .on && authorTags.contains(name) { return true }
+        if removal.location && name.hasPrefix("GPS") { return true }
+        if removal.camera && cameraTags.contains(name) { return true }
+        if removal.date && (name.contains("Date") || name.hasPrefix("OffsetTime") || name.hasPrefix("SubsecTime")) { return true }
+        if removal.author && authorTags.contains(name) { return true }
         return false
     }
 
     override func apply() async throws -> [URL] {
-        guard let src = CGImageSourceCreateWithURL(source as CFURL, nil), let type = CGImageSourceGetType(src) else {
-            throw ToolError("Couldn't read \(source.lastPathComponent)")
-        }
-        let metadata = CGImageSourceCopyMetadataAtIndex(src, 0, nil).flatMap { CGImageMetadataCreateMutableCopy($0) }
-            ?? CGImageMetadataCreateMutable()
-        var doomed: [String] = []
-        func collect(_ parent: String?, _ meta: CGImageMetadata) {
-            CGImageMetadataEnumerateTagsUsingBlock(meta, parent as CFString?, [kCGImageMetadataEnumerateRecursively: true] as CFDictionary) { path, tag in
+        let removal = Removal(location: location.state == .on, camera: camera.state == .on, date: date.state == .on,
+                              author: author.state == .on, everything: everything.state == .on)
+        let source = self.source
+        return try await Images.detached {
+            guard let src = CGImageSourceCreateWithURL(source as CFURL, nil), let type = CGImageSourceGetType(src) else {
+                throw ToolError("Couldn't read \(source.lastPathComponent)")
+            }
+            let metadata = CGImageSourceCopyMetadataAtIndex(src, 0, nil).flatMap { CGImageMetadataCreateMutableCopy($0) }
+                ?? CGImageMetadataCreateMutable()
+            var doomed: [String] = []
+            CGImageMetadataEnumerateTagsUsingBlock(metadata, nil, [kCGImageMetadataEnumerateRecursively: true] as CFDictionary) { path, tag in
                 let name = CGImageMetadataTagCopyName(tag) as String? ?? ""
-                if self.shouldRemove(name) { doomed.append(path as String) }
+                if Self.shouldRemove(name, removal) { doomed.append(path as String) }
                 return true
             }
-        }
-        collect(nil, metadata)
-        for path in doomed { CGImageMetadataRemoveTagWithPath(metadata, nil, path as CFString) }
+            for path in doomed { CGImageMetadataRemoveTagWithPath(metadata, nil, path as CFString) }
 
-        let out = Paths.output(for: source, ext: source.pathExtension, suffix: " clean")
-        guard let dest = CGImageDestinationCreateWithURL(out as CFURL, type, 1, nil) else { throw ToolError("Can't write this format") }
-        let options: [CFString: Any] = [
-            kCGImageDestinationMetadata: metadata,
-            kCGImageDestinationMergeMetadata: false,
-            kCGImageMetadataShouldExcludeGPS: location.state == .on || everything.state == .on,
-        ]
-        var error: Unmanaged<CFError>?
-        if !CGImageDestinationCopyImageSource(dest, src, options as CFDictionary, &error) {
-            // Formats that can't be copied losslessly get re-encoded without the removed tags.
-            try? FileManager.default.removeItem(at: out)
+            let out = Paths.output(for: source, ext: source.pathExtension, suffix: " clean")
             guard let dest = CGImageDestinationCreateWithURL(out as CFURL, type, 1, nil) else { throw ToolError("Can't write this format") }
-            CGImageDestinationAddImageAndMetadata(dest, try Images.load(source), metadata,
-                                                  [kCGImageDestinationLossyCompressionQuality: 0.95] as CFDictionary)
-            guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save") }
+            let options: [CFString: Any] = [
+                kCGImageDestinationMetadata: metadata,
+                kCGImageDestinationMergeMetadata: false,
+                kCGImageMetadataShouldExcludeGPS: removal.location || removal.everything,
+            ]
+            var error: Unmanaged<CFError>?
+            if !CGImageDestinationCopyImageSource(dest, src, options as CFDictionary, &error) {
+                // Formats that can't be copied losslessly get re-encoded without the removed tags.
+                try? FileManager.default.removeItem(at: out)
+                guard let dest = CGImageDestinationCreateWithURL(out as CFURL, type, 1, nil) else { throw ToolError("Can't write this format") }
+                CGImageDestinationAddImageAndMetadata(dest, try Images.load(source), metadata,
+                                                      [kCGImageDestinationLossyCompressionQuality: 0.95] as CFDictionary)
+                guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save") }
+            }
+            return [out]
         }
-        return [out]
     }
 }

@@ -7,6 +7,9 @@ struct Cancelled: LocalizedError {
 
 /// A floating editor window: a canvas on top, controls below, Reset / Apply at the bottom.
 /// `present()` suspends until the user applies (returning the saved files) or closes the window.
+///
+/// The main thread stays free throughout: subclasses decode in `load()`, render previews with `LiveRender`, and in
+/// `apply()` read their controls first, then hand the full-resolution work to `Images.detached`.
 @MainActor
 class Editor: NSObject, NSWindowDelegate {
     private static var open: [Editor] = []
@@ -16,11 +19,25 @@ class Editor: NSObject, NSWindowDelegate {
     let window: NSWindow
     let source: URL
     let controls = NSStackView()
+    private let canvas: NSView
+    private let well = NSBox()
     private var continuation: CheckedContinuation<[URL], Error>?
     private var applyButton: NSButton!
+    private var resetButton: NSButton!
+    private var cancelButton: NSButton!
+    private let savingSpinner = NSProgressIndicator()
+    private let loadingSpinner = NSProgressIndicator()
+    private var sliders: [DetentSlider] = []
+    private var disabledWhileSaving: [NSControl] = []
+    /// `load()` finished; until then the controls can move but nothing renders.
+    private(set) var isLoaded = false
+    private(set) var isSaving = false
+    private var closed = false
+    private var discardConfirmed = false
 
     init(title: String, source: URL, canvas: NSView) {
         self.source = source
+        self.canvas = canvas
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 700),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
@@ -28,6 +45,8 @@ class Editor: NSObject, NSWindowDelegate {
         window.title = L(title)
         window.subtitle = source.lastPathComponent
         window.isReleasedWhenClosed = false
+        // Floating until it first becomes key: opened from a drop while Finder is active, activation can be refused,
+        // and the editor must still show up. Once key it drops to normal, so switching apps puts it behind them.
         window.level = .floating
         window.minSize = NSSize(width: 480, height: 580)
         window.delegate = self
@@ -37,22 +56,30 @@ class Editor: NSObject, NSWindowDelegate {
         controls.spacing = 10
 
         // macOS convention: secondary action on the left, Cancel / default action on the right.
-        let reset = NSButton(title: L("Reset"), target: self, action: #selector(resetClicked))
-        let cancel = NSButton(title: L("Cancel"), target: self, action: #selector(cancelClicked))
-        cancel.keyEquivalent = "\u{1b}"
-        applyButton = NSButton(title: L("Apply"), target: self, action: #selector(applyClicked))
+        resetButton = NSButton(title: L("Reset"), target: self, action: #selector(resetClicked))
+        cancelButton = NSButton(title: L("Cancel"), target: self, action: #selector(cancelClicked))
+        cancelButton.keyEquivalent = "\u{1b}"
+        applyButton = NSButton(title: L("Saving…"), target: self, action: #selector(applyClicked))
         applyButton.keyEquivalent = "\r"
-        for button in [reset, cancel, applyButton!] {
+        // Wide enough for "Saving…", so the buttons don't shift when Apply is pressed.
+        let applyWidth = max(80, applyButton.fittingSize.width)
+        applyButton.title = L("Apply")
+        for button in [resetButton!, cancelButton!, applyButton!] {
             button.bezelStyle = .push
-            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: button === applyButton ? applyWidth : 80).isActive = true
         }
+        applyButton.isEnabled = false
+        resetButton.isEnabled = false
+        savingSpinner.style = .spinning
+        savingSpinner.controlSize = .small
+        savingSpinner.isDisplayedWhenStopped = false
         let bar = NSStackView()
-        bar.addView(reset, in: .leading)
-        bar.addView(cancel, in: .trailing)
+        bar.addView(resetButton, in: .leading)
+        bar.addView(savingSpinner, in: .trailing)
+        bar.addView(cancelButton, in: .trailing)
         bar.addView(applyButton, in: .trailing)
 
         // The canvas sits in a recessed well, like Preview's editing area.
-        let well = NSBox()
         well.boxType = .custom
         well.cornerRadius = 10
         well.borderColor = .separatorColor
@@ -63,6 +90,10 @@ class Editor: NSObject, NSWindowDelegate {
         well.translatesAutoresizingMaskIntoConstraints = false
         well.setContentHuggingPriority(.defaultLow, for: .vertical)
         well.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        loadingSpinner.style = .spinning
+        loadingSpinner.isDisplayedWhenStopped = false
+        loadingSpinner.translatesAutoresizingMaskIntoConstraints = false
+        well.addSubview(loadingSpinner)
 
         let separator = NSBox()
         separator.boxType = .separator
@@ -86,65 +117,202 @@ class Editor: NSObject, NSWindowDelegate {
             separator.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40),
             bar.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40),
             well.heightAnchor.constraint(greaterThanOrEqualToConstant: 280),
+            loadingSpinner.centerXAnchor.constraint(equalTo: well.centerXAnchor),
+            loadingSpinner.centerYAnchor.constraint(equalTo: well.centerYAnchor),
         ])
         window.contentView = content
     }
 
     func present() async throws -> [URL] {
-        try await withCheckedThrowingContinuation { continuation in
+        Editor.open.append(self)
+        Editor.presented += 1
+        // Opened from the Wheel before Settings ever was, the app has no menu, and without one ⌘C / ⌘V / ⌘Z / ⌘W
+        // do nothing in the editor's fields.
+        if NSApp.mainMenu == nil { NSApp.mainMenu = AppWindow.mainMenu() }
+        window.center()
+        // Large photos take a moment to decode. If it's more than a blink, open the window with a spinner in the well
+        // rather than leave nothing on screen after the drop.
+        let early = DispatchWorkItem { [weak self] in self?.reveal(loading: true) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: early)
+        do {
+            try await load()
+            early.cancel()
+            if closed { throw Cancelled() }
+        } catch {
+            early.cancel()
+            abandon()
+            throw error
+        }
+        isLoaded = true
+        applyButton.isEnabled = true
+        resetButton.isEnabled = true
+        update()
+        if window.isVisible { finishLoading() } else { reveal(loading: false) }
+        return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
-            Editor.open.append(self)
-            Editor.presented += 1
-            window.center()
-            NSApp.activate()
-            window.makeKeyAndOrderFront(nil)
-            update()
         }
     }
 
     // MARK: Overridable
 
+    /// Decodes what the editor shows. Runs before the window has content; do the heavy part off the main thread.
+    func load() async throws {}
     /// Saves the result and returns the written files.
     func apply() async throws -> [URL] { [] }
     func reset() {}
-    /// Called whenever a control changes.
+    /// Called whenever a control changes (only once loaded).
     func update() {}
+    /// A slider drag ended: a good moment for a final, exact preview.
+    func trackingEnded() {}
+    /// Work that closing without applying would lose; while true, the close button shows the edited dot and
+    /// Cancel / Esc / ⌘W ask first.
+    var hasUnsavedWork: Bool { false }
+    /// The window is closing, either way: stop animations, renders and playback.
+    func didClose() {}
+
+    /// Call after a change that `hasUnsavedWork` depends on.
+    func noteEdited() { window.isDocumentEdited = hasUnsavedWork }
 
     // MARK: Plumbing
 
-    @objc private func cancelClicked() { window.close() }
+    private func reveal(loading: Bool) {
+        guard !closed, !window.isVisible else { return }
+        if loading {
+            canvas.alphaValue = 0
+            loadingSpinner.startAnimation(nil)
+        }
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func finishLoading() {
+        loadingSpinner.stopAnimation(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            canvas.animator().alphaValue = 1
+        }
+    }
+
+    /// Loading failed or the window was closed during it: tidy up without a continuation to resume.
+    private func abandon() {
+        window.delegate = nil
+        window.close()
+        Editor.open.removeAll { $0 === self }
+        didClose()
+    }
+
+    @objc private func cancelClicked() { window.performClose(nil) }
 
     @objc private func resetClicked() {
+        guard isLoaded, !isSaving else { return }
         reset()
         update()
+        noteEdited()
     }
 
     @objc private func applyClicked() {
-        applyButton.isEnabled = false
+        guard isLoaded, !isSaving else { return }
+        // A half-typed value (W/H, the Text field) has to reach the editor before it reads its controls. A field
+        // holding something invalid refuses to let go; leave it to the user.
+        guard window.makeFirstResponder(nil) else {
+            NSSound.beep()
+            return
+        }
+        setSaving(true)
+        let started = CACurrentMediaTime()
         Task { @MainActor [self] in
-            // Let the button redraw before a possibly slow full-resolution render.
-            await Task.yield()
             do {
-                finish(.success(try await apply()))
+                let files = try await apply()
+                // A save the user waited for ends with a firm tap. A quick one would only echo the click itself.
+                // The success chime comes from the toast that reports the files.
+                if CACurrentMediaTime() - started > 0.3 { Haptics.press() }
+                finish(.success(files))
             } catch {
-                applyButton.isEnabled = true
+                setSaving(false)
+                Feedback.refuse()
                 NSAlert(error: error).beginSheetModal(for: window, completionHandler: nil)
             }
         }
     }
 
-    @objc func controlChanged(_ sender: Any?) { update() }
+    /// Apply's pressed state lasts as long as the save: a spinner, "Saving…", and nothing else to click.
+    private func setSaving(_ saving: Bool) {
+        isSaving = saving
+        applyButton.title = saving ? L("Saving…") : L("Apply")
+        if saving {
+            savingSpinner.startAnimation(nil)
+            disabledWhileSaving = (Self.controls(in: controls) + [resetButton, cancelButton, applyButton]).filter(\.isEnabled)
+            for control in disabledWhileSaving { control.isEnabled = false }
+        } else {
+            savingSpinner.stopAnimation(nil)
+            for control in disabledWhileSaving { control.isEnabled = true }
+            disabledWhileSaving = []
+        }
+    }
+
+    private static func controls(in view: NSView) -> [NSControl] {
+        view.subviews.flatMap { sub -> [NSControl] in
+            if let control = sub as? NSControl { return [control] }
+            return controls(in: sub)
+        }
+    }
+
+    @objc func controlChanged(_ sender: Any?) {
+        guard isLoaded else { return }
+        update()
+    }
 
     private func finish(_ result: Result<[URL], Error>) {
         guard let continuation else { return }
         self.continuation = nil
         window.delegate = nil
-        window.close()
         Editor.open.removeAll { $0 === self }
+        didClose()
         continuation.resume(with: result)
+        guard case .success = result else {
+            window.close()
+            return
+        }
+        // Saved: the window gives way to the toast instead of vanishing in one frame. Nothing can reopen this window,
+        // so the fade's completion can't hide anything newer.
+        let window = self.window
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            window.animator().alphaValue = 0
+        }, completionHandler: {
+            MainActor.assumeIsolated { window.close() }
+        })
     }
 
-    func windowWillClose(_ notification: Notification) { finish(.failure(Cancelled())) }
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // A save can't be abandoned halfway: its file would still appear after "Cancelled".
+        if isSaving { return false }
+        guard isLoaded, hasUnsavedWork, !discardConfirmed else { return true }
+        let alert = NSAlert()
+        alert.messageText = L("Discard your changes?")
+        alert.addButton(withTitle: L("Keep Editing"))
+        let discard = alert.addButton(withTitle: L("Discard"))
+        discard.hasDestructiveAction = true
+        discard.keyEquivalent = "d"
+        discard.keyEquivalentModifierMask = .command
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .alertSecondButtonReturn else { return }
+            self.discardConfirmed = true
+            self.window.close()
+        }
+        return false
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        closed = true
+        finish(.failure(Cancelled()))
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        if window.level != .normal { window.level = .normal }
+    }
 
     // MARK: Control builders
 
@@ -159,11 +327,21 @@ class Editor: NSObject, NSWindowDelegate {
         row.widthAnchor.constraint(equalTo: controls.widthAnchor).isActive = true
     }
 
-    func slider(_ min: Double, _ max: Double, _ value: Double) -> NSSlider {
-        let slider = NSSlider(value: value, minValue: min, maxValue: max, target: self, action: #selector(controlChanged))
+    /// A continuous slider whose starting value is a soft detent (see `DetentSlider`).
+    func slider(_ min: Double, _ max: Double, _ value: Double) -> DetentSlider {
+        let slider = DetentSlider(value: value, minValue: min, maxValue: max, target: self, action: #selector(controlChanged))
         slider.isContinuous = true
+        slider.neutral = value
+        slider.onTrackingEnded = { [weak self] in
+            guard let self, self.isLoaded else { return }
+            self.trackingEnded()
+        }
+        sliders.append(slider)
         return slider
     }
+
+    /// A slider is being dragged right now.
+    var isTracking: Bool { sliders.contains { $0.isTracking } }
 
     func segments(_ labels: [String]) -> NSSegmentedControl {
         let control = NSSegmentedControl(labels: labels.map { L($0) }, trackingMode: .selectOne, target: self,
@@ -191,6 +369,8 @@ class Editor: NSObject, NSWindowDelegate {
         field.alignment = .center
         field.target = self
         field.action = #selector(controlChanged)
+        // Tabbing or clicking away commits too, not only Return.
+        field.cell?.sendsActionOnEndEditing = true
         field.widthAnchor.constraint(equalToConstant: 70).isActive = true
         let formatter = NumberFormatter()
         formatter.allowsFloats = false
@@ -200,29 +380,233 @@ class Editor: NSObject, NSWindowDelegate {
     }
 }
 
-/// Shows a CGImage aspect-fit with a soft shadow.
-final class ImagePreview: NSView {
-    var image: CGImage? { didSet { needsDisplay = true } }
-    var overlay: ((NSRect) -> Void)?
+// MARK: - Slider detent
 
-    var imageRect: NSRect {
-        guard let image else { return .zero }
-        return fit(CGSize(width: image.width, height: image.height), in: bounds.insetBy(dx: 12, dy: 12))
+/// Where a slider sticks while dragged: within `zone` of `neutral` the value is pulled onto it, and the step that
+/// enters the zone (or jumps across it in one event) asks for one tap. Leaving re-arms only past twice the zone, so
+/// resting on the boundary doesn't buzz. Pure, so it can be tested.
+struct Detent {
+    let neutral: Double
+    let zone: Double
+    private(set) var engaged: Bool
+    private var last: Double
+
+    init(neutral: Double, range: Double, at value: Double, fraction: Double = 0.015) {
+        self.neutral = neutral
+        zone = abs(range) * fraction
+        last = value
+        engaged = abs(value - neutral) <= zone
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let image else { return }
+    /// A new drag starts from `value` (already in the detent if it rests there, so the first move doesn't tap).
+    mutating func begin(at value: Double) {
+        last = value
+        engaged = abs(value - neutral) <= zone
+    }
+
+    /// The value to show for a raw slider value, and whether this step should tap the trackpad.
+    mutating func filter(_ raw: Double) -> (value: Double, tick: Bool) {
+        let distance = abs(raw - neutral)
+        let crossed = (last - neutral) * (raw - neutral) < 0
+        last = raw
+        if distance <= zone {
+            let tick = !engaged
+            engaged = true
+            return (neutral, tick)
+        }
+        let tick = crossed && !engaged
+        if distance > zone * 2 { engaged = false }
+        return (raw, tick)
+    }
+}
+
+/// A native slider with a soft detent at its default: while dragging it sticks to the default within ±1.5 % of its
+/// range and taps the trackpad once on the way in (Logic and Figma do the same). Double-click resets it.
+final class DetentSlider: NSSlider {
+    var neutral: Double? {
+        didSet { detent = neutral.map { Detent(neutral: $0, range: maxValue - minValue, at: doubleValue) } }
+    }
+    /// The mouse went up after a drag (or a double-click reset).
+    var onTrackingEnded: (() -> Void)?
+    private(set) var isTracking = false
+    private var detent: Detent?
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2, let neutral, isEnabled {
+            doubleValue = neutral
+            _ = sendAction(action, to: target)
+            onTrackingEnded?()
+            return
+        }
+        isTracking = true
+        detent?.begin(at: doubleValue)
+        super.mouseDown(with: event)  // the cell's tracking loop; returns on mouse up
+        isTracking = false
+        onTrackingEnded?()
+    }
+
+    override func sendAction(_ action: Selector?, to target: Any?) -> Bool {
+        // Only a drag is magnetic: arrow keys and VoiceOver must be able to step off the default.
+        if isTracking, var detent {
+            let (value, tick) = detent.filter(doubleValue)
+            self.detent = detent
+            if value != doubleValue { doubleValue = value }
+            if tick { Haptics.tick(.alignment) }
+        }
+        return super.sendAction(action, to: target)
+    }
+}
+
+// MARK: - Live preview
+
+/// Renders previews off the main thread, newest request wins: while one render runs, later requests replace each
+/// other and only the latest runs next. Results arrive in order on the main thread, and the preview keeps showing
+/// the last one meanwhile, so a slider never waits for a render.
+@MainActor
+final class LiveRender<Output: Sendable> {
+    private var busy = false
+    private var queued: (@Sendable () -> Output)?
+    private var generation = 0
+    private let deliver: (Output) -> Void
+
+    init(_ deliver: @escaping (Output) -> Void) {
+        self.deliver = deliver
+    }
+
+    var isBusy: Bool { busy || queued != nil }
+
+    func request(_ job: @escaping @Sendable () -> Output) {
+        if busy {
+            queued = job
+        } else {
+            run(job)
+        }
+    }
+
+    /// Drops queued work and any result still on its way.
+    func cancel() {
+        queued = nil
+        generation += 1
+    }
+
+    private func run(_ job: @escaping @Sendable () -> Output) {
+        busy = true
+        let token = generation
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let output = job()
+            await self?.finished(output, token)
+        }
+    }
+
+    private func finished(_ output: Output, _ token: Int) {
+        busy = false
+        if token == generation { deliver(output) }
+        if let job = queued {
+            queued = nil
+            run(job)
+        }
+    }
+}
+
+// MARK: - Canvas pieces
+
+/// A picture held as a layer's contents: the GPU scales it, so redrawing what's on top never resamples the photo.
+/// It ignores the mouse; its owner positions it.
+final class PictureView: NSView {
+    var image: CGImage? { didSet { needsDisplay = true } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.contentsGravity = .resize
+        layer?.contents = image
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// A transparent view its owner draws into (guides, handles, the shape being drawn). It ignores the mouse.
+final class OverlayView: NSView {
+    var drawer: (() -> Void)?
+    var topDown = false
+
+    override var isFlipped: Bool { topDown }
+
+    override func draw(_ dirtyRect: NSRect) { drawer?() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// Shows a CGImage aspect-fit with a soft shadow. The image is a layer's contents, so a new preview costs a texture
+/// upload, not a CPU resample. When `original` is set, pressing and holding shows it instead, to compare.
+final class ImagePreview: NSView {
+    var image: CGImage? { didSet { refresh() } }
+    var original: CGImage? {
+        didSet { toolTip = original == nil ? nil : L("Press and hold to compare with the original") }
+    }
+    private let content = CALayer()
+    private var comparing = false
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        content.contentsGravity = .resize
+        content.shadowColor = NSColor.black.cgColor
+        content.shadowOpacity = 0.25
+        content.shadowRadius = 5
+        content.shadowOffset = CGSize(width: 0, height: -3)
+        content.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull(), "shadowPath": NSNull()]
+        layer?.addSublayer(content)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    var imageRect: NSRect {
+        guard let shown = image ?? original else { return .zero }
+        return fit(CGSize(width: shown.width, height: shown.height), in: bounds.insetBy(dx: 12, dy: 12))
+    }
+
+    /// Replaces the image with a short crossfade, for changes that rearrange the picture (a new layout).
+    func setImage(_ image: CGImage?, fade: Bool) {
+        self.image = image
+        if fade {
+            let transition = CATransition()
+            transition.type = .fade
+            transition.duration = 0.15
+            content.add(transition, forKey: "fade")
+        }
+    }
+
+    private func refresh() {
+        content.contents = comparing ? (original ?? image) : image
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
         let rect = imageRect
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = 10
-        shadow.shadowOffset = NSSize(width: 0, height: -3)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.25)
-        shadow.set()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        NSImage(cgImage: image, size: rect.size).draw(in: rect)
-        NSGraphicsContext.restoreGraphicsState()
-        overlay?(rect)
+        content.frame = rect
+        content.shadowPath = CGPath(rect: CGRect(origin: .zero, size: rect.size), transform: nil)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard original != nil else { return super.mouseDown(with: event) }
+        comparing = true
+        refresh()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard comparing else { return super.mouseUp(with: event) }
+        comparing = false
+        refresh()
     }
 }
 

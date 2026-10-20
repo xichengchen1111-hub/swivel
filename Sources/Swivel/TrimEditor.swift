@@ -3,6 +3,9 @@ import AVFoundation
 import AVKit
 
 /// Trims a video or audio file between two points, with a player to preview the cut.
+///
+/// The handles stop with a tap at the clip's ends and where they meet; scrubbing shows the frame under the handle
+/// (a nearby one while dragging, the exact one on release), and playback stays inside the cut.
 final class TrimEditor: Editor {
     private let player: AVPlayer
     private let playerView = AVPlayerView()
@@ -14,17 +17,27 @@ final class TrimEditor: Editor {
     private let endLabel = NSTextField(labelWithString: L(""))
     private let lengthLabel = NSTextField(labelWithString: L(""))
     private var lastStart = 0.0
+    private var lastEnd: Double
+    /// The handles are pushed together at the minimum gap.
+    private var pinned = false
+    // Seeking chases the newest target with one seek in flight at a time (Apple QA1820), so scrubbing never queues up.
+    private var seekTarget = 0.0
+    private var seekExact = true
+    private var seeking = false
+    private var rateObservation: NSKeyValueObservation?
 
     init(source: URL) async throws {
         let asset = AVURLAsset(url: source)
         duration = try await asset.load(.duration).seconds
         isAudio = try await asset.loadTracks(withMediaType: .video).isEmpty
         guard duration > 0 else { throw ToolError("This file has no duration") }
+        lastEnd = duration
         player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         playerView.player = player
         playerView.controlsStyle = .inline
         super.init(title: isAudio ? "Trim Audio" : "Trim Video", source: source, canvas: playerView)
 
+        // Each handle's detent is its own end of the clip.
         start = slider(0, duration, 0)
         end = slider(0, duration, duration)
         for label in [startLabel, endLabel] {
@@ -36,6 +49,10 @@ final class TrimEditor: Editor {
         lengthLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         lengthLabel.textColor = .controlAccentColor
         addRow("Length", lengthLabel)
+
+        rateObservation = player.observe(\.rate, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in self?.playbackChanged() }
+        }
     }
 
     private func time(_ seconds: Double) -> String {
@@ -45,21 +62,66 @@ final class TrimEditor: Editor {
 
     override func update() {
         // Keep at least a tenth of a second between the handles, and preview whichever one moved.
-        let startMoved = start.doubleValue != lastStart
+        let startMoved = start.doubleValue != lastStart, endMoved = end.doubleValue != lastEnd
+        var meeting = false
         if end.doubleValue < start.doubleValue + 0.1 {
             if startMoved { start.doubleValue = max(0, end.doubleValue - 0.1) } else { end.doubleValue = min(duration, start.doubleValue + 0.1) }
+            meeting = true
         }
+        // The handles meeting is a hard stop: one tap as they touch, none while held there.
+        if meeting, !pinned, isTracking { Haptics.tick(.alignment) }
+        pinned = meeting
         lastStart = start.doubleValue
+        lastEnd = end.doubleValue
         startLabel.stringValue = time(start.doubleValue)
         endLabel.stringValue = time(end.doubleValue)
         lengthLabel.stringValue = time(end.doubleValue - start.doubleValue)
-        let seekTo = startMoved ? start.doubleValue : end.doubleValue
-        player.seek(to: CMTime(seconds: seekTo, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        player.currentItem?.reversePlaybackEndTime = CMTime(seconds: start.doubleValue, preferredTimescale: 600)
+        player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: end.doubleValue, preferredTimescale: 600)
+        // Opening (or Reset) shows the first frame of the cut, not its last.
+        seek(to: endMoved && !startMoved ? end.doubleValue : start.doubleValue, exact: !isTracking)
+    }
+
+    override func trackingEnded() { seek(to: seekTarget, exact: true) }
+
+    private func seek(to seconds: Double, exact: Bool) {
+        seekTarget = seconds
+        seekExact = exact
+        if !seeking { chase() }
+    }
+
+    private func chase() {
+        seeking = true
+        let target = seekTarget, exact = seekExact
+        // While dragging any nearby frame will do (quick to decode); the frame left on screen is exact.
+        let slack = exact ? CMTime.zero : CMTime(seconds: min(duration / 200, 0.25), preferredTimescale: 600)
+        player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: slack, toleranceAfter: slack) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.seeking = false
+                if self.seekTarget != target || (self.seekExact && !exact) { self.chase() }
+            }
+        }
+    }
+
+    /// Play starts from the beginning of the cut when the playhead is outside it (or sitting at its end).
+    private func playbackChanged() {
+        guard player.rate > 0, isLoaded else { return }
+        let now = player.currentTime().seconds
+        if now < start.doubleValue - 0.05 || now >= end.doubleValue - 0.05 {
+            player.seek(to: CMTime(seconds: start.doubleValue, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
+        }
     }
 
     override func reset() {
         start.doubleValue = 0
         end.doubleValue = duration
+    }
+
+    override func didClose() {
+        rateObservation?.invalidate()
+        rateObservation = nil
+        player.pause()
     }
 
     override func apply() async throws -> [URL] {
