@@ -23,9 +23,19 @@ enum ToolUI {
         window.makeKeyAndOrderFront(nil)
     }
 
+    /// Brings a tool panel forward without activating Swivel: the app the user is in keeps focus and its menu bar,
+    /// and no Dock icon appears. `focus` also makes the panel key so it takes typing straight away.
+    static func present(_ panel: ToolPanel, focus: Bool) {
+        // Edit and Window menus for ⌘C, ⌘V, ⌘Z and ⌘W once the user clicks into the panel.
+        if NSApp.mainMenu == nil { NSApp.mainMenu = AppWindow.mainMenu() }
+        panel.orderFrontRegardless()
+        if focus { panel.makeKey() }
+    }
+
     static func didClose() {
         DispatchQueue.main.async {
-            if !NSApp.windows.contains(where: { $0.isVisible && $0.styleMask.contains(.titled) }) {
+            // Non-activating panels never asked for the Dock icon, so they don't keep it either.
+            if !NSApp.windows.contains(where: { $0.isVisible && $0.styleMask.contains(.titled) && !$0.styleMask.contains(.nonactivatingPanel) }) {
                 NSApp.setActivationPolicy(.accessory)
             }
         }
@@ -64,16 +74,125 @@ enum ToolUI {
             child.bottomAnchor.constraint(equalTo: parent.bottomAnchor, constant: -inset),
         ])
     }
+
+    /// Fades a view up to fully opaque. Opacity only, so it stays the same under Reduce Motion.
+    static func fadeIn(_ view: NSView, from alpha: CGFloat = 0, duration: TimeInterval = 0.15) {
+        view.alphaValue = alpha
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = duration
+            view.animator().alphaValue = 1
+        }
+    }
+
+    /// "That didn't work": a short sideways shake of the offending control plus the refuse tap. With Reduce Motion
+    /// the control stays still and the system alert sound marks the refusal instead.
+    static func refuse(_ view: NSView) {
+        Feedback.refuse()
+        guard !Motion.reduced else { NSSound.beep(); return }
+        view.wantsLayer = true
+        guard let layer = view.layer else { return }
+        let shake = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        shake.values = [0, -6, 5, -3, 2, 0]
+        shake.duration = 0.28
+        shake.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(shake, forKey: "refuse")
+    }
+
+    /// Keeps a button as wide as its widest title (with its image, if any), so swapping titles (Copied, Processing
+    /// 3 of 12…) never shifts the buttons beside it.
+    static func reserveWidth(_ button: NSButton, for variants: [(title: String, image: NSImage?)]) {
+        let (title, image, position) = (button.title, button.image, button.imagePosition)
+        var widest: CGFloat = 0
+        for variant in variants {
+            button.title = variant.title
+            button.image = variant.image
+            button.imagePosition = variant.image == nil ? .noImage : .imageLeading
+            widest = max(widest, button.intrinsicContentSize.width)
+        }
+        (button.title, button.image, button.imagePosition) = (title, image, position)
+        button.widthAnchor.constraint(greaterThanOrEqualToConstant: ceil(widest)).isActive = true
+    }
+}
+
+/// A floating panel that can take keyboard focus while another app stays active (Spotlight-style).
+class ToolPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+
+    /// While Swivel isn't the active app its menu bar isn't in charge, so route the standard editing shortcuts here.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if super.performKeyEquivalent(with: event) { return true }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard !NSApp.isActive, flags.contains(.command), !flags.contains(.control), !flags.contains(.option),
+              let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
+        let action: Selector? = switch key {
+        case "x": #selector(NSText.cut(_:))
+        case "c": #selector(NSText.copy(_:))
+        case "v": #selector(NSText.paste(_:))
+        case "a": #selector(NSText.selectAll(_:))
+        case "z": flags.contains(.shift) ? Selector(("redo:")) : Selector(("undo:"))
+        case "w": #selector(NSWindow.performClose(_:))
+        default: nil
+        }
+        guard let action else { return false }
+        return NSApp.sendAction(action, to: nil, from: self)
+    }
+}
+
+/// An accent outline over a drop target while files hover over it. It never takes clicks or drags itself.
+final class DropRing: NSView {
+    private let shape = CAShapeLayer()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        alphaValue = 0
+        shape.fillColor = nil
+        shape.lineWidth = 2
+        layer?.addSublayer(shape)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        shape.frame = bounds
+        shape.path = CGPath(roundedRect: bounds.insetBy(dx: 6, dy: 6), cornerWidth: 10, cornerHeight: 10, transform: nil)
+    }
+
+    override func updateLayer() {
+        shape.strokeColor = NSColor.controlAccentColor.cgColor
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    /// Fades in quickly and out a little faster.
+    func setShown(_ shown: Bool) {
+        needsDisplay = true
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = shown ? 0.12 : 0.1
+            animator().alphaValue = shown ? 1 : 0
+        }
+    }
 }
 
 /// Native text fields retain editing shortcuts even in a menu-bar app.
 final class ToolTable: NSTableView {
     var deleteSelection: (() -> Void)?
     var previewSelection: (() -> Void)?
+    /// Files started hovering over the table and it will accept them.
+    var dropTargeted: (() -> Void)?
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 51 { deleteSelection?(); return }
+        if event.keyCode == 51 || event.keyCode == 117 { deleteSelection?(); return }
         if event.keyCode == 49 { previewSelection?(); return }
         super.keyDown(with: event)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let operation = super.draggingEntered(sender)
+        if !operation.isEmpty { dropTargeted?() }
+        return operation
     }
 }

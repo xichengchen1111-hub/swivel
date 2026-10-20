@@ -25,17 +25,24 @@ enum TextRecognition {
 final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
     private static var open: [TextCaptureWindow] = []
     let window: NSWindow
-    private let text = NSTextView()
+    private let text = CaptureTextView()
+    private let scroll = NSScrollView()
+    private let preview = NSImageView()
     private let status = ToolUI.note("Recognizing text…")
     private let progress = NSProgressIndicator()
     private var copyButton: NSButton!
     private var task: Task<Void, Never>?
+    /// Changes on every copy, so an older "Copied" can't put the title back early.
+    private var copyGeneration = 0
+    private var showingCopied = false
 
     static func present(_ url: URL) {
         guard Feature.textCapture.isOn else { return }
         let controller = TextCaptureWindow(url)
         open.append(controller)
+        // The window comes up at once; the picture and the text fill in as they're ready.
         ToolUI.show(controller.window)
+        controller.loadPreview(url)
         controller.recognize(url)
     }
 
@@ -53,10 +60,6 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
         window.delegate = self
         window.center()
 
-        let preview = NSImageView()
-        if let image = try? Images.load(url, maxPixels: 1800) {
-            preview.image = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
-        }
         preview.imageScaling = .scaleProportionallyUpOrDown
         preview.setAccessibilityLabel(L("Source image"))
         let well = NSBox()
@@ -77,7 +80,7 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
         text.autoresizingMask = [.width]
         text.textContainer?.widthTracksTextView = true
         text.setAccessibilityLabel(L("Recognized text"))
-        let scroll = NSScrollView()
+        text.onCommandReturn = { [weak self] in self?.copyText() }
         scroll.documentView = text
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
@@ -92,6 +95,10 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
         copyButton = ToolUI.button("Copy Text", target: self, action: #selector(copyText))
         copyButton.isEnabled = false
         copyButton.keyEquivalent = "\r"
+        copyButton.toolTip = L("Press ⌘Return to copy while editing the text.")
+        // The checkmark sits beside the title instead of at the edge of the (reserved) wider button.
+        copyButton.imageHugsTitle = true
+        ToolUI.reserveWidth(copyButton, for: [(L("Copy Text"), nil), (L("Copy Selection"), nil), (L("Copied"), Self.checkmark)])
         let close = ToolUI.button("Close", target: self, action: #selector(closeWindow))
         close.keyEquivalent = "\u{1b}"
         let footer = NSStackView()
@@ -112,6 +119,18 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
         columns.setContentHuggingPriority(.defaultLow, for: .vertical)
     }
 
+    private static let checkmark = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?
+        .withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))
+
+    /// Decodes the preview off the main thread (a large HEIC takes a noticeable moment) and fades it in.
+    private func loadPreview(_ url: URL) {
+        Task { [weak self] in
+            guard let image = try? await Images.detached({ try Images.load(url, maxPixels: 1800) }), let self else { return }
+            preview.image = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+            ToolUI.fadeIn(preview)
+        }
+    }
+
     private func recognize(_ url: URL) {
         task = Task { [weak self] in
             do {
@@ -119,9 +138,13 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
                 guard !Task.isCancelled, let self else { return }
                 text.string = value
                 text.isEditable = true
+                text.setSelectedRange(NSRange(location: 0, length: 0))
+                text.scrollToBeginningOfDocument(nil)
                 status.stringValue = value.isEmpty ? L("No text found in this image.") : L("Ready to copy")
                 progress.stopAnimation(nil)
                 updateCopy()
+                // Settle in softly. Focus stays off the text, so Return copies straight away.
+                if !value.isEmpty { ToolUI.fadeIn(text, from: 0.4) }
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 progress.stopAnimation(nil)
@@ -131,13 +154,39 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
     }
 
     func textDidChange(_ notification: Notification) { updateCopy() }
+    func textViewDidChangeSelection(_ notification: Notification) { updateCopyTitle() }
     private func updateCopy() { copyButton.isEnabled = !text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    private var selectedRanges: [NSRange] { text.selectedRanges.map(\.rangeValue).filter { $0.length > 0 } }
+
+    /// "Copy Selection" while part of the text is selected; that's all that gets copied then.
+    private func updateCopyTitle() {
+        guard !showingCopied else { return }
+        copyButton.image = nil
+        copyButton.imagePosition = .noImage
+        copyButton.title = L(selectedRanges.isEmpty ? "Copy Text" : "Copy Selection")
+    }
 
     @objc private func copyText() {
         guard Feature.textCapture.isOn, copyButton.isEnabled else { return }
+        let ranges = selectedRanges
+        let value = ranges.isEmpty ? text.string : ranges.map { (text.string as NSString).substring(with: $0) }.joined(separator: "\n")
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text.string, forType: .string)
+        NSPasteboard.general.setString(value, forType: .string)
         status.stringValue = L("Text copied")
+        Feedback.done()
+        // The button itself says it worked, for a moment.
+        copyGeneration += 1
+        let token = copyGeneration
+        showingCopied = true
+        copyButton.image = Self.checkmark
+        copyButton.imagePosition = .imageLeading
+        copyButton.title = L("Copied")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, copyGeneration == token else { return }
+            showingCopied = false
+            updateCopyTitle()
+        }
     }
     @objc private func closeWindow() { window.close() }
 
@@ -145,5 +194,20 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
         task?.cancel()
         Self.open.removeAll { $0 === self }
         ToolUI.didClose()
+    }
+}
+
+/// ⌘Return copies from anywhere in the window, including while the text is being edited, where plain Return
+/// types a new line.
+private final class CaptureTextView: NSTextView {
+    var onCommandReturn: (() -> Void)?
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.numericPad)
+        if flags == .command, event.keyCode == 36 || event.keyCode == 76 {
+            onCommandReturn?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
