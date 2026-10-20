@@ -235,11 +235,36 @@ enum TrackpadActuator {
     static func actuate(_ id: Int32) {
         queue.async {
             guard let api else { return }
-            for actuator in actuators() where api.actuate(actuator, id, 0, 0, 0) != 0 {
-                // Stale after sleep or a reconnect: start again on the next tap.
-                _ = api.close(actuator)
-                open = []
+            if fire(id, api) { return }
+            // Handles go stale after sleep or a reconnect: close them all, reopen and try once more. If that fails
+            // too, the public API still gives a tap while the finger is down.
+            reset(api)
+            if !fire(id, api) {
+                DispatchQueue.main.async {
+                    NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+                }
             }
+        }
+    }
+
+    /// True if every open trackpad actuated (and there was at least one).
+    private static func fire(_ id: Int32, _ api: API) -> Bool {
+        let actuators = actuators()
+        guard !actuators.isEmpty else { return false }
+        return actuators.allSatisfy { api.actuate($0, id, 0, 0, 0) == 0 }
+    }
+
+    private static func reset(_ api: API) {
+        for actuator in open { _ = api.close(actuator) }
+        open = []
+    }
+
+    /// After the Mac wakes, reopen ahead of the next press rather than losing it to a stale handle.
+    static func refreshAfterWake() {
+        queue.async {
+            guard let api, !open.isEmpty else { return }
+            reset(api)
+            _ = actuators()
         }
     }
 

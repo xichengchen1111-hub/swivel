@@ -17,6 +17,7 @@ final class Toast {
     /// Changes whenever the toast is shown or hidden, so an older fade-out can't hide a newer toast.
     private var generation = 0
     private var shownSymbol: String?
+    private var isSpinning = false
 
     init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 44),
@@ -80,6 +81,8 @@ final class Toast {
             frame.origin.y = min(frame.origin.y, area.maxY - frame.height - 8)
         }
 
+        // A toast by the pointer must sit above an open menu (pop-up menu level); others stay at status-bar level.
+        panel.level = point == nil ? .statusBar : NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
         let reduced = Motion.reduced
         if panel.isVisible, panel.alphaValue > 0.5, point == nil {
             // Already up: keep the place and let the width follow the new text.
@@ -106,6 +109,11 @@ final class Toast {
         hideWork?.cancel()
         autoHideDelay = autoHide ? (files.isEmpty ? 2.2 : 4) : nil
         scheduleHide()
+    }
+
+    /// Takes down a busy toast (a window that just opened is its own feedback); leaves results and errors alone.
+    func hideIfSpinning() {
+        if isSpinning { hide() }
     }
 
     /// Fades the toast out now.
@@ -156,6 +164,7 @@ final class Toast {
             icon.image = image
         }
         shownSymbol = name
+        isSpinning = spinning
         if spinning, !Motion.reduced { icon.addSymbolEffect(.rotate, options: .repeating) }
     }
 

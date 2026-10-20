@@ -90,8 +90,13 @@ struct FeelTests {
         // …and well past it the next sector (clockwise) takes over.
         view.track(point(view, degrees: 55, radius: 90))
         #expect(view.hovered == 1)
-        // Far outside the ring (a flick that overshoots) still selects by angle.
-        view.track(point(view, degrees: 0, radius: 190))
+        // Past the ring (a flick that overshoots) still selects by angle…
+        view.track(point(view, degrees: 0, radius: 160))
+        #expect(view.hovered == 2)
+        // …but well away from it is empty space, where releasing cancels.
+        view.track(point(view, degrees: 0, radius: 185))
+        #expect(view.hovered == nil)
+        view.track(point(view, degrees: 0, radius: 90))
         #expect(view.hovered == 2)
         // Falling back into the hub needs to go clearly inside it.
         view.track(point(view, degrees: 0, radius: 50))

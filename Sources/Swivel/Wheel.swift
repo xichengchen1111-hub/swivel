@@ -183,7 +183,10 @@ final class WheelPanel: NSPanel {
         }
         contentView?.frame = NSRect(origin: .zero, size: size)
         wheel.frame = NSRect(origin: .zero, size: size)
-        if let (rect, radius) = wheel.backdrop, !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+        // Under Reduce Transparency the wheel draws its own solid disc; the list keeps the effect view, whose
+        // system fallback is already opaque.
+        if let (rect, radius) = wheel.backdrop,
+           !(wheel.style == .wheel && NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) {
             glass.isHidden = false
             glass.frame = rect
             if #available(macOS 26.0, *), let glass = glass as? NSGlassEffectView {

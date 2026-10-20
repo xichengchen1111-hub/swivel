@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         watcher.onDragEnd = { [weak self] in self?.wheel.dragEnded() }
         watcher.start()
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
+            TrackpadActuator.refreshAfterWake()
+        }
         QuickActions.shared.syncSettings()
         Clothesline.shared.start()
         if ProcessInfo.processInfo.environment["SWIVEL_SHOW_ROPE"] != nil {  // for testing

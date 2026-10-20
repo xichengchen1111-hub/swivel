@@ -390,7 +390,7 @@ final class WheelView: NSView {
             let move: CGFloat = Motion.reduced ? 0 : 1
             let outer = baseOuter + Tune.popGrow * max(p, 0) * move
             // The gap to the neighbours narrows as a sector comes out, so it reads as one raised keycap.
-            let closing = 1 - 0.45 * min(max(p, 0), 1)
+            let closing = 1 - 0.45 * min(max(p, 0), 1) * move
             let padOut = (gap / 2) * closing / outer * 180 / .pi
             let padIn = (gap / 2) * closing / inner * 180 / .pi
             let centre = centreAngle(i) + rotation
@@ -418,7 +418,7 @@ final class WheelView: NSView {
             if items.count > 1 { path.transform(using: t) }
             return Slot(path: path, label: items.count == 1 ? NSPoint(x: center.x, y: center.y + mid) : labelCentre,
                         maxWidth: mid * sin(.pi / CGFloat(max(items.count, 2))) * 1.7,
-                        fontSize: items.count > 6 ? 11 : 12, labelScale: scale * (1 + 0.07 * max(p, 0)),
+                        fontSize: items.count > 6 ? 11 : 12, labelScale: scale * (1 + 0.07 * max(p, 0) * move),
                         alpha: min(max(bloom, 0), 1) * (1 - away))
         }
     }
@@ -524,6 +524,9 @@ final class WheelView: NSView {
             let distance = hypot(dx, dy)
             // The hub is the cancel zone; once a sector is chosen it takes a little more to fall back into it.
             guard distance > (hovered == nil ? innerRadius + 2 : innerRadius - 6) else { return nil }
+            // A flick that overshoots the ring keeps its sector, but a deliberate move well away from it is empty
+            // space again: releasing there cancels.
+            guard distance < (hovered == nil ? outerRadius + 40 : outerRadius + 52) else { return nil }
             let angle = atan2(dy, dx) * 180 / .pi
             if let hovered, items.indices.contains(hovered), items.count > 1 {
                 var off = (angle - centreAngle(hovered)).truncatingRemainder(dividingBy: 360)
@@ -665,7 +668,8 @@ final class WheelView: NSView {
         // Hub: shrinks in on open, fades as a confirmed menu clears.
         let hubBloom = blooms.isEmpty ? 1 : min(max(bloomValue(0) * 1.2, 0), 1)
         let sunk = hubPress.value
-        let hubRadius = innerRadius * (0.86 + 0.14 * hubBloom) * (1 - 0.04 * sunk)
+        let still: CGFloat = Motion.reduced ? 0 : 1
+        let hubRadius = innerRadius * (0.86 + 0.14 * hubBloom) * (1 - 0.04 * sunk * still)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current?.cgContext.setAlpha(min(max(hubBloom, 0), 1) * (pressed == nil ? 1 : 1 - exit.value))
         let hub = NSBezierPath(ovalIn: NSRect(x: center.x - hubRadius, y: center.y - hubRadius,
@@ -717,13 +721,14 @@ final class WheelView: NSView {
         let current = headline(for: hovered)
         // The old title leaves upwards in the first third; the new one rises in after it, so they never overlap.
         let changing = previousHeadline != current
+        let slide: CGFloat = Motion.reduced ? 0 : 6   // Reduce Motion: a plain crossfade
         let out = min(s / 0.35, 1), into = min(max((s - 0.2) / 0.8, 0), 1)
         if changing, out < 1 {
             let wasItem = previousHeadline != mode.title && previousHeadline != L("Cancel")
-            drawText(previousHeadline, at: NSPoint(x: point.x, y: point.y + 6 * out), font: font,
+            drawText(previousHeadline, at: NSPoint(x: point.x, y: point.y + slide * out), font: font,
                      color: (wasItem ? accent : ink).withAlphaComponent(1 - out), maxWidth: maxWidth)
         }
-        drawText(current, at: NSPoint(x: point.x, y: point.y - (changing ? 6 * (1 - into) : 0)), font: font,
+        drawText(current, at: NSPoint(x: point.x, y: point.y - (changing ? slide * (1 - into) : 0)), font: font,
                  color: (hovered == nil ? ink : accent).withAlphaComponent(changing ? into : 1), maxWidth: maxWidth)
     }
 
@@ -755,7 +760,7 @@ final class WheelView: NSView {
         let s = min(max(swap.value, 0), 1)
         var x = capsule.minX + 13
         let shownTitle = (title as NSString).size(withAttributes: attrs).width
-        drawText(title, at: NSPoint(x: x + min(shownTitle, titleWidth) / 2, y: capsule.midY - 3 * (1 - s)),
+        drawText(title, at: NSPoint(x: x + min(shownTitle, titleWidth) / 2, y: capsule.midY - (Motion.reduced ? 0 : 3 * (1 - s))),
                  font: .systemFont(ofSize: 13, weight: .bold),
                  color: (hovered == nil ? ink : NSColor.controlAccentColor).withAlphaComponent(0.4 + 0.6 * s),
                  maxWidth: titleWidth, glow: false)
@@ -777,7 +782,7 @@ final class WheelView: NSView {
         for p in 0..<pageCount {
             let x = dotsX + CGFloat(p) * spacing
             // The current page's dot grows in as the page turns.
-            let size = p == page ? dot * (1 + 0.5 * (1 - min(max(reveal.value, 0), 1))) : dot
+            let size = p == page && !Motion.reduced ? dot * (1 + 0.5 * (1 - min(max(reveal.value, 0), 1))) : dot
             (p == page ? accent : ink.withAlphaComponent(0.3)).setFill()
             NSBezierPath(ovalIn: NSRect(x: x - size / 2, y: point.y - size / 2, width: size, height: size)).fill()
         }
@@ -810,7 +815,7 @@ final class WheelView: NSView {
         if rowAlpha.value > 0.01 {
             var rect = listRect(row.value)
             let pressed = pressed.map { pressValue($0) } ?? 0
-            rect = rect.insetBy(dx: rect.width * 0.02 * pressed, dy: rect.height * 0.06 * pressed)
+            if !Motion.reduced { rect = rect.insetBy(dx: rect.width * 0.02 * pressed, dy: rect.height * 0.06 * pressed) }
             var fill = accent.withAlphaComponent(0.92 * min(rowAlpha.value, 1))
             if pressed > 0 { fill = fill.mix(pressedTint, pressed * 0.6) }
             if flash > 0 { fill = fill.mix(.white, 0.3 * flash) }
@@ -830,7 +835,7 @@ final class WheelView: NSView {
                 .paragraphStyle: style,
             ]
             let height = ("A" as NSString).size(withAttributes: attrs).height
-            let nudge = 3 * min(max(popValue(i), 0), 1) - 8 * (1 - bloom)
+            let nudge = Motion.reduced ? 0 : 3 * min(max(popValue(i), 0), 1) - 8 * (1 - bloom)
             (items[i].displayTitle as NSString).draw(with: NSRect(x: slot.label.x + nudge, y: slot.label.y - height / 2,
                                                            width: slot.maxWidth, height: height),
                                               options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
@@ -1082,6 +1087,13 @@ final class WheelView: NSView {
         pointerInside = false
         pointer = nil
         hovered = nil
+        cancelArmed = false
+    }
+
+    /// Starts a fresh try without changing what is shown as hovered (Settings previews rest on a hovered item, which
+    /// mustn't count as the user having visited it).
+    func resetVisit() {
+        visited = false
         cancelArmed = false
     }
 
