@@ -16,7 +16,7 @@ struct Slot {
 private enum Tune {
     // Hover: the item under the pointer springs out with a small overshoot and settles back calmly. Its colour
     // arrives in the first few frames; only the shape springs.
-    static let popOut = (response: CGFloat(0.24), damping: CGFloat(0.64))
+    static let popOut = (response: CGFloat(0.24), damping: CGFloat(0.7))
     static let popBack = (response: CGFloat(0.18), damping: CGFloat(0.95))
     static let popLift: CGFloat = 10        // wheel sector moves outwards (pt)
     static let popGrow: CGFloat = 4         // and its outer edge grows (pt)
@@ -42,6 +42,7 @@ private enum Tune {
 /// is pressed in, and opening blooms the items out from the centre. Previews in Settings draw the settled state.
 final class WheelView: NSView {
     var onDrop: ((WheelItem, [URL]) -> Void)?
+    var onDragEndedWithoutDrop: (() -> Void)?
     var subtitle = ""
     var style: MenuStyle = .wheel { didSet { needsDisplay = true } }
     /// Animate and give haptic feedback. Off for the static previews in Settings.
@@ -91,6 +92,13 @@ final class WheelView: NSView {
     private var visited = false
     private var pointerInside = false
     private var openPoint: NSPoint?
+    /// Where the pointer is (view coordinates), for the light that follows it across a raised sector.
+    private var pointer: NSPoint?
+    /// A Force Click during the drag (spring-loading activation): the hovered item is pushed partway in.
+    private var deepPressed = false
+    private weak var dragInfo: NSDraggingInfo?
+    /// Widest header the current page can show, so the header doesn't shift sideways as items are hovered.
+    private var headerTitleWidth: CGFloat = 0
     /// Releasing now would cancel: the pointer came back to the hub after visiting an item.
     private(set) var cancelArmed = false {
         didSet {
@@ -122,7 +130,12 @@ final class WheelView: NSView {
         self.page = page
         self.pageCount = pageCount
         pops = items.map { _ in Spring(0, response: Tune.popBack.response, damping: Tune.popBack.damping) }
-        blooms = items.map { _ in Spring(1, response: Tune.bloom.response, damping: Tune.bloom.damping) }
+        // Tags on the rope swing in as they appear (gently: still well damped); everything else settles without overshoot.
+        let bloom = style == .clothesline ? (response: CGFloat(0.42), damping: CGFloat(0.62)) : Tune.bloom
+        blooms = items.map { _ in Spring(1, response: bloom.response, damping: bloom.damping) }
+        headerTitleWidth = ([mode.title, L("Cancel")] + items.map { "\(mode.title): \($0.displayTitle)" })
+            .map { ($0 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold)]).width }
+            .max() ?? 0
         bloomClock = .infinity
         swap.snap(1)
         rowAlpha.snap(0)
@@ -160,6 +173,8 @@ final class WheelView: NSView {
         visited = false
         pointerInside = false
         cancelArmed = false
+        deepPressed = false
+        self.pointer = nil
         hubPress.snap(0)
         if Motion.reduced {
             for i in blooms.indices { blooms[i].snap(1) }
@@ -175,6 +190,7 @@ final class WheelView: NSView {
     func beginConfirm(_ index: Int) {
         guard items.indices.contains(index) else { return }
         pressedTint = pressedColour()
+        deepPressed = false
         pressed = index
         if hovered != index { hovered = index }
         press.response = Tune.pressIn.response
@@ -251,6 +267,8 @@ final class WheelView: NSView {
     }
 
     private func hoverChanged(from old: Int?) {
+        if deepPressed, pressed == nil { setDeepPress(false) }
+        dragInfo?.resetSpringLoading()
         if let old, pops.indices.contains(old) {
             pops[old].response = Tune.popBack.response
             pops[old].damping = Tune.popBack.damping
@@ -288,7 +306,7 @@ final class WheelView: NSView {
     /// Colour follows the pop but arrives in the first few frames, so the highlight never lags the pointer.
     private func tintValue(_ i: Int) -> CGFloat { min(max(popValue(i) * 2.2, 0), 1) }
     private func bloomValue(_ i: Int) -> CGFloat { blooms.indices.contains(i) ? blooms[i].value : 1 }
-    private func pressValue(_ i: Int) -> CGFloat { i == pressed ? press.value : 0 }
+    private func pressValue(_ i: Int) -> CGFloat { i == (pressed ?? (deepPressed ? hovered : nil)) ? press.value : 0 }
 
     /// While a dropped item is confirmed, the others clear away (0 → 1).
     private func exitValue(_ i: Int) -> CGFloat { pressed != nil && i != pressed ? exit.value : 0 }
@@ -368,7 +386,9 @@ final class WheelView: NSView {
             let pressed = settled ? 0 : pressValue(i)
             let bloom = settled ? 1 : bloomValue(i)
             let away = settled ? 0 : exitValue(i)
-            let outer = baseOuter + Tune.popGrow * max(p, 0)
+            // Under Reduce Motion nothing moves; the pop shows as colour only.
+            let move: CGFloat = Motion.reduced ? 0 : 1
+            let outer = baseOuter + Tune.popGrow * max(p, 0) * move
             // The gap to the neighbours narrows as a sector comes out, so it reads as one raised keycap.
             let closing = 1 - 0.45 * min(max(p, 0), 1)
             let padOut = (gap / 2) * closing / outer * 180 / .pi
@@ -376,7 +396,7 @@ final class WheelView: NSView {
             let centre = centreAngle(i) + rotation
             let rad = centre * .pi / 180
             let dir = CGVector(dx: cos(rad), dy: sin(rad))
-            let lift = Tune.popLift * p - Tune.pressSink * pressed - Tune.bloomRise * (1 - bloom) - 12 * away
+            let lift = move * (Tune.popLift * p - Tune.pressSink * pressed - Tune.bloomRise * (1 - bloom) - 12 * away)
 
             let path = NSBezierPath()
             if items.count == 1 {
@@ -391,7 +411,7 @@ final class WheelView: NSView {
             // Scale about the sector's own centre, then move it out along its direction.
             let rest = NSPoint(x: center.x + dir.dx * mid, y: center.y + dir.dy * mid)
             let labelCentre = NSPoint(x: rest.x + dir.dx * lift, y: rest.y + dir.dy * lift)
-            let scale = (1 - Tune.pressScale * pressed) * (0.9 + 0.1 * bloom) * (1 - 0.08 * away)
+            let scale = Motion.reduced ? 1 : (1 - Tune.pressScale * pressed) * (0.9 + 0.1 * bloom) * (1 - 0.08 * away)
             var t = AffineTransform(translationByX: labelCentre.x, byY: labelCentre.y)
             t.scale(scale)
             t.translate(x: -rest.x, y: -rest.y)
@@ -424,7 +444,9 @@ final class WheelView: NSView {
         return items.indices.map { i in
             let w = Self.bookWidth(i), h = Self.bookHeight(i)
             let bloom = settled ? 1 : bloomValue(i)
-            let lift = 12 * pop(i) - (settled ? 0 : 4 * pressValue(i)) - 26 * (1 - bloom)
+            // Neighbours of the hovered book rise a little too, so it reads as one physical row (Dock-style).
+            let near = settled ? 0 : max(i > 0 ? pop(i - 1) : 0, i + 1 < items.count ? pop(i + 1) : 0)
+            let lift = Motion.reduced ? 0 : 12 * pop(i) + 3 * max(near, 0) - (settled ? 0 : 4 * pressValue(i)) - 26 * (1 - bloom)
             let rect = NSRect(x: x, y: shelfTop + lift, width: w, height: h)
             x += w + 5
             return Slot(path: NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3),
@@ -445,8 +467,8 @@ final class WheelView: NSView {
                               width: side, height: side)
             let p = pop(i), bloom = settled ? 1 : bloomValue(i)
             let rest: CGFloat = [-3, 2.5, -1.5, 3, -2.5, 1.5, -3.5, 2][i % 8]
-            let tilt = rest * (1 - p) + 6 * (1 - bloom)
-            let scale = (1 + 0.08 * p - (settled ? 0 : 0.06 * pressValue(i))) * (0.82 + 0.18 * bloom)
+            let tilt = Motion.reduced ? rest : rest * (1 - p) + 6 * (1 - bloom)
+            let scale = Motion.reduced ? 1 : (1 + 0.08 * p - (settled ? 0 : 0.06 * pressValue(i))) * (0.82 + 0.18 * bloom)
             var t = AffineTransform(translationByX: rect.midX, byY: rect.midY)
             t.rotate(byDegrees: tilt)
             t.scale(scale)
@@ -476,8 +498,9 @@ final class WheelView: NSView {
             let p = pop(i), bloom = settled ? 1 : bloomValue(i)
             let rest: CGFloat = [4, -3, 2.5, -4, 3, -2, 3.5, -3][i % 8]
             // Tags swing in from the rope as they appear and straighten when hovered.
-            let tilt = rest * (1 - p) + 14 * (1 - bloom)
-            let lift = 4 * p - (settled ? 0 : 5 * pressValue(i))
+            let tilt = Motion.reduced ? rest : rest * (1 - p) + 14 * (1 - bloom)
+            let near = settled ? 0 : max(i > 0 ? pop(i - 1) : 0, i + 1 < items.count ? pop(i + 1) : 0)
+            let lift = Motion.reduced ? 0 : 4 * p + 1.5 * max(near, 0) - (settled ? 0 : 5 * pressValue(i))
             let rect = NSRect(x: x - w / 2, y: hang - 6 - h + lift, width: w, height: h)
             var t = AffineTransform(translationByX: x, byY: hang)
             t.rotate(byDegrees: tilt)
@@ -595,6 +618,11 @@ final class WheelView: NSView {
         let cap = dark ? NSColor(white: 0, alpha: 0.30) : NSColor(white: 1, alpha: 0.38)
         let hubFill = dark ? NSColor(white: 0, alpha: 0.38) : NSColor(white: 1, alpha: 0.6)
         let line = dark ? NSColor(white: 1, alpha: 0.28) : NSColor(white: 1, alpha: 0.9)
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency, let (rect, _) = backdrop {
+            // No glass under Reduce Transparency: a solid disc keeps the labels readable on any desktop.
+            NSColor.windowBackgroundColor.withAlphaComponent(0.96).setFill()
+            NSBezierPath(ovalIn: rect).fill()
+        }
         let all = slots()
 
         // Raised sectors are drawn last so their shadow falls on their neighbours.
@@ -614,11 +642,15 @@ final class WheelView: NSView {
                 slot.path.fill()
             }
             if p > 0.01 {
-                // A soft sheen across the raised keycap.
+                // A soft sheen across the raised keycap, and a light under the pointer that follows it.
                 NSGraphicsContext.saveGraphicsState()
                 slot.path.addClip()
                 NSGradient(colors: [NSColor.white.withAlphaComponent(0.28 * p * (1 - sink)), .clear])!
                     .draw(in: slot.path.bounds, angle: -90)
+                if let pointer, i == hovered, !Motion.reduced {
+                    NSGradient(colors: [NSColor.white.withAlphaComponent(0.22 * p * (1 - sink)), .clear])!
+                        .draw(fromCenter: pointer, radius: 0, toCenter: pointer, radius: 70, options: [])
+                }
                 NSGraphicsContext.restoreGraphicsState()
             }
             line.mix(NSColor.white.withAlphaComponent(0.9), tint).setStroke()
@@ -701,8 +733,11 @@ final class WheelView: NSView {
         let title = headline(for: hovered)
         let detail = cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply")
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .bold)]
-        let titleWidth = (title as NSString).size(withAttributes: attrs).width
-        var detailWidth = min((detail as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width, 150)
+        // Sized for the widest title this page can show, so hovering never slides the header sideways.
+        let titleWidth = max((title as NSString).size(withAttributes: attrs).width, headerTitleWidth)
+        let detailFont = NSFont.systemFont(ofSize: 11)
+        var detailWidth = min([subtitle, L("drop to apply"), L("release to cancel")]
+            .map { ($0 as NSString).size(withAttributes: [.font: detailFont]).width }.max() ?? 0, 150)
         let dotsWidth: CGFloat = pageCount > 1 ? CGFloat(pageCount) * 7 + 44 : 0
         let capsuleWidth = min(titleWidth + detailWidth + dotsWidth + 34, bounds.width - 8)
         // In a narrow menu the detail text gives way so it never runs into the page dots.
@@ -719,13 +754,15 @@ final class WheelView: NSView {
         }
         let s = min(max(swap.value, 0), 1)
         var x = capsule.minX + 13
-        drawText(title, at: NSPoint(x: x + titleWidth / 2, y: capsule.midY - 3 * (1 - s)),
+        let shownTitle = (title as NSString).size(withAttributes: attrs).width
+        drawText(title, at: NSPoint(x: x + min(shownTitle, titleWidth) / 2, y: capsule.midY - 3 * (1 - s)),
                  font: .systemFont(ofSize: 13, weight: .bold),
                  color: (hovered == nil ? ink : NSColor.controlAccentColor).withAlphaComponent(0.4 + 0.6 * s),
                  maxWidth: titleWidth, glow: false)
-        x += titleWidth + 8
-        drawText(detail, at: NSPoint(x: x + detailWidth / 2, y: capsule.midY),
-                 font: .systemFont(ofSize: 11), color: ink.withAlphaComponent(0.55), maxWidth: detailWidth, glow: false)
+        x += min(shownTitle, titleWidth) + 8
+        let shownDetail = min((detail as NSString).size(withAttributes: [.font: detailFont]).width, detailWidth)
+        drawText(detail, at: NSPoint(x: x + shownDetail / 2, y: capsule.midY),
+                 font: detailFont, color: ink.withAlphaComponent(0.55), maxWidth: detailWidth, glow: false)
         if pageCount > 1 {
             drawPageDots(at: NSPoint(x: capsule.maxX - dotsWidth / 2 - 6, y: capsule.midY), hintBelow: false)
         }
@@ -1008,6 +1045,8 @@ final class WheelView: NSView {
     func track(_ point: NSPoint) -> Bool {
         guard pressed == nil else { return false }
         pointerInside = true
+        if style == .wheel, hovered != nil, pointer != point { needsDisplay = true }
+        pointer = point
         if let start = openPoint {
             guard hypot(point.x - start.x, point.y - start.y) >= 10 else { return false }
             openPoint = nil
@@ -1018,6 +1057,7 @@ final class WheelView: NSView {
     }
 
     private func operation(for info: NSDraggingInfo) -> NSDragOperation {
+        dragInfo = info
         guard track(convert(info.draggingLocation, from: nil)) else { return [] }
         let mask = info.draggingSourceOperationMask
         if mask.contains(.copy) { return .copy }
@@ -1029,13 +1069,30 @@ final class WheelView: NSView {
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { operation(for: sender) }
 
     override func draggingExited(_ sender: NSDraggingInfo?) { pointerLeft() }
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        setDeepPress(false)
+        // The drag finished over the menu without a drop (Esc, or released on the hub): clear away now rather than
+        // waiting for the drag watcher's fallback.
+        if pressed == nil { DispatchQueue.main.async { [weak self] in self?.onDragEndedWithoutDrop?() } }
+    }
 
     /// The pointer left the menu: nothing is hovered, and releasing out there isn't a cancel on the hub.
     func pointerLeft() {
         guard pressed == nil else { return }
         pointerInside = false
+        pointer = nil
         hovered = nil
         cancelArmed = false
+    }
+
+    /// Pushes the hovered item partway in while a Force Click is held during the drag, and lets it back out.
+    private func setDeepPress(_ on: Bool) {
+        guard on != deepPressed, pressed == nil else { return }
+        deepPressed = on && hovered != nil
+        press.response = deepPressed ? 0.12 : 0.22
+        press.damping = deepPressed ? 1 : 0.7
+        press.target = deepPressed ? 0.6 : 0
+        kick()
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
@@ -1071,6 +1128,20 @@ final class WheelView: NSView {
         DispatchQueue.main.async { [weak self] in self?.onDrop?(item, urls) }
         return true
     }
+}
+
+/// A Force Click on a Force Touch trackpad during the drag "spring-loads" the hovered item: it sinks in, a real
+/// press under the finger (the trackpad gives its own click). Releasing the drag still applies it as usual.
+extension WheelView: NSSpringLoadingDestination {
+    private func springOptions() -> NSSpringLoadingOptions {
+        hovered == nil || pressed != nil ? [] : [.enabled, .continuousActivation, .noHover]
+    }
+
+    func springLoadingEntered(_ draggingInfo: NSDraggingInfo) -> NSSpringLoadingOptions { springOptions() }
+    func springLoadingUpdated(_ draggingInfo: NSDraggingInfo) -> NSSpringLoadingOptions { springOptions() }
+    func springLoadingActivated(_ activated: Bool, draggingInfo: NSDraggingInfo) { setDeepPress(activated) }
+    func springLoadingHighlightChanged(_ draggingInfo: NSDraggingInfo) {}
+    func springLoadingExited(_ draggingInfo: NSDraggingInfo) { setDeepPress(false) }
 }
 
 extension NSView {

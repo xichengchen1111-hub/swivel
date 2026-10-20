@@ -25,6 +25,16 @@ final class WheelController {
 
     init() {
         panel.wheel.onDrop = { [weak self] item, urls in self?.perform(item, urls: urls) }
+        panel.wheel.onDragEndedWithoutDrop = { [weak self] in
+            guard let self, self.panel.isVisible, !self.panel.isClosing, self.panel.wheel.pressed == nil else { return }
+            self.close(.cancel)
+        }
+        // Draw a menu once offscreen so fonts and shadows are cached before the first real one opens.
+        DispatchQueue.main.async { [panel] in
+            let view = menuPreview(style: .wheel, titles: ["JPG", "PNG", "HEIC", "PDF"], mode: .convert, hovered: 0)
+            if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) { view.cacheDisplay(in: view.bounds, to: rep) }
+            _ = panel
+        }
     }
 
     func keyTapped(_ newMode: WheelMode, urls: [URL]) {
@@ -107,7 +117,7 @@ final class WheelController {
         // Slow actions get a progress toast; items that open their own window (editors) don't need one.
         let busy = DispatchWorkItem { [toast] in
             guard Editor.presented == editorsBefore else { return }
-            toast.show(item.displayTitle + "…", symbol: "arrow.triangle.2.circlepath", autoHide: false, spinning: true)
+            toast.show(item.displayTitle + "…", symbol: "arrow.triangle.2.circlepath.circle", autoHide: false, spinning: true)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: busy)
         Task { @MainActor in
@@ -129,7 +139,6 @@ final class WheelController {
                 toast.show(info.message, symbol: "info.circle.fill")
             } catch {
                 busy.cancel()
-                Feedback.refuse()
                 toast.show(error.localizedDescription, symbol: "exclamationmark.triangle.fill", tint: .systemRed)
             }
         }
@@ -170,7 +179,7 @@ final class WheelPanel: NSPanel {
         }
         contentView?.frame = NSRect(origin: .zero, size: size)
         wheel.frame = NSRect(origin: .zero, size: size)
-        if let (rect, radius) = wheel.backdrop {
+        if let (rect, radius) = wheel.backdrop, !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
             glass.isHidden = false
             glass.frame = rect
             if #available(macOS 26.0, *), let glass = glass as? NSGlassEffectView {
@@ -273,8 +282,9 @@ final class WheelPanel: NSPanel {
         isClosing = true
         ignoresMouseEvents = true
         let token = generation
-        let delay: TimeInterval = how == .confirm ? 0.12 : 0
-        let duration: TimeInterval = how == .confirm ? 0.15 : 0.12
+        // A confirmed drop stays up long enough for the file's icon to land in the chosen item (about 0.2 s).
+        let delay: TimeInterval = how == .confirm ? 0.16 : 0
+        let duration: TimeInterval = how == .confirm ? 0.14 : 0.12
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, self.generation == token else { return }
             if !Motion.reduced { self.contentView?.shrinkAway(to: how == .confirm ? 0.97 : 0.93, duration: duration) }

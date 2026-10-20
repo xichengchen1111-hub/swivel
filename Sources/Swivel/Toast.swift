@@ -150,7 +150,7 @@ final class Toast {
         guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil) else { return }
         icon.removeAllSymbolEffects()
         if shownSymbol != nil, shownSymbol != name, panel.isVisible, !Motion.reduced {
-            icon.setSymbolImage(image, contentTransition: .replace)
+            icon.setSymbolImage(image, contentTransition: .replace.magic(fallback: .replace.downUp))
             if name == "checkmark.circle.fill" { icon.addSymbolEffect(.bounce, options: .nonRepeating) }
         } else {
             icon.image = image
