@@ -4,20 +4,23 @@ import AVKit
 
 /// Trims a video or audio file between two points, with a player to preview the cut.
 ///
-/// The handles stop with a tap at the clip's ends and where they meet; scrubbing shows the frame under the handle
-/// (a nearby one while dragging, the exact one on release), and playback stays inside the cut.
+/// The handles stop with a tap at the clip's ends (reaching exactly 0 and the full length) and where they meet;
+/// scrubbing shows the frame under the handle (a nearby one while dragging, the exact one on release), and playback
+/// stays inside the cut.
 final class TrimEditor: Editor {
+    private let asset: AVURLAsset
     private let player: AVPlayer
     private let playerView = AVPlayerView()
-    private let duration: Double
-    private let isAudio: Bool
-    private var start: NSSlider!
-    private var end: NSSlider!
+    /// Known once `load()` has read the asset.
+    private(set) var duration = 0.0
+    private(set) var isAudio: Bool
+    private(set) var start: DetentSlider!
+    private(set) var end: DetentSlider!
     private let startLabel = NSTextField(labelWithString: L(""))
     private let endLabel = NSTextField(labelWithString: L(""))
     private let lengthLabel = NSTextField(labelWithString: L(""))
     private var lastStart = 0.0
-    private var lastEnd: Double
+    private var lastEnd = 0.0
     /// The handles are pushed together at the minimum gap.
     private var pinned = false
     // Seeking chases the newest target with one seek in flight at a time (Apple QA1820), so scrubbing never queues up.
@@ -26,20 +29,21 @@ final class TrimEditor: Editor {
     private var seeking = false
     private var rateObservation: NSKeyValueObservation?
 
+    /// Builds the window at once; the asset's length and tracks load in `load()`, after `present()` has counted the
+    /// window, so the menu that opened it doesn't put up a busy toast meanwhile. (Still `async throws`, as callers
+    /// await it.)
     init(source: URL) async throws {
-        let asset = AVURLAsset(url: source)
-        duration = try await asset.load(.duration).seconds
-        isAudio = try await asset.loadTracks(withMediaType: .video).isEmpty
-        guard duration > 0 else { throw ToolError("This file has no duration") }
-        lastEnd = duration
+        asset = AVURLAsset(url: source)
+        isAudio = FileKind.of(source) == .audio
         player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         playerView.player = player
         playerView.controlsStyle = .inline
         super.init(title: isAudio ? "Trim Audio" : "Trim Video", source: source, canvas: playerView)
 
-        // Each handle's detent is its own end of the clip.
-        start = slider(0, duration, 0)
-        end = slider(0, duration, duration)
+        // Each handle's default is its own end of the clip: an end stop that taps, never a band that swallows the
+        // first or last seconds. The real range arrives with the duration.
+        start = slider(0, 1, 0)
+        end = slider(0, 1, 1)
         for label in [startLabel, endLabel] {
             label.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
             label.widthAnchor.constraint(equalToConstant: 64).isActive = true
@@ -53,6 +57,23 @@ final class TrimEditor: Editor {
         rateObservation = player.observe(\.rate, options: [.new]) { [weak self] _, _ in
             Task { @MainActor in self?.playbackChanged() }
         }
+    }
+
+    override func load() async throws {
+        let seconds = try await asset.load(.duration).seconds
+        let audio = try await asset.loadTracks(withMediaType: .video).isEmpty
+        guard seconds > 0 else { throw ToolError("This file has no duration") }  // also NaN (indefinite)
+        duration = seconds
+        if audio != isAudio {
+            isAudio = audio
+            window.title = L(audio ? "Trim Audio" : "Trim Video")
+        }
+        for handle in [start!, end!] { handle.maxValue = seconds }
+        start.doubleValue = 0
+        end.doubleValue = seconds
+        end.neutral = seconds
+        lastStart = 0
+        lastEnd = seconds
     }
 
     private func time(_ seconds: Double) -> String {

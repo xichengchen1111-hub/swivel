@@ -369,6 +369,10 @@ enum Strings {
         "Looking for faces and text…": ["正在查找人脸和文字…", "正在尋找人臉和文字…", "顔とテキストを探しています…"],
         "Found %d faces and %d text areas. Drag to add a box, click one to remove it.":
             ["找到 %d 张人脸、%d 处文字。拖动可加框，点框可删除。", "找到 %d 張人臉、%d 處文字。拖曳可加框，點框可刪除。", "顔 %d 件、テキスト %d 件が見つかりました。ドラッグで枠を追加、クリックで削除。"],
+        "Couldn't look for faces and text. Drag on the photo to cover areas yourself.":
+            ["无法查找人脸和文字。请在照片上拖动，自行遮盖区域。", "無法尋找人臉和文字。請在照片上拖曳，自行遮蔽區域。", "顔とテキストを検出できませんでした。写真上をドラッグして、隠す範囲を自分で指定してください。"],
+        "Nothing to redact. Drag on the photo to cover an area.":
+            ["没有要打码的内容。请在照片上拖动以遮盖区域。", "沒有要遮蔽的內容。請在照片上拖曳以遮蔽區域。", "墨消しする範囲がありません。写真上をドラッグして範囲を指定してください。"],
         "Edit Metadata": ["编辑元数据", "編輯後設資料", "メタデータを編集"],
         "Camera": ["相机", "相機", "カメラ"],
         "Lens": ["镜头", "鏡頭", "レンズ"],

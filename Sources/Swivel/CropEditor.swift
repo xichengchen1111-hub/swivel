@@ -190,6 +190,26 @@ struct CropDrag {
         return Result(rect: CGRect(x: x, y: y, width: w, height: h).roundedToPixels, snap: snap)
     }
 
+    /// The largest rect of `ratio` inside `rect`, for a press that takes over a glide toward a locked ratio (the box
+    /// drawn mid-glide has neither ratio). It keeps the grabbed edges where they are, so they stay under the pointer,
+    /// and centres the rest; it stays inside the image and at least `minSide` on each side.
+    static func fitted(_ rect: CGRect, to ratio: CGFloat, keeping handle: CropHandle, in size: CGSize,
+                       minSide: CGFloat = 16) -> CGRect {
+        var w = rect.width, h = rect.height
+        if w / h > ratio { w = h * ratio } else { h = w / ratio }
+        let grow = max(1, minSide / min(w, h))
+        w *= grow
+        h *= grow
+        let shrink = min(1, size.width / w, size.height / h)
+        w *= shrink
+        h *= shrink
+        var x = handle.left ? rect.minX : handle.right ? rect.maxX - w : rect.midX - w / 2
+        var y = handle.top ? rect.minY : handle.bottom ? rect.maxY - h : rect.midY - h / 2
+        x = min(max(0, x), size.width - w)
+        y = min(max(0, y), size.height - h)
+        return CGRect(x: x, y: y, width: w, height: h).roundedToPixels
+    }
+
     private func lineCandidates(_ edge: CGFloat, _ lines: [CGFloat]) -> [SnapPick.Candidate] {
         lines.enumerated().map { .init(id: $0.offset, delta: $0.element - edge) }
     }
@@ -427,9 +447,12 @@ final class CropView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         guard let handle = handle(at: event) else { return }
-        // Take over from a running glide where the box is drawn now, so the drag starts 1:1 under the pointer.
-        let current = shownCrop.roundedToPixels
+        // Take over from a running glide where the box is drawn now, so the drag starts 1:1 under the pointer. With a
+        // ratio locked, the in-between box is first fitted to it: no drag restores a ratio it didn't start with, and
+        // the crop would be saved off-ratio with the ratio still selected.
+        var current = shownCrop.roundedToPixels
         if current != crop {
+            if let ratio { current = CropDrag.fitted(current, to: ratio, keeping: handle, in: pixelSize) }
             setCrop(current, animated: false)
             onChange?()
         }
@@ -722,7 +745,6 @@ final class CompressEditor: Editor {
     private struct Estimate: Sendable {
         var settings: Settings
         var data: Data
-        var decoded: CGImage
         var preview: CGImage?
     }
 
@@ -731,7 +753,7 @@ final class CompressEditor: Editor {
     private let sizes = [0, 3840, 2560, 1920, 1280, 800]
     private var formats: [(String, UTType, String)] = []
     /// Decoded source per size cap, so dragging the quality only re-encodes.
-    private var cache: [Int: CGImage] = [:]
+    let decoded = DecodedSources()
     private var latest: Estimate?
     private var quality: NSSlider!
     private var qualityLabel: NSTextField!
@@ -740,6 +762,8 @@ final class CompressEditor: Editor {
     private let estimate = NSTextField(labelWithString: L(""))
     private var calculating: DispatchWorkItem?
     private lazy var estimator = LiveRender<Estimate?> { [weak self] in self?.show($0) }
+    /// An estimate is being worked out or waits its turn.
+    var isEstimating: Bool { estimator.isBusy }
 
     init(source: URL) throws {
         originalBytes = (try? source.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
@@ -776,17 +800,19 @@ final class CompressEditor: Editor {
 
     override func update() {
         qualityLabel.stringValue = "\(Int((quality.doubleValue * 100).rounded()))%"
-        let settings = self.settings, type = formats[settings.format].1, cached = cache[settings.maxPixels], source = self.source
+        let settings = self.settings, type = formats[settings.format].1, decoded = self.decoded, source = self.source
         // Keep the last result visible, dimmed, while the new one is worked out; only a slow encode says so in words.
         estimate.textColor = .tertiaryLabelColor
         calculating?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.estimate.stringValue = L("Calculating…") }
         calculating = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+        // The source is looked up when the job runs, not now: a request queued behind the first (full-size) decode
+        // then reuses that decode instead of starting another.
         estimator.request {
-            guard let image = cached ?? (try? Images.load(source, maxPixels: settings.maxPixels == 0 ? nil : settings.maxPixels)),
+            guard let image = try? decoded.image(source, maxPixels: settings.maxPixels),
                   let data = try? Images.encode(image, type: type, quality: settings.quality) else { return nil }
-            return Estimate(settings: settings, data: data, decoded: image, preview: CompressEditor.decode(data, maxPixels: 1400))
+            return Estimate(settings: settings, data: data, preview: CompressEditor.decode(data, maxPixels: 1400))
         }
     }
 
@@ -802,7 +828,6 @@ final class CompressEditor: Editor {
 
     private func show(_ result: Estimate?) {
         guard let result else { return }
-        cache[result.settings.maxPixels] = result.decoded
         latest = result
         let current = result.settings == settings
         if current { calculating?.cancel() }
@@ -828,13 +853,39 @@ final class CompressEditor: Editor {
         let settings = self.settings, (_, type, ext) = formats[settings.format], source = self.source
         // The estimate already encoded exactly this; write those bytes rather than encode again.
         let ready = latest?.settings == settings ? latest?.data : nil
-        let cached = cache[settings.maxPixels]
+        let decoded = self.decoded
         return try await Images.detached {
-            let data = try ready ?? Images.encode(try cached ?? Images.load(source, maxPixels: settings.maxPixels == 0 ? nil : settings.maxPixels),
+            let data = try ready ?? Images.encode(try decoded.image(source, maxPixels: settings.maxPixels),
                                                   type: type, quality: settings.quality)
             let out = Paths.output(for: source, ext: ext, suffix: " compressed")
             try data.write(to: out)
             return [out]
         }
+    }
+}
+
+/// Decoded copies of one source, per size cap (0 = full size), shared by Compress's estimates and its Apply.
+/// Whoever needs a size first decodes it; anyone asking meanwhile waits for that decode rather than starting a second
+/// one (a 48 MP original is about 200 MB and a fifth of a second).
+final class DecodedSources: @unchecked Sendable {
+    private let lock = NSLock()
+    private var images: [Int: CGImage] = [:]
+    private var decodes = 0
+
+    /// How many decodes have run (for tests).
+    var decodeCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return decodes
+    }
+
+    func image(_ source: URL, maxPixels: Int) throws -> CGImage {
+        lock.lock()
+        defer { lock.unlock() }
+        if let image = images[maxPixels] { return image }
+        let image = try Images.load(source, maxPixels: maxPixels == 0 ? nil : maxPixels)
+        images[maxPixels] = image
+        decodes += 1
+        return image
     }
 }
