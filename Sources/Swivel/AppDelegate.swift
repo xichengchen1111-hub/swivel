@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = L("Hang your screenshots on the clothesline?")
         alert.informativeText = L("""
             New screenshots will skip the desktop and hang on a rope under the menu bar. \
-            Rest the pointer on the menu bar to lower it. The floating thumbnail is turned off while this is on; \
+            Move the pointer to the top edge of the screen to lower it. The floating thumbnail is turned off while this is on; \
             your own settings come back if you turn it off or quit Swivel.
             """)
         alert.addButton(withTitle: L("Take Over Screenshots"))
@@ -93,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let keys = WheelMode.allCases.map { "\(Prefs.key(for: $0).symbol) \($0.title)" }.joined(separator: " · ")
         var tip: [String] = []
         if wheelOn { tip.append(L("Wheel: drag a file, then tap %@", keys)) }
-        if ropeOn { tip.append(L("Clothesline: rest the pointer on the menu bar, or press ⌃⌥T")) }
+        if ropeOn { tip.append(L("Clothesline: move to the top edge, or press ⌃⌥T")) }
         statusItem.button?.toolTip = tip.isEmpty ? L(anyOn ? "Swivel — open the menu to use your enabled tools." : "Swivel — everything is off. Open this menu to turn a feature on.") : tip.joined(separator: "\n")
 
         let menu = NSMenu()

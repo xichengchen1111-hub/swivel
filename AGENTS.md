@@ -3,7 +3,7 @@
 Swivel is a native macOS menu-bar app (Swift, AppKit, no third-party dependencies) that bundles six tools, each switched on or off on its own:
 
 - **Wheel** — start dragging a file in Finder, tap a modifier key, and a menu pops up under the pointer. Drop the file on an option to convert it, open an editor (crop, compress, adjust, background, redact, metadata, annotate, collage, trim), or act on it (AirDrop, copy, move, copy path, Terminal, shelf, hang on the clothesline). Five menu templates: Wheel, List, Bookshelf, Sticky Notes, Clothesline.
-- **Clothesline** — a rope under the menu bar. New screenshots first wait as a card in the bottom-right corner (like the system thumbnail); drag the card up or click it to hang it. Resting the pointer on the menu bar lowers the rope. Prints can be clicked (copy), double-clicked (open), held (Quick Look) or dragged away. The rope and prints are animated with a small physics model.
+- **Clothesline** — a rope under the menu bar. New screenshots first wait as a card in the bottom-right corner (like the system thumbnail); drag the card up or click it to hang it. Moving the pointer to the screen’s top edge immediately lowers the rope. Prints can be clicked (copy), double-clicked (open), held (Quick Look) or dragged away. The rope and prints are animated with a small physics model.
 - **Text Capture** — local Vision OCR from a selected image, with editable text and explicit copy.
 - **File Shelf** — a session-only list of file references with multiple selection and dragging out together.
 - **Image Presets** — saved image size, format, quality and metadata recipes; outputs beside originals.
@@ -74,6 +74,15 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 - Editors' Apply buttons were never clicked end to end (windows were only opened and screenshotted).
 - Clothesline: dragging the corner card up to the rope, persistence of hung prints, and whether the calmer swing feels right.
 - The original feature switches and language picker were checked by screenshot, not clicked.
+
+### Version 1.1.1 interaction tuning (2026-10-20)
+
+- Touching the top two points of a screen starts lowering the rope without a hover delay (50 ms polling). Moving away rearms the gesture, so hiding it while at the edge does not immediately reopen it.
+- Incoming cards wait 2.5 seconds while idle. Hovering, pressing or dragging pauses dismissal; leaving or ending a cancelled/copy drag grants one more second. Entry/exit use short eased animations; old animation completions cannot hide a newer card.
+- Existing eight tests and the release build pass. Installed 1.1.1 after a normal quit and verified screenshot-setting restoration. The previous app/preferences are in ignored `build/previous-1.1/`.
+- Tested the real incoming-file watcher with a generated image: it moved to the user's original screenshot directory after 2.95 seconds, including watch delay, with identical bytes. The generated test image was then removed.
+- Updated both `/Applications/Swivel.app` and the owner's desktop copy to 1.1.1. Quit the stale desktop 1.0 process normally, verified screenshot restoration, then launched only the Applications copy. Both binaries match the release build; signatures pass and preferences are unchanged. The old desktop app/preferences are backed up in ignored `build/desktop-update-backup/`.
+- Physical top-edge movement and hover/drag timing still need subjective manual checking; automated tests do not measure the feel of the gesture.
 
 ### Version 1.1 validation (2026-10-20)
 

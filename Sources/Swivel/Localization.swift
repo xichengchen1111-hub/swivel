@@ -197,7 +197,7 @@ enum Strings {
         "Move it there — it comes off the rope": ["移到那里，从绳上取下", "移到那裡，從繩上取下", "そこへ移動（ロープから外れる）"],
         "Drag to the Trash, or click ×": ["拖到废纸篓，或点 ×", "拖到垃圾桶，或點 ×", "ゴミ箱にドラッグ、または × をクリック"],
         "Throw it away": ["丢掉", "丟掉", "捨てる"],
-        "Rest on the menu bar": ["指针停在菜单栏", "指標停在選單列", "メニューバーにポインタを置く"],
+        "Move to the top edge": ["鼠标移到屏幕顶边", "滑鼠移到螢幕頂邊", "ポインタを画面の上端へ移動"],
         "Lower the rope": ["放下绳子", "放下繩子", "ロープを下ろす"],
         "Click the menu bar": ["点击菜单栏", "點按選單列", "メニューバーをクリック"],
         "Put the rope away": ["收起绳子", "收起繩子", "ロープをしまう"],
@@ -207,8 +207,8 @@ enum Strings {
         "Hang New Screenshots": ["挂上新截图", "掛上新截圖", "新しいスクリーンショットを掛ける"],
         "Hang Copied Images": ["挂上复制的图片", "掛上拷貝的圖片", "コピーした画像を掛ける"],
         "Hang your screenshots on the clothesline?": ["要把截图挂到晾衣绳上吗？", "要把截圖掛到曬衣繩上嗎？", "スクリーンショットを物干しロープに掛けますか？"],
-        "New screenshots will skip the desktop and hang on a rope under the menu bar. Rest the pointer on the menu bar to lower it. The floating thumbnail is turned off while this is on; your own settings come back if you turn it off or quit Swivel.":
-            ["新截图不再放到桌面，而是挂在菜单栏下的绳子上。指针停在菜单栏就能放下绳子。开启期间会关闭浮动缩略图；关闭此功能或退出 Swivel 时会恢复你原来的设置。", "新截圖不再放到桌面，而是掛在選單列下的繩子上。指標停在選單列就能放下繩子。開啟期間會關閉浮動縮圖；關閉此功能或結束 Swivel 時會回復你原本的設定。", "新しいスクリーンショットはデスクトップに置かれず、メニューバーの下のロープに掛かります。メニューバーにポインタを置くとロープが下ります。オンの間はフローティングサムネールがオフになり、オフにするか Swivel を終了すると元の設定に戻ります。"],
+        "New screenshots will skip the desktop and hang on a rope under the menu bar. Move the pointer to the top edge of the screen to lower it. The floating thumbnail is turned off while this is on; your own settings come back if you turn it off or quit Swivel.":
+            ["新截图不再放到桌面，而是挂在菜单栏下的绳子上。鼠标移到屏幕顶边就能立即放下绳子。开启期间会关闭浮动缩略图；关闭此功能或退出 Swivel 时会恢复你原来的设置。", "新截圖不再放到桌面，而是掛在選單列下的繩子上。滑鼠移到螢幕頂邊就能立即放下繩子。開啟期間會關閉浮動縮圖；關閉此功能或結束 Swivel 時會回復你原本的設定。", "新しいスクリーンショットはデスクトップに置かれず、メニューバーの下のロープに掛かります。ポインタを画面の上端へ移動すると、すぐにロープが下ります。オンの間はフローティングサムネールがオフになり、オフにするか Swivel を終了すると元の設定に戻ります。"],
         "Take Over Screenshots": ["接管截图", "接管截圖", "スクリーンショットを引き継ぐ"],
         "Not Now": ["以后再说", "以後再說", "今はしない"],
         "Click: copy · Double-click: open · Hold: Quick Look · Drag: take it down":
@@ -235,7 +235,7 @@ enum Strings {
         "Swivel — everything is off. Open this menu to turn a feature on.":
             ["Swivel — 所有功能都已关闭。打开此菜单来开启功能。", "Swivel — 所有功能都已關閉。打開此選單來開啟功能。", "Swivel — すべてオフです。このメニューから機能をオンにしてください。"],
         "Wheel: drag a file, then tap %@": ["轮盘：拖住文件，再按 %@", "輪盤：拖住檔案，再按 %@", "ホイール：ファイルをドラッグして %@ を押す"],
-        "Clothesline: rest the pointer on the menu bar, or press ⌃⌥T": ["晾衣绳：指针停在菜单栏，或按 ⌃⌥T", "曬衣繩：指標停在選單列，或按 ⌃⌥T", "物干しロープ：メニューバーにポインタを置くか ⌃⌥T"],
+        "Clothesline: move to the top edge, or press ⌃⌥T": ["晾衣绳：鼠标移到屏幕顶边，或按 ⌃⌥T", "曬衣繩：滑鼠移到螢幕頂邊，或按 ⌃⌥T", "物干しロープ：ポインタを画面の上端へ移動、または ⌃⌥T"],
         "%@ is on": ["%@ 已开启", "%@ 已開啟", "%@ をオンにしました"],
         "%@ is off": ["%@ 已关闭", "%@ 已關閉", "%@ をオフにしました"],
         "Swivel is running — drag a file, then tap %@": ["Swivel 正在运行 — 拖住文件，再按 %@", "Swivel 正在執行 — 拖住檔案，再按 %@", "Swivel 実行中 — ファイルをドラッグして %@ を押す"],

@@ -4,8 +4,8 @@ import AVFoundation
 /// A rope tucked under the menu bar.
 ///
 /// New screenshots first appear as a card in the bottom-right corner, as macOS shows them. Drag the card up
-/// (or click it) to hang it on the rope; leave it and it goes to your usual screenshot folder. Resting the
-/// pointer on the menu bar lowers the rope, and every print can be clicked, opened or dragged away.
+/// (or click it) to hang it on the rope; leave it and it goes to your usual screenshot folder. Moving the
+/// pointer to the screen's top edge lowers the rope, and every print can be clicked, opened or dragged away.
 @MainActor
 final class Clothesline: NSObject {
     static let shared = Clothesline()
@@ -27,7 +27,7 @@ final class Clothesline: NSObject {
     let panel = RopePanel()
     private var watches: [DispatchSourceFileSystemObject] = []
     private var hoverTimer: Timer?
-    private var hoverSince: Date?
+    private var wasAtTopEdge = false
     private var leftSince: Date?
     private var pinned = false              // shown with the hotkey: stays until toggled or clicked away
     private var pasteboardCount = NSPasteboard.general.changeCount
@@ -44,9 +44,10 @@ final class Clothesline: NSObject {
         for url in mediaFiles(in: incoming) { IncomingCard.shared.putAway(url) }
         watch(folder) { [weak self] in self?.reload() }
         watch(incoming) { [weak self] in self?.checkIncoming() }
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        timer.tolerance = 0.01
         RunLoop.main.add(timer, forMode: .common)
         hoverTimer = timer
         hotKey = HotKey { [weak self] in self?.toggle() }
@@ -142,7 +143,6 @@ final class Clothesline: NSObject {
 
     func hide() {
         pinned = false
-        hoverSince = nil
         leftSince = nil
         panel.raise()
     }
@@ -163,23 +163,26 @@ final class Clothesline: NSObject {
     }
 
     private func tick() {
-        guard Prefs.clotheslineEnabled else { if isShown { hide() }; return }
+        guard Prefs.clotheslineEnabled else {
+            wasAtTopEdge = false
+            if isShown { hide() }
+            return
+        }
         checkPasteboard()
         let point = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) else { return }
         let inMenuBar = point.y >= screen.frame.maxY - menuBarHeight(screen)
+        let atTopEdge = point.y >= screen.frame.maxY - 2
+        let reachedTopEdge = atTopEdge && !wasAtTopEdge
+        wasAtTopEdge = atTopEdge
         let buttonDown = NSEvent.pressedMouseButtons & 1 != 0
 
-        if !isShown {
-            // Rest the pointer on the menu bar (without clicking) to lower the rope.
-            if inMenuBar && !buttonDown && !items.isEmpty {
-                if hoverSince == nil { hoverSince = Date() }
-                if Date().timeIntervalSince(hoverSince!) > 0.35 { show() }
-            } else {
-                hoverSince = nil
-            }
-            return
+        // Touching the edge reveals immediately. Moving away rearms it, so a menu-bar
+        // click or the hide shortcut can dismiss the rope without it reopening in place.
+        if reachedTopEdge && !buttonDown && (!isShown || panel.rope.isLifting) {
+            show()
         }
+        if !isShown { return }
 
         if isDraggingItem || isReceiving { return }
         // Clicking the menu bar puts the rope away.
@@ -797,7 +800,9 @@ final class IncomingCard: NSObject, NSDraggingSource {
     private(set) var url: URL?
     private var dismissal: DispatchWorkItem?
     private var dragging = false
-    private static let waitSeconds: TimeInterval = 6
+    private var presentation = 0
+    private static let waitSeconds: TimeInterval = 2.5
+    private static let resumeSeconds: TimeInterval = 1
 
     override init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 170),
@@ -816,7 +821,10 @@ final class IncomingCard: NSObject, NSDraggingSource {
 
     func present(_ url: URL) {
         if let current = self.url, current != url { putAway(current, animated: false) }
+        pauseDismissal()
+        presentation += 1
         self.url = url
+        view.resetInteraction()
         let isMovie = ["mov", "mp4"].contains(url.pathExtension.lowercased())
         var thumb: CGImage?
         if isMovie {
@@ -832,28 +840,36 @@ final class IncomingCard: NSObject, NSDraggingSource {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         guard let area = screen?.visibleFrame else { return }
         let final = NSRect(x: area.maxX - size.width - 14, y: area.minY + 14, width: size.width, height: size.height)
+        view.resetInteraction(hovered: NSPointInRect(NSEvent.mouseLocation, final))
         panel.setFrame(final.offsetBy(dx: size.width + 40, dy: 0), display: false)
         panel.alphaValue = 1
         panel.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.5
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 1.25, 0.35, 1)  // slides in, overshoots a hair
+            ctx.duration = 0.32
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(final, display: true)
         }
         scheduleDismissal()
     }
 
-    private func scheduleDismissal() {
+    func pauseDismissal() {
         dismissal?.cancel()
+        dismissal = nil
+    }
+
+    func resumeDismissal() { scheduleDismissal(after: Self.resumeSeconds) }
+
+    private func scheduleDismissal(after delay: TimeInterval = IncomingCard.waitSeconds) {
+        pauseDismissal()
+        guard let url, !dragging, !view.isHovered, !view.isInteracting else { return }
+        let generation = presentation
         let work = DispatchWorkItem { [weak self] in
-            guard let self, !self.dragging, !self.view.isHovered, let url = self.url else {
-                self?.scheduleDismissal()
-                return
-            }
+            guard let self, self.presentation == generation, self.url == url,
+                  !self.dragging, !self.view.isHovered, !self.view.isInteracting else { return }
             self.putAway(url)
         }
         dismissal = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.waitSeconds, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     /// Not wanted on the rope: saved where screenshots normally go, and the card slides away.
@@ -862,20 +878,28 @@ final class IncomingCard: NSObject, NSDraggingSource {
         try? FileManager.default.moveItem(at: url, to: destination)
         guard url == self.url else { return }
         self.url = nil
-        dismissal?.cancel()
+        pauseDismissal()
         guard animated else { panel.orderOut(nil); return }
+        let generation = presentation
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.28
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            ctx.duration = 0.22
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             panel.animator().setFrame(panel.frame.offsetBy(dx: panel.frame.width + 40, dy: 0), display: true)
-        }, completionHandler: { [panel] in MainActor.assumeIsolated { panel.orderOut(nil) } })
+            panel.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.presentation == generation else { return }
+                self.panel.orderOut(nil)
+            }
+        })
     }
 
     /// Click: the card flies up to the rope.
     func hangNow() {
         guard let url else { return }
         self.url = nil
-        dismissal?.cancel()
+        pauseDismissal()
+        let generation = presentation
         Clothesline.shared.show(force: true)
         let area = panel.screen?.visibleFrame ?? .zero
         let target = NSRect(x: area.midX - panel.frame.width * 0.25, y: area.maxY - 130,
@@ -885,9 +909,9 @@ final class IncomingCard: NSObject, NSDraggingSource {
             ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.5, 0, 0.3, 1)
             panel.animator().setFrame(target, display: true)
             panel.animator().alphaValue = 0
-        }, completionHandler: { [panel] in
+        }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
-                panel.orderOut(nil)
+                if let self, self.presentation == generation { self.panel.orderOut(nil) }
                 Clothesline.shared.receive([url])
             }
         })
@@ -895,7 +919,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
 
     func open() {
         guard let url else { return }
-        dismissal?.cancel()
+        pauseDismissal()
         panel.orderOut(nil)
         self.url = nil
         Clothesline.shared.openInPreview(url)
@@ -904,6 +928,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
     func beginDrag(with event: NSEvent) {
         guard let url else { return }
         dragging = true
+        pauseDismissal()
         let item = NSDraggingItem(pasteboardWriter: url as NSURL)
         item.setDraggingFrame(view.photoRect, contents: view.thumbnail ?? NSWorkspace.shared.icon(forFile: url.path))
         panel.animator().alphaValue = 0.25
@@ -917,6 +942,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         dragging = false
+        view.resetInteraction(hovered: NSPointInRect(screenPoint, panel.frame), afterDrag: true)
         Clothesline.shared.endReceiving()
         guard let url else { return }
         if operation == .delete {
@@ -925,7 +951,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
         if !FileManager.default.fileExists(atPath: url.path) || operation == .delete {
             // Hung on the rope, moved to a folder or thrown away: the card's job is done.
             self.url = nil
-            dismissal?.cancel()
+            pauseDismissal()
             panel.orderOut(nil)
             panel.alphaValue = 1
         } else {
@@ -934,7 +960,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
                 ctx.duration = 0.2
                 panel.animator().alphaValue = 1
             }
-            scheduleDismissal()
+            resumeDismissal()
         }
     }
 }
@@ -946,6 +972,15 @@ final class IncomingView: NSView {
     private var downEvent: NSEvent?
     private var dragged = false
     private var singleClick: DispatchWorkItem?
+    var isInteracting: Bool { downEvent != nil || singleClick != nil }
+
+    func resetInteraction(hovered: Bool = false, afterDrag: Bool = false) {
+        singleClick?.cancel()
+        singleClick = nil
+        downEvent = nil
+        dragged = afterDrag
+        isHovered = hovered
+    }
 
     private static let maxThumb = NSSize(width: 200, height: 128)
     private static let caption: CGFloat = 26
@@ -969,8 +1004,14 @@ final class IncomingView: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
-    override func mouseExited(with event: NSEvent) { isHovered = false }
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        card?.pauseDismissal()
+    }
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        card?.resumeDismissal()
+    }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -1003,6 +1044,7 @@ final class IncomingView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        card?.pauseDismissal()
         downEvent = event
         dragged = false
     }
@@ -1012,16 +1054,23 @@ final class IncomingView: NSView {
         let a = down.locationInWindow, b = event.locationInWindow
         guard hypot(b.x - a.x, b.y - a.y) > 4 else { return }
         dragged = true
+        singleClick?.cancel()
+        singleClick = nil
         card?.beginDrag(with: down)
     }
 
     override func mouseUp(with event: NSEvent) {
+        downEvent = nil
         guard !dragged else { return }
         if event.clickCount >= 2 {
             singleClick?.cancel()
+            singleClick = nil
             card?.open()
         } else {
-            let click = DispatchWorkItem { [weak self] in self?.card?.hangNow() }
+            let click = DispatchWorkItem { [weak self] in
+                self?.singleClick = nil
+                self?.card?.hangNow()
+            }
             singleClick = click
             DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: click)
         }

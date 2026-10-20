@@ -288,7 +288,7 @@ final class ClotheslinePane: Pane {
             ["Click", "Copy the image"], ["Double-click", "Open in Preview (QuickTime for recordings)"],
             ["Hold or force click", "Quick Look"], ["Drag into an app", "Send a copy — the original stays on the rope"],
             ["Drag into a folder", "Move it there — it comes off the rope"], ["Drag to the Trash, or click ×", "Throw it away"],
-            ["Rest on the menu bar", "Lower the rope"], ["Click the menu bar", "Put the rope away"], ["⌃ ⌥ T", "Show or hide the rope"],
+            ["Move to the top edge", "Lower the rope"], ["Click the menu bar", "Put the rope away"], ["⌃ ⌥ T", "Show or hide the rope"],
         ].map { pair -> [NSView] in
             let key = NSTextField(labelWithString: L(pair[0]))
             key.font = .systemFont(ofSize: 12, weight: .semibold)
