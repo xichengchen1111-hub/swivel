@@ -27,6 +27,10 @@ class Editor: NSObject, NSWindowDelegate {
     private var cancelButton: NSButton!
     private let savingSpinner = NSProgressIndicator()
     private let loadingSpinner = NSProgressIndicator()
+    /// Covers the canvas while saving, so a click, drag or draw can't change what Apply already read.
+    private let shield = InputShield()
+    /// The window's undo manager (handed over in `windowWillReturnUndoManager`); locked while saving.
+    let history = EditorUndoManager()
     private var sliders: [DetentSlider] = []
     private var disabledWhileSaving: [NSControl] = []
     /// `load()` finished; until then the controls can move but nothing renders.
@@ -34,6 +38,8 @@ class Editor: NSObject, NSWindowDelegate {
     private(set) var isSaving = false
     private var closed = false
     private var discardConfirmed = false
+    /// The window opened during `load()`, with a spinner in place of the canvas.
+    private var revealedWhileLoading = false
 
     init(title: String, source: URL, canvas: NSView) {
         self.source = source
@@ -92,8 +98,13 @@ class Editor: NSObject, NSWindowDelegate {
         well.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         loadingSpinner.style = .spinning
         loadingSpinner.isDisplayedWhenStopped = false
+        // Hidden, not only stopped, when not loading: a stopped spinner still takes the clicks at the canvas's centre.
+        loadingSpinner.isHidden = true
         loadingSpinner.translatesAutoresizingMaskIntoConstraints = false
         well.addSubview(loadingSpinner)
+        shield.isHidden = true
+        shield.translatesAutoresizingMaskIntoConstraints = false
+        well.addSubview(shield)
 
         let separator = NSBox()
         separator.boxType = .separator
@@ -119,6 +130,10 @@ class Editor: NSObject, NSWindowDelegate {
             well.heightAnchor.constraint(greaterThanOrEqualToConstant: 280),
             loadingSpinner.centerXAnchor.constraint(equalTo: well.centerXAnchor),
             loadingSpinner.centerYAnchor.constraint(equalTo: well.centerYAnchor),
+            shield.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            shield.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            shield.topAnchor.constraint(equalTo: well.topAnchor),
+            shield.bottomAnchor.constraint(equalTo: well.bottomAnchor),
         ])
         window.contentView = content
     }
@@ -147,7 +162,9 @@ class Editor: NSObject, NSWindowDelegate {
         applyButton.isEnabled = true
         resetButton.isEnabled = true
         update()
-        if window.isVisible { finishLoading() } else { reveal(loading: false) }
+        // Already open with a spinner: swap in the canvas even if the window was minimized or hidden meanwhile (it
+        // then stays where the user put it). Not open yet: open it now.
+        if revealedWhileLoading { finishLoading() } else { reveal(loading: false) }
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
         }
@@ -178,15 +195,25 @@ class Editor: NSObject, NSWindowDelegate {
     private func reveal(loading: Bool) {
         guard !closed, !window.isVisible else { return }
         if loading {
+            revealedWhileLoading = true
             canvas.alphaValue = 0
+            loadingSpinner.isHidden = false
             loadingSpinner.startAnimation(nil)
         }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+        // The window is the feedback now; a busy toast from the action that opened it would otherwise spin on.
+        Toast.shared.hideIfSpinning()
     }
 
     private func finishLoading() {
         loadingSpinner.stopAnimation(nil)
+        loadingSpinner.isHidden = true
+        guard window.isVisible else {
+            // Minimized or hidden while loading: ready when it comes back.
+            canvas.alphaValue = 1
+            return
+        }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -213,6 +240,11 @@ class Editor: NSObject, NSWindowDelegate {
 
     @objc private func applyClicked() {
         guard isLoaded, !isSaving else { return }
+        // Return pressed mid-drag on the canvas: the drag would go on changing the picture after Apply read it.
+        guard NSEvent.pressedMouseButtons & 1 == 0 else {
+            NSSound.beep()
+            return
+        }
         // A half-typed value (W/H, the Text field) has to reach the editor before it reads its controls. A field
         // holding something invalid refuses to let go; leave it to the user.
         guard window.makeFirstResponder(nil) else {
@@ -230,16 +262,21 @@ class Editor: NSObject, NSWindowDelegate {
                 finish(.success(files))
             } catch {
                 setSaving(false)
+                guard !closed else { return }
                 Feedback.refuse()
                 NSAlert(error: error).beginSheetModal(for: window, completionHandler: nil)
             }
         }
     }
 
-    /// Apply's pressed state lasts as long as the save: a spinner, "Saving…", and nothing else to click.
-    private func setSaving(_ saving: Bool) {
+    /// Apply's pressed state lasts as long as the save: a spinner, "Saving…", and nothing else to click — the
+    /// controls are disabled, the canvas is covered and ⌘Z / ⇧⌘Z wait, because `apply()` has already read them all.
+    func setSaving(_ saving: Bool) {
         isSaving = saving
         applyButton.title = saving ? L("Saving…") : L("Apply")
+        history.isLocked = saving
+        shield.isHidden = !saving
+        window.invalidateCursorRects(for: shield)
         if saving {
             savingSpinner.startAnimation(nil)
             disabledWhileSaving = (Self.controls(in: controls) + [resetButton, cancelButton, applyButton]).filter(\.isEnabled)
@@ -314,6 +351,8 @@ class Editor: NSObject, NSWindowDelegate {
         if window.level != .normal { window.level = .normal }
     }
 
+    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { history }
+
     // MARK: Control builders
 
     func addRow(_ title: String, _ views: NSView...) {
@@ -383,23 +422,41 @@ class Editor: NSObject, NSWindowDelegate {
 // MARK: - Slider detent
 
 /// Where a slider sticks while dragged: within `zone` of `neutral` the value is pulled onto it, and the step that
-/// enters the zone (or jumps across it in one event) asks for one tap. Leaving re-arms only past twice the zone, so
-/// resting on the boundary doesn't buzz. Pure, so it can be tested.
+/// enters the zone (or jumps across it in one event) asks for one tap. Leaving re-arms only past `rearm` (twice the
+/// zone), so resting on the boundary doesn't buzz. Pure, so it can be tested.
+///
+/// A default at either end of the slider's travel is an end stop instead (`forSlider`): the slider's own clamp
+/// already holds the value there, so there's no capture band — every value up to the end stays reachable (the first
+/// and last seconds of an hour-long clip) — only a tap as the value arrives exactly at the end.
 struct Detent {
     let neutral: Double
     let zone: Double
+    let rearm: Double
     private(set) var engaged: Bool
     private var last: Double
 
     init(neutral: Double, range: Double, at value: Double, fraction: Double = 0.015) {
-        self.neutral = neutral
-        zone = abs(range) * fraction
-        last = value
-        engaged = abs(value - neutral) <= zone
+        self.init(neutral: neutral, zone: abs(range) * fraction, rearm: abs(range) * fraction * 2, at: value)
     }
 
-    /// A new drag starts from `value` (already in the detent if it rests there, so the first move doesn't tap).
-    mutating func begin(at value: Double) {
+    /// An end stop at `end`: values are never moved; arriving exactly at the end taps once, and it re-arms after
+    /// moving `fraction` of the range away.
+    static func endStop(_ end: Double, range: Double, at value: Double, fraction: Double = 0.015) -> Detent {
+        Detent(neutral: end, zone: 0, rearm: abs(range) * fraction, at: value)
+    }
+
+    /// The detent for a drag starting at `value` on a slider from `min` to `max` whose default is `neutral`.
+    static func forSlider(neutral: Double, min: Double, max: Double, at value: Double) -> Detent {
+        neutral <= min || neutral >= max
+            ? endStop(neutral, range: max - min, at: value)
+            : Detent(neutral: neutral, range: max - min, at: value)
+    }
+
+    /// Starts at `value`: already engaged if it rests in the detent, so the first move doesn't tap.
+    private init(neutral: Double, zone: Double, rearm: Double, at value: Double) {
+        self.neutral = neutral
+        self.zone = zone
+        self.rearm = rearm
         last = value
         engaged = abs(value - neutral) <= zone
     }
@@ -415,17 +472,17 @@ struct Detent {
             return (neutral, tick)
         }
         let tick = crossed && !engaged
-        if distance > zone * 2 { engaged = false }
+        if distance > rearm { engaged = false }
         return (raw, tick)
     }
 }
 
 /// A native slider with a soft detent at its default: while dragging it sticks to the default within ±1.5 % of its
-/// range and taps the trackpad once on the way in (Logic and Figma do the same). Double-click resets it.
+/// range and taps the trackpad once on the way in (Logic and Figma do the same). A default at one end of the range
+/// only taps on arrival (see `Detent`). ⌘ while dragging turns the detent off, as it turns off snapping in Crop, so
+/// the values right beside the default can be reached too. Double-click resets it.
 final class DetentSlider: NSSlider {
-    var neutral: Double? {
-        didSet { detent = neutral.map { Detent(neutral: $0, range: maxValue - minValue, at: doubleValue) } }
-    }
+    var neutral: Double?
     /// The mouse went up after a drag (or a double-click reset).
     var onTrackingEnded: (() -> Void)?
     private(set) var isTracking = false
@@ -439,7 +496,8 @@ final class DetentSlider: NSSlider {
             return
         }
         isTracking = true
-        detent?.begin(at: doubleValue)
+        // Built per drag, from the range as it is now (Trim learns its clip's length only after opening).
+        detent = neutral.map { Detent.forSlider(neutral: $0, min: minValue, max: maxValue, at: doubleValue) }
         super.mouseDown(with: event)  // the cell's tracking loop; returns on mouse up
         isTracking = false
         onTrackingEnded?()
@@ -450,11 +508,48 @@ final class DetentSlider: NSSlider {
         if isTracking, var detent {
             let (value, tick) = detent.filter(doubleValue)
             self.detent = detent
-            if value != doubleValue { doubleValue = value }
-            if tick { Haptics.tick(.alignment) }
+            if !NSEvent.modifierFlags.contains(.command) {
+                if value != doubleValue { doubleValue = value }
+                if tick { Haptics.tick(.alignment) }
+            }
         }
         return super.sendAction(action, to: target)
     }
+}
+
+// MARK: - Saving locks
+
+/// The editor window's undo manager. While a save runs it's locked: ⌘Z / ⇧⌘Z (and the Edit menu's items) do
+/// nothing, so the picture can't change after `apply()` read it. Registering still works, so a change that lands
+/// meanwhile (Redact's detection finishing) keeps its history.
+final class EditorUndoManager: UndoManager {
+    var isLocked = false
+
+    override var canUndo: Bool { !isLocked && super.canUndo }
+    override var canRedo: Bool { !isLocked && super.canRedo }
+
+    override func undo() {
+        if !isLocked { super.undo() }
+    }
+
+    override func undoNestedGroup() {
+        if !isLocked { super.undoNestedGroup() }
+    }
+
+    override func redo() {
+        if !isLocked { super.redo() }
+    }
+}
+
+/// Lies over the canvas while saving and takes every click, drag and scroll aimed at it.
+private final class InputShield: NSView {
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseDragged(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+    override func otherMouseDown(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
 }
 
 // MARK: - Live preview

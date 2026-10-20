@@ -257,10 +257,15 @@ final class BackgroundEditor: Editor {
 
 /// Finds faces and text on-device and covers them; drag on the photo to add a box, click a box to remove it.
 /// Every change can be undone (⌘Z), Reset included.
+///
+/// Apply waits for detection to finish (under its Saving… state), so a quick Return can't save the photo before the
+/// faces and text are found. It never writes a "redacted" file that covers nothing, and a detection that was cancelled
+/// saves nothing at all.
 final class RedactEditor: Editor {
     private enum Kind: Sendable { case face, text, manual }
     private struct Box: Equatable, Sendable { var rect: CGRect; var kind: Kind }  // normalized, bottom-left origin (Vision space)
     private struct Snapshot { var boxes: [Box]; var faces: Bool; var text: Bool; var style: Int }
+    enum Detection: Equatable { case running, finished, failed }
 
     private let preview = RedactCanvas()
     private var small: CGImage?
@@ -273,6 +278,8 @@ final class RedactEditor: Editor {
     private let status = NSTextField(labelWithString: L("Looking for faces and text…"))
     private let spinner = NSProgressIndicator()
     private var detection: Task<Void, Never>?
+    /// Stays `.running` if the detection task was cancelled before it could add what it found.
+    private(set) var detectionState = Detection.running
     private lazy var renderer = LiveRender<CGImage?> { [weak self] image in
         if let image { self?.preview.image = image }
     }
@@ -309,12 +316,20 @@ final class RedactEditor: Editor {
         detection = Task { @MainActor [weak self] in
             let found = await Task.detached { Self.detect(image) }.value
             guard let self, !Task.isCancelled else { return }
-            self.detected = found
-            self.boxes += found
-            // Undoing an edit made before detection finished would also drop what it found: start the history here.
-            self.window.undoManager?.removeAllActions(withTarget: self)
             self.spinner.stopAnimation(nil)
             self.spinner.isHidden = true
+            guard let found else {
+                // Say so rather than "found 0": the photo may well have faces, and nothing covers them yet.
+                self.detectionState = .failed
+                self.status.stringValue = L("Couldn't look for faces and text. Drag on the photo to cover areas yourself.")
+                self.status.textColor = .systemRed
+                return
+            }
+            self.detected = found
+            self.boxes += found
+            self.detectionState = .finished
+            // Undoing an edit made before detection finished would also drop what it found: start the history here.
+            self.window.undoManager?.removeAllActions(withTarget: self)
             let f = found.filter { $0.kind == .face }.count, t = found.filter { $0.kind == .text }.count
             self.status.stringValue = L("Found %d faces and %d text areas. Drag to add a box, click one to remove it.", f, t)
             self.preview.revealOutlines()
@@ -322,13 +337,19 @@ final class RedactEditor: Editor {
         }
     }
 
-    private nonisolated static func detect(_ image: CGImage) -> [Box] {
+    /// Faces and text in Vision's normalized space, or nil if Vision failed (as opposed to finding nothing).
+    private nonisolated static func detect(_ image: CGImage) -> [Box]? {
         let faceRequest = VNDetectFaceRectanglesRequest()
         let textRequest = VNRecognizeTextRequest()
         textRequest.recognitionLevel = .fast
-        try? VNImageRequestHandler(cgImage: image).perform([faceRequest, textRequest])
-        let faces = (faceRequest.results ?? []).map { Box(rect: $0.boundingBox.insetBy(dx: -0.01, dy: -0.01), kind: .face) }
-        let text = (textRequest.results ?? []).map { Box(rect: $0.boundingBox.insetBy(dx: -0.003, dy: -0.004), kind: .text) }
+        do {
+            try VNImageRequestHandler(cgImage: image).perform([faceRequest, textRequest])
+        } catch {
+            return nil
+        }
+        guard let faceResults = faceRequest.results, let textResults = textRequest.results else { return nil }
+        let faces = faceResults.map { Box(rect: $0.boundingBox.insetBy(dx: -0.01, dy: -0.01), kind: .face) }
+        let text = textResults.map { Box(rect: $0.boundingBox.insetBy(dx: -0.003, dy: -0.004), kind: .text) }
         return faces + text
     }
 
@@ -438,7 +459,14 @@ final class RedactEditor: Editor {
     }
 
     override func apply() async throws -> [URL] {
+        // Detection may still be running (Return pressed straight away): what it finds has to be in the file, so
+        // wait for it here, under Apply's Saving… state, before reading the boxes.
+        await detection?.value
+        // Cancelled before it added its boxes (the window is closing): never write a file that may show the faces.
+        guard detectionState != .running else { throw Cancelled() }
         let rects = active.map(\.rect), style = self.style.selectedSegment, source = self.source
+        // Nothing would be covered, so a "… redacted" copy would be the original under a name that says otherwise.
+        guard !rects.isEmpty else { throw ToolError(L("Nothing to redact. Drag on the photo to cover an area.")) }
         return try await Images.detached {
             guard let result = Self.render(try Images.load(source), rects: rects, style: style) else { throw ToolError("Couldn't render") }
             let (type, ext) = Images.writableType(for: source)
