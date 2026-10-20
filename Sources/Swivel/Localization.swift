@@ -63,6 +63,11 @@ enum Strings {
         "General": ["通用", "一般", "一般"],
         "Startup": ["启动", "啟動", "起動"],
         "Open Swivel at login": ["登录时打开 Swivel", "登入時開啟 Swivel", "ログイン時に Swivel を開く"],
+        "Feedback": ["反馈", "回饋", "フィードバック"],
+        "Haptic feedback on the trackpad": ["触控板触感反馈", "觸控式軌跡板觸覺回饋", "トラックパッドの触覚フィードバック"],
+        "Sound effects": ["音效", "音效", "効果音"],
+        "Haptic Feedback": ["触感反馈", "觸覺回饋", "触覚フィードバック"],
+        "Sound Effects": ["音效", "音效", "効果音"],
         "A bundle of small Mac tools. Turn on the ones you want — each works on its own.":
             ["一组 Mac 小工具。打开你想用的就好，每个都能单独使用。", "一組 Mac 小工具。打開你想用的就好，每個都能單獨使用。", "Mac の小さなツール集です。使いたいものだけオンにしてください。それぞれ単独で動きます。"],
         "A bundle of small Mac tools. Turn on the ones you want.":

@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let watcher = DragWatcher()
     private let wheel = WheelController()
     private var statusItem: NSStatusItem!
-    private let launchToast = Toast()
+    private var launchToast: Toast { Toast.shared }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setUpStatusItem()
@@ -140,6 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(.separator())
+        add(to: menu, "Haptic Feedback", #selector(toggleHaptics)).state = Prefs.haptics ? .on : .off
+        add(to: menu, "Sound Effects", #selector(toggleSounds)).state = Prefs.soundEffects ? .on : .off
+        menu.addItem(.separator())
         add(to: menu, "Open Swivel…", #selector(openWindow), key: ",")
         add(to: menu, "Open at Login", #selector(toggleLogin)).state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator())
@@ -182,6 +185,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleHangCopied() { Prefs.clotheslineHangCopied.toggle() }
+    @objc private func toggleHaptics() { Prefs.haptics.toggle() }
+    @objc private func toggleSounds() { Prefs.soundEffects.toggle() }
 
     @objc private func openWindow() { AppWindow.shared.show(.overview) }
     @objc private func openStyle() { AppWindow.shared.show(.style) }

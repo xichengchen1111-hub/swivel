@@ -196,6 +196,8 @@ final class PreviewHost: NSView {
 
 final class GeneralPane: Pane {
     private let login = NSButton(checkboxWithTitle: L("Open Swivel at login"), target: nil, action: nil)
+    private let haptics = NSButton(checkboxWithTitle: L("Haptic feedback on the trackpad"), target: nil, action: nil)
+    private let sounds = NSButton(checkboxWithTitle: L("Sound effects"), target: nil, action: nil)
 
     init() { super.init(size: NSSize(width: 620, height: 420)) }
     required init?(coder: NSCoder) { fatalError() }
@@ -215,6 +217,16 @@ final class GeneralPane: Pane {
         login.target = self
         login.action = #selector(toggleLogin)
         stack.addArrangedSubview(row("Startup", login))
+
+        haptics.target = self
+        haptics.action = #selector(toggleHaptics)
+        sounds.target = self
+        sounds.action = #selector(toggleSounds)
+        let feedback = NSStackView(views: [haptics, sounds])
+        feedback.orientation = .vertical
+        feedback.alignment = .leading
+        feedback.spacing = 6
+        stack.addArrangedSubview(row("Feedback", feedback))
 
         let languages = NSPopUpButton(frame: .zero, pullsDown: false)
         languages.addItems(withTitles: Language.allCases.map(\.title))
@@ -239,6 +251,23 @@ final class GeneralPane: Pane {
 
     override func refresh() {
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        haptics.state = Prefs.haptics ? .on : .off
+        sounds.state = Prefs.soundEffects ? .on : .off
+    }
+
+    @objc private func toggleHaptics() {
+        Prefs.haptics = haptics.state == .on
+        Feedback.press()
+    }
+
+    @objc private func toggleSounds() {
+        Prefs.soundEffects = sounds.state == .on
+        // Let the user hear what they turned on.
+        if Prefs.soundEffects {
+            Feedback.prepare()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { Sounds.play(.press) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) { Sounds.play(.done) }
+        }
     }
 
 

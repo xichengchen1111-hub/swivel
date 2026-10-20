@@ -96,6 +96,18 @@ enum Prefs {
         set { defaults.set(newValue.rawValue, forKey: "quickActions.shortcut"); post() }
     }
 
+    /// Force Touch trackpad taps when the pointer moves between menu items and on a drop.
+    static var haptics: Bool {
+        get { defaults.object(forKey: "feedback.haptics") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "feedback.haptics"); post() }
+    }
+
+    /// Short interface sounds for the same moments (always quiet, and off when macOS's UI sounds are off).
+    static var soundEffects: Bool {
+        get { defaults.object(forKey: "feedback.sounds") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "feedback.sounds"); post() }
+    }
+
     static var isEnabled: Bool {
         get { defaults.object(forKey: "enabled") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "enabled"); post() }

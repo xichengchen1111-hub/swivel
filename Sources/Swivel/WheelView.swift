@@ -8,15 +8,48 @@ struct Slot {
     var angle: CGFloat = 0          // label rotation in degrees
     var maxWidth: CGFloat
     var fontSize: CGFloat = 12
+    var labelScale: CGFloat = 1
+    var alpha: CGFloat = 1
+}
+
+/// Motion constants for the pop-up menu, in one place so the feel can be tuned.
+private enum Tune {
+    // Hover: the item under the pointer springs out with a small overshoot and settles back calmly. Its colour
+    // arrives in the first few frames; only the shape springs.
+    static let popOut = (response: CGFloat(0.24), damping: CGFloat(0.64))
+    static let popBack = (response: CGFloat(0.18), damping: CGFloat(0.95))
+    static let popLift: CGFloat = 10        // wheel sector moves outwards (pt)
+    static let popGrow: CGFloat = 4         // and its outer edge grows (pt)
+    // Press on drop: sink fast and hold for a beat, then release with a bounce while the rest of the menu clears.
+    static let pressIn = (response: CGFloat(0.09), damping: CGFloat(1))
+    static let pressOut = (response: CGFloat(0.28), damping: CGFloat(0.6))
+    static let pressHold: CGFloat = 0.06    // how long the pressed state is held before releasing
+    static let pressSink: CGFloat = 5       // pressed sector sinks back towards the hub (pt)
+    static let pressScale: CGFloat = 0.04   // and shrinks by this fraction
+    static let exit = (response: CGFloat(0.2), damping: CGFloat(1))
+    // Open: items bloom out from the hub one after another, clockwise from the top. No overshoot on a menu.
+    static let bloom = (response: CGFloat(0.26), damping: CGFloat(0.86))
+    static let bloomStagger: CGFloat = 0.01
+    static let bloomRise: CGFloat = 14
+    // Page turn: the ring turns by part of a segment and settles.
+    static let turn = (response: CGFloat(0.27), damping: CGFloat(0.84))
+    static let turnFraction: CGFloat = 0.5
 }
 
 /// The pop-up menu. Lays its items out in the chosen `MenuStyle`; every item is a drop target.
+///
+/// Live menus (`isLive`) animate on a display link: each item has its own spring for hovering, the dropped item
+/// is pressed in, and opening blooms the items out from the centre. Previews in Settings draw the settled state.
 final class WheelView: NSView {
     var onDrop: ((WheelItem, [URL]) -> Void)?
     var subtitle = ""
     var style: MenuStyle = .wheel { didSet { needsDisplay = true } }
+    /// Animate and give haptic feedback. Off for the static previews in Settings.
+    var isLive = false
+    /// Tests drive the animation with `advance(_:)` instead of a display link.
+    var manualClock = false
     var hovered: Int? {
-        didSet { if hovered != oldValue { needsDisplay = true } }
+        didSet { if hovered != oldValue { hoverChanged(from: oldValue) } }
     }
 
     private(set) var items: [WheelItem] = []
@@ -31,22 +64,234 @@ final class WheelView: NSView {
 
     private var center: NSPoint { NSPoint(x: bounds.midX, y: bounds.midY) }
 
+    // MARK: Motion state
+
+    private lazy var driver: FrameDriver = {
+        let driver = FrameDriver(view: self)
+        driver.onFrame = { [weak self] dt in self?.advance(dt) ?? false }
+        return driver
+    }()
+    private var pops: [Spring] = []                 // per item: 0 at rest, 1 hovered
+    private var blooms: [Spring] = []               // per item: 0 hidden, 1 shown
+    private var bloomClock: CGFloat = .infinity     // seconds since opening, while items are still being released
+    private var press = Spring(0, response: Tune.pressIn.response, damping: Tune.pressIn.damping)
+    private var pressClock: CGFloat = .infinity
+    private(set) var pressed: Int?
+    private var exit = Spring(0, response: Tune.exit.response, damping: Tune.exit.damping)
+    private var turn = Spring(0, response: Tune.turn.response, damping: Tune.turn.damping)
+    private var reveal = Spring(1, response: 0.2, damping: 1)              // labels fading in after a page turn
+    private var dial = Spring(90, response: 0.2, damping: 0.8)             // hub indicator angle, degrees
+    private var dialAlpha = Spring(0, response: 0.14, damping: 1)
+    private var swap = Spring(1, response: 0.2, damping: 1)                // hub/header headline crossfade
+    private var previousHeadline = ""
+    private var row = Spring(0, response: 0.15, damping: 0.9)              // list: highlight position in rows
+    private var rowAlpha = Spring(0, response: 0.12, damping: 1)
+    private var hubPress = Spring(0, response: 0.16, damping: 1)           // the hub sinks while it means "cancel"
+    /// An item has been hovered since the menu opened, so coming back to the hub (or an empty spot) means cancel.
+    private var visited = false
+    private var pointerInside = false
+    private var openPoint: NSPoint?
+    /// Releasing now would cancel: the pointer came back to the hub after visiting an item.
+    private(set) var cancelArmed = false {
+        didSet {
+            guard cancelArmed != oldValue else { return }
+            previousHeadline = oldValue ? L("Cancel") : headline(for: hovered)
+            swap.snap(0)
+            swap.target = 1
+            hubPress.target = cancelArmed ? 1 : 0
+            if cancelArmed, isLive { Feedback.hover(sound: false) }
+            kick()
+        }
+    }
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
         registerForDraggedTypes([.fileURL])
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(items: [WheelItem], mode: WheelMode, page: Int, pageCount: Int) {
+        let turning = isLive && (manualClock || window?.isVisible == true) && mode == self.mode && page != self.page
+            && !items.isEmpty && pressed == nil
+        hovered = nil
         self.items = items
         self.mode = mode
         self.page = page
         self.pageCount = pageCount
-        hovered = nil
+        pops = items.map { _ in Spring(0, response: Tune.popBack.response, damping: Tune.popBack.damping) }
+        blooms = items.map { _ in Spring(1, response: Tune.bloom.response, damping: Tune.bloom.damping) }
+        bloomClock = .infinity
+        swap.snap(1)
+        rowAlpha.snap(0)
+        dialAlpha.snap(0)
+        if !turning { visited = false }
+        cancelArmed = false
+        hubPress.snap(0)
+        if turning {
+            if !Motion.reduced {
+                turn.snap(step * Tune.turnFraction)
+                turn.target = 0
+            }
+            reveal.snap(0)
+            reveal.target = 1
+            Feedback.page()
+            kick()
+        }
         needsDisplay = true
     }
+
+    /// Starts the opening animation; called as the panel appears. `pointer` is where the drag is (view coordinates):
+    /// items only react once the pointer has moved a little, so a menu that had to shift to fit on screen can't
+    /// select whatever happened to land under a still pointer.
+    func beginOpen(pointer: NSPoint? = nil) {
+        openPoint = pointer
+        pressed = nil
+        pressClock = .infinity
+        press.snap(0)
+        exit.snap(0)
+        turn.snap(0)
+        reveal.snap(1)
+        swap.snap(1)
+        dialAlpha.snap(0)
+        rowAlpha.snap(0)
+        visited = false
+        pointerInside = false
+        cancelArmed = false
+        hubPress.snap(0)
+        if Motion.reduced {
+            for i in blooms.indices { blooms[i].snap(1) }
+            bloomClock = .infinity
+        } else {
+            for i in blooms.indices { blooms[i].snap(0) }
+            bloomClock = 0
+        }
+        kick()
+    }
+
+    /// Presses the dropped item in, then releases it while the rest of the menu clears away.
+    func beginConfirm(_ index: Int) {
+        guard items.indices.contains(index) else { return }
+        pressedTint = pressedColour()
+        pressed = index
+        if hovered != index { hovered = index }
+        press.response = Tune.pressIn.response
+        press.damping = Tune.pressIn.damping
+        press.target = 1
+        pressClock = 0
+        kick()
+    }
+
+    /// Jumps every animation to its end state (used by previews and tests).
+    func settle() {
+        bloomClock = .infinity
+        for i in pops.indices { pops[i].snap(pops[i].target) }
+        for i in blooms.indices { blooms[i].snap(1) }
+        for spring in [\WheelView.press, \.exit, \.turn, \.reveal, \.dial, \.dialAlpha, \.swap, \.row, \.rowAlpha, \.hubPress] as [ReferenceWritableKeyPath<WheelView, Spring>] {
+            self[keyPath: spring].snap(self[keyPath: spring].target)
+        }
+        needsDisplay = true
+    }
+
+    /// Advances every spring by `dt` seconds. Returns true while anything is still moving.
+    @discardableResult
+    func advance(_ dt: CGFloat) -> Bool {
+        if bloomClock.isFinite {
+            bloomClock += dt
+            for i in blooms.indices where bloomClock >= CGFloat(i) * Tune.bloomStagger { blooms[i].target = 1 }
+            if bloomClock >= CGFloat(blooms.count) * Tune.bloomStagger { bloomClock = .infinity }
+        }
+        if pressClock.isFinite {
+            pressClock += dt
+            if pressClock >= Tune.pressHold, press.target == 1 {
+                press.response = Tune.pressOut.response
+                press.damping = Tune.pressOut.damping
+                press.target = 0
+                exit.target = 1
+                pressClock = .infinity
+            }
+        }
+        for i in pops.indices { pops[i].step(dt) }
+        for i in blooms.indices { blooms[i].step(dt) }
+        press.step(dt)
+        exit.step(dt)
+        turn.step(dt)
+        reveal.step(dt)
+        dial.step(dt)
+        dialAlpha.step(dt)
+        swap.step(dt)
+        row.step(dt)
+        rowAlpha.step(dt)
+        hubPress.step(dt)
+        needsDisplay = true
+        return !isSettled
+    }
+
+    private var isSettled: Bool {
+        !bloomClock.isFinite && !pressClock.isFinite && pops.allSatisfy(\.isSettled) && blooms.allSatisfy(\.isSettled)
+            && press.isSettled && exit.isSettled && turn.isSettled && reveal.isSettled && dial.isSettled
+            && dialAlpha.isSettled && swap.isSettled && row.isSettled && rowAlpha.isSettled && hubPress.isSettled
+    }
+
+    /// Runs the display link for live menus; previews jump straight to the end state.
+    private func kick() {
+        if manualClock { return }
+        if isLive, window != nil {
+            driver.start()
+        } else {
+            settle()
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { driver.stop() }
+    }
+
+    private func hoverChanged(from old: Int?) {
+        if let old, pops.indices.contains(old) {
+            pops[old].response = Tune.popBack.response
+            pops[old].damping = Tune.popBack.damping
+            pops[old].target = 0
+        }
+        if let new = hovered, pops.indices.contains(new) {
+            // Tags on the rope straighten gently (the owner's rule for anything on the clothesline).
+            let out = style == .clothesline ? (response: CGFloat(0.42), damping: CGFloat(0.8)) : Tune.popOut
+            pops[new].response = Motion.reduced ? 0.14 : out.response
+            pops[new].damping = Motion.reduced ? 1 : out.damping
+            pops[new].target = 1
+            let angle = unwrap(centreAngle(new), near: dial.value)
+            if dialAlpha.value < 0.05 || Motion.reduced { dial.snap(angle) } else { dial.target = angle }
+            if rowAlpha.value < 0.05 || Motion.reduced { row.snap(CGFloat(new)) } else { row.target = CGFloat(new) }
+        }
+        if hovered != nil { visited = true }
+        dialAlpha.target = hovered == nil ? 0 : 1
+        rowAlpha.target = hovered == nil ? 0 : 1
+        previousHeadline = headline(for: old)
+        swap.snap(0)
+        swap.target = 1
+        if isLive, hovered != nil, pressed == nil { Feedback.hover() }
+        kick()
+    }
+
+    /// The angle equivalent to `angle` (mod 360) closest to `reference`, so the dial turns the short way.
+    private func unwrap(_ angle: CGFloat, near reference: CGFloat) -> CGFloat {
+        var a = angle
+        while a - reference > 180 { a -= 360 }
+        while a - reference < -180 { a += 360 }
+        return a
+    }
+
+    private func popValue(_ i: Int) -> CGFloat { pops.indices.contains(i) ? pops[i].value : 0 }
+    /// Colour follows the pop but arrives in the first few frames, so the highlight never lags the pointer.
+    private func tintValue(_ i: Int) -> CGFloat { min(max(popValue(i) * 2.2, 0), 1) }
+    private func bloomValue(_ i: Int) -> CGFloat { blooms.indices.contains(i) ? blooms[i].value : 1 }
+    private func pressValue(_ i: Int) -> CGFloat { i == pressed ? press.value : 0 }
+
+    /// While a dropped item is confirmed, the others clear away (0 → 1).
+    private func exitValue(_ i: Int) -> CGFloat { pressed != nil && i != pressed ? exit.value : 0 }
 
     // MARK: Sizes per style
 
@@ -56,12 +301,13 @@ final class WheelView: NSView {
     static func bookWidth(_ i: Int) -> CGFloat { [40, 34, 44, 37, 42, 35, 39, 43][i % 8] }
     static func bookHeight(_ i: Int) -> CGFloat { [150, 132, 158, 140, 128, 154, 136, 146][i % 8] }
 
-    /// Natural view size for a style and item count.
-    static func size(for style: MenuStyle, count: Int) -> NSSize {
+    /// Natural view size for a style and item count. The live wheel is larger than it looks: the clear margin
+    /// keeps catching the drag when a flick overshoots the ring, so the chosen sector stays chosen.
+    static func size(for style: MenuStyle, count: Int, live: Bool = false) -> NSSize {
         let n = max(count, 1)
         switch style {
         case .wheel:
-            return NSSize(width: 320, height: 320)
+            return live ? NSSize(width: 400, height: 400) : NSSize(width: 320, height: 320)
         case .list:
             return NSSize(width: 240, height: headerHeight + CGFloat(n) * listRow + 14)
         case .shelf:
@@ -99,45 +345,72 @@ final class WheelView: NSView {
         NSRect(x: 0, y: 0, width: bounds.width, height: bounds.height - Self.headerHeight)
     }
 
-    private func slots() -> [Slot] {
+    /// Item geometry. `settled` lays items out as hit targets: the hovered item fully out, no transient motion.
+    private func slots(settled: Bool = false) -> [Slot] {
+        let target = hovered
+        let pop: (Int) -> CGFloat = settled ? { i in i == target ? 1 : 0 } : popValue
         switch style {
-        case .wheel: return wheelSlots()
+        case .wheel: return wheelSlots(pop: pop, settled: settled)
         case .list: return listSlots()
-        case .shelf: return shelfSlots()
-        case .notes: return noteSlots()
-        case .clothesline: return clothesSlots()
+        case .shelf: return shelfSlots(pop: pop, settled: settled)
+        case .notes: return noteSlots(pop: pop, settled: settled)
+        case .clothesline: return clothesSlots(pop: pop, settled: settled)
         }
     }
 
-    private func wheelSlots() -> [Slot] {
+    private func wheelSlots(pop: (Int) -> CGFloat, settled: Bool) -> [Slot] {
         let half = step / 2
-        let outer = outerRadius - rimWidth, inner = innerRadius + 6
-        let padOut = (gap / 2) / outer * 180 / .pi
-        let padIn = (gap / 2) / inner * 180 / .pi
-        let mid = (outer + inner) / 2
+        let baseOuter = outerRadius - rimWidth, inner = innerRadius + 6
+        let mid = (baseOuter + inner) / 2
+        let rotation = settled ? 0 : turn.value
         return items.indices.map { i in
+            let p = pop(i)
+            let pressed = settled ? 0 : pressValue(i)
+            let bloom = settled ? 1 : bloomValue(i)
+            let away = settled ? 0 : exitValue(i)
+            let outer = baseOuter + Tune.popGrow * max(p, 0)
+            // The gap to the neighbours narrows as a sector comes out, so it reads as one raised keycap.
+            let closing = 1 - 0.45 * min(max(p, 0), 1)
+            let padOut = (gap / 2) * closing / outer * 180 / .pi
+            let padIn = (gap / 2) * closing / inner * 180 / .pi
+            let centre = centreAngle(i) + rotation
+            let rad = centre * .pi / 180
+            let dir = CGVector(dx: cos(rad), dy: sin(rad))
+            let lift = Tune.popLift * p - Tune.pressSink * pressed - Tune.bloomRise * (1 - bloom) - 12 * away
+
             let path = NSBezierPath()
             if items.count == 1 {
                 path.appendOval(in: NSRect(x: center.x - outer, y: center.y - outer, width: outer * 2, height: outer * 2))
                 path.appendOval(in: NSRect(x: center.x - inner, y: center.y - inner, width: inner * 2, height: inner * 2))
                 path.windingRule = .evenOdd
             } else {
-                let a0 = centreAngle(i) - half, a1 = centreAngle(i) + half
-                path.appendArc(withCenter: center, radius: outer, startAngle: a0 + padOut, endAngle: a1 - padOut, clockwise: false)
-                path.appendArc(withCenter: center, radius: inner, startAngle: a1 - padIn, endAngle: a0 + padIn, clockwise: true)
+                path.appendArc(withCenter: center, radius: outer, startAngle: centre - half + padOut, endAngle: centre + half - padOut, clockwise: false)
+                path.appendArc(withCenter: center, radius: inner, startAngle: centre + half - padIn, endAngle: centre - half + padIn, clockwise: true)
                 path.close()
             }
-            let rad = centreAngle(i) * .pi / 180
-            return Slot(path: path, label: NSPoint(x: center.x + cos(rad) * mid, y: center.y + sin(rad) * mid),
+            // Scale about the sector's own centre, then move it out along its direction.
+            let rest = NSPoint(x: center.x + dir.dx * mid, y: center.y + dir.dy * mid)
+            let labelCentre = NSPoint(x: rest.x + dir.dx * lift, y: rest.y + dir.dy * lift)
+            let scale = (1 - Tune.pressScale * pressed) * (0.9 + 0.1 * bloom) * (1 - 0.08 * away)
+            var t = AffineTransform(translationByX: labelCentre.x, byY: labelCentre.y)
+            t.scale(scale)
+            t.translate(x: -rest.x, y: -rest.y)
+            if items.count > 1 { path.transform(using: t) }
+            return Slot(path: path, label: items.count == 1 ? NSPoint(x: center.x, y: center.y + mid) : labelCentre,
                         maxWidth: mid * sin(.pi / CGFloat(max(items.count, 2))) * 1.7,
-                        fontSize: items.count > 6 ? 11 : 12)
+                        fontSize: items.count > 6 ? 11 : 12, labelScale: scale * (1 + 0.07 * max(p, 0)),
+                        alpha: min(max(bloom, 0), 1) * (1 - away))
         }
     }
 
-    private func listSlots() -> [Slot] {
+    private func listRect(_ row: CGFloat) -> NSRect {
         let top = bounds.height - Self.headerHeight
-        return items.indices.map { i in
-            let rect = NSRect(x: 10, y: top - CGFloat(i + 1) * Self.listRow, width: bounds.width - 20, height: Self.listRow - 4)
+        return NSRect(x: 10, y: top - (row + 1) * Self.listRow, width: bounds.width - 20, height: Self.listRow - 4)
+    }
+
+    private func listSlots() -> [Slot] {
+        items.indices.map { i in
+            let rect = listRect(CGFloat(i))
             return Slot(path: NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7),
                         label: NSPoint(x: rect.minX + 14, y: rect.midY), maxWidth: rect.width - 28, fontSize: 13)
         }
@@ -145,20 +418,22 @@ final class WheelView: NSView {
 
     private var shelfTop: CGFloat { 30 }  // top surface of the plank
 
-    private func shelfSlots() -> [Slot] {
+    private func shelfSlots(pop: (Int) -> CGFloat, settled: Bool) -> [Slot] {
         let total = items.indices.reduce(CGFloat(0)) { $0 + Self.bookWidth($1) + 5 } - 5
         var x = (bounds.width - total) / 2
         return items.indices.map { i in
             let w = Self.bookWidth(i), h = Self.bookHeight(i)
-            let lift: CGFloat = i == hovered ? 12 : 0
+            let bloom = settled ? 1 : bloomValue(i)
+            let lift = 12 * pop(i) - (settled ? 0 : 4 * pressValue(i)) - 26 * (1 - bloom)
             let rect = NSRect(x: x, y: shelfTop + lift, width: w, height: h)
             x += w + 5
             return Slot(path: NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3),
-                        label: NSPoint(x: rect.midX, y: rect.midY + 6), angle: 90, maxWidth: h - 34, fontSize: 12)
+                        label: NSPoint(x: rect.midX, y: rect.midY + 6), angle: 90, maxWidth: h - 34, fontSize: 12,
+                        alpha: min(max(bloom * 1.6, 0), 1) * (1 - (settled ? 0 : exitValue(i))))
         }
     }
 
-    private func noteSlots() -> [Slot] {
+    private func noteSlots(pop: (Int) -> CGFloat, settled: Bool) -> [Slot] {
         let cols = min(max(items.count, 1), 4)
         let side: CGFloat = 94, pitch: CGFloat = 108
         let gridWidth = CGFloat(cols) * pitch
@@ -168,16 +443,19 @@ final class WheelView: NSView {
             let row = i / cols, col = i % cols
             let rect = NSRect(x: originX + CGFloat(col) * pitch, y: top - CGFloat(row + 1) * pitch + (pitch - side) / 2,
                               width: side, height: side)
-            let tilt: CGFloat = i == hovered ? 0 : [-3, 2.5, -1.5, 3, -2.5, 1.5, -3.5, 2][i % 8]
-            let scale: CGFloat = i == hovered ? 1.08 : 1
+            let p = pop(i), bloom = settled ? 1 : bloomValue(i)
+            let rest: CGFloat = [-3, 2.5, -1.5, 3, -2.5, 1.5, -3.5, 2][i % 8]
+            let tilt = rest * (1 - p) + 6 * (1 - bloom)
+            let scale = (1 + 0.08 * p - (settled ? 0 : 0.06 * pressValue(i))) * (0.82 + 0.18 * bloom)
             var t = AffineTransform(translationByX: rect.midX, byY: rect.midY)
             t.rotate(byDegrees: tilt)
             t.scale(scale)
             t.translate(x: -rect.midX, y: -rect.midY)
             let path = NSBezierPath(rect: rect)
             path.transform(using: t)
-            return Slot(path: path, label: NSPoint(x: rect.midX, y: rect.midY - 4), angle: tilt,
-                        maxWidth: side - 16, fontSize: 15)
+            return Slot(path: path, label: t.transform(NSPoint(x: rect.midX, y: rect.midY - 4)), angle: tilt,
+                        maxWidth: side - 16, fontSize: 15, labelScale: scale,
+                        alpha: min(max(bloom * 1.4, 0), 1) * (1 - (settled ? 0 : exitValue(i))))
         }
     }
 
@@ -188,46 +466,105 @@ final class WheelView: NSView {
         return body.maxY - 18 - 16 * 4 * t * (1 - t)
     }
 
-    private func clothesSlots() -> [Slot] {
+    private func clothesSlots(pop: (Int) -> CGFloat, settled: Bool) -> [Slot] {
         let pitch: CGFloat = 82
         let start = (bounds.width - CGFloat(items.count) * pitch) / 2 + pitch / 2
         return items.indices.map { i in
             let x = start + CGFloat(i) * pitch
             let hang = ropeY(x)
             let w: CGFloat = 66, h: CGFloat = 92
-            let tilt: CGFloat = i == hovered ? 0 : [4, -3, 2.5, -4, 3, -2, 3.5, -3][i % 8]
-            let rect = NSRect(x: x - w / 2, y: hang - 6 - h, width: w, height: h)
+            let p = pop(i), bloom = settled ? 1 : bloomValue(i)
+            let rest: CGFloat = [4, -3, 2.5, -4, 3, -2, 3.5, -3][i % 8]
+            // Tags swing in from the rope as they appear and straighten when hovered.
+            let tilt = rest * (1 - p) + 14 * (1 - bloom)
+            let lift = 4 * p - (settled ? 0 : 5 * pressValue(i))
+            let rect = NSRect(x: x - w / 2, y: hang - 6 - h + lift, width: w, height: h)
             var t = AffineTransform(translationByX: x, byY: hang)
             t.rotate(byDegrees: tilt)
             t.translate(x: -x, y: -hang)
             let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
             path.transform(using: t)
             let labelPoint = t.transform(NSPoint(x: rect.midX, y: rect.midY - 8))
-            return Slot(path: path, label: labelPoint, angle: tilt, maxWidth: w - 10, fontSize: 12)
+            return Slot(path: path, label: labelPoint, angle: tilt, maxWidth: w - 10, fontSize: 12,
+                        alpha: min(max(bloom * 1.5, 0), 1) * (1 - (settled ? 0 : exitValue(i))))
         }
     }
+
+    /// How far (degrees) the pointer may stray past a hovered sector's edge before the next one takes over: about
+    /// 10 pt of arc, so it's the same distance for the hand whether the pointer is near the hub or the rim.
+    private func hysteresis(at radius: CGFloat) -> CGFloat { min(max(10 / max(radius, 1) * 180 / .pi, 4), 9) }
 
     private func slot(at point: NSPoint) -> Int? {
         guard !items.isEmpty else { return nil }
         if style == .wheel {
             let dx = point.x - center.x, dy = point.y - center.y
             let distance = hypot(dx, dy)
-            guard distance > innerRadius, distance < outerRadius + 30 else { return nil }
+            // The hub is the cancel zone; once a sector is chosen it takes a little more to fall back into it.
+            guard distance > (hovered == nil ? innerRadius + 2 : innerRadius - 6) else { return nil }
             let angle = atan2(dy, dx) * 180 / .pi
+            if let hovered, items.indices.contains(hovered), items.count > 1 {
+                var off = (angle - centreAngle(hovered)).truncatingRemainder(dividingBy: 360)
+                if off > 180 { off -= 360 }
+                if off < -180 { off += 360 }
+                if abs(off) <= step / 2 + hysteresis(at: distance) { return hovered }
+            }
             var offset = (90 - angle + step / 2).truncatingRemainder(dividingBy: 360)
             if offset < 0 { offset += 360 }
             return min(Int(offset / step), items.count - 1)
         }
-        // Keep the hovered item while the pointer is still on it (shelf books lift when hovered).
-        let all = slots()
-        if let hovered, all.indices.contains(hovered), all[hovered].path.contains(point) { return hovered }
-        return all.lastIndex { $0.path.contains(point) }
+        // Other templates: whole bands and cells, gaps included, so moving between items never blinks off and a
+        // lifted or straightened item can't move out from under the pointer.
+        let n = items.count
+        switch style {
+        case .list:
+            let top = bounds.height - Self.headerHeight - 4
+            guard point.y < top, point.x > 4, point.x < bounds.width - 4 else { return nil }
+            let i = Int((top - point.y) / Self.listRow)
+            return i < n ? i : nil
+        case .shelf:
+            let total = items.indices.reduce(CGFloat(0)) { $0 + Self.bookWidth($1) + 5 } - 5
+            var x = (bounds.width - total) / 2
+            guard point.y > shelfTop - 16, point.y < shelfTop + 172 else { return nil }
+            for i in items.indices {
+                let w = Self.bookWidth(i)
+                if point.x >= x - 2.5, point.x < x + w + 2.5 { return i }
+                x += w + 5
+            }
+            return nil
+        case .notes:
+            let cols = min(max(n, 1), 4), pitch: CGFloat = 108
+            let originX = (bounds.width - CGFloat(cols) * pitch) / 2
+            let top = body.maxY - 10
+            guard point.x >= originX, point.y <= top else { return nil }
+            let col = Int((point.x - originX) / pitch), row = Int((top - point.y) / pitch)
+            let i = row * cols + col
+            return col < cols && i < n ? i : nil
+        case .clothesline:
+            let pitch: CGFloat = 82
+            let start = (bounds.width - CGFloat(n) * pitch) / 2
+            guard point.x >= start, point.y < body.maxY - 4, point.y > 4 else { return nil }
+            let i = Int((point.x - start) / pitch)
+            return i < n ? i : nil
+        case .wheel:
+            return nil
+        }
+    }
+
+    /// Re-checks what is under the pointer without waiting for the next drag update (after a page turn).
+    func rehover(atScreen point: NSPoint) {
+        guard let window, pointerInside else { return }
+        hovered = slot(at: convert(window.convertPoint(fromScreen: point), from: nil))
     }
 
     // MARK: Drawing
 
     private var isDark: Bool { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
     private var accent: NSColor { NSColor.controlAccentColor.withAlphaComponent(0.92) }
+    /// The accent a quarter darker, for an item being pressed (resolved once per drop; system colours are slow to convert).
+    private lazy var pressedTint: NSColor = pressedColour()
+    private func pressedColour() -> NSColor {
+        NSColor.controlAccentColor.usingColorSpace(.sRGB)?.shadow(withLevel: 0.25) ?? .controlAccentColor
+    }
     private var ink: NSColor { isDark ? .white : NSColor(white: 0.13, alpha: 1) }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -241,66 +578,150 @@ final class WheelView: NSView {
         }
     }
 
+    private func headline(for index: Int?) -> String {
+        if cancelArmed { return L("Cancel") }
+        if let index, items.indices.contains(index) {
+            return style == .wheel ? items[index].displayTitle : "\(mode.title): \(items[index].displayTitle)"
+        }
+        return mode.title
+    }
+
+    /// A flash on the confirmed item as it is released (0 → 1 → 0).
+    private var flash: CGFloat { pressed == nil ? 0 : sin(.pi * min(max(exit.value, 0), 1)) }
+
     private func drawWheel() {
         // Frosted keycaps on clear glass: the desktop shows through, labels stay legible.
         let dark = isDark
         let cap = dark ? NSColor(white: 0, alpha: 0.30) : NSColor(white: 1, alpha: 0.38)
         let hubFill = dark ? NSColor(white: 0, alpha: 0.38) : NSColor(white: 1, alpha: 0.6)
         let line = dark ? NSColor(white: 1, alpha: 0.28) : NSColor(white: 1, alpha: 0.9)
+        let all = slots()
 
-        for (i, slot) in slots().enumerated() {
-            let isHovered = i == hovered
-            withShadow(blur: 3, alpha: dark ? 0.4 : 0.12) {
-                (isHovered ? accent : cap).setFill()
+        // Raised sectors are drawn last so their shadow falls on their neighbours.
+        for i in all.indices.sorted(by: { popValue($0) < popValue($1) }) {
+            let slot = all[i]
+            guard slot.alpha > 0.01 else { continue }
+            let p = min(max(popValue(i), 0), 1), sink = pressValue(i)
+            let tint = tintValue(i)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current?.cgContext.setAlpha(slot.alpha)
+            var fill = cap.mix(accent, tint)
+            if sink > 0 { fill = fill.mix(pressedTint, sink * 0.6) }
+            if i == pressed, flash > 0 { fill = fill.mix(.white, 0.3 * flash) }
+            withShadow(blur: 3 + 9 * p * (1 - sink), alpha: (dark ? 0.4 : 0.12) + 0.18 * p * (1 - sink),
+                       offset: 1 + 3 * p * (1 - sink)) {
+                fill.setFill()
                 slot.path.fill()
             }
-            (isHovered ? NSColor.white.withAlphaComponent(0.9) : line).setStroke()
+            if p > 0.01 {
+                // A soft sheen across the raised keycap.
+                NSGraphicsContext.saveGraphicsState()
+                slot.path.addClip()
+                NSGradient(colors: [NSColor.white.withAlphaComponent(0.28 * p * (1 - sink)), .clear])!
+                    .draw(in: slot.path.bounds, angle: -90)
+                NSGraphicsContext.restoreGraphicsState()
+            }
+            line.mix(NSColor.white.withAlphaComponent(0.9), tint).setStroke()
             slot.path.lineWidth = 1
             slot.path.stroke()
-            drawLabel(items[i].displayTitle, slot, color: isHovered ? .white : ink, glow: !isHovered)
+            let labelAlpha = i == hovered || sink > 0 ? 1 : reveal.value
+            drawLabel(items[i].displayTitle, slot, color: ink.mix(.white, tint).withAlphaComponent(labelAlpha),
+                      glow: tint < 0.5)
+            NSGraphicsContext.restoreGraphicsState()
         }
 
-        let hub = NSBezierPath(ovalIn: NSRect(x: center.x - innerRadius, y: center.y - innerRadius,
-                                              width: innerRadius * 2, height: innerRadius * 2))
-        withShadow(blur: 3, alpha: dark ? 0.4 : 0.12) {
-            hubFill.setFill()
+        // Hub: shrinks in on open, fades as a confirmed menu clears.
+        let hubBloom = blooms.isEmpty ? 1 : min(max(bloomValue(0) * 1.2, 0), 1)
+        let sunk = hubPress.value
+        let hubRadius = innerRadius * (0.86 + 0.14 * hubBloom) * (1 - 0.04 * sunk)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.cgContext.setAlpha(min(max(hubBloom, 0), 1) * (pressed == nil ? 1 : 1 - exit.value))
+        let hub = NSBezierPath(ovalIn: NSRect(x: center.x - hubRadius, y: center.y - hubRadius,
+                                              width: hubRadius * 2, height: hubRadius * 2))
+        withShadow(blur: 3 * (1 - sunk), alpha: dark ? 0.4 : 0.12) {
+            hubFill.mix(dark ? NSColor(white: 0, alpha: 0.55) : NSColor(white: 0.82, alpha: 0.7), sunk).setFill()
             hub.fill()
         }
         line.setStroke()
         hub.lineWidth = 1
         hub.stroke()
+        if sunk > 0.01 {
+            // A small × above the title while releasing would cancel.
+            let x = NSBezierPath()
+            let c = NSPoint(x: center.x, y: center.y + 24), r: CGFloat = 4
+            x.move(to: NSPoint(x: c.x - r, y: c.y - r)); x.line(to: NSPoint(x: c.x + r, y: c.y + r))
+            x.move(to: NSPoint(x: c.x - r, y: c.y + r)); x.line(to: NSPoint(x: c.x + r, y: c.y - r))
+            x.lineWidth = 1.6
+            x.lineCapStyle = .round
+            ink.withAlphaComponent(0.7 * sunk).setStroke()
+            x.stroke()
+        }
 
-        let headline = hovered.map { items[$0].displayTitle } ?? mode.title
-        drawText(headline, at: NSPoint(x: center.x, y: center.y + 7),
-                 font: .systemFont(ofSize: 12, weight: .bold), color: hovered == nil ? ink : accent,
-                 maxWidth: innerRadius * 1.7)
-        drawText(hovered == nil ? subtitle : L("drop to apply"), at: NSPoint(x: center.x, y: center.y - 8),
+        // A short accent arc on the hub's rim turns to the chosen sector, like a dial clicking into place.
+        if dialAlpha.value > 0.01 {
+            let arc = NSBezierPath()
+            let span = min(step * 0.7, 54)
+            arc.appendArc(withCenter: center, radius: hubRadius - 2.5, startAngle: dial.value + turn.value - span / 2,
+                          endAngle: dial.value + turn.value + span / 2, clockwise: false)
+            arc.lineWidth = 3
+            arc.lineCapStyle = .round
+            NSColor.controlAccentColor.withAlphaComponent(0.95 * min(dialAlpha.value, 1)).setStroke()
+            arc.stroke()
+        }
+
+        drawHeadline(at: NSPoint(x: center.x, y: center.y + 7), maxWidth: hubRadius * 1.7)
+        drawText(cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply"),
+                 at: NSPoint(x: center.x, y: center.y - 8),
                  font: .systemFont(ofSize: 8.5, weight: .medium), color: ink.withAlphaComponent(0.6),
-                 maxWidth: innerRadius * 1.6)
+                 maxWidth: hubRadius * 1.6)
         drawPageDots(at: NSPoint(x: center.x, y: center.y - 26), hintBelow: true)
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    /// The wheel hub's title: crossfades with a small vertical slide when the hovered item changes.
+    private func drawHeadline(at point: NSPoint, maxWidth: CGFloat) {
+        let font = NSFont.systemFont(ofSize: 12, weight: .bold)
+        let s = min(max(swap.value, 0), 1)
+        let current = headline(for: hovered)
+        // The old title leaves upwards in the first third; the new one rises in after it, so they never overlap.
+        let changing = previousHeadline != current
+        let out = min(s / 0.35, 1), into = min(max((s - 0.2) / 0.8, 0), 1)
+        if changing, out < 1 {
+            let wasItem = previousHeadline != mode.title && previousHeadline != L("Cancel")
+            drawText(previousHeadline, at: NSPoint(x: point.x, y: point.y + 6 * out), font: font,
+                     color: (wasItem ? accent : ink).withAlphaComponent(1 - out), maxWidth: maxWidth)
+        }
+        drawText(current, at: NSPoint(x: point.x, y: point.y - (changing ? 6 * (1 - into) : 0)), font: font,
+                 color: (hovered == nil ? ink : accent).withAlphaComponent(changing ? into : 1), maxWidth: maxWidth)
     }
 
     /// Title, file name and page dots above the items (every style but the wheel).
     private func drawHeader(onGlass: Bool) {
         let rect = NSRect(x: 0, y: bounds.height - Self.headerHeight, width: bounds.width, height: Self.headerHeight)
-        let title = hovered.map { "\(mode.title): \(items[$0].displayTitle)" } ?? mode.title
-        let detail = hovered == nil ? subtitle : L("drop to apply")
+        let title = headline(for: hovered)
+        let detail = cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply")
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .bold)]
         let titleWidth = (title as NSString).size(withAttributes: attrs).width
-        let detailWidth = min((detail as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width, 150)
+        var detailWidth = min((detail as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width, 150)
         let dotsWidth: CGFloat = pageCount > 1 ? CGFloat(pageCount) * 7 + 44 : 0
         let capsuleWidth = min(titleWidth + detailWidth + dotsWidth + 34, bounds.width - 8)
+        // In a narrow menu the detail text gives way so it never runs into the page dots.
+        detailWidth = max(min(detailWidth, capsuleWidth - titleWidth - dotsWidth - 34), 0)
         let capsule = NSRect(x: rect.midX - capsuleWidth / 2, y: rect.midY - 13, width: capsuleWidth, height: 26)
 
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.cgContext.setAlpha(pressed == nil ? 1 : 1 - exit.value)
         if !onGlass {
             withShadow(blur: 6, alpha: isDark ? 0.5 : 0.18) {
                 (isDark ? NSColor(white: 0.12, alpha: 0.86) : NSColor(white: 1, alpha: 0.88)).setFill()
                 NSBezierPath(roundedRect: capsule, xRadius: 13, yRadius: 13).fill()
             }
         }
+        let s = min(max(swap.value, 0), 1)
         var x = capsule.minX + 13
-        drawText(title, at: NSPoint(x: x + titleWidth / 2, y: capsule.midY),
-                 font: .systemFont(ofSize: 13, weight: .bold), color: hovered == nil ? ink : NSColor.controlAccentColor,
+        drawText(title, at: NSPoint(x: x + titleWidth / 2, y: capsule.midY - 3 * (1 - s)),
+                 font: .systemFont(ofSize: 13, weight: .bold),
+                 color: (hovered == nil ? ink : NSColor.controlAccentColor).withAlphaComponent(0.4 + 0.6 * s),
                  maxWidth: titleWidth, glow: false)
         x += titleWidth + 8
         drawText(detail, at: NSPoint(x: x + detailWidth / 2, y: capsule.midY),
@@ -308,6 +729,7 @@ final class WheelView: NSView {
         if pageCount > 1 {
             drawPageDots(at: NSPoint(x: capsule.maxX - dotsWidth / 2 - 6, y: capsule.midY), hintBelow: false)
         }
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawPageDots(at point: NSPoint, hintBelow: Bool) {
@@ -317,8 +739,10 @@ final class WheelView: NSView {
         let dotsX = hintBelow ? point.x - width / 2 : point.x - width / 2 - 16
         for p in 0..<pageCount {
             let x = dotsX + CGFloat(p) * spacing
+            // The current page's dot grows in as the page turns.
+            let size = p == page ? dot * (1 + 0.5 * (1 - min(max(reveal.value, 0), 1))) : dot
             (p == page ? accent : ink.withAlphaComponent(0.3)).setFill()
-            NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: point.y - dot / 2, width: dot, height: dot)).fill()
+            NSBezierPath(ovalIn: NSRect(x: x - size / 2, y: point.y - size / 2, width: size, height: size)).fill()
         }
         let hint = L("%@ next", mode.key)
         if hintBelow {
@@ -345,20 +769,32 @@ final class WheelView: NSView {
         NSColor.separatorColor.setFill()
         NSRect(x: 16, y: bounds.height - Self.headerHeight - 1, width: bounds.width - 32, height: 1).fill()
 
+        // One highlight that slides from row to row instead of jumping.
+        if rowAlpha.value > 0.01 {
+            var rect = listRect(row.value)
+            let pressed = pressed.map { pressValue($0) } ?? 0
+            rect = rect.insetBy(dx: rect.width * 0.02 * pressed, dy: rect.height * 0.06 * pressed)
+            var fill = accent.withAlphaComponent(0.92 * min(rowAlpha.value, 1))
+            if pressed > 0 { fill = fill.mix(pressedTint, pressed * 0.6) }
+            if flash > 0 { fill = fill.mix(.white, 0.3 * flash) }
+            fill.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 7, yRadius: 7).fill()
+        }
+
         for (i, slot) in slots().enumerated() {
-            let isHovered = i == hovered
-            if isHovered {
-                accent.setFill()
-                slot.path.fill()
-            }
+            // Text turns white as the highlight passes under it.
+            let under = rowAlpha.value * max(0, 1 - abs(row.value - CGFloat(i)))
             let style = NSMutableParagraphStyle()
             style.lineBreakMode = .byTruncatingTail
+            let bloom = min(max(bloomValue(i) * 1.5, 0), 1)
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: NSFont.systemFont(ofSize: slot.fontSize, weight: .medium),
-                .foregroundColor: isHovered ? NSColor.white : ink, .paragraphStyle: style,
+                .foregroundColor: ink.mix(.white, under).withAlphaComponent(bloom * (1 - exitValue(i)) * (i == hovered ? 1 : reveal.value)),
+                .paragraphStyle: style,
             ]
             let height = ("A" as NSString).size(withAttributes: attrs).height
-            (items[i].displayTitle as NSString).draw(with: NSRect(x: slot.label.x, y: slot.label.y - height / 2,
+            let nudge = 3 * min(max(popValue(i), 0), 1) - 8 * (1 - bloom)
+            (items[i].displayTitle as NSString).draw(with: NSRect(x: slot.label.x + nudge, y: slot.label.y - height / 2,
                                                            width: slot.maxWidth, height: height),
                                               options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
         }
@@ -387,10 +823,17 @@ final class WheelView: NSView {
             NSBezierPath(roundedRect: NSRect(x: bx, y: plank.minY - 12, width: 12, height: 14), xRadius: 2, yRadius: 2).fill()
         }
 
+        // Books rise out from behind the plank as the menu opens, so clip them to above its top.
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: NSRect(x: 0, y: shelfTop - 3, width: bounds.width, height: bounds.height)).addClip()
         for (i, slot) in slots().enumerated() {
-            let isHovered = i == hovered
-            let color = isHovered ? NSColor.controlAccentColor : palette[i % palette.count]
-            withShadow(blur: 4, alpha: 0.35) {
+            guard slot.alpha > 0.01 else { continue }
+            let p = min(max(popValue(i), 0), 1)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current?.cgContext.setAlpha(slot.alpha)
+            var color = palette[i % palette.count].mix(NSColor.controlAccentColor, tintValue(i))
+            if i == pressed, flash > 0 { color = color.mix(.white, 0.3 * flash) }
+            withShadow(blur: 4 + 6 * p, alpha: 0.35, offset: 1 + 2 * p) {
                 color.setFill()
                 slot.path.fill()
             }
@@ -398,11 +841,14 @@ final class WheelView: NSView {
             // Spine details: darker edges, two gilt bands.
             NSGradient(colors: [NSColor.black.withAlphaComponent(0.25), .clear, .clear, NSColor.black.withAlphaComponent(0.3)])!
                 .draw(in: slot.path, angle: 0)
-            NSColor(srgbRed: 0.95, green: 0.82, blue: 0.5, alpha: isHovered ? 0.9 : 0.75).setFill()
+            NSColor(srgbRed: 0.95, green: 0.82, blue: 0.5, alpha: 0.75 + 0.15 * p).setFill()
             NSRect(x: rect.minX + 3, y: rect.maxY - 16, width: rect.width - 6, height: 2).fill()
             NSRect(x: rect.minX + 3, y: rect.minY + 14, width: rect.width - 6, height: 2).fill()
-            drawLabel(items[i].displayTitle, slot, color: .white, glow: false, weight: .bold)
+            drawLabel(items[i].displayTitle, slot, color: NSColor.white.withAlphaComponent(i == hovered ? 1 : reveal.value),
+                      glow: false, weight: .bold)
+            NSGraphicsContext.restoreGraphicsState()
         }
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawNotes() {
@@ -412,16 +858,23 @@ final class WheelView: NSView {
             NSColor(srgbRed: 1, green: 0.78, blue: 0.5, alpha: 1), NSColor(srgbRed: 0.85, green: 0.76, blue: 1, alpha: 1),
         ]
         drawHeader(onGlass: false)
-        for (i, slot) in slots().enumerated() {
-            let isHovered = i == hovered
-            withShadow(blur: isHovered ? 12 : 6, alpha: 0.3) {
-                colors[i % colors.count].setFill()
+        let all = slots()
+        for i in all.indices.sorted(by: { popValue($0) < popValue($1) }) {
+            let slot = all[i]
+            guard slot.alpha > 0.01 else { continue }
+            let p = min(max(popValue(i), 0), 1)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current?.cgContext.setAlpha(slot.alpha)
+            var color = colors[i % colors.count]
+            if i == pressed, flash > 0 { color = color.mix(.white, 0.35 * flash) }
+            withShadow(blur: 6 + 8 * p * (1 - pressValue(i)), alpha: 0.3, offset: 1 + 4 * p * (1 - pressValue(i))) {
+                color.setFill()
                 slot.path.fill()
             }
             // Slightly darker bottom edge, like a curled note.
             NSGradient(colors: [.clear, NSColor.black.withAlphaComponent(0.08)])!.draw(in: slot.path, angle: -90)
-            if isHovered {
-                NSColor.controlAccentColor.setStroke()
+            if p > 0.01 {
+                NSColor.controlAccentColor.withAlphaComponent(tintValue(i)).setStroke()
                 slot.path.lineWidth = 3
                 slot.path.stroke()
             }
@@ -435,7 +888,9 @@ final class WheelView: NSView {
             NSColor(white: 1, alpha: 0.55).setFill()
             tape.fill()
             let font = NSFont(name: "Noteworthy-Bold", size: slot.fontSize) ?? .systemFont(ofSize: slot.fontSize, weight: .semibold)
-            drawLabel(items[i].displayTitle, slot, color: NSColor(white: 0.15, alpha: 1), glow: false, font: font)
+            drawLabel(items[i].displayTitle, slot, color: NSColor(white: 0.15, alpha: i == hovered ? 1 : reveal.value),
+                      glow: false, font: font)
+            NSGraphicsContext.restoreGraphicsState()
         }
     }
 
@@ -462,9 +917,13 @@ final class WheelView: NSView {
         }
 
         for (i, slot) in slots().enumerated() {
-            let isHovered = i == hovered
-            let kraft = isHovered ? NSColor.controlAccentColor : NSColor(srgbRed: 0.86, green: 0.74, blue: 0.56, alpha: 1)
-            withShadow(blur: isHovered ? 10 : 5, alpha: 0.32) {
+            guard slot.alpha > 0.01 else { continue }
+            let p = min(max(popValue(i), 0), 1)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current?.cgContext.setAlpha(slot.alpha)
+            var kraft = NSColor(srgbRed: 0.86, green: 0.74, blue: 0.56, alpha: 1).mix(NSColor.controlAccentColor, tintValue(i))
+            if i == pressed, flash > 0 { kraft = kraft.mix(.white, 0.3 * flash) }
+            withShadow(blur: 5 + 5 * p, alpha: 0.32, offset: 1 + 2 * p) {
                 kraft.setFill()
                 slot.path.fill()
             }
@@ -481,15 +940,18 @@ final class WheelView: NSView {
             }
             NSColor(white: 0.55, alpha: 1).setFill()
             NSRect(x: x - 4, y: pegTop - 12, width: 8, height: 2).fill()
-            drawLabel(items[i].displayTitle, slot, color: isHovered ? .white : NSColor(white: 0.18, alpha: 1), glow: false, weight: .bold)
+            drawLabel(items[i].displayTitle, slot,
+                      color: NSColor(white: 0.18, alpha: 1).mix(.white, tintValue(i)).withAlphaComponent(i == hovered ? 1 : reveal.value),
+                      glow: false, weight: .bold)
+            NSGraphicsContext.restoreGraphicsState()
         }
     }
 
-    private func withShadow(blur: CGFloat, alpha: CGFloat, _ draw: () -> Void) {
+    private func withShadow(blur: CGFloat, alpha: CGFloat, offset: CGFloat = 1, _ draw: () -> Void) {
         NSGraphicsContext.saveGraphicsState()
         let shadow = NSShadow()
         shadow.shadowBlurRadius = blur
-        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.shadowOffset = NSSize(width: 0, height: -offset)
         shadow.shadowColor = NSColor.black.withAlphaComponent(alpha)
         shadow.set()
         draw()
@@ -505,6 +967,7 @@ final class WheelView: NSView {
         let t = NSAffineTransform()
         t.translateX(by: slot.label.x, yBy: slot.label.y)
         t.rotate(byDegrees: slot.angle)
+        if slot.labelScale != 1 { t.scale(by: slot.labelScale) }
         t.concat()
         drawText(string, at: .zero, font: font ?? .systemFont(ofSize: slot.fontSize, weight: weight), color: color,
                  maxWidth: slot.maxWidth, glow: glow)
@@ -513,6 +976,7 @@ final class WheelView: NSView {
 
     private func drawText(_ string: String, at point: NSPoint, font: NSFont, color: NSColor, maxWidth: CGFloat,
                           glow: Bool = true) {
+        guard color.alphaComponent > 0.01 else { return }
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         style.lineBreakMode = .byTruncatingMiddle
@@ -521,7 +985,7 @@ final class WheelView: NSView {
             let shadow = NSShadow()
             shadow.shadowBlurRadius = 2.5
             shadow.shadowOffset = .zero
-            shadow.shadowColor = labelGlow
+            shadow.shadowColor = labelGlow.withAlphaComponent(labelGlow.alphaComponent * color.alphaComponent)
             attrs[.shadow] = shadow
         }
         var size = (string as NSString).size(withAttributes: attrs)
@@ -538,19 +1002,56 @@ final class WheelView: NSView {
 
     // MARK: Drop target
 
+    /// Updates the hover state for a pointer at `point` (view coordinates). Returns true if a drop there would
+    /// apply an item.
+    @discardableResult
+    func track(_ point: NSPoint) -> Bool {
+        guard pressed == nil else { return false }
+        pointerInside = true
+        if let start = openPoint {
+            guard hypot(point.x - start.x, point.y - start.y) >= 10 else { return false }
+            openPoint = nil
+        }
+        hovered = slot(at: point)
+        cancelArmed = isLive && visited && hovered == nil
+        return hovered != nil
+    }
+
     private func operation(for info: NSDraggingInfo) -> NSDragOperation {
-        hovered = slot(at: convert(info.draggingLocation, from: nil))
-        guard hovered != nil else { return [] }
+        guard track(convert(info.draggingLocation, from: nil)) else { return [] }
         let mask = info.draggingSourceOperationMask
         if mask.contains(.copy) { return .copy }
         if mask.contains(.generic) { return .generic }
-        return mask.contains(.move) ? .move : .every
+        return mask.contains(.move) ? .move : .copy
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { operation(for: sender) }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { operation(for: sender) }
-    override func draggingExited(_ sender: NSDraggingInfo?) { hovered = nil }
-    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { hovered != nil }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) { pointerLeft() }
+
+    /// The pointer left the menu: nothing is hovered, and releasing out there isn't a cancel on the hub.
+    func pointerLeft() {
+        guard pressed == nil else { return }
+        pointerInside = false
+        hovered = nil
+        cancelArmed = false
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard hovered != nil, pressed == nil else { return false }
+        // Let the system shrink the file's drag image into the chosen item (see performDragOperation).
+        sender.animatesToDestination = !Motion.reduced
+        return true
+    }
+
+    /// Where the dragged file's image lands on a drop: a small square on the chosen item.
+    private func landing(for index: Int) -> NSRect {
+        let slots = slots(settled: true)
+        guard slots.indices.contains(index) else { return .zero }
+        let p = style == .wheel ? slots[index].label : NSPoint(x: slots[index].path.bounds.midX, y: slots[index].path.bounds.midY)
+        return NSRect(x: p.x - 12, y: p.y - 12, width: 24, height: 24)
+    }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         guard let index = hovered, items.indices.contains(index) else { return false }
@@ -558,14 +1059,23 @@ final class WheelView: NSView {
                                                          options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
         guard !urls.isEmpty else { return false }
         let item = items[index]
+        if sender.animatesToDestination {
+            let target = landing(for: index)
+            sender.enumerateDraggingItems(options: [], for: self, classes: [NSURL.self], searchOptions: [:]) { item, _, _ in
+                item.draggingFrame = target
+            }
+        }
+        // Feedback lands on the drop itself; the action starts on the next run-loop turn.
+        beginConfirm(index)
+        Feedback.press()
         DispatchQueue.main.async { [weak self] in self?.onDrop?(item, urls) }
         return true
     }
 }
 
 extension NSView {
-    /// A small spring "pop" from 82% scale around the view's centre.
-    func popIn() {
+    /// A small spring "pop" around the view's centre, from `scale`.
+    func popIn(from scale: CGFloat = 0.82) {
         wantsLayer = true
         guard let layer else { return }
         let c = NSPoint(x: bounds.midX, y: bounds.midY)
@@ -574,12 +1084,33 @@ extension NSView {
             t = CATransform3DScale(t, s, s, 1)
             return CATransform3DTranslate(t, -c.x, -c.y, 0)
         }
-        let anim = CASpringAnimation(keyPath: "transform")
-        anim.fromValue = scaled(0.82)
+        layer.removeAnimation(forKey: "shrink")
+        layer.transform = CATransform3DIdentity
+        // Crisp, barely-there settle: a menu shouldn't wobble.
+        let anim = CASpringAnimation(perceptualDuration: 0.24, bounce: 0.1)
+        anim.keyPath = "transform"
+        anim.fromValue = scaled(scale)
         anim.toValue = CATransform3DIdentity
-        anim.damping = 16
-        anim.stiffness = 260
         anim.duration = anim.settlingDuration
         layer.add(anim, forKey: "pop")
+    }
+
+    /// Shrinks the view towards its centre over `duration` (paired with a fade by the caller).
+    func shrinkAway(to scale: CGFloat, duration: CFTimeInterval) {
+        wantsLayer = true
+        guard let layer else { return }
+        let c = NSPoint(x: bounds.midX, y: bounds.midY)
+        var t = CATransform3DMakeTranslation(c.x, c.y, 0)
+        t = CATransform3DScale(t, scale, scale, 1)
+        t = CATransform3DTranslate(t, -c.x, -c.y, 0)
+        let anim = CABasicAnimation(keyPath: "transform")
+        anim.fromValue = layer.presentation()?.transform ?? CATransform3DIdentity
+        anim.toValue = t
+        anim.duration = duration
+        anim.timingFunction = CAMediaTimingFunction(controlPoints: 0.23, 1, 0.32, 1)
+        anim.fillMode = .forwards
+        anim.isRemovedOnCompletion = false
+        layer.removeAnimation(forKey: "pop")
+        layer.add(anim, forKey: "shrink")
     }
 }

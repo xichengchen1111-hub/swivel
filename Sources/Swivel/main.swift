@@ -29,6 +29,26 @@ MainActor.assumeIsolated {
         app.run()
     }
 
+    // `Swivel --feedback <check|play>`: check reports whether the trackpad actuator and the sounds are ready;
+    // play runs through every haptic and sound once, a second apart.
+    if args.count == 3, args[1] == "--feedback" {
+        app.setActivationPolicy(.accessory)
+        Feedback.prepare()
+        if args[2] == "play" {
+            let steps: [(String, () -> Void)] = [("hover", { Feedback.hover() }), ("page", { Feedback.page() }),
+                                                 ("press", { Feedback.press() }), ("done", { Feedback.done() })]
+            for (n, step) in steps.enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6 + Double(n)) { print(step.0); step.1() }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (args[2] == "play" ? 5 : 0.6)) {
+            print("actuator:", TrackpadActuator.isUsable ? "usable" : "unavailable", "devices:", TrackpadActuator.deviceCount,
+                  "sounds:", Sounds.registeredCount)
+            exit(0)
+        }
+        app.run()
+    }
+
     // File-only OCR for smoke tests; does not touch the clipboard or launch screenshot watchers.
     if args.count == 3, args[1] == "--recognize" {
         Task { @MainActor in
@@ -88,15 +108,124 @@ MainActor.assumeIsolated {
         app.run()
     }
 
-    // `Swivel --demo <mode> <file> [hover index] [style]` shows the wheel at the cursor without a drag (for screenshots).
+    // `Swivel --frames <style> <out dir> [light|dark]` renders the menu's animations frame by frame to PNGs (for review):
+    // open, a slow and a fast sweep across items, a page turn, then a drop.
+    if args.count >= 4, args[1] == "--frames", let style = MenuStyle(rawValue: args[2]) {
+        app.setActivationPolicy(.prohibited)
+        if args.count >= 5 { app.appearance = NSAppearance(named: args[4] == "dark" ? .darkAqua : .aqua) }
+        let titles = ["JPG", "PNG", "HEIC", "TIFF", "PDF", "GIF", "AVIF", "BMP"]
+        let page1 = titles.map { WheelItem(title: $0) { _ in ActionResult(message: "") } }
+        let page2 = ["WebP", "ICNS", "PSD"].map { WheelItem(title: $0) { _ in ActionResult(message: "") } }
+        let size = WheelView.size(for: style, count: 8)
+        let view = WheelView(frame: NSRect(origin: .zero, size: size))
+        view.appearance = app.appearance
+        view.style = style
+        view.subtitle = "photo.heic"
+        view.isLive = true
+        view.manualClock = true
+        view.configure(items: page1, mode: .convert, page: 0, pageCount: 2)
+        let out = URL(fileURLWithPath: args[3])
+        try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        let fps: CGFloat = 60
+        // The pointer moves along a path like a real drag: out to the top sector, a slow arc clockwise, a fast flick
+        // across three sectors, back to the hub (cancel), out again, a page turn, then a drop.
+        let c = NSPoint(x: size.width / 2, y: size.height / 2)
+        func at(_ degrees: CGFloat, _ r: CGFloat) -> NSPoint {
+            NSPoint(x: c.x + cos(degrees * .pi / 180) * r, y: c.y + sin(degrees * .pi / 180) * r)
+        }
+        // For the wheel the pointer is driven by angle; other styles walk item to item.
+        let wheel = style == .wheel
+        var pointer: (CGFloat) -> NSPoint? = { _ in nil }
+        if wheel {
+            pointer = { t in
+                switch t {
+                case ..<0.3: return c
+                case ..<0.45: return at(90, 20 + (t - 0.3) / 0.15 * 70)                // out to the top sector
+                case ..<0.95: return at(90 - (t - 0.45) / 0.5 * 50, 90)                // slow clockwise arc
+                case ..<1.05: return at(40 - (t - 0.95) / 0.1 * 140, 95)                // fast flick
+                case ..<1.3: return at(-100, 95 - (t - 1.05) / 0.25 * 85)               // back into the hub
+                case ..<1.5: return at(-100, 10)
+                case ..<1.7: return at(-100 + 0, 10 + (t - 1.5) / 0.2 * 80)             // out again
+                default: return at(-100, 90)
+                }
+            }
+        }
+        let script: [(CGFloat, () -> Void)] = wheel ? [
+            (0, { view.beginOpen(pointer: c) }),
+            (1.80, { view.configure(items: page2, mode: .convert, page: 1, pageCount: 2); view.track(at(-100, 90)) }),
+            (2.25, { view.beginConfirm(view.hovered ?? 0) }),
+        ] : [
+            (0, { view.beginOpen() }),
+            (0.40, { view.hovered = 0 }),
+            (0.75, { view.hovered = 1 }),
+            (0.85, { view.hovered = 2 }),
+            (0.95, { view.hovered = 3 }),
+            (1.40, { view.configure(items: page2, mode: .convert, page: 1, pageCount: 2) }),
+            (1.85, { view.hovered = 1 }),
+            (2.25, { view.beginConfirm(1) }),
+        ]
+        var drawTime: Double = 0, totalTime: Double = 0, timed = 0
+        var next = 0
+        for frame in 0..<Int(2.8 * fps) { autoreleasepool {
+            let t = CGFloat(frame) / fps
+            while next < script.count, script[next].0 <= t + 0.0001 { script[next].1(); next += 1 }
+            if let p = pointer(t), t < 1.8 { view.track(p) }
+            view.advance(1 / fps)
+            let image = NSImage(size: size)
+            image.lockFocus()
+            NSGradient(colors: [NSColor(srgbRed: 0.47, green: 0.66, blue: 0.9, alpha: 1),
+                                NSColor(srgbRed: 0.98, green: 0.8, blue: 0.62, alpha: 1)])!.draw(in: NSRect(origin: .zero, size: size), angle: -60)
+            let scale = CGFloat(Double(ProcessInfo.processInfo.environment["SWIVEL_FRAMES_SCALE"] ?? "") ?? 1)
+            if let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) {
+                rep.size = size
+                let start = CACurrentMediaTime()
+                view.cacheDisplay(in: view.bounds, to: rep)
+                let took = CACurrentMediaTime() - start
+                if frame > 2 { drawTime = max(drawTime, took); totalTime += took; timed += 1 }
+                if ProcessInfo.processInfo.environment["SWIVEL_FRAMES_LOG"] != nil, took > 0.005 { print(String(format: "frame %d (t=%.2f) %.2f ms", frame, Double(t), took * 1000)) }
+                rep.draw(in: NSRect(origin: .zero, size: size), from: .zero, operation: .sourceOver, fraction: 1,
+                         respectFlipped: false, hints: nil)
+            }
+            image.unlockFocus()
+            if let p = pointer(t), t < 1.8 {
+                // Mark the pointer.
+                image.lockFocus()
+                NSColor.black.setFill()
+                NSBezierPath(ovalIn: NSRect(x: p.x - 3, y: p.y - 3, width: 6, height: 6)).fill()
+                image.unlockFocus()
+            }
+            if let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+                try? png.write(to: out.appendingPathComponent(String(format: "f%03d_%.3f.png", frame, Double(t))))
+            }
+        } }
+        print(String(format: "OK draw: mean %.2f ms, slowest %.2f ms", totalTime / Double(max(timed, 1)) * 1000, drawTime * 1000))
+        exit(0)
+    }
+
+    // `Swivel --demo <mode> <file> [script] [style]` shows the menu at the pointer without a drag (for screenshots and
+    // recordings). The script is one hover index ("2"), or steps run every 0.35 s: "0,1,2,n,1,p1" (n = next page,
+    // p = drop on that item). The style applies to this run only; the saved setting is left alone.
     if args.count >= 4, args[1] == "--demo" {
         let mode: WheelMode = args[2] == "tools" ? .tools : args[2] == "actions" ? .actions : .convert
-        if args.count >= 6, let style = MenuStyle(rawValue: args[5]) { Prefs.style = style }
+        let style = args.count >= 6 ? MenuStyle(rawValue: args[5]) : nil
         let controller = WheelController()
+        controller.styleOverride = style
         controller.keyTapped(mode, urls: [URL(fileURLWithPath: args[3])])
-        if args.count >= 5, let index = Int(args[4]) { controller.demoHover(index) }
+        let steps = args.count >= 5 ? args[4].split(separator: ",").map(String.init) : []
+        var lastStep = 0.0
+        for (n, step) in steps.enumerated() {
+            let at = steps.count == 1 ? 0 : 0.6 + Double(n) * 0.35
+            lastStep = at
+            DispatchQueue.main.asyncAfter(deadline: .now() + at) {
+                if step == "n" { controller.demoNextPage() }
+                else if step.hasPrefix("p"), let i = Int(step.dropFirst()) { controller.demoPress(i) }
+                else if let i = Int(step) { controller.demoHover(i) }
+            }
+        }
         app.setActivationPolicy(.accessory)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { exit(0) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(6, lastStep + 1.5)) { exit(0) }
         app.run()
     }
 

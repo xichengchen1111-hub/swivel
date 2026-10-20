@@ -31,8 +31,10 @@ enum WheelMode: CaseIterable {
 
 /// Notices when a file drag is in progress anywhere on screen and reports modifier-key taps during it.
 ///
-/// Polls instead of using event monitors: during a drag session the window server swallows most
-/// mouse events, and polling the drag pasteboard and modifier state needs no Accessibility permission.
+/// Polls instead of using event monitors for the drag itself: during a drag session the window server swallows most
+/// mouse events, and polling the drag pasteboard and modifier state needs no Accessibility permission. Polling is
+/// slow while the mouse button is up and switches to every display frame (120 Hz) while it is held; a global
+/// mouse-down monitor (which also needs no permission) switches it the moment a press starts.
 @MainActor
 final class DragWatcher {
     var onKeyTap: ((WheelMode) -> Void)?
@@ -43,15 +45,43 @@ final class DragWatcher {
 
     private let dragPasteboard = NSPasteboard(name: .drag)
     private var timer: Timer?
+    private var interval: TimeInterval = 0
+    private var monitors: [Any] = []
     private var wasDown = false
     private var baselineCount = 0
     private var active = false
     private var lastFlags: NSEvent.ModifierFlags = []
+    /// Keys pressed after the button went down but before the drag was recognised: a quick user's tap.
+    private var earlyTaps: NSEvent.ModifierFlags = []
+    /// Keeps the app out of App Nap and timer coalescing while a drag is in progress.
+    private var activity: NSObjectProtocol?
+
+    private static let idleInterval = 1.0 / 20
+    private static let dragInterval = 1.0 / 120
 
     func start() {
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+        schedule(Self.idleInterval)
+        let wake: (NSEvent) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.interval != Self.dragInterval else { return }
+                self.schedule(Self.dragInterval)
+                self.tick()
+            }
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: wake) { monitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown, handler: { event in wake(event); return event }) {
+            monitors.append(local)
+        }
+    }
+
+    private func schedule(_ interval: TimeInterval) {
+        guard interval != self.interval else { return }
+        timer?.invalidate()
+        self.interval = interval
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        timer.tolerance = interval == Self.dragInterval ? 0 : interval / 2
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
@@ -68,18 +98,24 @@ final class DragWatcher {
             if active {
                 active = false
                 urls = []
+                endActivity()
                 onDragEnd?()
             }
+            earlyTaps = []
+            schedule(Self.idleInterval)
             return
         }
+        schedule(Self.dragInterval)
 
         if !wasDown {
             baselineCount = dragPasteboard.changeCount
+            earlyTaps = []
             log.debug("mouse down, drag pasteboard count \(self.baselineCount)")
             return
         }
 
         if !active {
+            earlyTaps.formUnion(flags.subtracting(lastFlags))
             let count = dragPasteboard.changeCount
             guard count != baselineCount else { return }
             // Keep retrying until the source has finished writing file URLs to the pasteboard.
@@ -91,8 +127,17 @@ final class DragWatcher {
             baselineCount = count
             urls = found
             active = true
+            activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
+                                                             reason: "File drag in progress")
             log.info("file drag started: \(found.map(\.lastPathComponent), privacy: .public)")
-            // Keys already held when the drag began don't count; the wheel opens on a fresh tap.
+            Feedback.prepare()
+            // Keys already held when the button went down don't count; one tapped since then (and still held) does.
+            let early = earlyTaps.intersection(flags)
+            earlyTaps = []
+            if let mode = WheelMode.allCases.first(where: { early.contains(Prefs.key(for: $0).flag) }) {
+                log.info("key tapped before the drag was recognised: \(early.rawValue)")
+                onKeyTap?(mode)
+            }
             return
         }
 
@@ -101,5 +146,10 @@ final class DragWatcher {
         if let mode = WheelMode.allCases.first(where: { pressed.contains(Prefs.key(for: $0).flag) }) {
             onKeyTap?(mode)
         }
+    }
+
+    private func endActivity() {
+        if let activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = nil
     }
 }

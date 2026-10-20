@@ -10,6 +10,8 @@ struct Cancelled: LocalizedError {
 @MainActor
 class Editor: NSObject, NSWindowDelegate {
     private static var open: [Editor] = []
+    /// How many editor windows have been opened, so callers can tell whether an action showed one.
+    private(set) static var presented = 0
 
     let window: NSWindow
     let source: URL
@@ -92,6 +94,7 @@ class Editor: NSObject, NSWindowDelegate {
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
             Editor.open.append(self)
+            Editor.presented += 1
             window.center()
             NSApp.activate()
             window.makeKeyAndOrderFront(nil)

@@ -1,0 +1,398 @@
+import AppKit
+import QuartzCore
+import AudioToolbox
+import IOKit
+
+/// A damped spring that can be retargeted at any moment without a jump (position and velocity carry over).
+///
+/// Parameterised like SwiftUI: `response` is the period of the undamped oscillation in seconds, `damping` is the
+/// damping fraction (1 = no overshoot, lower = bouncier). It is solved analytically, so any frame length is stable.
+struct Spring {
+    var value: CGFloat
+    var target: CGFloat
+    var velocity: CGFloat = 0
+    var response: CGFloat
+    var damping: CGFloat
+
+    init(_ value: CGFloat = 0, response: CGFloat = 0.3, damping: CGFloat = 0.8) {
+        self.value = value
+        self.target = value
+        self.response = response
+        self.damping = damping
+    }
+
+    var isSettled: Bool { abs(value - target) < 0.0005 && abs(velocity) < 0.005 }
+
+    /// Jumps to a value with no motion.
+    mutating func snap(_ v: CGFloat) {
+        value = v
+        target = v
+        velocity = 0
+    }
+
+    mutating func step(_ dt: CGFloat) {
+        guard dt > 0, !isSettled else {
+            if isSettled { value = target; velocity = 0 }
+            return
+        }
+        let w0 = 2 * .pi / max(response, 0.001)
+        let zeta = min(max(damping, 0.05), 1)
+        let x0 = value - target, v0 = velocity
+        let x: CGFloat, v: CGFloat
+        if zeta < 0.999 {
+            let wd = w0 * (1 - zeta * zeta).squareRoot()
+            let decay = exp(-zeta * w0 * dt)
+            let c = cos(wd * dt), s = sin(wd * dt)
+            let b = (v0 + zeta * w0 * x0) / wd
+            x = decay * (x0 * c + b * s)
+            v = decay * ((b * wd - zeta * w0 * x0) * c - (x0 * wd + zeta * w0 * b) * s)
+        } else {
+            let decay = exp(-w0 * dt)
+            let b = v0 + w0 * x0
+            x = decay * (x0 + b * dt)
+            v = decay * (b - w0 * (x0 + b * dt))
+        }
+        value = target + x
+        velocity = v
+    }
+}
+
+/// Calls `onFrame` with the frame time on every display refresh (120 Hz on ProMotion) until it returns false.
+@MainActor
+final class FrameDriver: NSObject {
+    /// Return true to keep animating.
+    var onFrame: ((CGFloat) -> Bool)?
+    private weak var view: NSView?
+    private var link: CADisplayLink?
+    private var last: CFTimeInterval = 0
+
+    init(view: NSView) {
+        self.view = view
+    }
+
+    var isRunning: Bool { link != nil }
+
+    func start() {
+        guard link == nil, let view, view.window != nil else { return }
+        let link = view.displayLink(target: self, selector: #selector(tick(_:)))
+        link.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        link.add(to: .main, forMode: .common)
+        self.link = link
+        last = 0
+    }
+
+    func stop() {
+        link?.invalidate()
+        link = nil
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        // Advance to the time this frame will be shown. The first frame and long stalls advance by one nominal
+        // frame, so nothing jumps.
+        let now = link.targetTimestamp
+        let dt = last == 0 ? link.targetTimestamp - link.timestamp : min(max(now - last, 1.0 / 240), 1.0 / 30)
+        last = now
+        if onFrame?(CGFloat(dt)) != true { stop() }
+    }
+}
+
+/// Shared rules for motion: honour Reduce Motion everywhere.
+@MainActor
+enum Motion {
+    static var reduced: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+}
+
+extension CGFloat {
+    /// Linear interpolation from self to `to` by t.
+    func mix(_ to: CGFloat, _ t: CGFloat) -> CGFloat { self + (to - self) * t }
+}
+
+extension NSColor {
+    /// Blends two colours in sRGB (NSColor.blended works in the receiver's space, which can be a pattern or catalog).
+    func mix(_ other: NSColor, _ t: CGFloat) -> NSColor {
+        guard let a = usingColorSpace(.sRGB), let b = other.usingColorSpace(.sRGB) else { return t < 0.5 ? self : other }
+        let t = Swift.min(Swift.max(t, 0), 1)
+        return NSColor(srgbRed: a.redComponent.mix(b.redComponent, t), green: a.greenComponent.mix(b.greenComponent, t),
+                       blue: a.blueComponent.mix(b.blueComponent, t), alpha: a.alphaComponent.mix(b.alphaComponent, t))
+    }
+}
+
+/// The moments the app gives tactile and audible feedback for. Each channel has its own switch in Settings.
+/// Every call fires its haptic and sound together, from the same event that changes the picture.
+@MainActor
+enum Feedback {
+    /// The pointer moved onto a different menu item (or back onto the hub, where releasing cancels).
+    static func hover(sound: Bool = true) {
+        Haptics.tick(.alignment)
+        if sound { Sounds.play(.hover) }
+    }
+
+    /// The menu turned to another page.
+    static func page() {
+        Haptics.tick(.levelChange)
+        Sounds.play(.page)
+    }
+
+    /// A file was dropped on an item: the strongest tap, which must land even as the finger lifts.
+    static func press() {
+        Haptics.press()
+        Sounds.play(.press)
+    }
+
+    /// A dropped action finished successfully.
+    static func done() { Sounds.play(.done) }
+
+    /// Nothing to do, or something failed.
+    static func refuse() { Haptics.tick(.generic) }
+
+    /// A drag started or a menu is opening: get the actuator and sounds ready so the first tap is on time.
+    static func prepare() {
+        Haptics.prepare()
+        Sounds.prepare()
+    }
+}
+
+/// Force Touch trackpad feedback.
+///
+/// Ticks go through NSHapticFeedbackManager, which respects the system setting and works from a background app
+/// while a finger is on the trackpad (true during a drag). The drop press uses the trackpad actuator directly when
+/// it's available, because the finger is often already lifting, which silences the public API.
+@MainActor
+enum Haptics {
+    private static var last: CFTimeInterval = 0
+
+    /// A light detent. Calls closer together than 40 ms are merged so fast sweeps don't buzz.
+    static func tick(_ pattern: NSHapticFeedbackManager.FeedbackPattern) {
+        guard Prefs.haptics else { return }
+        let now = CACurrentMediaTime()
+        guard now - last > 0.04 else { return }
+        last = now
+        NSHapticFeedbackManager.defaultPerformer.perform(pattern, performanceTime: .now)
+    }
+
+    /// A firm press; never merged away.
+    static func press() {
+        guard Prefs.haptics else { return }
+        last = CACurrentMediaTime()
+        if TrackpadActuator.isUsable {
+            TrackpadActuator.actuate(4)
+        } else {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        }
+    }
+
+    static func prepare() {
+        if Prefs.haptics, TrackpadActuator.isUsable { TrackpadActuator.prepare() }
+    }
+}
+
+/// The trackpad's actuator, through the private MultitouchSupport framework. It is loaded at run time (never linked),
+/// so a macOS without it just falls back to the public API. Actuation IDs come from the system's own table:
+/// 1, 3, 5 are silent weak taps; 2, 4 medium with the click tone; 6 the strongest; 15, 16 the soft system detent.
+enum TrackpadActuator {
+    private struct API {
+        let create: @convention(c) (UInt64) -> Unmanaged<CFTypeRef>?
+        let open: @convention(c) (CFTypeRef) -> Int32
+        let close: @convention(c) (CFTypeRef) -> Int32
+        let actuate: @convention(c) (CFTypeRef, Int32, UInt32, Float, Float) -> Int32
+    }
+
+    private static let api: API? = {
+        // `defaults write local.swivel.app privateHaptics -bool NO` turns this off if a macOS update misbehaves.
+        if UserDefaults.standard.object(forKey: "privateHaptics") as? Bool == false { return nil }
+        let path = "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
+        guard let handle = dlopen(path, RTLD_LAZY | RTLD_LOCAL),
+              let create = dlsym(handle, "MTActuatorCreateFromDeviceID"), let open = dlsym(handle, "MTActuatorOpen"),
+              let close = dlsym(handle, "MTActuatorClose"), let actuate = dlsym(handle, "MTActuatorActuate") else { return nil }
+        return API(create: unsafeBitCast(create, to: (@convention(c) (UInt64) -> Unmanaged<CFTypeRef>?).self),
+                   open: unsafeBitCast(open, to: (@convention(c) (CFTypeRef) -> Int32).self),
+                   close: unsafeBitCast(close, to: (@convention(c) (CFTypeRef) -> Int32).self),
+                   actuate: unsafeBitCast(actuate, to: (@convention(c) (CFTypeRef, Int32, UInt32, Float, Float) -> Int32).self))
+    }()
+
+    private static let queue = DispatchQueue(label: "local.swivel.haptics", qos: .userInteractive)
+    private nonisolated(unsafe) static var open: [CFTypeRef] = []
+
+    /// Available, and the user hasn't turned trackpad haptics off in System Settings (the actuator would ignore that).
+    static var isUsable: Bool {
+        guard api != nil else { return false }
+        let detents = CFPreferencesCopyAppValue("ActuateDetents" as CFString, "com.apple.AppleMultitouchTrackpad" as CFString)
+        return (detents as? NSNumber)?.intValue != 0
+    }
+
+    /// For diagnostics: trackpads that can actuate.
+    static var deviceCount: Int { deviceIDs().count }
+
+    /// Opens the actuators ahead of time; opening costs about 10 ms.
+    static func prepare() {
+        queue.async { _ = actuators() }
+    }
+
+    static func actuate(_ id: Int32) {
+        queue.async {
+            guard let api else { return }
+            for actuator in actuators() where api.actuate(actuator, id, 0, 0, 0) != 0 {
+                // Stale after sleep or a reconnect: start again on the next tap.
+                _ = api.close(actuator)
+                open = []
+            }
+        }
+    }
+
+    /// Every trackpad that can actuate (built-in and Magic Trackpad), opened once and kept.
+    private static func actuators() -> [CFTypeRef] {
+        guard open.isEmpty, let api else { return open }
+        for id in deviceIDs() {
+            guard let actuator = api.create(id)?.takeRetainedValue() else { continue }
+            if api.open(actuator) == 0 { open.append(actuator) }
+        }
+        return open
+    }
+
+    private static func deviceIDs() -> [UInt64] {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("AppleMultitouchDevice"), &iterator) == KERN_SUCCESS
+        else { return [] }
+        defer { IOObjectRelease(iterator) }
+        var ids: [UInt64] = []
+        while case let service = IOIteratorNext(iterator), service != 0 {
+            defer { IOObjectRelease(service) }
+            func property(_ key: String) -> Any? {
+                IORegistryEntryCreateCFProperty(service, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+            }
+            guard (property("ActuationSupported") as? Bool) == true,
+                  let id = (property("Multitouch ID") as? NSNumber)?.uint64Value else { continue }
+            ids.append(id)
+        }
+        return ids
+    }
+}
+
+/// Short interface sounds, synthesised once into the cache folder (no bundled audio) and played as system sounds:
+/// they go to the user's sound-effects device, at the alert volume, and stay silent when “Play user interface sound
+/// effects” is off.
+@MainActor
+enum Sounds {
+    enum Effect: String, CaseIterable { case hover, page, press, done }
+
+    private static var ids: [Effect: [SystemSoundID]] = [:]
+    private static var lastHover: CFTimeInterval = 0
+    private static var variant = 0
+    private static var preparing = false
+
+    static func play(_ effect: Effect) {
+        guard Prefs.soundEffects else { return }
+        if effect == .hover {
+            let now = CACurrentMediaTime()
+            guard now - lastHover > 0.045 else { return }
+            lastHover = now
+        }
+        guard let choices = ids[effect], !choices.isEmpty else {
+            prepare()
+            return
+        }
+        // Repeated ticks vary a little in pitch and level, so a sweep doesn't sound mechanical.
+        variant = (variant + 1 + Int.random(in: 0...1)) % choices.count
+        AudioServicesPlaySystemSound(choices[effect == .hover ? variant : 0])
+    }
+
+    /// For diagnostics.
+    static var registeredCount: Int { ids.values.reduce(0) { $0 + $1.count } }
+
+    /// Writes and registers the sounds off the main thread (once).
+    static func prepare() {
+        guard Prefs.soundEffects, ids.isEmpty, !preparing else { return }
+        preparing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let made = SoundSynth.register()
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    ids = made
+                    preparing = false
+                }
+            }
+        }
+    }
+}
+
+/// Builds the interface sounds as 48 kHz 16-bit WAV files. Levels follow Apple's own UI sounds: a hover tick peaks
+/// near −24 dBFS (it repeats), a press near −13 dBFS.
+enum SoundSynth {
+    static func register() -> [Sounds.Effect: [SystemSoundID]] {
+        let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("local.swivel.app/sounds-v2", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var result: [Sounds.Effect: [SystemSoundID]] = [:]
+        for effect in Sounds.Effect.allCases {
+            let variants: [(pitch: Double, gain: Double)] = effect == .hover
+                ? [(1, 1), (0.97, 0.88), (1.03, 0.94)] : [(1, 1)]
+            for (n, v) in variants.enumerated() {
+                let url = folder.appendingPathComponent("\(effect.rawValue)-\(n).wav")
+                if !FileManager.default.fileExists(atPath: url.path) {
+                    try? wav(samples(effect, pitch: v.pitch, gain: v.gain)).write(to: url)
+                }
+                var id: SystemSoundID = 0
+                if AudioServicesCreateSystemSoundID(url as CFURL, &id) == noErr { result[effect, default: []].append(id) }
+            }
+        }
+        return result
+    }
+
+    private static let rate = 48_000.0
+
+    static func samples(_ effect: Sounds.Effect, pitch: Double, gain: Double) -> [Float] {
+        let length: Double, peak: Double
+        switch effect {
+        case .hover: (length, peak) = (0.025, 0.063)    // −24 dBFS
+        case .page: (length, peak) = (0.07, 0.09)       // −21 dBFS
+        case .press: (length, peak) = (0.11, 0.22)      // −13 dBFS
+        case .done: (length, peak) = (0.26, 0.14)       // −17 dBFS
+        }
+        let count = Int(rate * length)
+        var noise = SystemRandomNumberGenerator()
+        func hiss() -> Double { Double.random(in: -1...1, using: &noise) }
+        func ping(_ t: Double, _ freq: Double, _ decay: Double) -> Double {
+            t < 0 ? 0 : exp(-t / decay) * sin(2 * .pi * freq * pitch * t)
+        }
+        var out = [Double](repeating: 0, count: count)
+        for i in 0..<count {
+            let t = Double(i) / rate
+            switch effect {
+            case .hover:
+                // A small plastic detent: two bright partials and a breath of noise, gone in ~10 ms.
+                out[i] = 0.6 * ping(t, 2350, 0.0038) + 0.3 * ping(t, 3900, 0.0022) + 0.15 * hiss() * exp(-t / 0.0007)
+            case .page:
+                // A ratchet: two detents, the second a little higher.
+                out[i] = 0.6 * ping(t, 2000, 0.003) + 0.25 * ping(t, 3300, 0.0018)
+                    + 0.65 * ping(t - 0.034, 2500, 0.003) + 0.25 * ping(t - 0.034, 4100, 0.0018)
+            case .press:
+                // A keycap bottoming out: a sharp click over a short, falling low body.
+                let f = 210 - 80 * min(t / 0.05, 1)
+                out[i] = 0.75 * exp(-t / 0.022) * sin(2 * .pi * f * t) + 0.3 * ping(t, 1150, 0.006)
+                    + 0.3 * hiss() * exp(-t / 0.001)
+            case .done:
+                // A soft two-note chime (C6 then G6) with a quick attack.
+                let attack = min(t / 0.004, 1)
+                out[i] = attack * (0.55 * (ping(t, 1046.5, 0.07) + 0.25 * ping(t, 2093, 0.03))
+                    + 0.6 * (ping(t - 0.075, 1568, 0.09) + 0.2 * ping(t - 0.075, 3136, 0.035)))
+            }
+            // Fade the last few milliseconds so nothing clicks at the cut.
+            out[i] *= min(Double(count - i) / (rate * 0.004), 1)
+        }
+        let loudest = out.map(abs).max() ?? 1
+        return out.map { Float($0 / max(loudest, 1e-9) * peak * gain) }
+    }
+
+    /// A minimal mono 16-bit PCM WAV file.
+    static func wav(_ samples: [Float]) -> Data {
+        var data = Data()
+        func put<T: FixedWidthInteger>(_ value: T) { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        let bytes = UInt32(samples.count * 2)
+        data.append(contentsOf: Array("RIFF".utf8)); put(36 + bytes)
+        data.append(contentsOf: Array("WAVEfmt ".utf8)); put(UInt32(16)); put(UInt16(1)); put(UInt16(1))
+        put(UInt32(rate)); put(UInt32(rate * 2)); put(UInt16(2)); put(UInt16(16))
+        data.append(contentsOf: Array("data".utf8)); put(bytes)
+        for s in samples { put(Int16(max(-1, min(1, s)) * 32_767)) }
+        return data
+    }
+}
