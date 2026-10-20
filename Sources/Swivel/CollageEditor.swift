@@ -2,6 +2,13 @@ import AppKit
 
 /// Combines several images into a grid, row, column or featured layout.
 final class CollageEditor: Editor {
+    private struct Look: Sendable {
+        var layout: Int
+        var gap: CGFloat
+        var corners: CGFloat
+        var background: CGColor
+    }
+
     private let preview = ImagePreview()
     private let urls: [URL]
     private var thumbs: [CGImage] = []
@@ -10,12 +17,14 @@ final class CollageEditor: Editor {
     private var spacing: NSSlider!
     private var corners: NSSlider!
     private let colorWell = NSColorWell(style: .minimal)
+    private var lastLayout = 0
+    private var fadeNext = false
+    private lazy var renderer = LiveRender<CGImage?> { [weak self] image in self?.show(image) }
 
     init(urls: [URL]) throws {
         self.urls = urls
         super.init(title: "Make a Collage", source: urls[0], canvas: preview)
-        window.subtitle = "\(urls.count) images"
-        thumbs = try urls.map { try Images.load($0, maxPixels: 700) }
+        window.subtitle = L("%d images", urls.count)
         layout = segments(layouts)
         addRow("Layout", layout)
         spacing = slider(0, 0.06, 0.02)
@@ -28,12 +37,28 @@ final class CollageEditor: Editor {
         addRow("Background", colorWell)
     }
 
+    private var look: Look {
+        Look(layout: layout.selectedSegment, gap: spacing.doubleValue, corners: corners.doubleValue,
+             background: colorWell.color.cgColor)
+    }
+
+    override func load() async throws {
+        // Decode every image and compose the first preview off the main thread, so the window opens on the collage.
+        let urls = self.urls, look = self.look
+        let (thumbs, first) = try await Images.detached { () throws -> ([CGImage], CGImage?) in
+            let thumbs = try urls.map { try Images.load($0, maxPixels: 700) }
+            return (thumbs, Self.render(thumbs, width: 1200, look))
+        }
+        self.thumbs = thumbs
+        preview.image = first
+    }
+
     /// Cell frames in a unit-width canvas (y up), plus the canvas height.
-    private func cells(for sizes: [CGSize], gap: CGFloat) -> ([CGRect], CGFloat) {
+    private nonisolated static func cells(for sizes: [CGSize], layout: Int, gap: CGFloat) -> ([CGRect], CGFloat) {
         let n = sizes.count
         func aspect(_ i: Int) -> CGFloat { sizes[i].width / max(sizes[i].height, 1) }
 
-        switch layout.selectedSegment {
+        switch layout {
         case 1:  // Row: equal heights, widths follow each image's aspect.
             let total = (0..<n).reduce(0) { $0 + aspect($1) }
             let h = (1 - gap * CGFloat(n + 1)) / total
@@ -74,14 +99,14 @@ final class CollageEditor: Editor {
         }
     }
 
-    private func render(_ images: [CGImage], width: CGFloat) -> CGImage? {
+    private nonisolated static func render(_ images: [CGImage], width: CGFloat, _ look: Look) -> CGImage? {
         let sizes = images.map { CGSize(width: $0.width, height: $0.height) }
-        let (frames, unitHeight) = cells(for: sizes, gap: spacing.doubleValue)
+        let (frames, unitHeight) = cells(for: sizes, layout: look.layout, gap: look.gap)
         let height = unitHeight * width
         guard let ctx = CGContext(data: nil, width: Int(width), height: Int(height), bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
-        ctx.setFillColor(colorWell.color.cgColor)
+        ctx.setFillColor(look.background)
         ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
         ctx.interpolationQuality = .high
         for (image, unit) in zip(images, frames) {
@@ -89,7 +114,7 @@ final class CollageEditor: Editor {
             // Fill the cell, cropping the image's overflow.
             let scale = max(cell.width / CGFloat(image.width), cell.height / CGFloat(image.height))
             let drawn = CGSize(width: CGFloat(image.width) * scale, height: CGFloat(image.height) * scale)
-            let r = corners.doubleValue * min(cell.width, cell.height)
+            let r = look.corners * min(cell.width, cell.height)
             ctx.saveGState()
             ctx.addPath(CGPath(roundedRect: cell, cornerWidth: r, cornerHeight: r, transform: nil))
             ctx.clip()
@@ -100,7 +125,22 @@ final class CollageEditor: Editor {
         return ctx.makeImage()
     }
 
-    override func update() { preview.image = render(thumbs, width: 1200) }
+    private func show(_ image: CGImage?) {
+        guard let image else { return }
+        preview.setImage(image, fade: fadeNext)
+        fadeNext = false
+    }
+
+    override func update() {
+        // A new layout rearranges every cell: crossfade it rather than cut.
+        if layout.selectedSegment != lastLayout {
+            lastLayout = layout.selectedSegment
+            fadeNext = true
+        }
+        guard !thumbs.isEmpty else { return }
+        let thumbs = self.thumbs, look = self.look
+        renderer.request { Self.render(thumbs, width: 1200, look) }
+    }
 
     override func reset() {
         layout.selectedSegment = 0
@@ -109,11 +149,16 @@ final class CollageEditor: Editor {
         colorWell.color = .white
     }
 
+    override func didClose() { renderer.cancel() }
+
     override func apply() async throws -> [URL] {
-        let full = try urls.map { try Images.load($0, maxPixels: 3000) }
-        guard let result = render(full, width: 4000) else { throw ToolError("Collage too large") }
-        let out = Paths.unique(urls[0].deletingLastPathComponent().appendingPathComponent("Collage.png"))
-        try Images.write(result, to: out, type: .png, quality: 1)
-        return [out]
+        let urls = self.urls, look = self.look
+        return try await Images.detached {
+            let full = try urls.map { try Images.load($0, maxPixels: 3000) }
+            guard let result = Self.render(full, width: 4000, look) else { throw ToolError("Collage too large") }
+            let out = Paths.unique(urls[0].deletingLastPathComponent().appendingPathComponent("Collage.png"))
+            try Images.write(result, to: out, type: .png, quality: 1)
+            return [out]
+        }
     }
 }

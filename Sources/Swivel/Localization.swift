@@ -312,6 +312,14 @@ enum Strings {
 
         // Editors
         "Apply": ["应用", "套用", "適用"],
+        // Feel: editors
+        "Saving…": ["正在存储…", "正在儲存…", "保存中…"],
+        "Discard your changes?": ["要放弃更改吗？", "要放棄變更嗎？", "変更を破棄しますか？"],
+        "Discard": ["放弃", "放棄", "破棄"],
+        "Keep Editing": ["继续编辑", "繼續編輯", "編集を続ける"],
+        "Original ratio": ["原始比例", "原始比例", "元の比率"],
+        "Press and hold to compare with the original": ["按住可与原图对比", "按住可與原圖對比", "押し続けると元の画像と比較できます"],
+        "%d images": ["%d 张图片", "%d 張圖片", "%d 枚の画像"],
         "Cancel": ["取消", "取消", "キャンセル"],
         "Reset": ["重置", "重設", "リセット"],
         "Crop Image": ["裁剪图片", "裁切圖片", "画像を切り取る"],
