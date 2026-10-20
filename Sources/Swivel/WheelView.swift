@@ -86,7 +86,7 @@ final class WheelView: NSView {
         let hubFill = dark ? NSColor(white: 0, alpha: 0.38) : NSColor(white: 1, alpha: 0.6)
         let line = dark ? NSColor(white: 1, alpha: 0.28) : NSColor(white: 1, alpha: 0.9)
         let text = dark ? NSColor.white : NSColor(white: 0.13, alpha: 1)
-        let accent = NSColor(srgbRed: 1.0, green: 0.47, blue: 0.12, alpha: 0.92)
+        let accent = NSColor.controlAccentColor.withAlphaComponent(0.92)
         labelGlow = dark ? NSColor.black.withAlphaComponent(0.6) : NSColor.white.withAlphaComponent(0.8)
 
         for i in items.indices {
@@ -103,8 +103,8 @@ final class WheelView: NSView {
             let mid = ((outerRadius - rimWidth) + innerRadius + 6) / 2
             let rad = centreAngle(i) * .pi / 180
             let labelCentre = NSPoint(x: center.x + cos(rad) * mid, y: center.y + sin(rad) * mid)
-            drawText(items[i].title.uppercased(), at: labelCentre,
-                     font: .systemFont(ofSize: items.count > 6 ? 10 : 11, weight: .heavy),
+            drawText(items[i].title, at: labelCentre,
+                     font: .systemFont(ofSize: items.count > 6 ? 11 : 12, weight: .semibold),
                      color: isHovered ? .white : text, maxWidth: mid * sin(.pi / CGFloat(max(items.count, 2))) * 1.7,
                      glow: !isHovered)
         }
@@ -172,7 +172,7 @@ final class WheelView: NSView {
         if size.width > maxWidth {
             // Shrink long labels to fit rather than truncating them.
             let fitted = max(7, font.pointSize * maxWidth / size.width)
-            attrs[.font] = NSFont.systemFont(ofSize: fitted, weight: .heavy)
+            attrs[.font] = NSFont.systemFont(ofSize: fitted, weight: .semibold)
             size = (string as NSString).size(withAttributes: attrs)
         }
         let width = min(size.width, maxWidth)

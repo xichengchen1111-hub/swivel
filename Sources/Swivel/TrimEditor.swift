@@ -34,7 +34,7 @@ final class TrimEditor: Editor {
         addRow("Start", start, startLabel)
         addRow("End", end, endLabel)
         lengthLabel.font = .systemFont(ofSize: 13, weight: .semibold)
-        lengthLabel.textColor = .systemOrange
+        lengthLabel.textColor = .controlAccentColor
         addRow("Length", lengthLabel)
     }
 

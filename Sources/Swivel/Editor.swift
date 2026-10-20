@@ -19,58 +19,73 @@ class Editor: NSObject, NSWindowDelegate {
 
     init(title: String, source: URL, canvas: NSView) {
         self.source = source
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 680),
-                          styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 700),
+                          styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         super.init()
         window.title = title
         window.subtitle = source.lastPathComponent
-        window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.level = .floating
-        window.minSize = NSSize(width: 460, height: 560)
+        window.minSize = NSSize(width: 480, height: 580)
         window.delegate = self
-
-        let background = NSVisualEffectView()
-        background.material = .popover
-        background.blendingMode = .behindWindow
-        background.state = .active
 
         controls.orientation = .vertical
         controls.alignment = .leading
         controls.spacing = 10
 
+        // macOS convention: secondary action on the left, Cancel / default action on the right.
         let reset = NSButton(title: "Reset", target: self, action: #selector(resetClicked))
-        reset.bezelStyle = .push
+        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancelClicked))
+        cancel.keyEquivalent = "\u{1b}"
         applyButton = NSButton(title: "Apply", target: self, action: #selector(applyClicked))
-        applyButton.bezelStyle = .push
         applyButton.keyEquivalent = "\r"
-        applyButton.bezelColor = .systemOrange
+        for button in [reset, cancel, applyButton!] {
+            button.bezelStyle = .push
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
+        }
         let bar = NSStackView()
         bar.addView(reset, in: .leading)
+        bar.addView(cancel, in: .trailing)
         bar.addView(applyButton, in: .trailing)
 
-        canvas.translatesAutoresizingMaskIntoConstraints = false
-        canvas.setContentHuggingPriority(.defaultLow, for: .vertical)
-        canvas.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        let root = NSStackView(views: [canvas, controls, bar])
+        // The canvas sits in a recessed well, like Preview's editing area.
+        let well = NSBox()
+        well.boxType = .custom
+        well.cornerRadius = 10
+        well.borderColor = .separatorColor
+        well.borderWidth = 1
+        well.fillColor = .underPageBackgroundColor
+        well.contentViewMargins = .zero
+        well.contentView = canvas
+        well.translatesAutoresizingMaskIntoConstraints = false
+        well.setContentHuggingPriority(.defaultLow, for: .vertical)
+        well.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+
+        let separator = NSBox()
+        separator.boxType = .separator
+
+        let root = NSStackView(views: [well, controls, separator, bar])
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = 16
-        root.edgeInsets = NSEdgeInsets(top: 40, left: 20, bottom: 18, right: 20)
+        root.setCustomSpacing(12, after: separator)
+        root.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 18, right: 20)
         root.translatesAutoresizingMaskIntoConstraints = false
-        background.addSubview(root)
+        let content = NSView()
+        content.addSubview(root)
         NSLayoutConstraint.activate([
-            root.leadingAnchor.constraint(equalTo: background.leadingAnchor),
-            root.trailingAnchor.constraint(equalTo: background.trailingAnchor),
-            root.topAnchor.constraint(equalTo: background.topAnchor),
-            root.bottomAnchor.constraint(equalTo: background.bottomAnchor),
-            canvas.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40),
+            root.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            root.topAnchor.constraint(equalTo: content.topAnchor),
+            root.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            well.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40),
             controls.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40),
+            separator.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40),
             bar.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -40),
-            canvas.heightAnchor.constraint(greaterThanOrEqualToConstant: 260),
+            well.heightAnchor.constraint(greaterThanOrEqualToConstant: 280),
         ])
-        window.contentView = background
+        window.contentView = content
     }
 
     func present() async throws -> [URL] {
@@ -93,6 +108,8 @@ class Editor: NSObject, NSWindowDelegate {
     func update() {}
 
     // MARK: Plumbing
+
+    @objc private func cancelClicked() { window.close() }
 
     @objc private func resetClicked() {
         reset()
@@ -129,9 +146,10 @@ class Editor: NSObject, NSWindowDelegate {
     // MARK: Control builders
 
     func addRow(_ title: String, _ views: NSView...) {
-        let label = NSTextField(labelWithString: title)
-        label.textColor = .secondaryLabelColor
-        label.widthAnchor.constraint(equalToConstant: 92).isActive = true
+        // Right-aligned "Label:" column, as in System Settings and inspector panels.
+        let label = NSTextField(labelWithString: title.isEmpty ? "" : title + ":")
+        label.alignment = .right
+        label.widthAnchor.constraint(equalToConstant: 96).isActive = true
         let row = NSStackView(views: [label] + views)
         row.spacing = 8
         controls.addArrangedSubview(row)
@@ -141,7 +159,6 @@ class Editor: NSObject, NSWindowDelegate {
     func slider(_ min: Double, _ max: Double, _ value: Double) -> NSSlider {
         let slider = NSSlider(value: value, minValue: min, maxValue: max, target: self, action: #selector(controlChanged))
         slider.isContinuous = true
-        slider.trackFillColor = .systemOrange
         return slider
     }
 
@@ -149,7 +166,6 @@ class Editor: NSObject, NSWindowDelegate {
         let control = NSSegmentedControl(labels: labels, trackingMode: .selectOne, target: self,
                                          action: #selector(controlChanged))
         control.selectedSegment = 0
-        control.selectedSegmentBezelColor = .systemOrange
         return control
     }
 

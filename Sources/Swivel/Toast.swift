@@ -21,10 +21,12 @@ final class Toast {
         panel.hidesOnDeactivate = false
 
         let background = NSVisualEffectView()
-        background.material = .hudWindow
+        background.material = .popover
         background.state = .active
         background.wantsLayer = true
-        background.layer?.cornerRadius = 12
+        background.layer?.cornerRadius = 16
+        background.layer?.borderWidth = 0.5
+        background.layer?.borderColor = NSColor.separatorColor.cgColor
         background.layer?.masksToBounds = true
 
         icon.symbolConfiguration = .init(pointSize: 15, weight: .semibold)
@@ -47,7 +49,7 @@ final class Toast {
         background.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(clicked)))
     }
 
-    func show(_ message: String, symbol: String, files: [URL] = [], tint: NSColor = .systemOrange, autoHide: Bool = true) {
+    func show(_ message: String, symbol: String, files: [URL] = [], tint: NSColor = .controlAccentColor, autoHide: Bool = true) {
         self.files = files
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         icon.contentTintColor = tint
@@ -56,7 +58,7 @@ final class Toast {
         let width = min(max(label.intrinsicContentSize.width + 66, 180), 520)
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         let area = screen?.visibleFrame ?? .zero
-        panel.setFrame(NSRect(x: area.midX - width / 2, y: area.minY + 70, width: width, height: 44), display: true)
+        panel.setFrame(NSRect(x: area.midX - width / 2, y: area.minY + 70, width: width, height: 48), display: true)
         panel.alphaValue = 1
         panel.orderFrontRegardless()
 

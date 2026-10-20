@@ -309,7 +309,7 @@ final class RedactCanvas: NSView {
         guard let image else { return }
         NSGraphicsContext.current?.imageInterpolation = .high
         NSImage(cgImage: image, size: imageRect.size).draw(in: imageRect)
-        NSColor.systemOrange.setStroke()
+        NSColor.controlAccentColor.setStroke()
         for rect in outlines {
             let path = NSBezierPath(rect: toView(rect))
             path.lineWidth = 1.5

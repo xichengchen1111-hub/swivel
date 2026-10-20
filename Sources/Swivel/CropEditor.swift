@@ -54,7 +54,7 @@ final class CropView: NSView {
             NSBezierPath.strokeLine(from: NSPoint(x: box.minX, y: y), to: NSPoint(x: box.maxX, y: y))
         }
 
-        let accent = NSColor.systemOrange
+        let accent = NSColor.controlAccentColor
         accent.setStroke()
         let border = NSBezierPath(rect: box)
         border.lineWidth = 2
@@ -194,7 +194,7 @@ final class CropEditor: Editor {
         heightField = numberField(0)
         for field in [widthField!, heightField!] { field.action = #selector(sizeEdited) }
         let units = NSTextField(labelWithString: isPDF ? "pt" : "px")
-        units.textColor = .systemOrange
+        units.textColor = .secondaryLabelColor
         let times = NSTextField(labelWithString: "×")
         addRow("Size", NSTextField(labelWithString: "W"), widthField, times, NSTextField(labelWithString: "H"),
                heightField, units)
