@@ -1,16 +1,15 @@
 import AppKit
 import ServiceManagement
 
-/// The app's main window: settings tabs plus 晾图. While it is open Swivel shows in the Dock with a normal menu bar.
+/// The app's main window: settings tabs plus the clothesline. While it is open Swivel shows in the Dock with a normal menu bar.
 @MainActor
 final class AppWindow: NSObject, NSWindowDelegate {
     static let shared = AppWindow()
 
-    enum Tab: Int { case general, shortcuts, style, customize, clipline }
+    enum Tab: Int { case general, shortcuts, style, customize, clothesline }
 
     private var window: NSWindow?
     private var tabs: NSTabViewController?
-    let clipline = ClipLinePane()
 
     func show(_ tab: Tab? = nil) {
         let window = self.window ?? makeWindow()
@@ -30,7 +29,7 @@ final class AppWindow: NSObject, NSWindowDelegate {
                                     (ShortcutsPane(), "Shortcuts", "keyboard"),
                                     (StylePane(), "Style", "paintpalette"),
                                     (CustomizePane(), "Customize", "slider.horizontal.3"),
-                                    (clipline, "晾图", "photo.on.rectangle.angled")] {
+                                    (ClotheslinePane(), "Clothesline", "tshirt")] {
             vc.title = title  // shown as the window title for the selected tab
             let item = NSTabViewItem(viewController: vc)
             item.label = title
@@ -58,7 +57,7 @@ final class AppWindow: NSObject, NSWindowDelegate {
         }
     }
 
-    /// App, Edit and Window menus, so ⌘V, ⌘C, ⌘A and ⌘W work in the window (and in 晾图).
+    /// App, Edit and Window menus, so ⌘V, ⌘C, ⌘A and ⌘W work in the window.
     private static func mainMenu() -> NSMenu {
         let main = NSMenu()
         let app = NSMenu()
@@ -246,8 +245,8 @@ final class GeneralPane: Pane {
         stack.addArrangedSubview(row("How it works", steps))
 
         let shelf = NSButton(title: "Show Shelf", target: self, action: #selector(showShelf))
-        let liangtu = NSButton(title: "Open 晾图", target: self, action: #selector(openClipline))
-        stack.addArrangedSubview(row("", shelf, liangtu))
+        let rope = NSButton(title: "Show Clothesline", target: self, action: #selector(showClothesline))
+        stack.addArrangedSubview(row("", shelf, rope))
     }
 
     override func refresh() {
@@ -267,7 +266,70 @@ final class GeneralPane: Pane {
     }
 
     @objc private func showShelf() { Shelf.shared.show() }
-    @objc private func openClipline() { AppWindow.shared.show(.clipline) }
+    @objc private func showClothesline() { Clothesline.shared.toggle() }
+}
+
+// MARK: - Clothesline
+
+final class ClotheslinePane: Pane {
+    private let enabled = NSButton(checkboxWithTitle: "Lower the rope when the pointer rests on the menu bar", target: nil, action: nil)
+    private let takeover = NSButton(checkboxWithTitle: "Hang new screenshots and screen recordings on the rope", target: nil, action: nil)
+    private let copied = NSButton(checkboxWithTitle: "Also hang images you copy (e.g. ⌃ screenshots, Copy in Preview)", target: nil, action: nil)
+
+    init() { super.init(size: NSSize(width: 680, height: 560)) }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func build() {
+        stack.addArrangedSubview(label("A rope hidden under the menu bar. Screenshots hang on it instead of piling up on the desktop; take one down when you need it.", secondary: true))
+        for (box, action) in [(enabled, #selector(toggleEnabled)), (takeover, #selector(toggleTakeover)), (copied, #selector(toggleCopied))] {
+            box.target = self
+            box.action = action
+        }
+        stack.addArrangedSubview(row("Rope", enabled))
+        stack.addArrangedSubview(row("Screenshots", takeover))
+        let note = label("Turns off the floating thumbnail and saves screenshots to the rope's folder. Your own settings come back when this is off or Swivel quits.", size: 11, secondary: true)
+        note.preferredMaxLayoutWidth = 440
+        stack.addArrangedSubview(row("", note))
+        stack.addArrangedSubview(row("Clipboard", copied))
+
+        let gestures = NSGridView(views: [
+            ["Click", "Copy the image"], ["Double-click", "Open in Preview (QuickTime for recordings)"],
+            ["Hold or force click", "Quick Look"], ["Drag into an app", "Send a copy — the original stays on the rope"],
+            ["Drag into a folder", "Move it there — it comes off the rope"], ["Drag to the Trash, or click ×", "Throw it away"],
+            ["Rest on the menu bar", "Lower the rope"], ["Click the menu bar", "Put the rope away"], ["⌃ ⌥ T", "Show or hide the rope"],
+        ].map { pair -> [NSView] in
+            let key = NSTextField(labelWithString: pair[0])
+            key.font = .systemFont(ofSize: 12, weight: .semibold)
+            let value = NSTextField(labelWithString: pair[1])
+            value.font = .systemFont(ofSize: 12)
+            value.textColor = .secondaryLabelColor
+            return [key, value]
+        })
+        gestures.rowSpacing = 6
+        gestures.columnSpacing = 16
+        stack.addArrangedSubview(row("Gestures", gestures))
+
+        let show = NSButton(title: "Show Rope", target: self, action: #selector(showRope))
+        let open = NSButton(title: "Open Folder", target: self, action: #selector(openFolder))
+        stack.addArrangedSubview(row("", show, open))
+    }
+
+    override func refresh() {
+        enabled.state = Prefs.clotheslineEnabled ? .on : .off
+        takeover.state = Prefs.clotheslineTakeover ? .on : .off
+        copied.state = Prefs.clotheslineHangCopied ? .on : .off
+    }
+
+    @objc private func toggleEnabled() { Prefs.clotheslineEnabled = enabled.state == .on }
+    @objc private func toggleCopied() { Prefs.clotheslineHangCopied = copied.state == .on }
+
+    @objc private func toggleTakeover() {
+        Prefs.clotheslineTakeover = takeover.state == .on
+        if Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: Clothesline.shared.folder) } else { ScreenshotTakeover.restore() }
+    }
+
+    @objc private func showRope() { Clothesline.shared.toggle() }
+    @objc private func openFolder() { NSWorkspace.shared.open(Clothesline.shared.folder) }
 }
 
 // MARK: - Shortcuts

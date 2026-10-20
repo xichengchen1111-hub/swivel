@@ -20,7 +20,7 @@ Open Swivel from Launchpad or Finder (or choose **Open Swivel…** from the ◎ 
 - **Shortcuts**: pick which key (⇧ ⌘ ⌃ ⌥ fn) opens each menu.
 - **Style**: menu templates — Wheel, List, Bookshelf, Sticky Notes, Clothesline.
 - **Customize**: choose which options each menu shows per file type, and their order.
-- **晾图**: the screenshot clothesline from `../clipline/index.html`, bundled into the app by `build.sh`. Images can be hung on it from the ⌃ Actions menu.
+- **Clothesline**: a rope under the menu bar. New screenshots hang on it instead of the desktop; rest the pointer on the menu bar (or press ⌃⌥T) to lower it. Click to copy, double-click to open, hold for Quick Look, drag into an app for a copy or into a folder to take it down, drag to the Trash or click × to discard. Images can also be hung from the ⌃ Actions menu.
 
 ## Formats
 

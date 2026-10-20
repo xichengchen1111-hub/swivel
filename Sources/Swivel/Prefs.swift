@@ -73,6 +73,29 @@ enum Prefs {
         set { defaults.set(newValue, forKey: "enabled"); post() }
     }
 
+    // MARK: Clothesline
+
+    static var clotheslineEnabled: Bool {
+        get { defaults.object(forKey: "clothesline.enabled") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "clothesline.enabled"); post() }
+    }
+
+    /// Whether new screenshots go to the clothesline folder (asked once on first launch).
+    static var clotheslineTakeover: Bool {
+        get { defaults.bool(forKey: "clothesline.takeover") }
+        set { defaults.set(newValue, forKey: "clothesline.takeover"); post() }
+    }
+
+    static var clotheslineAsked: Bool {
+        get { defaults.bool(forKey: "clothesline.asked") }
+        set { defaults.set(newValue, forKey: "clothesline.asked") }
+    }
+
+    static var clotheslineHangCopied: Bool {
+        get { defaults.bool(forKey: "clothesline.hangCopied") }
+        set { defaults.set(newValue, forKey: "clothesline.hangCopied"); post() }
+    }
+
     static var style: MenuStyle {
         get { MenuStyle(rawValue: defaults.string(forKey: "style") ?? "") ?? .wheel }
         set { defaults.set(newValue.rawValue, forKey: "style"); post() }

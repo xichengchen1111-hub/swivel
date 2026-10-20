@@ -16,6 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         watcher.onDragEnd = { [weak self] in self?.wheel.dragEnded() }
         watcher.start()
+        Clothesline.shared.start()
+        if ProcessInfo.processInfo.environment["SWIVEL_SHOW_ROPE"] != nil {  // for testing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { Clothesline.shared.toggle() }
+        }
         NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebuildMenu() }
         }
@@ -29,6 +33,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // SWIVEL_TAB=<0-4> opens a specific tab (for testing).
             let tab = ProcessInfo.processInfo.environment["SWIVEL_TAB"].flatMap(Int.init).flatMap(AppWindow.Tab.init)
             AppWindow.shared.show(tab)
+            if tab == nil { askAboutScreenshots() }
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) { Clothesline.shared.stop() }
+
+    /// First launch: ask before redirecting screenshots.
+    private func askAboutScreenshots() {
+        guard !Prefs.clotheslineAsked else { return }
+        Prefs.clotheslineAsked = true
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Hang your screenshots on the clothesline?"
+        alert.informativeText = """
+            New screenshots will skip the desktop and hang on a rope under the menu bar. \
+            Rest the pointer on the menu bar to lower it. The floating thumbnail is turned off while this is on; \
+            your own settings come back if you turn it off or quit Swivel.
+            """
+        alert.addButton(withTitle: "Take Over Screenshots")
+        alert.addButton(withTitle: "Not Now")
+        if alert.runModal() == .alertFirstButtonReturn {
+            Prefs.clotheslineTakeover = true
+            ScreenshotTakeover.enable(into: Clothesline.shared.folder)
         }
     }
 
@@ -89,7 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         add(to: menu, "Open Swivel…", #selector(openWindow), key: ",")
         add(to: menu, "Menu Style: \(Prefs.style.title)…", #selector(openStyle))
-        add(to: menu, "Open 晾图", #selector(openClipline))
+        add(to: menu, "Show Clothesline", #selector(toggleRope), key: "t").keyEquivalentModifierMask = [.control, .option]
+        add(to: menu, "Hang New Screenshots", #selector(toggleTakeover)).state = Prefs.clotheslineTakeover ? .on : .off
         add(to: menu, "Show Shelf", #selector(showShelf))
         add(to: menu, "Open at Login", #selector(toggleLogin)).state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator())
@@ -134,7 +162,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openWindow() { AppWindow.shared.show(.general) }
     @objc private func openStyle() { AppWindow.shared.show(.style) }
     @objc fileprivate func openCustomize() { AppWindow.shared.show(.customize) }
-    @objc private func openClipline() { AppWindow.shared.show(.clipline) }
+    @objc private func toggleRope() { Clothesline.shared.toggle() }
+
+    @objc private func toggleTakeover() {
+        Prefs.clotheslineTakeover.toggle()
+        if Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: Clothesline.shared.folder) } else { ScreenshotTakeover.restore() }
+    }
     @objc private func showShelf() { Shelf.shared.show() }
 
     @objc private func toggleLogin() {

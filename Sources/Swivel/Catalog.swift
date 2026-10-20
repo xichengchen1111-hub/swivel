@@ -87,10 +87,9 @@ enum Catalog {
         case .actions:
             var list = actions(multi: multi)
             if kind == .image {
-                list.insert(WheelItem(title: "晾图") { urls in
-                    AppWindow.shared.show(.clipline)
-                    AppWindow.shared.clipline.hang(urls)
-                    return ActionResult(message: urls.count == 1 ? "Hung on 晾图" : "Hung \(urls.count) images on 晾图")
+                list.insert(WheelItem(title: "Hang") { urls in
+                    Clothesline.shared.hang(urls)
+                    return ActionResult(message: urls.count == 1 ? "Hung on the clothesline" : "Hung \(urls.count) images on the clothesline")
                 }, at: 1)
             }
             return list

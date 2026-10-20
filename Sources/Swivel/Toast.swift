@@ -3,6 +3,7 @@ import AppKit
 /// A small HUD at the bottom of the screen reporting what happened. Click it to reveal the output.
 @MainActor
 final class Toast {
+    static let shared = Toast()
     private let panel: NSPanel
     private let icon = NSImageView()
     private let label = NSTextField(labelWithString: "")
