@@ -87,7 +87,7 @@ class Editor: NSObject, NSWindowDelegate {
     // MARK: Overridable
 
     /// Saves the result and returns the written files.
-    func apply() throws -> [URL] { [] }
+    func apply() async throws -> [URL] { [] }
     func reset() {}
     /// Called whenever a control changes.
     func update() {}
@@ -101,13 +101,14 @@ class Editor: NSObject, NSWindowDelegate {
 
     @objc private func applyClicked() {
         applyButton.isEnabled = false
-        // Let the button redraw before a possibly slow full-resolution render.
-        DispatchQueue.main.async { [self] in
+        Task { @MainActor [self] in
+            // Let the button redraw before a possibly slow full-resolution render.
+            await Task.yield()
             do {
-                finish(.success(try apply()))
+                finish(.success(try await apply()))
             } catch {
                 applyButton.isEnabled = true
-                NSAlert(error: error).beginSheetModal(for: window)
+                NSAlert(error: error).beginSheetModal(for: window, completionHandler: nil)
             }
         }
     }

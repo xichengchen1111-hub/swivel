@@ -225,7 +225,7 @@ final class CropEditor: Editor {
         lastAspect = 0
     }
 
-    override func apply() throws -> [URL] {
+    override func apply() async throws -> [URL] {
         let crop = view.crop
         if isPDF {
             let doc = try PDFs.open(source)
@@ -320,7 +320,7 @@ final class CompressEditor: Editor {
         format.selectItem(at: 0)
     }
 
-    override func apply() throws -> [URL] {
+    override func apply() async throws -> [URL] {
         let (data, ext) = try encode()
         let out = Paths.output(for: source, ext: ext, suffix: " compressed")
         try data.write(to: out)

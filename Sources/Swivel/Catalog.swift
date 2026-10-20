@@ -74,13 +74,22 @@ enum Catalog {
                     each("Add BG", urls) { try await BackgroundEditor(source: $0).present() },
                     each("Redact", urls) { try await RedactEditor(source: $0).present() },
                     each("Metadata", urls) { try await MetadataEditor(source: $0).present() },
+                    each("Annotate", urls) { try await AnnotateEditor(source: $0).present() },
                 ]
-                return editors + Images.toolItems.map { option in each(option.title, urls, option.run) }
+                var list = editors + Images.toolItems.map { option in each(option.title, urls, option.run) }
                     + [WheelItem(title: "Make PDF") { saved(try await Images.makePDF($0)) }]
+                if multi { list.insert(WheelItem(title: "Collage") { saved(try await CollageEditor(urls: $0).present()) }, at: 0) }
+                return list
             case .video:
-                return Video.toolItems.map { option in each(option.title, urls, option.run) }
+                var list = [each("Trim", urls) { try await TrimEditor(source: $0).present() }]
+                    + Video.toolItems.map { option in each(option.title, urls, option.run) }
+                if multi { list.insert(WheelItem(title: "Merge") { saved([try await Video.merge($0, audioOnly: false)]) }, at: 0) }
+                return list
             case .audio:
-                return Audio.toolItems.map { option in each(option.title, urls, option.run) }
+                var list = [each("Trim", urls) { try await TrimEditor(source: $0).present() }]
+                    + Audio.toolItems.map { option in each(option.title, urls, option.run) }
+                if multi { list.insert(WheelItem(title: "Merge") { saved([try await Video.merge($0, audioOnly: true)]) }, at: 0) }
+                return list
             case .pdf:
                 var list = [each("Crop", urls) { try await CropEditor(source: $0).present() }]
                     + PDFs.toolItems.map { option in each(option.title, urls, option.run) }

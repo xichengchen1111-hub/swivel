@@ -48,7 +48,7 @@ final class AdjustEditor: Editor {
 
     override func reset() { for (control, value) in sliders { control.doubleValue = value } }
 
-    override func apply() throws -> [URL] {
+    override func apply() async throws -> [URL] {
         guard let result = render(try Images.load(source)) else { throw ToolError("Couldn't render") }
         let (type, ext) = Images.writableType(for: source)
         let out = Paths.output(for: source, ext: ext, suffix: " edited")
@@ -152,7 +152,7 @@ final class BackgroundEditor: Editor {
         shadow.state = .on
     }
 
-    override func apply() throws -> [URL] {
+    override func apply() async throws -> [URL] {
         guard let result = render(try Images.load(source)) else { throw ToolError("Couldn't render") }
         let out = Paths.output(for: source, ext: "png", suffix: " background")
         try Images.write(result, to: out, type: .png, quality: 1)
@@ -272,7 +272,7 @@ final class RedactEditor: Editor {
         style.selectedSegment = 0
     }
 
-    override func apply() throws -> [URL] {
+    override func apply() async throws -> [URL] {
         guard let result = render(try Images.load(source)) else { throw ToolError("Couldn't render") }
         let (type, ext) = Images.writableType(for: source)
         let out = Paths.output(for: source, ext: ext, suffix: " redacted")
@@ -429,7 +429,7 @@ final class MetadataEditor: Editor {
         return false
     }
 
-    override func apply() throws -> [URL] {
+    override func apply() async throws -> [URL] {
         guard let src = CGImageSourceCreateWithURL(source as CFURL, nil), let type = CGImageSourceGetType(src) else {
             throw ToolError("Couldn't read \(source.lastPathComponent)")
         }
