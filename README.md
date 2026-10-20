@@ -10,6 +10,14 @@ A zero-click, offline file converter for macOS. Drag any file, tap a key, and dr
 
 Tap the same key again to page through a wheel that has more than eight options. Drop on the centre to cancel. Results are saved next to the original — no new folders, even for multi-page PDFs or archives. Click the toast to reveal them in Finder.
 
+### How it feels
+
+- The option under the pointer **springs out of the ring**, and a dial on the hub turns to it. Moving on lets it settle back while the next one comes out, so a quick sweep reads as one wave. Selection follows the pointer's direction, so overshooting past the ring keeps the option you aimed at, and a little hysteresis stops it flickering at the edges.
+- **Dropping presses the option in**, holds it for a beat and lets it spring back as the rest of the menu clears away; the file's icon flies into it. A Force Click while still dragging pushes the option partway in first.
+- Coming back to the centre shows **Cancel**; releasing there (or pressing Esc) clears the menu at once.
+- On a Force Touch trackpad each new option gives a light **detent**, a page turn a step, and the drop a firmer **press**. Optional **sound effects** (a soft tick per option, a ratchet for pages, a key “thock” on the drop and a short chime when a result is saved) follow the system's “Play user interface sound effects” setting. Both have switches in General and in the ◎ menu.
+- Reduce Motion keeps the colour and feedback but nothing moves; Reduce Transparency puts a solid backdrop behind the wheel.
+
 Everything runs locally, using built-in macOS frameworks (Vision, ImageIO, AVFoundation, PDFKit, AppKit text system) and `afconvert` / `ditto` / `tar`. No third-party dependencies.
 
 ## The app window

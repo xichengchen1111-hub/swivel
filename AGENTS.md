@@ -17,7 +17,7 @@ The owner is a Chinese-speaking user; talk to them in Chinese. The app UI is Eng
 
 ```bash
 ./build.sh                                   # swift build -c release → build/Swivel.app (ad-hoc signed)
-./test.sh                                   # eight Swift Testing checks
+./test.sh                                   # Swift Testing checks (tools, springs, hit-testing, sounds)
 ```
 
 Quit the installed app normally before replacing it, so screenshot takeover can restore the user's settings. Keep a backup of the previous application when installing a development build.
@@ -27,7 +27,9 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 ## Testing without a real drag
 
 - `Swivel --run <convert|tools|actions> "<item title>" <file>...` — runs one menu item headlessly and prints `OK`/`FAIL`. A wrong title lists the available ones.
-- `Swivel --demo <convert|tools|actions> <file> [hover index] [style]` — shows a menu at the pointer for 6 s (for screenshots).
+- `Swivel --demo <convert|tools|actions> <file> [script] [style]` — shows a menu at the pointer (for screenshots and recordings). The script is one hover index (`2`) or steps run every 0.35 s: `0,1,2,n,1,p1` (`n` next page, `pN` drop on item N without running it). The style applies to this run only.
+- `Swivel --frames <wheel|list|shelf|notes|clothesline> <out dir> [light|dark]` — renders the menu's animations offscreen, 60 frames a second, to PNGs: open, a slow arc, a fast flick, back to the hub (cancel), a page turn and a drop. Prints mean and slowest draw time; `SWIVEL_FRAMES_SCALE=2` renders at Retina size, `SWIVEL_FRAMES_LOG=1` lists slow frames.
+- `Swivel --feedback <check|play>` — `check` reports whether the trackpad actuator and the sounds are ready; `play` runs every haptic and sound once. To confirm haptic requests without feeling them: `/usr/bin/log stream --level debug --predicate 'eventMessage CONTAINS "AppKitActuateWithID"'` (the drop press goes through the actuator directly and doesn't appear there).
 - `Swivel --edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>...` — opens one editor directly.
 - `Swivel --recognize <image>` — prints OCR text without touching clipboard or screenshot settings.
 - `Swivel --tool <text|shelf|quick|presets> [file]...` — isolated UI preview; skips the app delegate and background watchers, but registers the Quick Actions shortcut. Enables the four new tools in the executable's defaults domain, so use an unbundled binary or a separate validation bundle. `SWIVEL_PREVIEW_APPEARANCE=light|dark` changes only the preview's appearance.
@@ -53,8 +55,9 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 | Image Presets | `ImagePresets.swift` — persisted model, ImageIO output, form sheet |
 | Quick Actions | `QuickActions.swift` — search panel, file input, configurable Carbon shortcut |
 | New settings and shared UI | `AdditionalPanes.swift`, `ToolUI.swift` |
+| Feel: springs, frame driver, haptics, sounds | `Feel.swift` — `Spring` (response/damping, solved analytically, retargetable), `FrameDriver` (display link), `Motion.reduced`, `Feedback` (the moments that get feedback), `Haptics`, `TrackpadActuator` (private MultitouchSupport, loaded with dlopen), `Sounds` (synthesised once into Caches, played as system sounds) |
 | Misc UI | `Toast.swift`, `Localization.swift` |
-| Automated checks | `Tests/SwivelTests/NativeToolsTests.swift`, `test.sh` |
+| Automated checks | `Tests/SwivelTests/NativeToolsTests.swift`, `Tests/SwivelTests/FeelTests.swift`, `test.sh` |
 
 ## Rules of the house
 
@@ -64,6 +67,8 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 - **Settings** live in `Prefs` (UserDefaults, posts `Prefs.changed`). Feature on/off goes through `Feature.isOn`.
 - **Screenshot takeover** changes `com.apple.screencapture` (`location`, `show-thumbnail`). Always keep `ScreenshotTakeover.restore()` working: it runs when the feature is turned off and on quit.
 - **Motion:** the clothesline uses a hand-rolled spring/pendulum step (`RopeView.step`). The owner asked for *gentle* motion — keep swings small and well damped.
+- **Feel (手感):** anything that moves is a `Spring` driven by a `FrameDriver`, never a fixed tween or a `Timer`; retarget springs instead of restarting them. Colour and opacity are critically damped; only geometry may overshoot a little (damping ≥ 0.6), and the wheel's numbers live in `WheelView`'s `Tune`. Feedback starts on the next frame, presses respond on mouse-down, and the real work never waits for an animation. Fire haptics and sounds only through `Feedback` (one owner per moment, same frame as the visual): detents for snapping or a new item, a press for a commit, nothing on hover-off. Every motion path checks `Motion.reduced`. Research and sources: emilkowalski/skills `apple-design` (MIT), Apple's HIG on haptics, Kando/Fly-Pie (MIT) for pie-menu numbers.
+- **Private haptics:** `TrackpadActuator` is the only private API. It is resolved with dlopen/dlsym (never linked), skipped when System Settings turns trackpad haptics off, and can be disabled with `defaults write local.swivel.app privateHaptics -bool NO`.
 - **Licensing:** Tendedero (github.com/alejandrobujan/tendedero) inspired the clothesline; its code is MIT but its name and icon are not licensed — don't use them. Don't copy code from GPL projects into this MIT-style codebase. When borrowing an idea, reimplement it.
 - Don't edit sibling projects (`../atelier-focus`, `../clipline`); other sessions own them.
 - Commit messages end with a `Co-Authored-By` line for the agent that wrote the change. Push to `origin main` (private repo `xichengchen1111-hub/swivel`) when the owner asks.
