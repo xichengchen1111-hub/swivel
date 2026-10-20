@@ -20,7 +20,6 @@ final class WheelView: NSView {
     private let gap: CGFloat = 7
 
     private var center: NSPoint { NSPoint(x: bounds.midX, y: bounds.midY) }
-    private var isDark: Bool { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -78,31 +77,26 @@ final class WheelView: NSView {
 
     // MARK: Drawing
 
-    override func draw(_ dirtyRect: NSRect) {
-        let dark = isDark
-        // Translucent keycaps over the glass disc that sits behind this view.
-        let segTop = dark ? NSColor(white: 1, alpha: 0.16) : NSColor(white: 1, alpha: 0.62)
-        let segBottom = dark ? NSColor(white: 1, alpha: 0.07) : NSColor(white: 1, alpha: 0.34)
-        let text = dark ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.18, alpha: 1)
-        let accent = NSColor(srgbRed: 1.0, green: 0.47, blue: 0.12, alpha: 0.92)
+    private var isDark: Bool { effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
 
-        // Segments, drawn like keycaps.
-        let gradient = NSGradient(starting: segTop, ending: segBottom)!
-        let hoverGradient = NSGradient(starting: accent.blended(withFraction: 0.15, of: .white)!, ending: accent)!
+    override func draw(_ dirtyRect: NSRect) {
+        // Frosted keycaps on clear glass, like milky glass: the desktop shows through, labels stay legible.
+        let dark = isDark
+        let cap = dark ? NSColor(white: 0, alpha: 0.30) : NSColor(white: 1, alpha: 0.38)
+        let hubFill = dark ? NSColor(white: 0, alpha: 0.38) : NSColor(white: 1, alpha: 0.6)
+        let line = dark ? NSColor(white: 1, alpha: 0.28) : NSColor(white: 1, alpha: 0.9)
+        let text = dark ? NSColor.white : NSColor(white: 0.13, alpha: 1)
+        let accent = NSColor(srgbRed: 1.0, green: 0.47, blue: 0.12, alpha: 0.92)
+        labelGlow = dark ? NSColor.black.withAlphaComponent(0.6) : NSColor.white.withAlphaComponent(0.8)
+
         for i in items.indices {
             let path = segmentPath(i)
             let isHovered = i == hovered
-            NSGraphicsContext.saveGraphicsState()
-            let capShadow = NSShadow()
-            capShadow.shadowBlurRadius = 1.5
-            capShadow.shadowOffset = NSSize(width: 0, height: -1.5)
-            capShadow.shadowColor = NSColor.black.withAlphaComponent(dark ? 0.35 : 0.10)
-            capShadow.set()
-            (isHovered ? accent : segBottom).setFill()
-            path.fill()
-            NSGraphicsContext.restoreGraphicsState()
-            (isHovered ? hoverGradient : gradient).draw(in: path, angle: -90)
-            NSColor.white.withAlphaComponent(dark ? 0.18 : 0.75).setStroke()
+            withShadow(blur: 3, alpha: dark ? 0.4 : 0.12) {
+                (isHovered ? accent : cap).setFill()
+                path.fill()
+            }
+            (isHovered ? NSColor.white.withAlphaComponent(0.9) : line).setStroke()
             path.lineWidth = 1
             path.stroke()
 
@@ -110,51 +104,77 @@ final class WheelView: NSView {
             let rad = centreAngle(i) * .pi / 180
             let labelCentre = NSPoint(x: center.x + cos(rad) * mid, y: center.y + sin(rad) * mid)
             drawText(items[i].title.uppercased(), at: labelCentre,
-                     font: .systemFont(ofSize: items.count > 6 ? 10 : 11, weight: .bold),
-                     color: isHovered ? .white : text, maxWidth: mid * sin(.pi / CGFloat(max(items.count, 2))) * 1.7)
+                     font: .systemFont(ofSize: items.count > 6 ? 10 : 11, weight: .heavy),
+                     color: isHovered ? .white : text, maxWidth: mid * sin(.pi / CGFloat(max(items.count, 2))) * 1.7,
+                     glow: !isHovered)
         }
 
         // Centre button.
-        let hub = NSRect(x: center.x - innerRadius, y: center.y - innerRadius,
-                         width: innerRadius * 2, height: innerRadius * 2)
-        NSGraphicsContext.saveGraphicsState()
-        let hubShadow = NSShadow()
-        hubShadow.shadowBlurRadius = 3
-        hubShadow.shadowOffset = NSSize(width: 0, height: -1)
-        hubShadow.shadowColor = NSColor.black.withAlphaComponent(0.12)
-        hubShadow.set()
-        (dark ? NSColor(white: 0, alpha: 0.28) : NSColor(white: 1, alpha: 0.72)).setFill()
-        NSBezierPath(ovalIn: hub).fill()
-        NSGraphicsContext.restoreGraphicsState()
+        let hub = NSBezierPath(ovalIn: NSRect(x: center.x - innerRadius, y: center.y - innerRadius,
+                                              width: innerRadius * 2, height: innerRadius * 2))
+        withShadow(blur: 3, alpha: dark ? 0.4 : 0.12) {
+            hubFill.setFill()
+            hub.fill()
+        }
+        line.setStroke()
+        hub.lineWidth = 1
+        hub.stroke()
 
         let headline = hovered.map { items[$0].title } ?? mode.title
         drawText(headline, at: NSPoint(x: center.x, y: center.y + 7),
-                 font: .systemFont(ofSize: 12, weight: .semibold), color: hovered == nil ? text : accent,
+                 font: .systemFont(ofSize: 12, weight: .bold), color: hovered == nil ? text : accent,
                  maxWidth: innerRadius * 1.7)
         drawText(hovered == nil ? subtitle : "drop to apply", at: NSPoint(x: center.x, y: center.y - 8),
-                 font: .systemFont(ofSize: 8.5, weight: .regular), color: text.withAlphaComponent(0.55),
+                 font: .systemFont(ofSize: 8.5, weight: .medium), color: text.withAlphaComponent(0.6),
                  maxWidth: innerRadius * 1.6)
 
         if pageCount > 1 {
             let dot: CGFloat = 4, spacing: CGFloat = 7
             let width = CGFloat(pageCount - 1) * spacing
-            for p in 0..<pageCount {
-                let x = center.x - width / 2 + CGFloat(p) * spacing
-                (p == page ? accent : text.withAlphaComponent(0.25)).setFill()
-                NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: center.y - 26, width: dot, height: dot)).fill()
+            withShadow(blur: 3, alpha: 0.5) {
+                for p in 0..<pageCount {
+                    let x = center.x - width / 2 + CGFloat(p) * spacing
+                    (p == page ? accent : text.withAlphaComponent(0.3)).setFill()
+                    NSBezierPath(ovalIn: NSRect(x: x - dot / 2, y: center.y - 26, width: dot, height: dot)).fill()
+                }
             }
             drawText("\(mode.key) next", at: NSPoint(x: center.x, y: center.y - 36),
-                     font: .systemFont(ofSize: 7.5, weight: .medium), color: text.withAlphaComponent(0.45),
+                     font: .systemFont(ofSize: 7.5, weight: .semibold), color: text.withAlphaComponent(0.55),
                      maxWidth: innerRadius * 1.5)
         }
     }
 
-    private func drawText(_ string: String, at point: NSPoint, font: NSFont, color: NSColor, maxWidth: CGFloat) {
+    private func withShadow(blur: CGFloat, alpha: CGFloat, _ draw: () -> Void) {
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = blur
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.shadowColor = NSColor.black.withAlphaComponent(alpha)
+        shadow.set()
+        draw()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private var labelGlow = NSColor.white
+
+    private func drawText(_ string: String, at point: NSPoint, font: NSFont, color: NSColor, maxWidth: CGFloat,
+                          glow: Bool = true) {
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         style.lineBreakMode = .byTruncatingMiddle
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: style]
-        let size = (string as NSString).size(withAttributes: attrs)
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = 2.5
+        shadow.shadowOffset = .zero
+        shadow.shadowColor = glow ? labelGlow : NSColor.black.withAlphaComponent(0.35)
+        var attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color, .paragraphStyle: style,
+                                                    .shadow: shadow]
+        var size = (string as NSString).size(withAttributes: attrs)
+        if size.width > maxWidth {
+            // Shrink long labels to fit rather than truncating them.
+            let fitted = max(7, font.pointSize * maxWidth / size.width)
+            attrs[.font] = NSFont.systemFont(ofSize: fitted, weight: .heavy)
+            size = (string as NSString).size(withAttributes: attrs)
+        }
         let width = min(size.width, maxWidth)
         let rect = NSRect(x: point.x - width / 2, y: point.y - size.height / 2, width: width, height: size.height)
         (string as NSString).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)

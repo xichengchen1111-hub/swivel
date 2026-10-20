@@ -28,6 +28,29 @@ MainActor.assumeIsolated {
         app.run()
     }
 
+    // `Swivel --edit <crop|compress|edit|bg|redact|metadata> <file>` opens one editor directly (for testing).
+    if args.count >= 4, args[1] == "--edit" {
+        let url = URL(fileURLWithPath: args[3])
+        app.setActivationPolicy(.accessory)
+        Task { @MainActor in
+            do {
+                let editor: Editor = switch args[2] {
+                case "compress": try CompressEditor(source: url)
+                case "edit": try AdjustEditor(source: url)
+                case "bg": try BackgroundEditor(source: url)
+                case "redact": try RedactEditor(source: url)
+                case "metadata": try MetadataEditor(source: url)
+                default: try CropEditor(source: url)
+                }
+                print("OK", try await editor.present().map(\.path))
+            } catch {
+                print("FAIL", error.localizedDescription)
+            }
+            exit(0)
+        }
+        app.run()
+    }
+
     // `Swivel --demo <mode> <file>` shows the wheel at the cursor without a drag (for screenshots).
     if args.count >= 4, args[1] == "--demo" {
         let mode: WheelMode = args[2] == "tools" ? .tools : args[2] == "actions" ? .actions : .convert

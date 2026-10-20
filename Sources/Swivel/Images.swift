@@ -28,7 +28,6 @@ enum Images {
     }()
 
     static let toolItems: [FileOption] = [
-        FileOption(title: "Compress") { url in try await detached { try compress(url) } },
         FileOption(title: "Resize 50%") { url in
             try await detached { try transform(url, suffix: " small", scale: 0.5) }
         },
@@ -41,7 +40,6 @@ enum Images {
         FileOption(title: "Grayscale") { url in
             try await detached { try transform(url, suffix: " gray") { $0.grayscale() } }
         },
-        FileOption(title: "Strip Metadata") { url in try await detached { try stripMetadata(url) } },
     ]
 
     static func convert(_ url: URL, to format: ImageFormat) async throws -> [URL] {
@@ -92,6 +90,18 @@ enum Images {
         return image
     }
 
+    static func encode(_ image: CGImage, type: UTType, quality: Double) throws -> Data {
+        var image = image
+        if [UTType.jpeg, .bmp].contains(type), image.hasAlpha { image = image.flattened() }
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else {
+            throw ToolError("Can't write \(type.preferredFilenameExtension ?? "this format")")
+        }
+        CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't encode image") }
+        return data as Data
+    }
+
     static func write(_ image: CGImage, to url: URL, type: UTType, quality: Double) throws {
         var image = image
         if [UTType.jpeg, .bmp].contains(type), image.hasAlpha { image = image.flattened() }
@@ -106,7 +116,8 @@ enum Images {
         UTType(filenameExtension: url.pathExtension) ?? .png
     }
 
-    private static func writableType(for url: URL) -> (UTType, String) {
+    /// The source's own format if ImageIO can write it, else PNG.
+    static func writableType(for url: URL) -> (UTType, String) {
         let type = sourceType(url)
         let writable = CGImageDestinationCopyTypeIdentifiers() as? [String] ?? []
         return writable.contains(type.identifier) ? (type, url.pathExtension) : (.png, "png")

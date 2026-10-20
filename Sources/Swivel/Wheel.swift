@@ -80,6 +80,9 @@ final class WheelController {
                 let result = try await item.run(urls)
                 busy.cancel()
                 toast.show(result.message, symbol: "checkmark.circle.fill", files: result.files)
+            } catch is Cancelled {
+                busy.cancel()
+                toast.show("Cancelled", symbol: "xmark.circle", tint: .secondaryLabelColor)
             } catch let info as Info {
                 busy.cancel()
                 toast.show(info.message, symbol: "info.circle.fill")
@@ -99,13 +102,13 @@ final class WheelPanel: NSPanel {
                    backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        hasShadow = false
         level = .popUpMenu
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
 
-        // Frosted glass disc behind the segments, which the wheel draws translucently on top.
+        // A clear glass disc under the segments: see-through, but lightly frosted so labels stay readable.
         let container = NSView(frame: wheel.frame)
         let r = wheel.outerRadius
         let disc = NSRect(x: wheel.frame.midX - r, y: wheel.frame.midY - r, width: r * 2, height: r * 2)
@@ -117,6 +120,7 @@ final class WheelPanel: NSPanel {
     private static func makeGlass(frame: NSRect, radius: CGFloat) -> NSView {
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView(frame: frame)
+            glass.style = .clear
             glass.cornerRadius = radius
             return glass
         }
@@ -124,6 +128,7 @@ final class WheelPanel: NSPanel {
         blur.material = .hudWindow
         blur.blendingMode = .behindWindow
         blur.state = .active
+        blur.alphaValue = 0.6
         blur.wantsLayer = true
         blur.layer?.cornerRadius = radius
         blur.layer?.masksToBounds = true

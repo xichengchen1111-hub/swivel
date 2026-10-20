@@ -67,14 +67,23 @@ enum Catalog {
         case .tools:
             switch kind {
             case .image:
-                return Images.toolItems.map { option in each(option.title, urls, option.run) }
+                let editors: [WheelItem] = [
+                    each("Crop", urls) { try await CropEditor(source: $0).present() },
+                    each("Compress", urls) { try await CompressEditor(source: $0).present() },
+                    each("Edit", urls) { try await AdjustEditor(source: $0).present() },
+                    each("Add BG", urls) { try await BackgroundEditor(source: $0).present() },
+                    each("Redact", urls) { try await RedactEditor(source: $0).present() },
+                    each("Metadata", urls) { try await MetadataEditor(source: $0).present() },
+                ]
+                return editors + Images.toolItems.map { option in each(option.title, urls, option.run) }
                     + [WheelItem(title: "Make PDF") { saved(try await Images.makePDF($0)) }]
             case .video:
                 return Video.toolItems.map { option in each(option.title, urls, option.run) }
             case .audio:
                 return Audio.toolItems.map { option in each(option.title, urls, option.run) }
             case .pdf:
-                var list = PDFs.toolItems.map { option in each(option.title, urls, option.run) }
+                var list = [each("Crop", urls) { try await CropEditor(source: $0).present() }]
+                    + PDFs.toolItems.map { option in each(option.title, urls, option.run) }
                 if multi { list.insert(WheelItem(title: "Merge") { saved([try await PDFs.merge($0)]) }, at: 0) }
                 return list
             case .document:
