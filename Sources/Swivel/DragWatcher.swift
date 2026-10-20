@@ -32,6 +32,8 @@ final class DragWatcher {
     var onKeyTap: ((WheelMode) -> Void)?
     var onDragEnd: (() -> Void)?
     private(set) var urls: [URL] = []
+    /// When false, drags are ignored and no wheel opens.
+    var isEnabled = true
 
     private let dragPasteboard = NSPasteboard(name: .drag)
     private var timer: Timer?
@@ -56,7 +58,7 @@ final class DragWatcher {
             lastFlags = flags
         }
 
-        guard down else {
+        guard down, isEnabled else {
             if active {
                 active = false
                 urls = []
