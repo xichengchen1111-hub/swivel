@@ -655,7 +655,28 @@ final class RopeView: NSView, NSDraggingSource {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    override func rightMouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let index = printIndex(at: point), Feature.textCapture.isOn,
+              FileKind.of(prints[index].url) == .image else { return }
+        let menu = NSMenu()
+        let item = NSMenuItem(title: L("Extract Text"), action: #selector(extractPrintText(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = prints[index].url
+        menu.addItem(item)
+        Clothesline.shared.isDraggingItem = true
+        defer { Clothesline.shared.isDraggingItem = false }
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc private func extractPrintText(_ item: NSMenuItem) {
+        guard let url = item.representedObject as? URL else { return }
+        Clothesline.shared.hide()
+        TextCaptureWindow.present(url)
+    }
+
     override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.control) { rightMouseDown(with: event); return }
         handled = false
         downEvent = event
         let p = convert(event.locationInWindow, from: nil)

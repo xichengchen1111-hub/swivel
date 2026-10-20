@@ -3,7 +3,7 @@ import AppKit
 /// Sidebar of pages on the left (Overview, each feature, General), the selected page on the right.
 @MainActor
 final class BundleSplit: NSSplitViewController {
-    enum Page: Int, CaseIterable { case overview, wheel, clothesline, general }
+    enum Page: Int, CaseIterable { case overview, wheel, clothesline, textCapture, shelf, imagePresets, quickActions, general }
 
     private let sidebar = SidebarList()
     private let detail = NSViewController()
@@ -11,6 +11,10 @@ final class BundleSplit: NSSplitViewController {
         .overview: OverviewPage(),
         .wheel: WheelPage(),
         .clothesline: FeaturePage(.clothesline, content: ClotheslinePane()),
+        .textCapture: FeaturePage(.textCapture, content: TextCapturePane()),
+        .shelf: FeaturePage(.shelf, content: ShelfPane()),
+        .imagePresets: FeaturePage(.imagePresets, content: ImagePresetsPane()),
+        .quickActions: FeaturePage(.quickActions, content: QuickActionsPane()),
         .general: GeneralPane(),
     ]
     private var current: NSViewController?
@@ -34,6 +38,10 @@ final class BundleSplit: NSSplitViewController {
         case .overview: showPage(.overview)
         case .general: showPage(.general)
         case .clothesline: showPage(.clothesline)
+        case .textCapture: showPage(.textCapture)
+        case .shelf: showPage(.shelf)
+        case .imagePresets: showPage(.imagePresets)
+        case .quickActions: showPage(.quickActions)
         case .shortcuts, .style, .customize:
             showPage(.wheel)
             (pages[.wheel] as? WheelPage)?.select(tab)
@@ -93,6 +101,10 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         case .overview: L("Overview")
         case .wheel: Feature.wheel.title
         case .clothesline: Feature.clothesline.title
+        case .textCapture: Feature.textCapture.title
+        case .shelf: Feature.shelf.title
+        case .imagePresets: Feature.imagePresets.title
+        case .quickActions: Feature.quickActions.title
         case .general: L("General")
         }
     }
@@ -102,6 +114,10 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         case .overview: "square.grid.2x2"
         case .wheel: Feature.wheel.symbol
         case .clothesline: Feature.clothesline.symbol
+        case .textCapture: Feature.textCapture.symbol
+        case .shelf: Feature.shelf.symbol
+        case .imagePresets: Feature.imagePresets.symbol
+        case .quickActions: Feature.quickActions.symbol
         case .general: "gearshape"
         }
     }
@@ -110,6 +126,10 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         switch page {
         case .wheel: .wheel
         case .clothesline: .clothesline
+        case .textCapture: .textCapture
+        case .shelf: .shelf
+        case .imagePresets: .imagePresets
+        case .quickActions: .quickActions
         default: nil
         }
     }
@@ -204,6 +224,7 @@ final class FeatureHeader: NSView {
         text.orientation = .vertical
         text.alignment = .leading
         text.spacing = 3
+        toggle.setAccessibilityLabel(feature.title)
         toggle.target = self
         toggle.action = #selector(flipped)
         state.font = .systemFont(ofSize: 12)
@@ -213,7 +234,9 @@ final class FeatureHeader: NSView {
         let row = NSStackView(views: [icon, text, right])
         row.spacing = 14
         row.alignment = .centerY
+        row.distribution = .fill
         text.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        right.setContentHuggingPriority(.required, for: .horizontal)
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         NSLayoutConstraint.activate([
@@ -240,13 +263,13 @@ final class FeatureHeader: NSView {
 
 /// Overview: one card per feature with its switch and a link to its settings.
 final class OverviewPage: Pane {
-    init() { super.init(size: NSSize(width: 820, height: 520)) }
+    init() { super.init(size: NSSize(width: 820, height: 1120)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func build() {
         stack.addArrangedSubview(label("Swivel", size: 26, weight: .bold))
         stack.addArrangedSubview(label("A bundle of small Mac tools. Turn on the ones you want — each works on its own.", secondary: true))
-        for (feature, page) in [(Feature.wheel, BundleSplit.Page.wheel), (.clothesline, .clothesline)] {
+        for (feature, page) in [(Feature.wheel, BundleSplit.Page.wheel), (.clothesline, .clothesline), (.textCapture, .textCapture), (.shelf, .shelf), (.imagePresets, .imagePresets), (.quickActions, .quickActions)] {
             let card = CardView()
             let header = FeatureHeader(feature, compact: true)
             let settings = NSButton(title: L("Settings…"), target: self, action: #selector(openSettings(_:)))
@@ -281,6 +304,8 @@ final class OverviewPage: Pane {
 
 /// A rounded card that follows light and dark mode.
 final class CardView: NSView {
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
+    required init?(coder: NSCoder) { fatalError() }
     override var wantsUpdateLayer: Bool { true }
 
     override func updateLayer() {

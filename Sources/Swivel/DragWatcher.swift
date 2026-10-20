@@ -22,6 +22,10 @@ enum WheelMode: CaseIterable {
         }
     }
 
+    var symbol: String {
+        switch self { case .convert: "arrow.triangle.2.circlepath"; case .tools: "slider.horizontal.3"; case .actions: "bolt" }
+    }
+
     @MainActor var key: String { Prefs.key(for: self).symbol }
 }
 

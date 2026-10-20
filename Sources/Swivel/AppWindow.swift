@@ -7,7 +7,7 @@ import ServiceManagement
 final class AppWindow: NSObject, NSWindowDelegate {
     static let shared = AppWindow()
 
-    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview }
+    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions }
 
     private var window: NSWindow?
     private var split: BundleSplit?
@@ -52,23 +52,18 @@ final class AppWindow: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Back to a menu-bar-only app once the window is gone.
-        DispatchQueue.main.async {
-            if !(NSApp.windows.contains { $0.isVisible && $0.styleMask.contains(.titled) && !($0 is NSPanel) }) {
-                NSApp.setActivationPolicy(.accessory)
-            }
-        }
+        ToolUI.didClose()
     }
 
     /// App, Edit and Window menus, so ⌘V, ⌘C, ⌘A and ⌘W work in the window.
-    private static func mainMenu() -> NSMenu {
+    static func mainMenu() -> NSMenu {
         let main = NSMenu()
         let app = NSMenu()
         app.addItem(withTitle: L("About Swivel"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
         app.addItem(withTitle: L("Hide Swivel"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         app.addItem(withTitle: L("Quit Swivel"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        let edit = NSMenu(title: "Edit")
+        let edit = NSMenu(title: L("Edit"))
         edit.addItem(withTitle: L("Undo"), action: Selector(("undo:")), keyEquivalent: "z")
         edit.addItem(withTitle: L("Redo"), action: Selector(("redo:")), keyEquivalent: "Z")
         edit.addItem(.separator())
@@ -76,7 +71,7 @@ final class AppWindow: NSObject, NSWindowDelegate {
         edit.addItem(withTitle: L("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         edit.addItem(withTitle: L("Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: L("Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        let windowMenu = NSMenu(title: "Window")
+        let windowMenu = NSMenu(title: L("Window"))
         windowMenu.addItem(withTitle: L("Close"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
         windowMenu.addItem(withTitle: L("Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         for (title, menu) in [("Swivel", app), ("Edit", edit), ("Window", windowMenu)] {
@@ -262,7 +257,9 @@ final class GeneralPane: Pane {
         DispatchQueue.main.async { AppWindow.shared.reloadForLanguage() }
     }
 
-    @objc private func showShelf() { Shelf.shared.show() }
+    @objc private func showShelf() {
+        if Feature.shelf.isOn { Shelf.shared.show() } else { AppWindow.shared.show(.shelf) }
+    }
     @objc private func showClothesline() { Clothesline.shared.toggle() }
 }
 
@@ -551,7 +548,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let box = NSButton(checkboxWithTitle: L(rows[row].title), target: self, action: #selector(toggled(_:)))
+        let box = NSButton(checkboxWithTitle: Catalog.displayTitle(rows[row].title), target: self, action: #selector(toggled(_:)))
         box.state = rows[row].shown ? .on : .off
         box.tag = row
         return box

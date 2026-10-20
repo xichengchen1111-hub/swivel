@@ -257,7 +257,7 @@ final class WheelView: NSView {
             (isHovered ? NSColor.white.withAlphaComponent(0.9) : line).setStroke()
             slot.path.lineWidth = 1
             slot.path.stroke()
-            drawLabel(L(items[i].title), slot, color: isHovered ? .white : ink, glow: !isHovered)
+            drawLabel(items[i].displayTitle, slot, color: isHovered ? .white : ink, glow: !isHovered)
         }
 
         let hub = NSBezierPath(ovalIn: NSRect(x: center.x - innerRadius, y: center.y - innerRadius,
@@ -270,7 +270,7 @@ final class WheelView: NSView {
         hub.lineWidth = 1
         hub.stroke()
 
-        let headline = hovered.map { L(items[$0].title) } ?? mode.title
+        let headline = hovered.map { items[$0].displayTitle } ?? mode.title
         drawText(headline, at: NSPoint(x: center.x, y: center.y + 7),
                  font: .systemFont(ofSize: 12, weight: .bold), color: hovered == nil ? ink : accent,
                  maxWidth: innerRadius * 1.7)
@@ -283,7 +283,7 @@ final class WheelView: NSView {
     /// Title, file name and page dots above the items (every style but the wheel).
     private func drawHeader(onGlass: Bool) {
         let rect = NSRect(x: 0, y: bounds.height - Self.headerHeight, width: bounds.width, height: Self.headerHeight)
-        let title = hovered.map { "\(mode.title): \(L(items[$0].title))" } ?? mode.title
+        let title = hovered.map { "\(mode.title): \(items[$0].displayTitle)" } ?? mode.title
         let detail = hovered == nil ? subtitle : L("drop to apply")
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .bold)]
         let titleWidth = (title as NSString).size(withAttributes: attrs).width
@@ -358,7 +358,7 @@ final class WheelView: NSView {
                 .foregroundColor: isHovered ? NSColor.white : ink, .paragraphStyle: style,
             ]
             let height = ("A" as NSString).size(withAttributes: attrs).height
-            (L(items[i].title) as NSString).draw(with: NSRect(x: slot.label.x, y: slot.label.y - height / 2,
+            (items[i].displayTitle as NSString).draw(with: NSRect(x: slot.label.x, y: slot.label.y - height / 2,
                                                            width: slot.maxWidth, height: height),
                                               options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
         }
@@ -401,7 +401,7 @@ final class WheelView: NSView {
             NSColor(srgbRed: 0.95, green: 0.82, blue: 0.5, alpha: isHovered ? 0.9 : 0.75).setFill()
             NSRect(x: rect.minX + 3, y: rect.maxY - 16, width: rect.width - 6, height: 2).fill()
             NSRect(x: rect.minX + 3, y: rect.minY + 14, width: rect.width - 6, height: 2).fill()
-            drawLabel(L(items[i].title), slot, color: .white, glow: false, weight: .bold)
+            drawLabel(items[i].displayTitle, slot, color: .white, glow: false, weight: .bold)
         }
     }
 
@@ -435,7 +435,7 @@ final class WheelView: NSView {
             NSColor(white: 1, alpha: 0.55).setFill()
             tape.fill()
             let font = NSFont(name: "Noteworthy-Bold", size: slot.fontSize) ?? .systemFont(ofSize: slot.fontSize, weight: .semibold)
-            drawLabel(L(items[i].title), slot, color: NSColor(white: 0.15, alpha: 1), glow: false, font: font)
+            drawLabel(items[i].displayTitle, slot, color: NSColor(white: 0.15, alpha: 1), glow: false, font: font)
         }
     }
 
@@ -481,7 +481,7 @@ final class WheelView: NSView {
             }
             NSColor(white: 0.55, alpha: 1).setFill()
             NSRect(x: x - 4, y: pegTop - 12, width: 8, height: 2).fill()
-            drawLabel(L(items[i].title), slot, color: isHovered ? .white : NSColor(white: 0.18, alpha: 1), glow: false, weight: .bold)
+            drawLabel(items[i].displayTitle, slot, color: isHovered ? .white : NSColor(white: 0.18, alpha: 1), glow: false, weight: .bold)
         }
     }
 

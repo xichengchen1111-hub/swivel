@@ -1,133 +1,186 @@
 import AppKit
 
-/// A floating shelf that holds files so they can be dragged into another app later.
+/// Session-only references: staging and removing items never copies or deletes files.
+struct ShelfContents {
+    private(set) var urls: [URL] = []
+    mutating func add(_ candidates: [URL]) {
+        for candidate in candidates where candidate.isFileURL {
+            let url = candidate.standardizedFileURL
+            if FileManager.default.fileExists(atPath: url.path), !urls.contains(url) { urls.append(url) }
+        }
+    }
+    mutating func remove(_ indexes: IndexSet) { urls = urls.enumerated().filter { !indexes.contains($0.offset) }.map(\.element) }
+    mutating func clear() { urls.removeAll() }
+}
+
 @MainActor
-final class Shelf: NSObject, NSWindowDelegate {
+final class Shelf: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate, NSMenuDelegate {
     static let shared = Shelf()
-
     private var panel: NSPanel?
-    private let stack = NSStackView()
-    private var urls: [URL] = []
+    private let table = ToolTable()
+    private var contents = ShelfContents()
+    private let status = ToolUI.note("")
+    private let empty = ShelfPlaceholder(wrappingLabelWithString: L("Drop files here, then select several and drag them out together."))
+    private var removeButton: NSButton!
+    private var clearButton: NSButton!
+    private var previewButton: NSButton!
+    private var observer: NSObjectProtocol?
 
-    func add(_ new: [URL]) {
-        for url in new where !urls.contains(url) { urls.append(url) }
-        rebuild()
+    func add(_ urls: [URL]) {
+        guard Feature.shelf.isOn else { return }
+        contents.add(urls)
         show()
     }
-
     func show() {
-        let panel = self.panel ?? makePanel()
-        self.panel = panel
-        rebuild()
-        if !panel.isVisible, let area = NSScreen.main?.visibleFrame {
-            panel.setFrameTopLeftPoint(NSPoint(x: area.maxX - panel.frame.width - 16, y: area.maxY - 16))
-        }
-        panel.orderFrontRegardless()
+        guard Feature.shelf.isOn else { return }
+        if panel == nil { panel = makePanel() }
+        refresh()
+        if let panel { ToolUI.show(panel) }
     }
+    func hide() { panel?.orderOut(nil); ToolUI.didClose() }
 
     private func makePanel() -> NSPanel {
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 240, height: 320),
-                            styleMask: [.titled, .closable, .resizable, .utilityWindow, .nonactivatingPanel],
-                            backing: .buffered, defer: false)
-        panel.title = "Shelf"
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 480, height: 470),
+                            styleMask: [.titled, .closable, .resizable, .utilityWindow], backing: .buffered, defer: false)
+        panel.title = L("File Shelf")
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 2
-        stack.edgeInsets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
-
+        panel.minSize = NSSize(width: 420, height: 330)
+        panel.delegate = self
+        panel.setFrameAutosaveName("SwivelFileShelf")
+        panel.center()
+        table.addTableColumn(NSTableColumn(identifier: .init("file")))
+        table.headerView = nil
+        table.style = .inset
+        table.rowHeight = 52
+        table.allowsMultipleSelection = true
+        table.dataSource = self; table.delegate = self
+        table.registerForDraggedTypes([.fileURL])
+        table.setDraggingSourceOperationMask(.copy, forLocal: false)
+        table.setDraggingSourceOperationMask(.copy, forLocal: true)
+        table.deleteSelection = { [weak self] in self?.removeSelected() }
+        table.previewSelection = { [weak self] in self?.quickLook() }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.delegate = self
+        for (title, action) in [("Quick Look", #selector(quickLook)), ("Show in Finder", #selector(reveal)), ("Remove from Shelf", #selector(removeSelected))] {
+            let item = NSMenuItem(title: L(title), action: action, keyEquivalent: "")
+            item.target = self; menu.addItem(item)
+        }
+        table.menu = menu
         let scroll = NSScrollView()
+        scroll.documentView = table
         scroll.hasVerticalScroller = true
-        scroll.drawsBackground = false
-        let flipped = FlippedView()
-        flipped.translatesAutoresizingMaskIntoConstraints = false
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        flipped.addSubview(stack)
-        scroll.documentView = flipped
+        scroll.autohidesScrollers = true
+        scroll.borderType = .bezelBorder
+        let area = NSView()
+        ToolUI.embed(scroll, in: area, inset: 0)
+        empty.alignment = .center
+        empty.font = .systemFont(ofSize: 12)
+        empty.textColor = .secondaryLabelColor
+        empty.translatesAutoresizingMaskIntoConstraints = false
+        area.addSubview(empty)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: flipped.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: flipped.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: flipped.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: flipped.bottomAnchor),
-            flipped.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
+            empty.centerXAnchor.constraint(equalTo: area.centerXAnchor),
+            empty.centerYAnchor.constraint(equalTo: area.centerYAnchor),
+            empty.widthAnchor.constraint(lessThanOrEqualTo: area.widthAnchor, constant: -48),
         ])
-
-        let clear = NSButton(title: L("Clear"), target: self, action: #selector(clearAll))
-        clear.bezelStyle = .accessoryBarAction
-        let root = NSStackView(views: [scroll, clear])
-        root.orientation = .vertical
-        root.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 8, right: 0)
-        panel.contentView = root
+        let add = ToolUI.button("Add Files…", target: self, action: #selector(chooseFiles))
+        previewButton = ToolUI.button("Quick Look", target: self, action: #selector(quickLook))
+        removeButton = ToolUI.button("Remove from Shelf", target: self, action: #selector(removeSelected))
+        clearButton = ToolUI.button("Clear", target: self, action: #selector(clearAll))
+        let top = NSStackView()
+        top.addView(status, in: .leading); top.addView(add, in: .trailing)
+        let buttons = NSStackView()
+        buttons.addView(previewButton, in: .leading)
+        buttons.addView(removeButton, in: .trailing); buttons.addView(clearButton, in: .trailing)
+        let note = ToolUI.note("Removing an item only clears its reference. Original files stay where they are. This shelf lasts until you quit.")
+        let root = ToolUI.stack([top, area, buttons, note])
+        let content = NSView(); panel.contentView = content
+        ToolUI.embed(root, in: content, inset: 16)
+        for view in [top, area, buttons, note] { view.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true }
+        area.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
+        area.setContentHuggingPriority(.defaultLow, for: .vertical)
+        observer = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
         return panel
     }
-
-    private func rebuild() {
-        stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        if urls.isEmpty {
-            let empty = NSTextField(labelWithString: L("Drag a file, tap ⌃, drop on Float."))
-            empty.textColor = .secondaryLabelColor
-            stack.addArrangedSubview(empty)
-        }
-        for url in urls {
-            let row = ShelfRow(url: url)
-            stack.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -16).isActive = true
-        }
+    private var selectedURLs: [URL] { table.selectedRowIndexes.compactMap { contents.urls.indices.contains($0) ? contents.urls[$0] : nil } }
+    private var availableSelection: [URL] { selectedURLs.filter { FileManager.default.fileExists(atPath: $0.path) } }
+    private func refresh() {
+        guard panel != nil else { return }
+        panel?.title = L("File Shelf")
+        let selected = table.selectedRowIndexes
+        table.reloadData()
+        table.selectRowIndexes(IndexSet(selected.filter { $0 < contents.urls.count }), byExtendingSelection: false)
+        empty.isHidden = !contents.urls.isEmpty
+        updateSelection()
     }
-
-    @objc private func clearAll() {
-        urls.removeAll()
-        rebuild()
+    private func updateSelection() {
+        status.stringValue = L("%d files · %d selected", contents.urls.count, table.numberOfSelectedRows)
+        removeButton?.isEnabled = !selectedURLs.isEmpty
+        clearButton?.isEnabled = !contents.urls.isEmpty
+        previewButton?.isEnabled = !availableSelection.isEmpty
     }
-}
-
-private final class FlippedView: NSView {
-    override var isFlipped: Bool { true }
-}
-
-private final class ShelfRow: NSView, NSDraggingSource {
-    let url: URL
-
-    init(url: URL) {
-        self.url = url
-        super.init(frame: .zero)
+    @objc private func chooseFiles() { add(ToolUI.chooseFiles(folders: true)) }
+    @objc private func removeSelected() { contents.remove(table.selectedRowIndexes); table.deselectAll(nil); refresh() }
+    @objc private func clearAll() { contents.clear(); refresh() }
+    @objc private func quickLook() { if let url = availableSelection.first { QuickLooker.shared.show(url) } }
+    @objc private func reveal() { NSWorkspace.shared.activateFileViewerSelecting(availableSelection) }
+    func windowWillClose(_ notification: Notification) { ToolUI.didClose() }
+    func tableViewSelectionDidChange(_ notification: Notification) { updateSelection() }
+    func numberOfRows(in tableView: NSTableView) -> Int { contents.urls.count }
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        if table.clickedRow >= 0, !table.selectedRowIndexes.contains(table.clickedRow) {
+            table.selectRowIndexes([table.clickedRow], byExtendingSelection: false)
+        }
+        for item in menu.items { item.isEnabled = item.action == #selector(removeSelected) ? !selectedURLs.isEmpty : !availableSelection.isEmpty }
+    }
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let url = contents.urls[row]
+        let available = FileManager.default.fileExists(atPath: url.path)
         let icon = NSImageView(image: NSWorkspace.shared.icon(forFile: url.path))
-        icon.widthAnchor.constraint(equalToConstant: 28).isActive = true
-        icon.heightAnchor.constraint(equalToConstant: 28).isActive = true
-        let name = NSTextField(labelWithString: url.lastPathComponent)
-        name.lineBreakMode = .byTruncatingMiddle
-        name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let row = NSStackView(views: [icon, name])
-        row.spacing = 8
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: leadingAnchor),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor),
-            row.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
-        ])
-        toolTip = url.path
+        icon.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        icon.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        let title = NSTextField(labelWithString: url.lastPathComponent)
+        title.lineBreakMode = .byTruncatingMiddle
+        let path = NSTextField(labelWithString: available ? url.deletingLastPathComponent().path : L("File is no longer available"))
+        path.lineBreakMode = .byTruncatingMiddle
+        path.font = .systemFont(ofSize: 11)
+        path.textColor = available ? .secondaryLabelColor : .systemRed
+        let labels = ToolUI.stack([title, path], spacing: 3)
+        labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let cell = ToolUI.stack([icon, labels], vertical: false, spacing: 10)
+        cell.toolTip = url.path
+        cell.setAccessibilityLabel(url.lastPathComponent)
+        return cell
     }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func mouseDown(with event: NSEvent) {}
-
-    override func mouseDragged(with event: NSEvent) {
-        let item = NSDraggingItem(pasteboardWriter: url as NSURL)
-        item.setDraggingFrame(NSRect(x: 0, y: 0, width: 32, height: 32),
-                              contents: NSWorkspace.shared.icon(forFile: url.path))
-        beginDraggingSession(with: [item], event: event, source: self)
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+        let url = contents.urls[row]
+        return Feature.shelf.isOn && FileManager.default.fileExists(atPath: url.path) ? url as NSURL : nil
     }
-
-    func draggingSession(_ session: NSDraggingSession,
-                         sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .outsideApplication ? [.copy, .generic] : []
+    func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int,
+                   proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
+        guard Feature.shelf.isOn, info.draggingSource as? NSTableView !== table,
+              !ToolUI.fileURLs(from: info.draggingPasteboard).isEmpty else { return [] }
+        tableView.setDropRow(-1, dropOperation: .on)
+        return .copy
     }
+    func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int,
+                   dropOperation: NSTableView.DropOperation) -> Bool {
+        let urls = ToolUI.fileURLs(from: info.draggingPasteboard)
+        guard Feature.shelf.isOn, !urls.isEmpty else { return false }
+        contents.add(urls)
+        refresh()
+        return true
+    }
+}
+
+/// Let drops reach the table even when the pointer is over the empty-state text.
+private final class ShelfPlaceholder: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

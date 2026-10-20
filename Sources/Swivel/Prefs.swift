@@ -68,6 +68,34 @@ enum Prefs {
 
     private static func post() { NotificationCenter.default.post(name: changed, object: nil) }
 
+    /// Additional tools are opt-in. Disabling them retains their settings.
+    static func featureEnabled(_ feature: Feature) -> Bool {
+        defaults.bool(forKey: "feature.\(feature.rawValue)")
+    }
+
+    static func setFeatureEnabled(_ feature: Feature, _ enabled: Bool) {
+        defaults.set(enabled, forKey: "feature.\(feature.rawValue)"); post()
+    }
+
+    static var imagePresets: [ImagePreset] {
+        get {
+            guard let data = defaults.data(forKey: "imagePresets.v1"),
+                  let presets = try? JSONDecoder().decode([ImagePreset].self, from: data) else {
+                return ImagePreset.starters
+            }
+            return presets.filter { $0.isValid }
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue.filter { $0.isValid }) else { return }
+            defaults.set(data, forKey: "imagePresets.v1"); post()
+        }
+    }
+
+    static var quickShortcut: QuickShortcut {
+        get { QuickShortcut(rawValue: defaults.string(forKey: "quickActions.shortcut") ?? "") ?? .space }
+        set { defaults.set(newValue.rawValue, forKey: "quickActions.shortcut"); post() }
+    }
+
     static var isEnabled: Bool {
         get { defaults.object(forKey: "enabled") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "enabled"); post() }

@@ -16,12 +16,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         watcher.onDragEnd = { [weak self] in self?.wheel.dragEnded() }
         watcher.start()
+        QuickActions.shared.syncSettings()
         Clothesline.shared.start()
         if ProcessInfo.processInfo.environment["SWIVEL_SHOW_ROPE"] != nil {  // for testing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { Clothesline.shared.toggle() }
         }
         NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.rebuildMenu() }
+            MainActor.assumeIsolated {
+                self?.rebuildMenu()
+                QuickActions.shared.syncSettings()
+            }
         }
 
         // Opened by hand (Finder, Launchpad, Spotlight): show the window. Started at login: stay in the menu bar.
@@ -81,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Rebuilt whenever settings change, so the key names and option lists always match.
     private func rebuildMenu() {
         let wheelOn = Feature.wheel.isOn, ropeOn = Feature.clothesline.isOn
-        let anyOn = wheelOn || ropeOn
+        let anyOn = Feature.allCases.contains { $0.isOn }
         watcher.isEnabled = wheelOn
         statusItem.button?.image = NSImage(systemSymbolName: anyOn ? "circle.circle" : "circle.dashed",
                                            accessibilityDescription: "Swivel")
@@ -90,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var tip: [String] = []
         if wheelOn { tip.append(L("Wheel: drag a file, then tap %@", keys)) }
         if ropeOn { tip.append(L("Clothesline: rest the pointer on the menu bar, or press ⌃⌥T")) }
-        statusItem.button?.toolTip = tip.isEmpty ? L("Swivel — everything is off. Open this menu to turn a feature on.") : tip.joined(separator: "\n")
+        statusItem.button?.toolTip = tip.isEmpty ? L(anyOn ? "Swivel — open the menu to use your enabled tools." : "Swivel — everything is off. Open this menu to turn a feature on.") : tip.joined(separator: "\n")
 
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -120,8 +124,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 menu.addItem(item)
             }
             add(to: menu, L("Menu Style: %@…", Prefs.style.title), #selector(openStyle))
-            add(to: menu, "Show Shelf", #selector(showShelf))
+
         }
+
+        if Feature.shelf.isOn { add(to: menu, "Show Shelf", #selector(showShelf)) }
+        if Feature.textCapture.isOn { add(to: menu, "Extract Text…", #selector(extractText)) }
+        if Feature.imagePresets.isOn { add(to: menu, "Image Presets…", #selector(openPresets)) }
+        if Feature.quickActions.isOn { add(to: menu, "Show Quick Actions", #selector(showQuickActions)) }
 
         if ropeOn {
             menu.addItem(.separator())
@@ -152,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.autoenablesItems = false
         let kinds: [FileKind] = mode == .actions ? [.other] : [.image, .video, .audio, .pdf, .document, .archive, .other]
         for kind in kinds {
-            let titles = Catalog.items(for: kind.sampleURLs, mode: mode).map { L($0.title) }
+            let titles = Catalog.items(for: kind.sampleURLs, mode: mode).map { $0.displayTitle }
             guard !titles.isEmpty else { continue }
             let label = mode == .actions ? L("Any file or folder") : kind.title
             let item = NSMenuItem(title: "\(label):  \(titles.joined(separator: " · "))", action: nil, keyEquivalent: "")
@@ -183,6 +192,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Prefs.clotheslineTakeover.toggle()
         if Prefs.clotheslineTakeover && Prefs.clotheslineEnabled { ScreenshotTakeover.enable(into: Clothesline.shared.incoming) } else { ScreenshotTakeover.restore() }
     }
+    @objc private func extractText() {
+        if let url = ToolUI.chooseFiles(imagesOnly: true, multiple: false).first { TextCaptureWindow.present(url) }
+    }
+    @objc private func openPresets() { AppWindow.shared.show(.imagePresets) }
+    @objc private func showQuickActions() { QuickActions.shared.show() }
     @objc private func showShelf() { Shelf.shared.show() }
 
     @objc private func toggleLogin() {

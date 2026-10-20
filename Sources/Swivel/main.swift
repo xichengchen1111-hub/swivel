@@ -5,6 +5,40 @@ MainActor.assumeIsolated {
     let delegate = AppDelegate()
     let args = CommandLine.arguments
 
+    // Isolated preview: no screenshot takeover or background watchers. Uses the executable's defaults domain.
+    if args.count >= 3, args[1] == "--tool" {
+        for feature in [Feature.textCapture, .shelf, .imagePresets, .quickActions] { Prefs.setFeatureEnabled(feature, true) }
+        app.setActivationPolicy(.regular)
+        app.mainMenu = AppWindow.mainMenu()
+        if let appearance = ProcessInfo.processInfo.environment["SWIVEL_PREVIEW_APPEARANCE"] {
+            app.appearance = NSAppearance(named: appearance == "light" ? .aqua : .darkAqua)
+        }
+        QuickActions.shared.syncSettings()
+        NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { QuickActions.shared.syncSettings() }
+        }
+        switch args[2] {
+        case "text":
+            if args.count >= 4 { TextCaptureWindow.present(URL(fileURLWithPath: args[3])) }
+            else { AppWindow.shared.show(.textCapture) }
+        case "shelf": Shelf.shared.add(args.dropFirst(3).map { URL(fileURLWithPath: $0) })
+        case "quick": QuickActions.shared.show(files: args.dropFirst(3).map { URL(fileURLWithPath: $0) })
+        case "presets": AppWindow.shared.show(.imagePresets)
+        default: AppWindow.shared.show()
+        }
+        app.run()
+    }
+
+    // File-only OCR for smoke tests; does not touch the clipboard or launch screenshot watchers.
+    if args.count == 3, args[1] == "--recognize" {
+        Task { @MainActor in
+            do { print(try await TextRecognition.recognize(URL(fileURLWithPath: args[2]))); exit(0) }
+            catch { print("FAIL \(error.localizedDescription)"); exit(2) }
+        }
+        app.setActivationPolicy(.prohibited)
+        app.run()
+    }
+
     // `Swivel --run <convert|tools|actions> <item title> <file>...` runs one wheel item headlessly (for testing).
     if args.count >= 5, args[1] == "--run" {
         let mode: WheelMode = args[2] == "tools" ? .tools : args[2] == "actions" ? .actions : .convert

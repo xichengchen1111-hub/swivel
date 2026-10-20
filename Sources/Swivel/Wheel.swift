@@ -7,6 +7,7 @@ struct ActionResult {
 
 struct WheelItem {
     let title: String
+    @MainActor var displayTitle: String { Catalog.displayTitle(title) }
     let run: @MainActor ([URL]) async throws -> ActionResult
 }
 
@@ -74,7 +75,7 @@ final class WheelController {
         close()
         isDropping = false
         let busy = DispatchWorkItem { [toast] in
-            toast.show(L(item.title) + "…", symbol: "hourglass", autoHide: false)
+            toast.show(item.displayTitle + "…", symbol: "hourglass", autoHide: false)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: busy)
         Task { @MainActor in

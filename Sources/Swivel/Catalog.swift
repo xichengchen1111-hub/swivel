@@ -65,7 +65,21 @@ enum FileKind: String, CaseIterable {
 }
 
 /// Decides which wheel items a drag gets, per file kind and key.
+@MainActor
 enum Catalog {
+    static func displayTitle(_ id: String) -> String {
+        if id == "Float" { return L("Add to Shelf") }
+        if id.hasPrefix("preset."), let preset = Prefs.imagePresets.first(where: { $0.actionID == id }) {
+            return preset.displayName
+        }
+        return L(id)
+    }
+
+    static func standaloneItems(for urls: [URL], mode: WheelMode) -> [WheelItem] {
+        defaultItems(for: urls, mode: mode).filter {
+            $0.title == "Extract Text" || $0.title == "Float" || $0.title == "Hang" || $0.title.hasPrefix("preset.")
+        }
+    }
     /// The menu for a drag, in the user's order with hidden items removed.
     @MainActor
     static func items(for urls: [URL], mode: WheelMode) -> [WheelItem] {
@@ -74,7 +88,9 @@ enum Catalog {
 
     /// Everything a menu can offer for a kind of file, used by the Customize settings.
     static func allItems(mode: WheelMode, kind: FileKind) -> [String] {
-        defaultItems(for: kind.sampleURLs, mode: mode).map(\.title)
+        let multi = defaultItems(for: kind.sampleURLs, mode: mode).map(\.title)
+        let single = defaultItems(for: Array(kind.sampleURLs.prefix(1)), mode: mode).map(\.title)
+        return multi + single.filter { !multi.contains($0) }
     }
 
     static func defaultItems(for urls: [URL], mode: WheelMode) -> [WheelItem] {
@@ -86,13 +102,14 @@ enum Catalog {
         switch mode {
         case .actions:
             var list = actions(multi: multi)
-            if kind == .image {
+            if kind == .image && Feature.clothesline.isOn {
                 list.insert(WheelItem(title: "Hang") { urls in
+                    guard Feature.clothesline.isOn else { throw ToolError(L("This feature is turned off.")) }
                     Clothesline.shared.hang(urls)
                     return ActionResult(message: urls.count == 1 ? L("Hung on the clothesline") : L("Hung %d images on the clothesline", urls.count))
                 }, at: 1)
             }
-            return list
+            return Feature.shelf.isOn ? list : list.filter { $0.title != "Float" }
 
         case .convert:
             switch kind {
@@ -136,6 +153,18 @@ enum Catalog {
                 ]
                 var list = editors + Images.toolItems.map { option in each(option.title, urls, option.run) }
                     + [WheelItem(title: "Make PDF") { saved(try await Images.makePDF($0)) }]
+                if Feature.textCapture.isOn && !multi {
+                    list.insert(WheelItem(title: "Extract Text") { urls in
+                        guard Feature.textCapture.isOn, let url = urls.first else { throw ToolError(L("This feature is turned off.")) }
+                        TextCaptureWindow.present(url)
+                        return ActionResult(message: L("Opened Text Capture"))
+                    }, at: 0)
+                }
+                if Feature.imagePresets.isOn {
+                    list += Prefs.imagePresets.map { preset in
+                        WheelItem(title: preset.actionID) { try await PresetActions.run(preset, urls: $0) }
+                    }
+                }
                 if multi { list.insert(WheelItem(title: "Collage") { saved(try await CollageEditor(urls: $0).present()) }, at: 0) }
                 return list
             case .video:
@@ -190,6 +219,7 @@ enum Catalog {
                 return ActionResult(message: "Opened AirDrop")
             },
             WheelItem(title: "Float") { urls in
+                guard Feature.shelf.isOn else { throw ToolError(L("This feature is turned off.")) }
                 Shelf.shared.add(urls)
                 return ActionResult(message: "Added to Shelf")
             },

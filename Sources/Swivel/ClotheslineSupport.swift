@@ -101,19 +101,47 @@ enum ScreenshotTakeover {
 
 // MARK: - Global hotkey
 
-/// ⌃⌥T anywhere toggles the rope. Uses Carbon hotkeys, which need no extra permission.
+/// Carbon registers individual shortcuts without monitoring or injecting keyboard events.
+@MainActor
 final class HotKey {
     private var ref: EventHotKeyRef?
-    nonisolated(unsafe) private static var action: (() -> Void)?
+    private let identifier: UInt32
+    private(set) var status: OSStatus = noErr
+    private static var nextID: UInt32 = 1
+    private static var actions: [UInt32: () -> Void] = [:]
+    private static var handler: EventHandlerRef?
 
-    init(_ action: @escaping () -> Void) {
-        Self.action = action
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-            DispatchQueue.main.async { HotKey.action?() }
-            return noErr
-        }, 1, &spec, nil, nil)
-        let id = EventHotKeyID(signature: OSType(0x5357_5654), id: 1)  // 'SWVT'
-        RegisterEventHotKey(UInt32(kVK_ANSI_T), UInt32(controlKey | optionKey), id, GetApplicationEventTarget(), 0, &ref)
+    init(keyCode: UInt32 = UInt32(kVK_ANSI_T), modifiers: UInt32 = UInt32(controlKey | optionKey),
+         action: @escaping () -> Void) {
+        identifier = Self.nextID
+        Self.nextID += 1
+        if Self.handler == nil {
+            var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+            status = InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+                guard let event else { return OSStatus(eventNotHandledErr) }
+                var key = EventHotKeyID()
+                guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                        nil, MemoryLayout<EventHotKeyID>.size, nil, &key) == noErr,
+                      key.signature == OSType(0x5357_5654) else { return OSStatus(eventNotHandledErr) }
+                let identifier = key.id
+                DispatchQueue.main.async { HotKey.actions[identifier]?() }
+                return noErr
+            }, 1, &spec, nil, &Self.handler)
+        }
+        guard status == noErr else { return }
+        let key = EventHotKeyID(signature: OSType(0x5357_5654), id: identifier)
+        status = RegisterEventHotKey(keyCode, modifiers, key, GetApplicationEventTarget(), 0, &ref)
+        if status == noErr { Self.actions[identifier] = action }
+    }
+
+    func unregister() {
+        if let ref { UnregisterEventHotKey(ref); self.ref = nil }
+        Self.actions.removeValue(forKey: identifier)
+    }
+
+    deinit {
+        if let ref { UnregisterEventHotKey(ref) }
+        let identifier = identifier
+        DispatchQueue.main.async { HotKey.actions.removeValue(forKey: identifier) }
     }
 }
