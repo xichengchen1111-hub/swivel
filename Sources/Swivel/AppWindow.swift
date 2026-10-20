@@ -39,16 +39,22 @@ final class AppWindow: NSObject, NSWindowDelegate {
         return window
     }
 
-    /// Recreates the window in the new language and returns to General.
+    /// Rebuilds the window's contents in the new language and returns to General. The window itself stays, so it
+    /// doesn't vanish and come back, or hop between its saved and current frames.
     func reloadForLanguage() {
-        let frame = window?.frame
-        window?.delegate = nil
-        window?.close()
-        window = nil
-        split = nil
+        guard let window else {
+            NotificationCenter.default.post(name: Prefs.changed, object: nil)
+            show(.general)
+            return
+        }
+        let frame = window.frame
+        let split = BundleSplit()
+        self.split = split
+        window.contentViewController = split
+        window.setFrame(frame, display: false)  // a new content controller resizes the window to its own view
+        split.select(.general)
+        NSApp.mainMenu = Self.mainMenu()
         NotificationCenter.default.post(name: Prefs.changed, object: nil)
-        show(.general)
-        if let frame { window?.setFrame(frame, display: true) }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -140,6 +146,16 @@ class Pane: NSViewController {
         row.spacing = 10
         return row
     }
+
+    /// The line under a live menu preview that says it can be tried.
+    func tryItHint() -> NSStackView {
+        let icon = NSImageView(image: NSImage(systemSymbolName: "cursorarrow.motionlines", accessibilityDescription: nil) ?? NSImage())
+        icon.symbolConfiguration = .init(pointSize: 11, weight: .regular)
+        icon.contentTintColor = .tertiaryLabelColor
+        let hint = NSStackView(views: [icon, label("Move the pointer over the menu to try it", size: 11, secondary: true)])
+        hint.spacing = 5
+        return hint
+    }
 }
 
 /// A soft desktop-like backdrop so translucent menu previews look the way they do on screen.
@@ -152,7 +168,7 @@ final class WallpaperView: NSView {
     }
 }
 
-/// A non-interactive, scaled-down menu for previews.
+/// A scaled-down menu for previews. It draws settled; a `PreviewHost` makes it live while it is on screen.
 @MainActor
 func menuPreview(style: MenuStyle, titles: [String], mode: WheelMode, hovered: Int? = nil) -> WheelView {
     let shown = Array(titles.prefix(8))
@@ -168,27 +184,182 @@ func menuPreview(style: MenuStyle, titles: [String], mode: WheelMode, hovered: I
 }
 
 /// Hosts a preview, scaling it to fit while keeping its proportions.
+///
+/// An interactive host lets the menu be tried with the mouse while it is on screen: moving over it hovers items the
+/// way a drag does, pressing an item presses it in with the drop's tap and sound, and the menu then opens again.
+/// Off screen the preview is not live (no display link, no feedback) and goes back to its resting picture.
 final class PreviewHost: NSView {
-    var preview: WheelView? {
+    var isInteractive = true {
         didSet {
-            oldValue?.removeFromSuperview()
-            if let preview { addSubview(preview) }
-            needsLayout = true
+            updateTrackingAreas()
+            updateLiveness()
         }
     }
+    private(set) var preview: WheelView?
     private var natural = NSSize(width: 1, height: 1)
+    /// What the preview showed hovered before anyone touched it.
+    private var restingHover: Int?
+    private var tracking: NSTrackingArea?
+    /// Bumped by every press and by anything that replaces or resets the menu, so a pending re-open can't act on a
+    /// newer state.
+    private var trial = 0
+    /// The current click already pressed an item (on mouse-down), so its release doesn't press again.
+    private var pressedThisClick = false
 
-    func show(_ view: WheelView) {
+    /// How long a pressed item takes to clear before the menu opens again.
+    static let reopenDelay: TimeInterval = 0.6
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Shows `view` at rest. `crossfade` blends over from the previous menu, for edits that change it.
+    func show(_ view: WheelView, crossfade: Bool = false) {
+        trial += 1
+        pressedThisClick = false
+        if crossfade, preview != nil, window != nil {
+            let fade = CATransition()
+            fade.type = .fade
+            fade.duration = 0.15
+            layer?.add(fade, forKey: "swap")
+        }
+        preview?.removeFromSuperview()
         natural = view.bounds.size
+        restingHover = view.hovered
         preview = view
+        addSubview(view)
+        layoutPreview()
+        updateLiveness()
     }
 
     override func layout() {
         super.layout()
+        layoutPreview()
+    }
+
+    private func layoutPreview() {
         guard let preview else { return }
-        let rect = fit(natural, in: bounds.insetBy(dx: 10, dy: 10))
-        preview.frame = rect
+        preview.frame = fit(natural, in: bounds.insetBy(dx: 10, dy: 10))
         preview.bounds = NSRect(origin: .zero, size: natural)  // draws at natural size, scaled into frame
+    }
+
+    // MARK: Live only on screen
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        updateLiveness()
+    }
+
+    /// The display link needs a window, and a preview that isn't showing must never tick or sound.
+    private func updateLiveness() {
+        guard let preview else { return }
+        if isInteractive, window != nil {
+            preview.isLive = true
+        } else if preview.isLive {
+            preview.isLive = false
+            rest()
+        }
+    }
+
+    /// Back to the resting picture with no motion. Runs while the preview is not live, so nothing gives feedback.
+    private func rest() {
+        guard let preview else { return }
+        trial += 1
+        pressedThisClick = false
+        if preview.pressed != nil { preview.beginOpen() }
+        preview.pointerLeft()
+        preview.hovered = restingHover
+        preview.settle()
+    }
+
+    // MARK: Pointer
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        tracking = nil
+        guard isInteractive else { return }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    /// A window point in the preview's own, unscaled coordinates (the ones `WheelView.track` expects), if it is over
+    /// the menu.
+    func previewPoint(forWindowPoint point: NSPoint) -> NSPoint? {
+        guard let preview else { return nil }
+        let p = preview.convert(point, from: nil)
+        return preview.bounds.contains(p) ? p : nil
+    }
+
+    private var livePreview: WheelView? { preview?.isLive == true ? preview : nil }
+
+    override func mouseEntered(with event: NSEvent) { follow(event) }
+    override func mouseMoved(with event: NSEvent) { follow(event) }
+
+    override func mouseExited(with event: NSEvent) {
+        livePreview?.pointerLeft()
+    }
+
+    private func follow(_ event: NSEvent) {
+        guard let preview = livePreview else { return }
+        if let p = previewPoint(forWindowPoint: event.locationInWindow) { preview.track(p) } else { preview.pointerLeft() }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        pressedThisClick = false
+        if let preview = livePreview, preview.pressed == nil, let p = previewPoint(forWindowPoint: event.locationInWindow) {
+            preview.track(p)
+            if let index = preview.hovered { press(index) }
+        }
+        super.mouseDown(with: event)  // passes on, so a Style card around the preview presses too
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        // Moving with the button held is a drag: hovering keeps following until something is pressed.
+        if !pressedThisClick { follow(event) }
+        super.mouseDragged(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        // Letting go on an item reached with the button held is a drop.
+        if !pressedThisClick, let preview = livePreview, preview.pressed == nil,
+           previewPoint(forWindowPoint: event.locationInWindow) != nil, let index = preview.hovered {
+            press(index)
+        }
+        pressedThisClick = false
+        super.mouseUp(with: event)
+    }
+
+    /// Presses an item in, the way a drop does, then opens the menu again so it can be tried once more.
+    private func press(_ index: Int) {
+        guard let preview else { return }
+        pressedThisClick = true
+        preview.beginConfirm(index)
+        Feedback.press()  // the finger is on the trackpad for a click, so the tap lands
+        trial += 1
+        let current = trial
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.reopenDelay) { [weak self] in
+            guard let self, self.trial == current else { return }
+            self.reopen()
+        }
+    }
+
+    private func reopen() {
+        guard let preview = livePreview, let window else { return }
+        preview.beginOpen()
+        // A closed or hidden window has no display link running: open at rest instead of animating later.
+        guard window.isVisible else {
+            preview.pointerLeft()
+            preview.settle()
+            return
+        }
+        // Hover whatever is under the pointer now; it may have left while the item was pressed.
+        if let p = previewPoint(forWindowPoint: window.mouseLocationOutsideOfEventStream) { preview.track(p) } else { preview.pointerLeft() }
     }
 }
 
@@ -198,6 +369,9 @@ final class GeneralPane: Pane {
     private let login = NSButton(checkboxWithTitle: L("Open Swivel at login"), target: nil, action: nil)
     private let haptics = NSButton(checkboxWithTitle: L("Haptic feedback on the trackpad"), target: nil, action: nil)
     private let sounds = NSButton(checkboxWithTitle: L("Sound effects"), target: nil, action: nil)
+    /// Login-item changes still on their way to the system; until they land the checkbox shows the user's choice.
+    private var loginPending = 0
+    private nonisolated static let loginQueue = DispatchQueue(label: "local.swivel.login")
 
     init() { super.init(size: NSSize(width: 620, height: 420)) }
     required init?(coder: NSCoder) { fatalError() }
@@ -250,7 +424,7 @@ final class GeneralPane: Pane {
     }
 
     override func refresh() {
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        if loginPending == 0 { login.state = SMAppService.mainApp.status == .enabled ? .on : .off }
         haptics.state = Prefs.haptics ? .on : .off
         sounds.state = Prefs.soundEffects ? .on : .off
     }
@@ -272,12 +446,29 @@ final class GeneralPane: Pane {
 
 
     @objc private func toggleLogin() {
-        do {
-            if login.state == .on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
-        } catch {
-            NSAlert(error: error).runModal()
+        // Registering goes through a system daemon and can take a few hundred milliseconds. Keep the click instant
+        // and the checkbox as ticked; changes run in order off the main thread, and a failure puts it back.
+        let enable = login.state == .on
+        loginPending += 1
+        Task { [weak self] in
+            let failure: Error? = await withCheckedContinuation { done in
+                Self.loginQueue.async {
+                    do {
+                        if enable { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+                        done.resume(returning: nil)
+                    } catch {
+                        done.resume(returning: error)
+                    }
+                }
+            }
+            guard let self else { return }
+            self.loginPending -= 1
+            if self.loginPending == 0 { self.login.state = SMAppService.mainApp.status == .enabled ? .on : .off }
+            if let failure {
+                let alert = NSAlert(error: failure)
+                if let window = self.view.window { alert.beginSheetModal(for: window, completionHandler: nil) } else { alert.runModal() }
+            }
         }
-        refresh()
     }
 
     @objc private func languageChanged(_ sender: NSPopUpButton) {
@@ -394,7 +585,7 @@ final class ShortcutsPane: Pane {
 // MARK: - Style
 
 final class StylePane: Pane {
-    private var cards: [(MenuStyle, NSBox)] = []
+    private var cards: [TemplateCard] = []
 
     init() { super.init(size: NSSize(width: 860, height: 640)) }
     required init?(coder: NSCoder) { fatalError() }
@@ -406,72 +597,324 @@ final class StylePane: Pane {
         grid.columnSpacing = 14
         var row: [NSView] = []
         for style in MenuStyle.allCases {
-            let card = makeCard(style)
-            cards.append((style, card))
+            let card = TemplateCard(style)
+            card.onPick = { Prefs.style = $0 }
+            cards.append(card)
             row.append(card)
             if row.count == 3 { grid.addRow(with: row); row = [] }
         }
         if !row.isEmpty { grid.addRow(with: row) }
         stack.addArrangedSubview(grid)
+        stack.addArrangedSubview(tryItHint())
     }
 
-    private func makeCard(_ style: MenuStyle) -> NSBox {
-        let box = NSBox()
-        box.boxType = .custom
-        box.cornerRadius = 12
-        box.borderWidth = 1
-        box.fillColor = .controlBackgroundColor
-        box.contentViewMargins = NSSize(width: 10, height: 10)
-        box.translatesAutoresizingMaskIntoConstraints = false
-        box.widthAnchor.constraint(equalToConstant: 250).isActive = true
-        box.heightAnchor.constraint(equalToConstant: 250).isActive = true
+    override func refresh() {
+        for card in cards { card.setSelected(card.style == Prefs.style) }
+    }
+}
+
+/// A button-style click: pressed while the mouse is down over the control, committed only on release over it.
+struct ClickTracker {
+    private(set) var isDown = false
+    private(set) var isInside = false
+    var showsPressed: Bool { isDown && isInside }
+
+    mutating func down() {
+        isDown = true
+        isInside = true
+    }
+
+    mutating func drag(inside: Bool) {
+        if isDown { isInside = inside }
+    }
+
+    /// Ends the click. True when it should commit.
+    mutating func up(inside: Bool) -> Bool {
+        defer {
+            isDown = false
+            isInside = false
+        }
+        return isDown && inside
+    }
+}
+
+/// A template on the Style page. The whole card is one button: its edge lifts under the pointer, it presses in on
+/// mouse-down and picks the template on release (dragging off first cancels, as with a native button). The menu
+/// inside is a live preview that can be tried on its own.
+final class TemplateCard: NSView {
+    let style: MenuStyle
+    var onPick: ((MenuStyle) -> Void)?
+    private(set) var isSelected = false
+    private let host = PreviewHost()
+    private var click = ClickTracker()
+    private var tracking: NSTrackingArea?
+    private var keyPress = 0
+
+    // 0 → 1. Hover never overshoots; the press releases with a little give; a pick settles with a small spring.
+    private var hover = Spring(0, response: 0.14, damping: 1)
+    private var press = Spring(0, response: 0.09, damping: 1)
+    private var selection = Spring(0, response: 0.22, damping: 0.7)
+    private lazy var driver: FrameDriver = {
+        let driver = FrameDriver(view: self)
+        driver.onFrame = { [weak self] dt in self?.advance(dt) ?? false }
+        return driver
+    }()
+
+    init(_ style: MenuStyle) {
+        self.style = style
+        super.init(frame: NSRect(x: 0, y: 0, width: 250, height: 250))
+        wantsLayer = true
+        translatesAutoresizingMaskIntoConstraints = false
 
         let wallpaper = WallpaperView()
-        let host = PreviewHost()
         host.show(menuPreview(style: style, titles: ["JPG", "PNG", "HEIC", "WebP", "TIFF", "GIF", "PDF"], mode: .convert, hovered: 1))
         host.translatesAutoresizingMaskIntoConstraints = false
         wallpaper.addSubview(host)
         wallpaper.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            host.leadingAnchor.constraint(equalTo: wallpaper.leadingAnchor), host.trailingAnchor.constraint(equalTo: wallpaper.trailingAnchor),
-            host.topAnchor.constraint(equalTo: wallpaper.topAnchor), host.bottomAnchor.constraint(equalTo: wallpaper.bottomAnchor),
-            wallpaper.heightAnchor.constraint(equalToConstant: 170),
-        ])
         let title = NSTextField(labelWithString: style.title)
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         let blurb = NSTextField(wrappingLabelWithString: style.blurb)
         blurb.font = .systemFont(ofSize: 11)
         blurb.textColor = .secondaryLabelColor
+        blurb.preferredMaxLayoutWidth = 228
         let content = NSStackView(views: [wallpaper, title, blurb])
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 6
-        wallpaper.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        content.widthAnchor.constraint(equalToConstant: 228).isActive = true  // fixed, so short captions don't shrink the preview
-        blurb.preferredMaxLayoutWidth = 228
-        box.contentView = content
-
-        let click = NSClickGestureRecognizer(target: self, action: #selector(picked(_:)))
-        box.addGestureRecognizer(click)
-        box.toolTip = L("Use the %@ template", style.title)
-        return box
+        content.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(content)
+        // The content sits at a fixed inset, so the border thickening on selection never nudges the preview.
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 250), heightAnchor.constraint(equalToConstant: 250),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 11),
+            content.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -11),
+            content.topAnchor.constraint(equalTo: topAnchor, constant: 11),
+            wallpaper.widthAnchor.constraint(equalTo: content.widthAnchor),
+            wallpaper.heightAnchor.constraint(equalToConstant: 170),
+            host.leadingAnchor.constraint(equalTo: wallpaper.leadingAnchor), host.trailingAnchor.constraint(equalTo: wallpaper.trailingAnchor),
+            host.topAnchor.constraint(equalTo: wallpaper.topAnchor), host.bottomAnchor.constraint(equalTo: wallpaper.bottomAnchor),
+        ])
+        toolTip = L("Use the %@ template", style.title)
     }
 
-    override func refresh() {
-        for (style, card) in cards {
-            let selected = style == Prefs.style
-            card.borderColor = selected ? .controlAccentColor : .separatorColor
-            card.borderWidth = selected ? 3 : 1
+    required init?(coder: NSCoder) { fatalError() }
+
+    func setSelected(_ selected: Bool) {
+        guard selected != isSelected else { return }
+        isSelected = selected
+        // Picked: the edge thickens into the accent on a short spring. Unpicked: it fades back, quicker.
+        let springy = selected && !Motion.reduced
+        selection.response = springy ? 0.22 : 0.14
+        selection.damping = springy ? 0.7 : 1
+        selection.target = selected ? 1 : 0
+        kick()
+    }
+
+    // MARK: Motion
+
+    private func advance(_ dt: CGFloat) -> Bool {
+        hover.step(dt)
+        press.step(dt)
+        selection.step(dt)
+        needsDisplay = true
+        return !(hover.isSettled && press.isSettled && selection.isSettled)
+    }
+
+    /// Animates on screen; off screen everything jumps to where it's going.
+    private func kick() {
+        if window != nil {
+            driver.start()
+        } else {
+            hover.snap(hover.target)
+            press.snap(press.target)
+            selection.snap(selection.target)
+        }
+        needsDisplay = true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window == nil else { return }
+        // Leaving the screen (another page): forget the pointer, so the card comes back at rest.
+        driver.stop()
+        click = ClickTracker()
+        hover.snap(0)
+        press.snap(0)
+        selection.snap(selection.target)
+        needsDisplay = true
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        guard let layer else { return }
+        let h = min(max(hover.value, 0), 1), p = min(max(press.value, 0), 1), s = selection.value
+        layer.cornerRadius = 12
+        layer.masksToBounds = false  // AppKit turns clipping on with a corner radius; it would cut off the shadow
+        layer.borderWidth = 1 + 2 * max(s, 0)
+        layer.borderColor = NSColor.separatorColor.mix(.tertiaryLabelColor, h).mix(.controlAccentColor, min(max(s, 0), 1)).cgColor
+        // Under the pointer the card lifts on a soft shadow (no scaling, which would blur its text while it rests
+        // there); pressed, the shadow tucks back in and the face darkens a little.
+        layer.backgroundColor = NSColor.controlBackgroundColor.mix(.labelColor, 0.06 * p).cgColor
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        layer.shadowColor = NSColor.black.cgColor
+        layer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 12, cornerHeight: 12, transform: nil)
+        layer.shadowOpacity = Float((dark ? 0.35 : 0.13) * h * (1 - 0.7 * p))
+        layer.shadowRadius = 4 + 6 * h * (1 - 0.5 * p)
+        layer.shadowOffset = CGSize(width: 0, height: -(1 + 3 * h * (1 - 0.6 * p)))
+        // Pressed in to 97 %, about the centre (a backing layer's anchor is its corner). Reduce Motion: colour only.
+        let scale = Motion.reduced ? 1 : 1 - 0.03 * press.value
+        let c = CGPoint(x: bounds.midX, y: bounds.midY)
+        var t = CATransform3DMakeTranslation(c.x, c.y, 0)
+        t = CATransform3DScale(t, scale, scale, 1)
+        layer.transform = CATransform3DTranslate(t, -c.x, -c.y, 0)
+    }
+
+    // MARK: Pointer
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect, .enabledDuringMouseDrag],
+                                  owner: self)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { setHover(true) }
+    override func mouseExited(with event: NSEvent) { setHover(false) }
+
+    private func setHover(_ on: Bool) {
+        hover.response = on ? 0.14 : 0.1  // exits are quicker than entrances
+        hover.target = on ? 1 : 0
+        kick()
+    }
+
+    /// The live preview takes the pointer itself; anywhere else on the card, labels included, is the button.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        return hit.isDescendant(of: host) ? hit : self
+    }
+
+    // A click on the preview reaches these too: PreviewHost passes its mouse events on.
+    override func mouseDown(with event: NSEvent) {
+        click.down()
+        pressChanged()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        click.drag(inside: isInside(event))
+        pressChanged()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let picked = click.up(inside: isInside(event))
+        pressChanged()
+        if picked { onPick?(style) }
+    }
+
+    private func isInside(_ event: NSEvent) -> Bool { bounds.contains(convert(event.locationInWindow, from: nil)) }
+
+    private func pressChanged() {
+        let down = click.showsPressed
+        guard press.target != (down ? 1 : 0) else { return }
+        // In fast and firm; back out with a little give.
+        press.response = down ? 0.09 : 0.28
+        press.damping = down ? 1 : 0.8
+        press.target = down ? 1 : 0
+        kick()
+    }
+
+    // MARK: Keyboard and accessibility
+
+    override var acceptsFirstResponder: Bool { NSApp.isFullKeyboardAccessEnabled }
+    override var focusRingMaskBounds: NSRect { bounds }
+    override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill() }
+
+    override func keyDown(with event: NSEvent) {
+        guard event.charactersIgnoringModifiers == " " || event.keyCode == 36 || event.keyCode == 76 else {
+            super.keyDown(with: event)
+            return
+        }
+        guard !event.isARepeat else { return }
+        // The same press and release as a click; the pick itself doesn't wait for it.
+        keyPress += 1
+        let current = keyPress
+        press.response = 0.09
+        press.damping = 1
+        press.target = 1
+        kick()
+        onPick?(style)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) { [weak self] in
+            guard let self, self.keyPress == current else { return }
+            self.pressChanged()
         }
     }
 
-    @objc private func picked(_ sender: NSClickGestureRecognizer) {
-        guard let match = cards.first(where: { $0.1 === sender.view }) else { return }
-        Prefs.style = match.0
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .radioButton }
+    override func accessibilityLabel() -> String? { style.title }
+    override func accessibilityHelp() -> String? { style.blurb }
+    override func accessibilityValue() -> Any? { NSNumber(value: isSelected) }
+
+    override func accessibilityPerformPress() -> Bool {
+        onPick?(style)
+        return true
     }
 }
 
 // MARK: - Customize
+
+/// Where a reordered row lands, and when a reorder drag has moved to a new place (one haptic detent per place).
+struct DropSlot {
+    private(set) var destination: Int?
+
+    /// The index a row moved from `from` ends up at when dropped above row `proposed` (the row itself counts).
+    static func destination(from: Int, proposed: Int) -> Int { from < proposed ? proposed - 1 : proposed }
+
+    /// Records the place a drag would drop now. True when that is a new place; the drag's first place doesn't count.
+    mutating func move(to place: Int) -> Bool {
+        defer { destination = place }
+        return destination != nil && destination != place
+    }
+
+    mutating func reset() { destination = nil }
+}
+
+/// A Customize row: a native checkbox and a grip. Anywhere but the checkbox starts a drag, so reordering doesn't
+/// fight with ticking.
+private final class ArrangeCell: NSTableCellView {
+    static let id = NSUserInterfaceItemIdentifier("arrange")
+    let box = NSButton(checkboxWithTitle: "", target: nil, action: nil)
+
+    /// Shows the grip without taking the click, so a drag that starts on it moves the row.
+    private final class Grip: NSImageView {
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    init() {
+        super.init(frame: .zero)
+        identifier = Self.id
+        let grip = Grip(image: NSImage(systemSymbolName: "line.3.horizontal", accessibilityDescription: nil) ?? NSImage())
+        grip.symbolConfiguration = .init(pointSize: 11, weight: .regular)
+        grip.contentTintColor = .tertiaryLabelColor
+        grip.toolTip = L("Drag to reorder")
+        for view in [box, grip] as [NSView] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            box.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+            box.centerYAnchor.constraint(equalTo: centerYAnchor),
+            box.trailingAnchor.constraint(lessThanOrEqualTo: grip.leadingAnchor, constant: -8),
+            grip.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            grip.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        box.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+}
 
 final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     private let modePopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -479,8 +922,22 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     private let table = NSTableView()
     private let host = PreviewHost()
     private var rows: [(title: String, shown: Bool)] = []
+    private var labels: [String] = []  // display titles: renaming an image preset keeps its stored title
     private static let rowType = NSPasteboard.PasteboardType("local.swivel.row")
     private let kinds: [FileKind] = [.image, .video, .audio, .pdf, .document, .archive, .other]
+    /// Set while this pane writes Prefs: it already shows the change, so it ignores the notifications that follow.
+    private var isSaving = false
+    private var dragged: Int?
+    private var slot = DropSlot()
+    private var previewKey: PreviewKey?
+
+    /// What the preview shows; it is rebuilt only when this changes.
+    private struct PreviewKey: Equatable {
+        let style: MenuStyle
+        let mode: WheelMode
+        let titles: [String]
+        let labels: [String]
+    }
 
     init() { super.init(size: NSSize(width: 860, height: 600)) }
     required init?(coder: NSCoder) { fatalError() }
@@ -512,10 +969,14 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         table.headerView = nil
         table.rowHeight = 26
         table.style = .inset
+        // Rows aren't selected for anything, so a click on one shouldn't light it up.
+        table.selectionHighlightStyle = .none
         table.dataSource = self
         table.delegate = self
         table.registerForDraggedTypes([Self.rowType])
         table.setDraggingSourceOperationMask(.move, forLocal: true)
+        // The rows part to show where the dragged one will go, instead of a thin line.
+        table.draggingDestinationFeedbackStyle = .gap
         let scroll = NSScrollView()
         scroll.documentView = table
         scroll.hasVerticalScroller = true
@@ -533,7 +994,11 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
             host.topAnchor.constraint(equalTo: wallpaper.topAnchor), host.bottomAnchor.constraint(equalTo: wallpaper.bottomAnchor),
             wallpaper.widthAnchor.constraint(equalToConstant: 500), wallpaper.heightAnchor.constraint(equalToConstant: 420),
         ])
-        let split = NSStackView(views: [scroll, wallpaper])
+        let previewColumn = NSStackView(views: [wallpaper, tryItHint()])
+        previewColumn.orientation = .vertical
+        previewColumn.alignment = .leading
+        previewColumn.spacing = 8
+        let split = NSStackView(views: [scroll, previewColumn])
         split.spacing = 20
         split.alignment = .top
         stack.addArrangedSubview(split)
@@ -541,46 +1006,65 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     override func refresh() {
-        guard isViewLoaded, modePopup.numberOfItems > 0 else { return }
-        load()
+        guard isViewLoaded, modePopup.numberOfItems > 0, !isSaving else { return }
+        load(crossfade: true)
     }
 
-    private func load() {
+    private func load(crossfade: Bool = false) {
         let all = Catalog.allItems(mode: mode, kind: kind)
         let hidden = Prefs.hidden(mode, kind)
         let order = Prefs.order(mode, kind)
         let sorted = all.enumerated().sorted { a, b in
             (order.firstIndex(of: a.element) ?? order.count + a.offset) < (order.firstIndex(of: b.element) ?? order.count + b.offset)
         }.map(\.element)
-        rows = sorted.map { ($0, !hidden.contains($0)) }
-        table.reloadData()
-        updatePreview()
+        let fresh = sorted.map { (title: $0, shown: !hidden.contains($0)) }
+        let freshLabels = sorted.map { Catalog.displayTitle($0) }
+        // Reload only for a real change from elsewhere (another menu or file type, Restore Defaults, a renamed
+        // preset). Reloading for every settings change rebuilt the rows under the pointer, mid-click.
+        if fresh.map(\.title) != rows.map(\.title) || fresh.map(\.shown) != rows.map(\.shown) || freshLabels != labels {
+            rows = fresh
+            labels = freshLabels
+            table.reloadData()
+        }
+        updatePreview(crossfade: crossfade)
     }
 
-    private func updatePreview() {
-        host.show(menuPreview(style: Prefs.style, titles: rows.filter(\.shown).map(\.title), mode: mode))
+    private func updatePreview(crossfade: Bool) {
+        let titles = rows.filter(\.shown).map(\.title)
+        let key = PreviewKey(style: Prefs.style, mode: mode, titles: titles, labels: titles.map { Catalog.displayTitle($0) })
+        guard key != previewKey else { return }
+        previewKey = key
+        host.show(menuPreview(style: key.style, titles: titles, mode: mode), crossfade: crossfade)
     }
 
     private func save() {
+        isSaving = true
         Prefs.setOrder(rows.map(\.title), mode, kind)
         Prefs.setHidden(Set(rows.filter { !$0.shown }.map(\.title)), mode, kind)
+        isSaving = false
+        updatePreview(crossfade: true)
     }
 
-    @objc private func selectionChanged() { load() }
+    @objc private func selectionChanged() { load(crossfade: true) }
     @objc private func resetContents() { Prefs.resetContents(mode, kind) }
 
     @objc private func toggled(_ sender: NSButton) {
-        rows[sender.tag].shown = sender.state == .on
+        // The row, not a tag: rows that were dragged keep their views but not their old index.
+        let row = table.row(for: sender)
+        guard rows.indices.contains(row) else { return }
+        rows[row].shown = sender.state == .on
         save()
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let box = NSButton(checkboxWithTitle: Catalog.displayTitle(rows[row].title), target: self, action: #selector(toggled(_:)))
-        box.state = rows[row].shown ? .on : .off
-        box.tag = row
-        return box
+        let cell = tableView.makeView(withIdentifier: ArrangeCell.id, owner: self) as? ArrangeCell ?? ArrangeCell()
+        cell.box.title = labels.indices.contains(row) ? labels[row] : Catalog.displayTitle(rows[row].title)
+        cell.box.state = rows[row].shown ? .on : .off
+        cell.box.target = self
+        cell.box.action = #selector(toggled(_:))
+        return cell
     }
 
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
@@ -589,18 +1073,42 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         return item
     }
 
+    func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint,
+                   forRowIndexes rowIndexes: IndexSet) {
+        dragged = rowIndexes.first
+        slot.reset()
+    }
+
+    func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint,
+                   operation: NSDragOperation) {
+        dragged = nil
+        slot.reset()
+    }
+
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int,
                    proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
-        dropOperation == .above ? .move : []
+        guard info.draggingSource as? NSTableView === tableView else { return [] }
+        // Over the middle of a row still means "here": aim between rows, so there's no spot that refuses the drop.
+        if dropOperation == .on { tableView.setDropRow(row, dropOperation: .above) }
+        // A detent each time the gap moves to a new place (the finger is down, so the tap lands).
+        if let from = dragged, slot.move(to: DropSlot.destination(from: from, proposed: row)) { Haptics.tick(.alignment) }
+        return .move
     }
 
     func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int,
                    dropOperation: NSTableView.DropOperation) -> Bool {
         guard let string = info.draggingPasteboard.pasteboardItems?.first?.string(forType: Self.rowType),
-              let from = Int(string) else { return false }
-        let moved = rows.remove(at: from)
-        rows.insert(moved, at: from < row ? row - 1 : row)
+              let from = Int(string), rows.indices.contains(from) else { return false }
+        let to = DropSlot.destination(from: from, proposed: row)
+        guard to != from else { return true }  // put back where it was
+        rows.insert(rows.remove(at: from), at: to)
+        labels.insert(labels.remove(at: from), at: to)
+        // Slide the row into the gap rather than reloading the list.
+        tableView.beginUpdates()
+        tableView.moveRow(at: from, to: to)
+        tableView.endUpdates()
         save()
+        Haptics.tick(.generic)
         return true
     }
 }
