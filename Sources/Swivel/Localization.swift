@@ -212,6 +212,8 @@ enum Strings {
         "Hang New Screenshots": ["挂上新截图", "掛上新截圖", "新しいスクリーンショットを掛ける"],
         "Hang Copied Images": ["挂上复制的图片", "掛上拷貝的圖片", "コピーした画像を掛ける"],
         "Hang your screenshots on the clothesline?": ["要把截图挂到晾衣绳上吗？", "要把截圖掛到曬衣繩上嗎？", "スクリーンショットを物干しロープに掛けますか？"],
+        // Feel: clothesline
+        "Copied": ["已拷贝", "已拷貝", "コピーしました"],
         "New screenshots will skip the desktop and hang on a rope under the menu bar. Move the pointer to the top edge of the screen to lower it. The floating thumbnail is turned off while this is on; your own settings come back if you turn it off or quit Swivel.":
             ["新截图不再放到桌面，而是挂在菜单栏下的绳子上。鼠标移到屏幕顶边就能立即放下绳子。开启期间会关闭浮动缩略图；关闭此功能或退出 Swivel 时会恢复你原来的设置。", "新截圖不再放到桌面，而是掛在選單列下的繩子上。滑鼠移到螢幕頂邊就能立即放下繩子。開啟期間會關閉浮動縮圖；關閉此功能或結束 Swivel 時會回復你原本的設定。", "新しいスクリーンショットはデスクトップに置かれず、メニューバーの下のロープに掛かります。ポインタを画面の上端へ移動すると、すぐにロープが下ります。オンの間はフローティングサムネールがオフになり、オフにするか Swivel を終了すると元の設定に戻ります。"],
         "Take Over Screenshots": ["接管截图", "接管截圖", "スクリーンショットを引き継ぐ"],

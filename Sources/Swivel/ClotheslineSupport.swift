@@ -5,10 +5,18 @@ import Quartz
 // MARK: - Quick Look
 
 /// An invisible key window that drives the shared Quick Look panel for long-press and force click.
+///
+/// Given a source frame, the preview grows out of the thing that was pressed and shrinks back into it; when that
+/// thing has gone by the time Quick Look closes (the rope lifts), it fades instead. Closing hands focus back to the
+/// app (or Swivel window) the user was in, so their keystrokes don't go to the invisible host.
 @MainActor
 final class QuickLooker: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate {
     static let shared = QuickLooker()
     private var url: URL?
+    private var sourceFrame: (() -> NSRect?)?
+    private var transitionImage: NSImage?
+    private var previousApp: NSRunningApplication?
+    private weak var previousKey: NSWindow?
     private lazy var host: NSWindow = {
         let window = QLHostWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 1, height: 1),
                                   styleMask: [.borderless], backing: .buffered, defer: false)
@@ -17,8 +25,21 @@ final class QuickLooker: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDeleg
         return window
     }()
 
-    func show(_ url: URL) {
+    func show(_ url: URL, from sourceFrame: (() -> NSRect?)? = nil, image: NSImage? = nil) {
         self.url = url
+        self.sourceFrame = sourceFrame
+        transitionImage = image
+        // Remember where the user was, unless Quick Look is already up (then the first answer still holds).
+        if !host.isVisible {
+            let frontmost = NSWorkspace.shared.frontmostApplication
+            if let frontmost, frontmost != NSRunningApplication.current {
+                previousApp = frontmost
+                previousKey = nil
+            } else {
+                previousApp = nil
+                previousKey = NSApp.keyWindow
+            }
+        }
         NSApp.activate()
         host.makeKeyAndOrderFront(nil)
         guard let panel = QLPreviewPanel.shared() else { return }
@@ -27,10 +48,42 @@ final class QuickLooker: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDeleg
         panel.makeKeyAndOrderFront(nil)
     }
 
+    /// The panel let go of the host. Once it has really closed, put the host away and give focus back, unless
+    /// the user has already clicked into another app.
+    fileprivate func controlEnded() {
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared()?.isVisible == true { return }
+                self.sourceFrame = nil
+                self.transitionImage = nil
+                self.host.orderOut(nil)
+                if NSApp.isActive {
+                    if let app = self.previousApp, !app.isTerminated {
+                        NSApp.yieldActivation(to: app)
+                        app.activate(from: .current, options: [])
+                    } else {
+                        self.previousKey?.makeKey()
+                    }
+                }
+                self.previousApp = nil
+                self.previousKey = nil
+            }
+        }
+    }
+
     nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int { 1 }
 
     nonisolated func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> (any QLPreviewItem)! {
         MainActor.assumeIsolated { url as NSURL? }
+    }
+
+    nonisolated func previewPanel(_ panel: QLPreviewPanel!, sourceFrameOnScreenFor item: (any QLPreviewItem)!) -> NSRect {
+        MainActor.assumeIsolated { sourceFrame?() ?? .zero }
+    }
+
+    nonisolated func previewPanel(_ panel: QLPreviewPanel!, transitionImageFor item: (any QLPreviewItem)!,
+                                  contentRect: UnsafeMutablePointer<NSRect>!) -> Any! {
+        MainActor.assumeIsolated { sourceFrame?() == nil ? nil : transitionImage }
     }
 }
 
@@ -45,6 +98,7 @@ final class QLHostWindow: NSWindow {
     override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
         panel.dataSource = nil
         panel.delegate = nil
+        looker?.controlEnded()
     }
 }
 
