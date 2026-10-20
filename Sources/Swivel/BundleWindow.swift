@@ -72,7 +72,7 @@ final class BundleSplit: NSSplitViewController {
             vc.view.heightAnchor.constraint(equalToConstant: max(vc.preferredContentSize.height, 300)),
         ])
         current = vc
-        view.window?.title = "Swivel — \(SidebarList.title(page))"
+        view.window?.title = L("Swivel — %@", SidebarList.title(page))
     }
 }
 
@@ -90,10 +90,10 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
 
     static func title(_ page: BundleSplit.Page) -> String {
         switch page {
-        case .overview: "Overview"
+        case .overview: L("Overview")
         case .wheel: Feature.wheel.title
         case .clothesline: Feature.clothesline.title
-        case .general: "General"
+        case .general: L("General")
         }
     }
 
@@ -163,7 +163,7 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
             dot.layer?.backgroundColor = (feature.isOn ? NSColor.systemGreen : NSColor.tertiaryLabelColor).cgColor
             dot.widthAnchor.constraint(equalToConstant: 7).isActive = true
             dot.heightAnchor.constraint(equalToConstant: 7).isActive = true
-            dot.toolTip = feature.isOn ? "On" : "Off"
+            dot.toolTip = feature.isOn ? L("On") : L("Off")
             views.append(dot)
         }
         let row = NSStackView(views: views)
@@ -185,7 +185,7 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
 final class FeatureHeader: NSView {
     private let feature: Feature
     private let toggle = NSSwitch()
-    private let state = NSTextField(labelWithString: "")
+    private let state = NSTextField(labelWithString: L(""))
 
     init(_ feature: Feature, compact: Bool = false) {
         self.feature = feature
@@ -230,7 +230,7 @@ final class FeatureHeader: NSView {
 
     private func refresh() {
         toggle.state = feature.isOn ? .on : .off
-        state.stringValue = feature.isOn ? "On" : "Off"
+        state.stringValue = feature.isOn ? L("On") : L("Off")
     }
 
     @objc private func flipped() { feature.isOn = toggle.state == .on }
@@ -249,7 +249,7 @@ final class OverviewPage: Pane {
         for (feature, page) in [(Feature.wheel, BundleSplit.Page.wheel), (.clothesline, .clothesline)] {
             let card = CardView()
             let header = FeatureHeader(feature, compact: true)
-            let settings = NSButton(title: "Settings…", target: self, action: #selector(openSettings(_:)))
+            let settings = NSButton(title: L("Settings…"), target: self, action: #selector(openSettings(_:)))
             settings.tag = page.rawValue
             settings.bezelStyle = .push
             let content = NSStackView(views: [header, settings])
@@ -347,7 +347,7 @@ final class WheelPage: NSViewController {
         let root = NSView()
         let header = FeatureHeader(.wheel)
         picker.segmentCount = sections.count
-        for (i, section) in sections.enumerated() { picker.setLabel(section.0, forSegment: i) }
+        for (i, section) in sections.enumerated() { picker.setLabel(L(section.0), forSegment: i) }
         picker.trackingMode = .selectOne
         picker.selectedSegment = 0
         picker.target = self

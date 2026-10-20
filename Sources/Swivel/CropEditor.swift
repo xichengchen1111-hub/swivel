@@ -186,7 +186,7 @@ final class CropEditor: Editor {
         }
         view = CropView(image: image)
         super.init(title: "Crop Image", source: source, canvas: view)
-        if isPDF { window.title = "Crop PDF" }
+        if isPDF { window.title = L("Crop PDF") }
 
         aspect = segments(ratios.map(\.0))
         addRow("Aspect ratio", aspect)
@@ -195,8 +195,8 @@ final class CropEditor: Editor {
         for field in [widthField!, heightField!] { field.action = #selector(sizeEdited) }
         let units = NSTextField(labelWithString: isPDF ? "pt" : "px")
         units.textColor = .secondaryLabelColor
-        let times = NSTextField(labelWithString: "×")
-        addRow("Size", NSTextField(labelWithString: "W"), widthField, times, NSTextField(labelWithString: "H"),
+        let times = NSTextField(labelWithString: L("×"))
+        addRow("Size", NSTextField(labelWithString: L("W")), widthField, times, NSTextField(labelWithString: L("H")),
                heightField, units)
         view.onChange = { [weak self] in self?.syncFields() }
     }
@@ -262,7 +262,7 @@ final class CompressEditor: Editor {
     private var qualityLabel: NSTextField!
     private var maxSize: NSPopUpButton!
     private var format: NSPopUpButton!
-    private let estimate = NSTextField(labelWithString: "")
+    private let estimate = NSTextField(labelWithString: L(""))
     private var job: Task<Void, Never>?
 
     init(source: URL) throws {
@@ -272,14 +272,14 @@ final class CompressEditor: Editor {
 
         let (sourceType, sourceExt) = Images.writableType(for: source)
         let lossy: Set<UTType> = [.jpeg, .heic, .webP]
-        if lossy.contains(sourceType) { formats.append(("Same (\(sourceExt.uppercased()))", sourceType, sourceExt)) }
+        if lossy.contains(sourceType) { formats.append((L("Same (%@)", sourceExt.uppercased()), sourceType, sourceExt)) }
         formats += [("JPG", .jpeg, "jpg"), ("HEIC", .heic, "heic"), ("PNG", .png, "png")]
 
         quality = slider(0.1, 1, 0.7)
-        qualityLabel = NSTextField(labelWithString: "70%")
+        qualityLabel = NSTextField(labelWithString: L("70%"))
         qualityLabel.widthAnchor.constraint(equalToConstant: 40).isActive = true
         addRow("Quality", quality, qualityLabel)
-        maxSize = popup(sizes.map { $0 == 0 ? "Original size" : "Max \($0) px" })
+        maxSize = popup(sizes.map { $0 == 0 ? L("Original size") : L("Max %d px", $0) })
         addRow("Dimensions", maxSize)
         format = popup(formats.map(\.0))
         addRow("Format", format)
@@ -302,7 +302,7 @@ final class CompressEditor: Editor {
 
     override func update() {
         qualityLabel.stringValue = "\(Int((quality.doubleValue * 100).rounded()))%"
-        estimate.stringValue = "Calculating…"
+        estimate.stringValue = L("Calculating…")
         job?.cancel()
         job = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(150))

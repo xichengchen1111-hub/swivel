@@ -57,7 +57,7 @@ final class Shelf: NSObject, NSWindowDelegate {
             flipped.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
         ])
 
-        let clear = NSButton(title: "Clear", target: self, action: #selector(clearAll))
+        let clear = NSButton(title: L("Clear"), target: self, action: #selector(clearAll))
         clear.bezelStyle = .accessoryBarAction
         let root = NSStackView(views: [scroll, clear])
         root.orientation = .vertical
@@ -69,7 +69,7 @@ final class Shelf: NSObject, NSWindowDelegate {
     private func rebuild() {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         if urls.isEmpty {
-            let empty = NSTextField(labelWithString: "Drag a file, tap ⌃, drop on Float.")
+            let empty = NSTextField(labelWithString: L("Drag a file, tap ⌃, drop on Float."))
             empty.textColor = .secondaryLabelColor
             stack.addArrangedSubview(empty)
         }

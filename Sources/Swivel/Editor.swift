@@ -23,7 +23,7 @@ class Editor: NSObject, NSWindowDelegate {
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         super.init()
-        window.title = title
+        window.title = L(title)
         window.subtitle = source.lastPathComponent
         window.isReleasedWhenClosed = false
         window.level = .floating
@@ -35,10 +35,10 @@ class Editor: NSObject, NSWindowDelegate {
         controls.spacing = 10
 
         // macOS convention: secondary action on the left, Cancel / default action on the right.
-        let reset = NSButton(title: "Reset", target: self, action: #selector(resetClicked))
-        let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancelClicked))
+        let reset = NSButton(title: L("Reset"), target: self, action: #selector(resetClicked))
+        let cancel = NSButton(title: L("Cancel"), target: self, action: #selector(cancelClicked))
         cancel.keyEquivalent = "\u{1b}"
-        applyButton = NSButton(title: "Apply", target: self, action: #selector(applyClicked))
+        applyButton = NSButton(title: L("Apply"), target: self, action: #selector(applyClicked))
         applyButton.keyEquivalent = "\r"
         for button in [reset, cancel, applyButton!] {
             button.bezelStyle = .push
@@ -147,7 +147,7 @@ class Editor: NSObject, NSWindowDelegate {
 
     func addRow(_ title: String, _ views: NSView...) {
         // Right-aligned "Label:" column, as in System Settings and inspector panels.
-        let label = NSTextField(labelWithString: title.isEmpty ? "" : title + ":")
+        let label = NSTextField(labelWithString: title.isEmpty ? "" : L(title) + (Language.resolved == .en ? ":" : "："))
         label.alignment = .right
         label.widthAnchor.constraint(equalToConstant: 96).isActive = true
         let row = NSStackView(views: [label] + views)
@@ -163,7 +163,7 @@ class Editor: NSObject, NSWindowDelegate {
     }
 
     func segments(_ labels: [String]) -> NSSegmentedControl {
-        let control = NSSegmentedControl(labels: labels, trackingMode: .selectOne, target: self,
+        let control = NSSegmentedControl(labels: labels.map { L($0) }, trackingMode: .selectOne, target: self,
                                          action: #selector(controlChanged))
         control.selectedSegment = 0
         return control
@@ -171,14 +171,14 @@ class Editor: NSObject, NSWindowDelegate {
 
     func popup(_ items: [String]) -> NSPopUpButton {
         let popup = NSPopUpButton(frame: .zero, pullsDown: false)
-        popup.addItems(withTitles: items)
+        popup.addItems(withTitles: items.map { L($0) })
         popup.target = self
         popup.action = #selector(controlChanged)
         return popup
     }
 
     func checkbox(_ title: String, _ on: Bool) -> NSButton {
-        let box = NSButton(checkboxWithTitle: title, target: self, action: #selector(controlChanged))
+        let box = NSButton(checkboxWithTitle: L(title), target: self, action: #selector(controlChanged))
         box.state = on ? .on : .off
         return box
     }

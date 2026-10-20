@@ -16,21 +16,21 @@ enum TriggerKey: String, CaseIterable {
 
     var symbol: String {
         switch self {
-        case .shift: "⇧"
-        case .command: "⌘"
-        case .control: "⌃"
-        case .option: "⌥"
-        case .fn: "fn"
+        case .shift: L("⇧")
+        case .command: L("⌘")
+        case .control: L("⌃")
+        case .option: L("⌥")
+        case .fn: L("fn")
         }
     }
 
     var title: String {
         switch self {
-        case .shift: "⇧ Shift"
-        case .command: "⌘ Command"
-        case .control: "⌃ Control"
-        case .option: "⌥ Option"
-        case .fn: "fn / 🌐"
+        case .shift: L("⇧ Shift")
+        case .command: L("⌘ Command")
+        case .control: L("⌃ Control")
+        case .option: L("⌥ Option")
+        case .fn: L("fn / 🌐")
         }
     }
 }
@@ -41,21 +41,21 @@ enum MenuStyle: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .wheel: "Wheel"
-        case .list: "List"
-        case .shelf: "Bookshelf"
-        case .notes: "Sticky Notes"
-        case .clothesline: "Clothesline"
+        case .wheel: L("Wheel")
+        case .list: L("List")
+        case .shelf: L("Bookshelf")
+        case .notes: L("Sticky Notes")
+        case .clothesline: L("Clothesline")
         }
     }
 
     var blurb: String {
         switch self {
-        case .wheel: "A ring of keycaps around the cursor."
-        case .list: "A tidy column, like a context menu."
-        case .shelf: "Book spines standing on a wooden shelf."
-        case .notes: "Colourful sticky notes pinned in a grid."
-        case .clothesline: "Tags pegged on a rope, swaying gently."
+        case .wheel: L("A ring of keycaps around the cursor.")
+        case .list: L("A tidy column, like a context menu.")
+        case .shelf: L("Book spines standing on a wooden shelf.")
+        case .notes: L("Colourful sticky notes pinned in a grid.")
+        case .clothesline: L("Tags pegged on a rope, swaying gently.")
         }
     }
 }

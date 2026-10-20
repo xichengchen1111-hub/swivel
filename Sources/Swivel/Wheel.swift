@@ -34,7 +34,7 @@ final class WheelController {
         }
         let items = Catalog.items(for: urls, mode: newMode)
         guard !items.isEmpty else {
-            toast.show("Nothing to \(newMode.title.lowercased()) for this file", symbol: "nosign")
+            toast.show("Nothing to show for this file", symbol: "nosign")
             return
         }
         mode = newMode
@@ -74,7 +74,7 @@ final class WheelController {
         close()
         isDropping = false
         let busy = DispatchWorkItem { [toast] in
-            toast.show("\(item.title)…", symbol: "hourglass", autoHide: false)
+            toast.show(L(item.title) + "…", symbol: "hourglass", autoHide: false)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: busy)
         Task { @MainActor in

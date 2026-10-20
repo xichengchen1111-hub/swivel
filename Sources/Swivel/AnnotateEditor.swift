@@ -134,10 +134,10 @@ final class AnnotateEditor: Editor {
         addRow("Style", colorWell, thickness)
         textField.placeholderString = "Text to place"
         addRow("Text", textField)
-        let undo = NSButton(title: "Undo", target: self, action: #selector(undo))
+        let undo = NSButton(title: L("Undo"), target: self, action: #selector(undo))
         undo.keyEquivalent = "z"
         undo.keyEquivalentModifierMask = .command
-        let hint = NSTextField(labelWithString: "Drag on the photo to draw. Text and numbers are placed with a click.")
+        let hint = NSTextField(labelWithString: L("Drag on the photo to draw. Text and numbers are placed with a click."))
         hint.textColor = .secondaryLabelColor
         addRow("", undo, hint)
 

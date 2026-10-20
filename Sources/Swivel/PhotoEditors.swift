@@ -171,7 +171,7 @@ final class RedactEditor: Editor {
     private var faces: NSButton!
     private var text: NSButton!
     private var style: NSSegmentedControl!
-    private let status = NSTextField(labelWithString: "Looking for faces and text…")
+    private let status = NSTextField(labelWithString: L("Looking for faces and text…"))
 
     init(source: URL) throws {
         small = try Images.load(source, maxPixels: 1400)
@@ -201,7 +201,7 @@ final class RedactEditor: Editor {
             guard let self else { return }
             self.boxes += found
             let f = found.filter { $0.kind == .face }.count, t = found.filter { $0.kind == .text }.count
-            self.status.stringValue = "Found \(f) face\(f == 1 ? "" : "s") and \(t) text area\(t == 1 ? "" : "s"). Drag to add a box, click one to remove it."
+            self.status.stringValue = L("Found %d faces and %d text areas. Drag to add a box, click one to remove it.", f, t)
             self.update()
         }
     }

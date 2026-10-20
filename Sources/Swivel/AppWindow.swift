@@ -39,6 +39,18 @@ final class AppWindow: NSObject, NSWindowDelegate {
         return window
     }
 
+    /// Recreates the window in the new language and returns to General.
+    func reloadForLanguage() {
+        let frame = window?.frame
+        window?.delegate = nil
+        window?.close()
+        window = nil
+        split = nil
+        NotificationCenter.default.post(name: Prefs.changed, object: nil)
+        show(.general)
+        if let frame { window?.setFrame(frame, display: true) }
+    }
+
     func windowWillClose(_ notification: Notification) {
         // Back to a menu-bar-only app once the window is gone.
         DispatchQueue.main.async {
@@ -52,23 +64,23 @@ final class AppWindow: NSObject, NSWindowDelegate {
     private static func mainMenu() -> NSMenu {
         let main = NSMenu()
         let app = NSMenu()
-        app.addItem(withTitle: "About Swivel", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(withTitle: L("About Swivel"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(withTitle: "Hide Swivel", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        app.addItem(withTitle: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: L("Hide Swivel"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: L("Quit Swivel"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let edit = NSMenu(title: "Edit")
-        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(withTitle: L("Undo"), action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: L("Redo"), action: Selector(("redo:")), keyEquivalent: "Z")
         edit.addItem(.separator())
-        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        edit.addItem(withTitle: L("Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: L("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: L("Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: L("Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         let windowMenu = NSMenu(title: "Window")
-        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: L("Close"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: L("Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         for (title, menu) in [("Swivel", app), ("Edit", edit), ("Window", windowMenu)] {
-            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: L(title), action: nil, keyEquivalent: "")
             item.submenu = menu
             main.addItem(item)
         }
@@ -118,7 +130,7 @@ class Pane: NSViewController {
     func refresh() {}
 
     func label(_ text: String, size: CGFloat = 13, weight: NSFont.Weight = .regular, secondary: Bool = false) -> NSTextField {
-        let field = NSTextField(wrappingLabelWithString: text)
+        let field = NSTextField(wrappingLabelWithString: L(text))
         field.font = .systemFont(ofSize: size, weight: weight)
         if secondary { field.textColor = .secondaryLabelColor }
         field.preferredMaxLayoutWidth = self.size.width - 64
@@ -126,7 +138,7 @@ class Pane: NSViewController {
     }
 
     func row(_ title: String, _ views: NSView...) -> NSStackView {
-        let name = NSTextField(labelWithString: title.isEmpty ? "" : title + ":")
+        let name = NSTextField(labelWithString: title.isEmpty ? "" : L(title) + (Language.resolved == .en ? ":" : "："))
         name.alignment = .right
         name.widthAnchor.constraint(equalToConstant: 150).isActive = true
         let row = NSStackView(views: [name] + views)
@@ -188,7 +200,7 @@ final class PreviewHost: NSView {
 // MARK: - General
 
 final class GeneralPane: Pane {
-    private let login = NSButton(checkboxWithTitle: "Open Swivel at login", target: nil, action: nil)
+    private let login = NSButton(checkboxWithTitle: L("Open Swivel at login"), target: nil, action: nil)
 
     init() { super.init(size: NSSize(width: 620, height: 420)) }
     required init?(coder: NSCoder) { fatalError() }
@@ -209,6 +221,13 @@ final class GeneralPane: Pane {
         login.action = #selector(toggleLogin)
         stack.addArrangedSubview(row("Startup", login))
 
+        let languages = NSPopUpButton(frame: .zero, pullsDown: false)
+        languages.addItems(withTitles: Language.allCases.map(\.title))
+        languages.selectItem(at: Language.allCases.firstIndex(of: Language.chosen) ?? 0)
+        languages.target = self
+        languages.action = #selector(languageChanged(_:))
+        stack.addArrangedSubview(row("Language", languages))
+
         let steps = label("""
             1.  Start dragging any file in Finder and keep holding the mouse button.
             2.  Tap a key once — the menu opens under the pointer.
@@ -218,8 +237,8 @@ final class GeneralPane: Pane {
         steps.preferredMaxLayoutWidth = 400
         stack.addArrangedSubview(row("Wheel", steps))
 
-        let shelf = NSButton(title: "Show Shelf", target: self, action: #selector(showShelf))
-        let rope = NSButton(title: "Show Clothesline", target: self, action: #selector(showClothesline))
+        let shelf = NSButton(title: L("Show Shelf"), target: self, action: #selector(showShelf))
+        let rope = NSButton(title: L("Show Clothesline"), target: self, action: #selector(showClothesline))
         stack.addArrangedSubview(row("", shelf, rope))
     }
 
@@ -237,6 +256,12 @@ final class GeneralPane: Pane {
         refresh()
     }
 
+    @objc private func languageChanged(_ sender: NSPopUpButton) {
+        UserDefaults.standard.set(Language.allCases[sender.indexOfSelectedItem].rawValue, forKey: "language")
+        // Rebuild everything that shows text: the window, the ◎ menu and the app menus.
+        DispatchQueue.main.async { AppWindow.shared.reloadForLanguage() }
+    }
+
     @objc private func showShelf() { Shelf.shared.show() }
     @objc private func showClothesline() { Clothesline.shared.toggle() }
 }
@@ -244,8 +269,8 @@ final class GeneralPane: Pane {
 // MARK: - Clothesline
 
 final class ClotheslinePane: Pane {
-    private let takeover = NSButton(checkboxWithTitle: "Hang new screenshots and screen recordings on the rope", target: nil, action: nil)
-    private let copied = NSButton(checkboxWithTitle: "Also hang images you copy (e.g. ⌃ screenshots, Copy in Preview)", target: nil, action: nil)
+    private let takeover = NSButton(checkboxWithTitle: L("Hang new screenshots and screen recordings on the rope"), target: nil, action: nil)
+    private let copied = NSButton(checkboxWithTitle: L("Also hang images you copy (e.g. ⌃ screenshots, Copy in Preview)"), target: nil, action: nil)
 
     init() { super.init(size: NSSize(width: 680, height: 560)) }
     required init?(coder: NSCoder) { fatalError() }
@@ -268,9 +293,9 @@ final class ClotheslinePane: Pane {
             ["Drag into a folder", "Move it there — it comes off the rope"], ["Drag to the Trash, or click ×", "Throw it away"],
             ["Rest on the menu bar", "Lower the rope"], ["Click the menu bar", "Put the rope away"], ["⌃ ⌥ T", "Show or hide the rope"],
         ].map { pair -> [NSView] in
-            let key = NSTextField(labelWithString: pair[0])
+            let key = NSTextField(labelWithString: L(pair[0]))
             key.font = .systemFont(ofSize: 12, weight: .semibold)
-            let value = NSTextField(labelWithString: pair[1])
+            let value = NSTextField(labelWithString: L(pair[1]))
             value.font = .systemFont(ofSize: 12)
             value.textColor = .secondaryLabelColor
             return [key, value]
@@ -279,8 +304,8 @@ final class ClotheslinePane: Pane {
         gestures.columnSpacing = 16
         stack.addArrangedSubview(row("Gestures", gestures))
 
-        let show = NSButton(title: "Show Rope", target: self, action: #selector(showRope))
-        let open = NSButton(title: "Open Folder", target: self, action: #selector(openFolder))
+        let show = NSButton(title: L("Show Rope"), target: self, action: #selector(showRope))
+        let open = NSButton(title: L("Open Folder"), target: self, action: #selector(openFolder))
         stack.addArrangedSubview(row("", show, open))
     }
 
@@ -324,7 +349,7 @@ final class ShortcutsPane: Pane {
             For fn / 🌐: System Settings → Keyboard →
             “Press 🌐 key to” → “Do Nothing”.
             """, size: 11, secondary: true)))
-        stack.addArrangedSubview(row("", NSButton(title: "Restore Defaults", target: self, action: #selector(reset))))
+        stack.addArrangedSubview(row("", NSButton(title: L("Restore Defaults"), target: self, action: #selector(reset))))
     }
 
     override func refresh() {
@@ -396,11 +421,13 @@ final class StylePane: Pane {
         content.alignment = .leading
         content.spacing = 6
         wallpaper.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        content.widthAnchor.constraint(equalToConstant: 228).isActive = true  // fixed, so short captions don't shrink the preview
+        blurb.preferredMaxLayoutWidth = 228
         box.contentView = content
 
         let click = NSClickGestureRecognizer(target: self, action: #selector(picked(_:)))
         box.addGestureRecognizer(click)
-        box.toolTip = "Use the \(style.title) template"
+        box.toolTip = L("Use the %@ template", style.title)
         return box
     }
 
@@ -437,7 +464,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
 
     override func build() {
         stack.addArrangedSubview(label("Pick which options each menu shows and in what order. Untick to hide, drag to reorder.", secondary: true))
-        modePopup.addItems(withTitles: ["Convert formats", "File tools", "File actions"])
+        modePopup.addItems(withTitles: ["Convert formats", "File tools", "File actions"].map { L($0) })
         kindPopup.addItems(withTitles: kinds.map(\.title))
         for (popup, i) in [(modePopup, 0), (kindPopup, 1)] {
             popup.target = self
@@ -447,9 +474,9 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         for (i, kind) in kinds.enumerated() {
             kindPopup.item(at: i)?.image = NSImage(systemSymbolName: kind.symbol, accessibilityDescription: nil)
         }
-        let reset = NSButton(title: "Restore Defaults", target: self, action: #selector(resetContents))
-        let pickers = NSStackView(views: [NSTextField(labelWithString: "Menu:"), modePopup,
-                                          NSTextField(labelWithString: "File type:"), kindPopup, reset])
+        let reset = NSButton(title: L("Restore Defaults"), target: self, action: #selector(resetContents))
+        let pickers = NSStackView(views: [NSTextField(labelWithString: L("Menu:")), modePopup,
+                                          NSTextField(labelWithString: L("File type:")), kindPopup, reset])
         pickers.spacing = 8
         stack.addArrangedSubview(pickers)
 
@@ -524,7 +551,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let box = NSButton(checkboxWithTitle: rows[row].title, target: self, action: #selector(toggled(_:)))
+        let box = NSButton(checkboxWithTitle: L(rows[row].title), target: self, action: #selector(toggled(_:)))
         box.state = rows[row].shown ? .on : .off
         box.tag = row
         return box

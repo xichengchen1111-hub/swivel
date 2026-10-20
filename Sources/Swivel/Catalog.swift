@@ -6,27 +6,27 @@ enum FileKind: String, CaseIterable {
 
     var title: String {
         switch self {
-        case .image: "Images"
-        case .video: "Video"
-        case .audio: "Audio"
-        case .pdf: "PDF"
-        case .document: "Documents"
-        case .archive: "Archives"
-        case .folder: "Folders"
-        case .other: "Other files"
+        case .image: L("Images")
+        case .video: L("Video")
+        case .audio: L("Audio")
+        case .pdf: L("PDF")
+        case .document: L("Documents")
+        case .archive: L("Archives")
+        case .folder: L("Folders")
+        case .other: L("Other files")
         }
     }
 
     var symbol: String {
         switch self {
-        case .image: "photo"
-        case .video: "film"
-        case .audio: "music.note"
-        case .pdf: "doc.richtext"
-        case .document: "doc.text"
-        case .archive: "archivebox"
-        case .folder: "folder"
-        case .other: "doc"
+        case .image: L("photo")
+        case .video: L("film")
+        case .audio: L("music.note")
+        case .pdf: L("doc.richtext")
+        case .document: L("doc.text")
+        case .archive: L("archivebox")
+        case .folder: L("folder")
+        case .other: L("doc")
         }
     }
 
@@ -89,7 +89,7 @@ enum Catalog {
             if kind == .image {
                 list.insert(WheelItem(title: "Hang") { urls in
                     Clothesline.shared.hang(urls)
-                    return ActionResult(message: urls.count == 1 ? "Hung on the clothesline" : "Hung \(urls.count) images on the clothesline")
+                    return ActionResult(message: urls.count == 1 ? L("Hung on the clothesline") : L("Hung %d images on the clothesline", urls.count))
                 }, at: 1)
             }
             return list
@@ -174,8 +174,8 @@ enum Catalog {
     static func saved(_ files: [URL]) -> ActionResult {
         switch files.count {
         case 0: ActionResult(message: "Done")
-        case 1: ActionResult(message: "Saved \(files[0].lastPathComponent)", files: files)
-        default: ActionResult(message: "Saved \(files.count) files", files: files)
+        case 1: ActionResult(message: L("Saved %@", files[0].lastPathComponent), files: files)
+        default: ActionResult(message: L("Saved %d files", files.count), files: files)
         }
     }
 
@@ -196,16 +196,16 @@ enum Catalog {
             WheelItem(title: "Copy") { urls in
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.writeObjects(urls as [NSURL])
-                return ActionResult(message: multi ? "Copied \(urls.count) files" : "Copied \(urls[0].lastPathComponent)")
+                return ActionResult(message: multi ? L("Copied %d files", urls.count) : L("Copied %@", urls[0].lastPathComponent))
             },
             WheelItem(title: "Move") { urls in
                 let moved = try FileActions.move(urls)
-                return moved.isEmpty ? ActionResult(message: "Move cancelled") : saved(moved).renamed("Moved")
+                return moved.isEmpty ? ActionResult(message: L("Move cancelled")) : saved(moved).renamed()
             },
             WheelItem(title: "Copy Path") { urls in
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(urls.map(\.path).joined(separator: "\n"), forType: .string)
-                return ActionResult(message: multi ? "Copied \(urls.count) paths" : "Copied path")
+                return ActionResult(message: multi ? L("Copied %d paths", urls.count) : L("Copied path"))
             },
             WheelItem(title: "Terminal") { urls in
                 try await FileActions.openTerminal(at: urls[0])
@@ -216,9 +216,9 @@ enum Catalog {
 }
 
 private extension ActionResult {
-    func renamed(_ verb: String) -> ActionResult {
+    func renamed() -> ActionResult {
         var copy = self
-        copy.message = files.count == 1 ? "\(verb) \(files[0].lastPathComponent)" : "\(verb) \(files.count) files"
+        copy.message = files.count == 1 ? L("Moved %@", files[0].lastPathComponent) : L("Moved %d files", files.count)
         return copy
     }
 }
@@ -243,7 +243,7 @@ enum FileActions {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.prompt = "Move Here"
+        panel.prompt = L("Move Here")
         panel.message = "Choose where to move \(urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) files")"
         guard panel.runModal() == .OK, let folder = panel.url else { return [] }
         return try urls.map { url in

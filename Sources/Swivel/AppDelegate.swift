@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let event = NSAppleEventManager.shared().currentAppleEvent
         let atLogin = event?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
         if atLogin {
-            if Prefs.isEnabled { launchToast.show("Swivel is running — drag a file, then tap \(Prefs.key(for: .convert).symbol)", symbol: "circle.circle") }
+            if Prefs.isEnabled { launchToast.show(L("Swivel is running — drag a file, then tap %@", Prefs.key(for: .convert).symbol), symbol: "circle.circle") }
         } else {
             // SWIVEL_TAB=<0-5> opens a specific page (for testing): general, shortcuts, style, customize, clothesline, overview.
             let tab = ProcessInfo.processInfo.environment["SWIVEL_TAB"].flatMap(Int.init).flatMap(AppWindow.Tab.init)
@@ -45,14 +45,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Prefs.clotheslineAsked = true
         NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = "Hang your screenshots on the clothesline?"
-        alert.informativeText = """
+        alert.messageText = L("Hang your screenshots on the clothesline?")
+        alert.informativeText = L("""
             New screenshots will skip the desktop and hang on a rope under the menu bar. \
             Rest the pointer on the menu bar to lower it. The floating thumbnail is turned off while this is on; \
             your own settings come back if you turn it off or quit Swivel.
-            """
-        alert.addButton(withTitle: "Take Over Screenshots")
-        alert.addButton(withTitle: "Not Now")
+            """)
+        alert.addButton(withTitle: L("Take Over Screenshots"))
+        alert.addButton(withTitle: L("Not Now"))
         if alert.runModal() == .alertFirstButtonReturn {
             Prefs.clotheslineTakeover = true
             ScreenshotTakeover.enable(into: Clothesline.shared.folder)
@@ -88,13 +88,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.appearsDisabled = !anyOn
         let keys = WheelMode.allCases.map { "\(Prefs.key(for: $0).symbol) \($0.title)" }.joined(separator: " · ")
         var tip: [String] = []
-        if wheelOn { tip.append("Wheel: drag a file, then tap \(keys)") }
-        if ropeOn { tip.append("Clothesline: rest the pointer on the menu bar, or press ⌃⌥T") }
-        statusItem.button?.toolTip = tip.isEmpty ? "Swivel — everything is off. Open this menu to turn a feature on." : tip.joined(separator: "\n")
+        if wheelOn { tip.append(L("Wheel: drag a file, then tap %@", keys)) }
+        if ropeOn { tip.append(L("Clothesline: rest the pointer on the menu bar, or press ⌃⌥T")) }
+        statusItem.button?.toolTip = tip.isEmpty ? L("Swivel — everything is off. Open this menu to turn a feature on.") : tip.joined(separator: "\n")
 
         let menu = NSMenu()
         menu.autoenablesItems = false
-        let header = NSMenuItem(title: "Swivel", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: L("Swivel"), action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
         // Quick switches, one per feature.
@@ -108,18 +108,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if wheelOn {
             menu.addItem(.separator())
-            let how = NSMenuItem(title: "Wheel — drag a file, keep holding, then tap a key:", action: nil, keyEquivalent: "")
+            let how = NSMenuItem(title: L("Wheel — drag a file, keep holding, then tap a key:"), action: nil, keyEquivalent: "")
             how.isEnabled = false
             menu.addItem(how)
             for (mode, title, symbol) in [(WheelMode.convert, "Convert formats", "arrow.triangle.2.circlepath"),
                                           (.tools, "File tools", "slider.horizontal.3"),
                                           (.actions, "File actions", "bolt")] {
-                let item = NSMenuItem(title: "\(Prefs.key(for: mode).title) — \(title)", action: nil, keyEquivalent: "")
+                let item = NSMenuItem(title: "\(Prefs.key(for: mode).title) — \(L(title))", action: nil, keyEquivalent: "")
                 item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
                 item.submenu = Self.guide(for: mode)
                 menu.addItem(item)
             }
-            add(to: menu, "Menu Style: \(Prefs.style.title)…", #selector(openStyle))
+            add(to: menu, L("Menu Style: %@…", Prefs.style.title), #selector(openStyle))
             add(to: menu, "Show Shelf", #selector(showShelf))
         }
 
@@ -134,13 +134,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(to: menu, "Open Swivel…", #selector(openWindow), key: ",")
         add(to: menu, "Open at Login", #selector(toggleLogin)).state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Swivel", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: L("Quit Swivel"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
     }
 
     @discardableResult
     private func add(to menu: NSMenu, _ title: String, _ action: Selector, key: String = "") -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        let item = NSMenuItem(title: L(title), action: action, keyEquivalent: key)
         item.target = self
         menu.addItem(item)
         return item
@@ -152,15 +152,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.autoenablesItems = false
         let kinds: [FileKind] = mode == .actions ? [.other] : [.image, .video, .audio, .pdf, .document, .archive, .other]
         for kind in kinds {
-            let titles = Catalog.items(for: kind.sampleURLs, mode: mode).map(\.title)
+            let titles = Catalog.items(for: kind.sampleURLs, mode: mode).map { L($0.title) }
             guard !titles.isEmpty else { continue }
-            let label = mode == .actions ? "Any file or folder" : kind.title
+            let label = mode == .actions ? L("Any file or folder") : kind.title
             let item = NSMenuItem(title: "\(label):  \(titles.joined(separator: " · "))", action: nil, keyEquivalent: "")
             item.image = NSImage(systemSymbolName: mode == .actions ? "doc.on.doc" : kind.symbol, accessibilityDescription: nil)
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let customize = NSMenuItem(title: "Customize…", action: #selector(AppDelegate.openCustomize), keyEquivalent: "")
+        let customize = NSMenuItem(title: L("Customize…"), action: #selector(AppDelegate.openCustomize), keyEquivalent: "")
         customize.target = NSApp.delegate
         menu.addItem(customize)
         return menu
@@ -169,7 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleFeature(_ sender: NSMenuItem) {
         let feature = Feature.allCases[sender.tag]
         feature.isOn.toggle()
-        launchToast.show("\(feature.title) is \(feature.isOn ? "on" : "off")", symbol: feature.isOn ? feature.symbol : "circle.dashed")
+        launchToast.show(L(feature.isOn ? "%@ is on" : "%@ is off", feature.title), symbol: feature.isOn ? feature.symbol : "circle.dashed")
     }
 
     @objc private func toggleHangCopied() { Prefs.clotheslineHangCopied.toggle() }

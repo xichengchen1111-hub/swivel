@@ -6,7 +6,7 @@ final class Toast {
     static let shared = Toast()
     private let panel: NSPanel
     private let icon = NSImageView()
-    private let label = NSTextField(labelWithString: "")
+    private let label = NSTextField(labelWithString: L(""))
     private var files: [URL] = []
     private var hideWork: DispatchWorkItem?
 
@@ -54,7 +54,7 @@ final class Toast {
         self.files = files
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         icon.contentTintColor = tint
-        label.stringValue = files.isEmpty ? message : message + "  ·  Show"
+        label.stringValue = files.isEmpty ? L(message) : L(message) + "  ·  " + L("Show")
 
         let width = min(max(label.intrinsicContentSize.width + 66, 180), 520)
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main

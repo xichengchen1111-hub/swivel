@@ -8,17 +8,17 @@ enum WheelMode: CaseIterable {
 
     var id: String {
         switch self {
-        case .convert: "convert"
-        case .tools: "tools"
-        case .actions: "actions"
+        case .convert: L("convert")
+        case .tools: L("tools")
+        case .actions: L("actions")
         }
     }
 
     var title: String {
         switch self {
-        case .convert: "Convert"
-        case .tools: "Tools"
-        case .actions: "Actions"
+        case .convert: L("Convert")
+        case .tools: L("Tools")
+        case .actions: L("Actions")
         }
     }
 

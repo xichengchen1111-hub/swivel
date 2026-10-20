@@ -193,7 +193,7 @@ final class Clothesline: NSObject {
         if let image = NSImage(contentsOf: url) { objects.append(image) }
         pasteboard.writeObjects(objects)
         pasteboardCount = pasteboard.changeCount  // don't re-hang our own copy
-        Toast.shared.show("Copied \(url.lastPathComponent)", symbol: "doc.on.doc")
+        Toast.shared.show(L("Copied %@", url.lastPathComponent), symbol: "doc.on.doc")
     }
 
     func openInPreview(_ url: URL) {
@@ -352,7 +352,7 @@ final class HangingItem: NSView, NSDraggingSource {
         isMovie = ["mov", "mp4"].contains(url.pathExtension.lowercased())
         super.init(frame: .zero)
         wantsLayer = true
-        toolTip = "\(url.lastPathComponent)\nClick: copy · Double-click: open · Hold: Quick Look · Drag: take it down"
+        toolTip = url.lastPathComponent + "\n" + L("Click: copy · Double-click: open · Hold: Quick Look · Drag: take it down")
         loadThumbnail()
     }
 

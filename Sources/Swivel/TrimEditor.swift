@@ -10,9 +10,9 @@ final class TrimEditor: Editor {
     private let isAudio: Bool
     private var start: NSSlider!
     private var end: NSSlider!
-    private let startLabel = NSTextField(labelWithString: "")
-    private let endLabel = NSTextField(labelWithString: "")
-    private let lengthLabel = NSTextField(labelWithString: "")
+    private let startLabel = NSTextField(labelWithString: L(""))
+    private let endLabel = NSTextField(labelWithString: L(""))
+    private let lengthLabel = NSTextField(labelWithString: L(""))
     private var lastStart = 0.0
 
     init(source: URL) async throws {
