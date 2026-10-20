@@ -369,7 +369,7 @@ final class RopeView: NSView, NSDraggingSource {
             // Arrives from above, bounces on the rope and swings.
             print.drop = -110
             print.dropV = 0
-            print.angleV = CGFloat.random(in: 2.5...4) * (Bool.random() ? 1 : -1)
+            print.angleV = CGFloat.random(in: 0.9...1.4) * (Bool.random() ? 1 : -1)
         }
         newcomers.removeAll()
         startTimer()
@@ -381,7 +381,7 @@ final class RopeView: NSView, NSDraggingSource {
             let fits = x + print.size.width < bounds.width - 40
             print.layer.isHidden = !fits
             print.x = x + print.size.width / 2
-            print.tilt = [0.04, -0.035, 0.025, -0.05, 0.035, -0.025][i % 6]
+            print.tilt = [0.018, -0.015, 0.012, -0.02, 0.015, -0.012][i % 6]
             x += print.size.width + 22
         }
     }
@@ -492,7 +492,7 @@ final class RopeView: NSView, NSDraggingSource {
         layoutPrints()
         for (i, print) in prints.enumerated() {
             print.kickAt = clock + 0.12 + Double(i) * 0.045
-            print.kick = CGFloat.random(in: 1.2...2.2) * (i % 2 == 0 ? 1 : -1)
+            print.kick = CGFloat.random(in: 0.35...0.6) * (i % 2 == 0 ? 1 : -1)
         }
         startTimer()
     }
@@ -502,7 +502,7 @@ final class RopeView: NSView, NSDraggingSource {
         isLifting = true
         offsetTarget = -bounds.height - 30
         onLifted = done
-        for print in prints { print.angleV += CGFloat.random(in: -0.8...0.8) }
+        for print in prints { print.angleV += CGFloat.random(in: -0.25...0.25) }
         startTimer()
     }
 
@@ -555,11 +555,11 @@ final class RopeView: NSView, NSDraggingSource {
         for _ in 0..<2 {  // two half-steps per frame keeps the springs stable
             clock += Double(dt)
             // Whole rope: an under-damped spring, so it overshoots and settles.
-            let offsetA = -260 * (offset - offsetTarget) - 17 * offsetV
+            let offsetA = -260 * (offset - offsetTarget) - 24 * offsetV
             offsetV += offsetA * dt
             offset += offsetV * dt
             // The cord lags behind the rope's motion, so it bounces in the middle when the rope stops.
-            let sagA = -150 * sag - 5 * sagV - 0.09 * offsetA
+            let sagA = -150 * sag - 9 * sagV - 0.05 * offsetA
             sagV += sagA * dt
             sag += sagV * dt
 
@@ -568,15 +568,15 @@ final class RopeView: NSView, NSDraggingSource {
                 // Pendulum on its peg, pulled toward its resting tilt (straight when hovered), plus a breeze.
                 let rest = i == hovered ? 0 : print.tilt
                 let t = CGFloat(clock)
-                let breeze = Prefs.clotheslineEnabled ? 0.28 * sin(1.1 * t + print.phase) + 0.12 * sin(2.7 * t + print.phase * 1.7) : 0
-                let angleA = -34 * (print.angle - rest) - 3.0 * print.angleV + breeze
+                let breeze = Prefs.clotheslineEnabled ? 0.07 * sin(1.1 * t + print.phase) + 0.03 * sin(2.7 * t + print.phase * 1.7) : 0
+                let angleA = -34 * (print.angle - rest) - 6.0 * print.angleV + breeze
                 print.angleV += angleA * dt
                 print.angle += print.angleV * dt
                 let liftTarget: CGFloat = i == hovered ? -6 : 0
                 let liftA = -340 * (print.lift - liftTarget) - 30 * print.liftV
                 print.liftV += liftA * dt
                 print.lift += print.liftV * dt
-                let dropA = -200 * print.drop - 12 * print.dropV
+                let dropA = -200 * print.drop - 16 * print.dropV
                 print.dropV += dropA * dt
                 print.drop += print.dropV * dt
             }
@@ -746,7 +746,7 @@ final class RopeView: NSView, NSDraggingSource {
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         let op = operation(sender)
-        if op != [] { sagV += 60 }  // the rope dips as something comes near
+        if op != [] { sagV += 30 }  // the rope dips as something comes near
         return op
     }
 
@@ -757,7 +757,7 @@ final class RopeView: NSView, NSDraggingSource {
         receivingHighlight = false
         let urls = acceptable(sender)
         guard !urls.isEmpty else { return false }
-        sagV += 140  // catches the weight
+        sagV += 80  // catches the weight
         DispatchQueue.main.async { Clothesline.shared.receive(urls) }
         return true
     }
