@@ -318,7 +318,7 @@ final class ClotheslinePane: Pane {
 
     @objc private func toggleTakeover() {
         Prefs.clotheslineTakeover = takeover.state == .on
-        if Prefs.clotheslineTakeover && Prefs.clotheslineEnabled { ScreenshotTakeover.enable(into: Clothesline.shared.folder) } else { ScreenshotTakeover.restore() }
+        if Prefs.clotheslineTakeover && Prefs.clotheslineEnabled { ScreenshotTakeover.enable(into: Clothesline.shared.incoming) } else { ScreenshotTakeover.restore() }
     }
 
     @objc private func showRope() { Clothesline.shared.toggle() }

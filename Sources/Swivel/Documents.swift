@@ -128,25 +128,19 @@ enum PDFs {
         return [out]
     }
 
-    /// Renders every page at 300 DPI. Multi-page PDFs go into a folder next to the original.
+    /// Renders every page at 300 DPI, next to the original: "name.png" for one page, "name 1.png", "name 2.png"… for more.
     private static func pages(_ url: URL, as type: UTType, ext: String) async throws -> [URL] {
         try await Images.detached {
             let doc = try open(url)
-            let folder: URL?
-            if doc.pageCount > 1 {
-                let dir = Paths.output(for: url, ext: "", suffix: " pages")
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                folder = dir
-            } else {
-                folder = nil
-            }
+            var outputs: [URL] = []
             for index in 0..<doc.pageCount {
                 guard let page = doc.page(at: index) else { continue }
-                let out = folder?.appendingPathComponent("page-\(index + 1).\(ext)") ?? Paths.output(for: url, ext: ext)
+                let suffix = doc.pageCount > 1 ? " \(index + 1)" : ""
+                let out = Paths.output(for: url, ext: ext, suffix: suffix)
                 try Images.write(try render(page, dpi: 300), to: out, type: type, quality: 0.92)
-                if folder == nil { return [out] }
+                outputs.append(out)
             }
-            return [folder!]
+            return outputs
         }
     }
 
@@ -190,18 +184,19 @@ enum PDFs {
         return [out]
     }
 
+    /// One PDF per page, next to the original: "name 1.pdf", "name 2.pdf"…
     private static func split(_ url: URL) throws -> [URL] {
         let doc = try open(url)
-        let dir = Paths.output(for: url, ext: "", suffix: " split")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let base = url.deletingPathExtension().lastPathComponent
+        var outputs: [URL] = []
         for i in 0..<doc.pageCount {
             guard let page = doc.page(at: i)?.copy() as? PDFPage else { continue }
             let single = PDFDocument()
             single.insert(page, at: 0)
-            single.write(to: dir.appendingPathComponent("\(base) – \(i + 1).pdf"))
+            let out = Paths.output(for: url, ext: "pdf", suffix: " \(i + 1)")
+            single.write(to: out)
+            outputs.append(out)
         }
-        return [dir]
+        return outputs
     }
 
     private static func rotate(_ url: URL) throws -> [URL] {
@@ -261,16 +256,11 @@ enum Archives {
         // A single top-level item lands next to the archive; anything else gets a folder named after it.
         let contents = try fm.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent != "__MACOSX" }
-        if contents.count == 1 {
-            let out = Paths.unique(parent.appendingPathComponent(contents[0].lastPathComponent))
-            try fm.moveItem(at: contents[0], to: out)
-            return [out]
+        // Everything lands next to the archive, without an extra wrapping folder.
+        return try contents.map { item in
+            let out = Paths.unique(parent.appendingPathComponent(item.lastPathComponent))
+            try fm.moveItem(at: item, to: out)
+            return out
         }
-        var base = url.deletingPathExtension()
-        if base.pathExtension == "tar" { base = base.deletingPathExtension() }
-        let dir = Paths.unique(base)
-        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        for item in contents { try fm.moveItem(at: item, to: dir.appendingPathComponent(item.lastPathComponent)) }
-        return [dir]
     }
 }

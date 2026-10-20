@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: L("Not Now"))
         if alert.runModal() == .alertFirstButtonReturn {
             Prefs.clotheslineTakeover = true
-            ScreenshotTakeover.enable(into: Clothesline.shared.folder)
+            ScreenshotTakeover.enable(into: Clothesline.shared.incoming)
         }
     }
 
@@ -181,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleTakeover() {
         Prefs.clotheslineTakeover.toggle()
-        if Prefs.clotheslineTakeover && Prefs.clotheslineEnabled { ScreenshotTakeover.enable(into: Clothesline.shared.folder) } else { ScreenshotTakeover.restore() }
+        if Prefs.clotheslineTakeover && Prefs.clotheslineEnabled { ScreenshotTakeover.enable(into: Clothesline.shared.incoming) } else { ScreenshotTakeover.restore() }
     }
     @objc private func showShelf() { Shelf.shared.show() }
 
