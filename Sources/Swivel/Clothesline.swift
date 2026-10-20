@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import ImageIO
 
 /// A rope tucked under the menu bar.
 ///
@@ -27,14 +28,20 @@ final class Clothesline: NSObject {
     let panel = RopePanel()
     private var watches: [DispatchSourceFileSystemObject] = []
     private var hoverTimer: Timer?
+    private var monitors: [Any] = []
     private var wasAtTopEdge = false
+    private var pressedAt: NSPoint?        // where the current click started, for telling a click from a drag
     private var leftSince: Date?
     private var pinned = false              // shown with the hotkey: stays until toggled or clicked away
     private var pasteboardCount = NSPasteboard.general.changeCount
     private var hotKey: HotKey?
     private var seenIncoming: Set<String> = []
-    var isDraggingItem = false              // a print is being dragged off the rope
-    private(set) var isReceiving = false    // something is being dragged toward the rope
+    /// Files dropped on the rope whose move runs on the next turn of the run loop, so the card can tell it was hung.
+    private var taking: Set<URL> = []
+    /// A print is being dragged off the rope (or its context menu is open): the rope stays down.
+    var isDraggingItem: Bool { panel.rope.isDraggingItem }
+    /// Something is being dragged toward the rope.
+    private(set) var isReceiving = false { didSet { panel.rope.isReceiving = isReceiving } }
 
     static let mediaExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tiff", "gif", "webp", "mov", "mp4"]
 
@@ -50,6 +57,21 @@ final class Clothesline: NSObject {
         timer.tolerance = 0.01
         RunLoop.main.add(timer, forMode: .common)
         hoverTimer = timer
+        // Mouse monitors (no Accessibility permission needed) see the pointer reach the top edge on the very next
+        // event instead of the next poll, and see clicks that should put the rope away.
+        let moved: (NSEvent) -> Void = { [weak self] _ in MainActor.assumeIsolated { self?.pointerMoved() } }
+        let clicked: (NSEvent) -> Void = { [weak self] event in
+            let down = event.type == .leftMouseDown
+            MainActor.assumeIsolated { self?.mouse(down: down, at: NSEvent.mouseLocation) }
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: moved) { monitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { event in moved(event); return event }) {
+            monitors.append(local)
+        }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp], handler: clicked) { monitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp], handler: { event in clicked(event); return event }) {
+            monitors.append(local)
+        }
         hotKey = HotKey { [weak self] in self?.toggle() }
         if Prefs.clotheslineEnabled && Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: incoming) }
     }
@@ -70,17 +92,20 @@ final class Clothesline: NSObject {
 
     // MARK: Contents
 
+    /// Newest first, by when each file arrived in the folder (falling back to its creation date): a copy keeps its
+    /// original creation date, but it was hung just now, so it belongs at the front where the drop animation puts it.
     private func mediaFiles(in directory: URL) -> [URL] {
-        let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
+        let keys: [URLResourceKey] = [.addedToDirectoryDateKey, .creationDateKey]
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys,
                                                                   options: [.skipsHiddenFiles])) ?? []
         return files
             .filter { Self.mediaExtensions.contains($0.pathExtension.lowercased()) }
-            .sorted {
-                let a = (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-                let b = (try? $1.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-                return a > b
+            .map { url -> (URL, Date) in
+                let values = try? url.resourceValues(forKeys: Set(keys))
+                return (url, values?.addedToDirectoryDate ?? values?.creationDate ?? .distantPast)
             }
+            .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0.lastPathComponent < $1.0.lastPathComponent }
+            .map(\.0)
     }
 
     func reload() {
@@ -89,22 +114,40 @@ final class Clothesline: NSObject {
         if items.isEmpty && !isReceiving { hide() }
     }
 
-    /// Puts files on the rope: files waiting as a card are moved, anything else is copied.
-    func receive(_ urls: [URL]) {
+    /// Puts files on the rope: files waiting as a card are moved, anything else is copied. Returns where they
+    /// landed. `thumbnails` (from the card) saves decoding the image again.
+    @discardableResult
+    func receive(_ urls: [URL], arrival: RopeView.Arrival = .fromAbove, thumbnails: [URL: CGImage] = [:]) -> [URL] {
         let fm = FileManager.default
+        var landed: [URL] = []
         for url in urls where Self.mediaExtensions.contains(url.pathExtension.lowercased()) {
             let destination = Paths.unique(folder.appendingPathComponent(url.lastPathComponent))
             let waiting = url.deletingLastPathComponent().standardizedFileURL == incoming.standardizedFileURL
-            if waiting { try? fm.moveItem(at: url, to: destination) } else { try? fm.copyItem(at: url, to: destination) }
-            panel.rope.markNew(destination)
+            do {
+                if waiting { try fm.moveItem(at: url, to: destination) } else { try fm.copyItem(at: url, to: destination) }
+            } catch {
+                continue  // nothing to hang for a file that didn't make it
+            }
+            panel.rope.markNew(destination, arrival: arrival, thumbnail: thumbnails[url])
+            landed.append(destination)
         }
+        taking.subtract(urls)
         reload()
+        guard !landed.isEmpty else {
+            Feedback.refuse()
+            return []
+        }
         show(force: true)
         if !pinned { leftSince = Date().addingTimeInterval(2.2) }  // stay down long enough to see it land
+        return landed
     }
 
     /// From the ⌃ Actions menu.
     func hang(_ urls: [URL]) { receive(urls) }
+
+    /// The rope accepted a drop of these files; the move follows on the next turn of the run loop.
+    func take(_ urls: [URL]) { taking.formUnion(urls) }
+    func isTaking(_ url: URL) -> Bool { taking.contains(url) }
 
     private func checkIncoming() {
         let waiting = mediaFiles(in: incoming)
@@ -126,18 +169,27 @@ final class Clothesline: NSObject {
         watches.append(source)
     }
 
+    /// A small picture of an image or the first frame of a movie.
+    static func thumbnail(_ url: URL, maxPixels: Int) -> CGImage? {
+        guard ["mov", "mp4"].contains(url.pathExtension.lowercased()) else { return try? Images.load(url, maxPixels: maxPixels) }
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: maxPixels, height: maxPixels)
+        return try? generator.copyCGImage(at: .zero, actualTime: nil)
+    }
+
     // MARK: Showing and hiding
 
     var isShown: Bool { panel.isVisible }
 
     func toggle() {
-        if isShown { hide() } else { pinned = true; show() }
+        // Caught while it's still lifting, the shortcut brings it back instead of hiding it again.
+        if isShown && !panel.rope.isLifting { hide() } else { pinned = true; show() }
     }
 
     func show(force: Bool = false) {
         guard Prefs.clotheslineEnabled, force || !items.isEmpty else { return }
-        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
-        guard let screen else { return }
+        guard let screen = screen(containing: NSEvent.mouseLocation) ?? NSScreen.main else { return }
         panel.lower(on: screen)
     }
 
@@ -155,11 +207,50 @@ final class Clothesline: NSObject {
 
     func endReceiving() {
         isReceiving = false
-        leftSince = Date()
+        // A drop may already have asked to stay down for the landing; don't cut that short.
+        let now = Date()
+        leftSince = max(leftSince ?? now, now)
+    }
+
+    private func screen(containing point: NSPoint) -> NSScreen? {
+        NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
     }
 
     private func menuBarHeight(_ screen: NSScreen) -> CGFloat {
         max(screen.frame.maxY - screen.visibleFrame.maxY, 24)
+    }
+
+    private func pointerMoved() {
+        guard Prefs.clotheslineEnabled else { return }
+        checkTopEdge(NSEvent.mouseLocation)
+    }
+
+    /// Touching the edge reveals immediately. Moving away rearms it, so a menu-bar click or the hide shortcut can
+    /// dismiss the rope without it reopening in place.
+    private func checkTopEdge(_ point: NSPoint) {
+        guard let screen = screen(containing: point) else { return }
+        let atTopEdge = point.y >= screen.frame.maxY - 2
+        let reachedTopEdge = atTopEdge && !wasAtTopEdge
+        wasAtTopEdge = atTopEdge
+        if reachedTopEdge && NSEvent.pressedMouseButtons & 1 == 0 && (!isShown || panel.rope.isLifting) {
+            show()
+        }
+    }
+
+    /// Pressing in the menu bar puts the rope away at once. A pinned rope also goes when the user clicks away from
+    /// the prints, on the release, and only for a click: a drag that starts elsewhere may be bringing a file to it.
+    private func mouse(down: Bool, at point: NSPoint) {
+        guard isShown, !panel.rope.isLifting, !isDraggingItem, !isReceiving, let screen = screen(containing: point) else {
+            pressedAt = nil
+            return
+        }
+        if down {
+            pressedAt = point
+            if point.y >= screen.frame.maxY - menuBarHeight(screen) { hide() }
+        } else if let start = pressedAt {
+            pressedAt = nil
+            if pinned, hypot(point.x - start.x, point.y - start.y) < 5, !panel.rope.isNear(screenPoint: start) { hide() }
+        }
     }
 
     private func tick() {
@@ -170,32 +261,24 @@ final class Clothesline: NSObject {
         }
         checkPasteboard()
         let point = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) else { return }
+        checkTopEdge(point)
+        guard isShown, let screen = screen(containing: point) else { return }
         let inMenuBar = point.y >= screen.frame.maxY - menuBarHeight(screen)
-        let atTopEdge = point.y >= screen.frame.maxY - 2
-        let reachedTopEdge = atTopEdge && !wasAtTopEdge
-        wasAtTopEdge = atTopEdge
-        let buttonDown = NSEvent.pressedMouseButtons & 1 != 0
-
-        // Touching the edge reveals immediately. Moving away rearms it, so a menu-bar
-        // click or the hide shortcut can dismiss the rope without it reopening in place.
-        if reachedTopEdge && !buttonDown && (!isShown || panel.rope.isLifting) {
-            show()
-        }
-        if !isShown { return }
 
         if isDraggingItem || isReceiving { return }
-        // Clicking the menu bar puts the rope away.
-        if inMenuBar && buttonDown { hide(); return }
+        // Clicking the menu bar puts the rope away (the click monitors usually got there first).
+        if inMenuBar && NSEvent.pressedMouseButtons & 1 != 0 { hide(); return }
         if pinned { return }
-        let overRope = NSPointInRect(point, panel.frame.insetBy(dx: 0, dy: -8)) && panel.rope.isOverPrint(screenPoint: point)
-        if overRope || inMenuBar {
+        let inStrip = point.y >= panel.frame.minY - 8 && point.x >= panel.frame.minX && point.x <= panel.frame.maxX
+        let delay = RopeTuning.hideDelay(overPrint: panel.rope.isOverPrint(screenPoint: point), inMenuBar: inMenuBar,
+                                         nearPrints: panel.rope.isNear(screenPoint: point), inStrip: inStrip)
+        guard let delay else {
             if let left = leftSince, left > Date() { return }  // still showing off a new arrival
             leftSince = nil
-        } else {
-            if leftSince == nil { leftSince = Date() }
-            if Date().timeIntervalSince(leftSince!) > 0.5 { hide() }
+            return
         }
+        if leftSince == nil { leftSince = Date() }
+        if Date().timeIntervalSince(leftSince!) > delay { hide() }
     }
 
     // MARK: Copied images
@@ -227,29 +310,166 @@ final class Clothesline: NSObject {
         if let image = NSImage(contentsOf: url) { objects.append(image) }
         pasteboard.writeObjects(objects)
         pasteboardCount = pasteboard.changeCount  // don't re-hang our own copy
+        // Confirmed where the user is looking (on the print), with the name at the bottom of the screen.
+        panel.rope.confirmCopy(url)
+        Feedback.done()
         Toast.shared.show(L("Copied %@", url.lastPathComponent), symbol: "doc.on.doc")
     }
 
     func openInPreview(_ url: URL) {
-        hide()
         let isMovie = ["mov", "mp4"].contains(url.pathExtension.lowercased())
         let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: isMovie ? "com.apple.QuickTimePlayerX" : "com.apple.Preview")
         if let app { NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil) } else { NSWorkspace.shared.open(url) }
+        // The rope leaves a beat later, so the eye catches the print's pulse first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in self?.hide() }
     }
 
+    /// Quick Look grows out of the print, and the rope lifts once it has started.
     func quickLook(_ url: URL) {
-        hide()
-        QuickLooker.shared.show(url)
+        let rope = panel.rope
+        let picture = rope.image(of: url).map { NSImage(cgImage: $0, size: NSSize(width: $0.width / 2, height: $0.height / 2)) }
+        QuickLooker.shared.show(url, from: { [weak rope] in rope?.screenFrame(of: url) }, image: picture)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.hide() }
     }
 
-    func discard(_ url: URL) {
-        panel.rope.letFall(url)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            NSWorkspace.shared.recycle([url]) { [weak self] _, _ in
-                MainActor.assumeIsolated { self?.reload() }
+    /// Thrown away: the print leaves the rope at once (falling, or shrinking away if it already went to the Trash
+    /// as a drag) while the file goes to the Trash.
+    func discard(_ url: URL, fall: Bool = true) {
+        panel.rope.remove(url, falling: fall)
+        NSWorkspace.shared.recycle([url]) { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                self?.panel.rope.departed(url)
+                self?.reload()
             }
         }
     }
+}
+
+// MARK: - Tuning
+
+/// The clothesline's motion constants and the small pure helpers behind them, kept together so tests can hold them
+/// to the owner's rule: gentle and well damped (damping ratio ≥ 0.6 for anything that swings or bounces), at most
+/// two visible oscillations, settled within 1.5 s.
+enum RopeTuning {
+    /// A mass–spring pair integrated in fixed steps: stiffness `k` and damping `c` per unit mass.
+    struct Oscillator {
+        let k: CGFloat
+        let c: CGFloat
+        var dampingRatio: CGFloat { c / (2 * k.squareRoot()) }
+    }
+
+    static let fall = Oscillator(k: 260, c: 24)        // the whole rope lowering and lifting (ζ ≈ 0.74)
+    static let sag = Oscillator(k: 150, c: 16)         // the cord's extra dip in the middle (ζ ≈ 0.65, was 0.37)
+    static let swing = Oscillator(k: 34, c: 7.6)       // each print's pendulum on its peg (ζ ≈ 0.65, was 0.51)
+    static let arrive = Oscillator(k: 200, c: 20)      // a new print settling onto the rope (ζ ≈ 0.71, was 0.57)
+    static let sagCoupling: CGFloat = 0.05             // the cord lags behind the rope's acceleration
+    /// Fixed physics step. Each display frame feeds its measured length through an accumulator, so the motion is
+    /// the same at 60 or 120 Hz and a late frame doesn't slow it down.
+    static let step: CGFloat = 1.0 / 240
+    static let maxSteps = 8
+
+    // Nudges, in rad/s: staggered as the rope lowers, trailing as it lifts, and for a new print.
+    static let dropKick: ClosedRange<CGFloat> = 0.3...0.5
+    static let liftKick: CGFloat = 0.25
+    static let arrivalSwingFromAbove: ClosedRange<CGFloat> = 0.5...0.8
+    static let arrivalSwingInPlace: ClosedRange<CGFloat> = 0.3...0.5
+    static let arrivalHeight: CGFloat = -110           // hung from the menu: falls this far onto the rope
+
+    // Hover and press, as retargetable springs.
+    static let lift = (response: CGFloat(0.34), damping: CGFloat(0.81))      // the old k = 340, c = 30
+    static let pressIn = (response: CGFloat(0.1), damping: CGFloat(0.9))
+    static let pressOut = (response: CGFloat(0.28), damping: CGFloat(0.8))
+    static let slide = (response: CGFloat(0.4), damping: CGFloat(0.9))       // along the rope as a gap opens or closes
+    static let fadeIn: CGFloat = 0.14, fadeOut: CGFloat = 0.1                 // opacity and colour (exits are faster)
+    static let hoverLift: CGFloat = 6
+    static let hoverScale: CGFloat = 0.025
+    static let pressSink: CGFloat = 4                  // pressed, a print sinks back toward the rope…
+    static let pressScale: CGFloat = 0.035             // …and gives a little (3.5 % from hovered)
+    static let chargeScale: CGFloat = 0.03             // held toward Quick Look, it gathers again
+
+    /// Semi-implicit Euler step toward `target`; returns the acceleration so the cord can follow the rope.
+    @discardableResult
+    static func advance(_ x: inout CGFloat, _ v: inout CGFloat, toward target: CGFloat, _ o: Oscillator,
+                        force: CGFloat = 0, h: CGFloat = step) -> CGFloat {
+        let a = -o.k * (x - target) - o.c * v + force
+        v += a * h
+        x += v * h
+        return a
+    }
+
+    /// Holding a print: it gathers between 0.2 s and 0.55 s, then Quick Look opens.
+    static let chargeStart: CFTimeInterval = 0.2, chargeEnd: CFTimeInterval = 0.55
+    static func charge(heldFor t: CFTimeInterval) -> CGFloat {
+        CGFloat(min(max((t - chargeStart) / (chargeEnd - chargeStart), 0), 1))
+    }
+
+    /// How long the rope waits before lifting, or nil to stay. Reaching along the rope for a print gets more time
+    /// than leaving it, so it doesn't run away from the pointer on a wide screen.
+    static func hideDelay(overPrint: Bool, inMenuBar: Bool, nearPrints: Bool, inStrip: Bool) -> TimeInterval? {
+        if overPrint || inMenuBar { return nil }
+        if nearPrints { return 1.5 }
+        return inStrip ? 1.0 : 0.5
+    }
+
+    static let firstSlot: CGFloat = 76, spacing: CGFloat = 22
+    static let maxPrint = CGSize(width: 168, height: 112)
+
+    /// Prints hang left-aligned from `firstSlot`, `spacing` apart; `gap` opens room at the front for something about
+    /// to be hung. Each print's centre, and whether it fits before the right edge.
+    static func slots(widths: [CGFloat], in width: CGFloat, gap: CGFloat = 0) -> [(x: CGFloat, fits: Bool)] {
+        var x = firstSlot + gap
+        return widths.map { w in
+            defer { x += w + spacing }
+            return (x + w / 2, x + w < width - 40)
+        }
+    }
+
+    /// A print's size for a picture of this aspect ratio, white border included.
+    static func printSize(aspect: CGFloat) -> CGSize {
+        let a = max(aspect, 0.05)
+        let h = min(maxPrint.width / a, maxPrint.height)
+        return CGSize(width: h * a + 10, height: h + 10)
+    }
+
+    /// The rope sags in a parabola, which one quadratic Bézier draws exactly (it used to be ~850 line segments
+    /// rebuilt every frame on a 5K display).
+    static func ropePath(width: CGFloat, y: CGFloat, sag: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: -4, y: y))
+        path.addLine(to: CGPoint(x: 0, y: y))
+        path.addQuadCurve(to: CGPoint(x: width, y: y), control: CGPoint(x: width / 2, y: y + 2 * sag))
+        path.addLine(to: CGPoint(x: width + 4, y: y))
+        return path
+    }
+
+    /// A CSS-style cubic-Bézier timing curve at `t`, solved by bisection (monotonic for x1, x2 in 0…1).
+    static func ease(_ t: CGFloat, _ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat) -> CGFloat {
+        let t = min(max(t, 0), 1)
+        func curve(_ u: CGFloat, _ a: CGFloat, _ b: CGFloat) -> CGFloat {
+            3 * a * u * (1 - u) * (1 - u) + 3 * b * u * u * (1 - u) + u * u * u
+        }
+        var lo: CGFloat = 0, hi: CGFloat = 1
+        for _ in 0..<24 {
+            let mid = (lo + hi) / 2
+            if curve(mid, x1, x2) < t { lo = mid } else { hi = mid }
+        }
+        return curve((lo + hi) / 2, y1, y2)
+    }
+}
+
+/// Draws into a bitmap at `scale` with both Core Graphics and AppKit (for text and symbols) available.
+@MainActor
+private func renderImage(_ size: NSSize, scale: CGFloat, _ draw: (CGContext) -> Void) -> CGImage? {
+    guard size.width >= 1, size.height >= 1,
+          let ctx = CGContext(data: nil, width: Int((size.width * scale).rounded(.up)), height: Int((size.height * scale).rounded(.up)),
+                              bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+    ctx.scaleBy(x: scale, y: scale)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+    draw(ctx)
+    NSGraphicsContext.restoreGraphicsState()
+    return ctx.makeImage()
 }
 
 // MARK: - Panel
@@ -276,12 +496,15 @@ final class RopePanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
 
+    /// Lowers the rope. Caught while it's still lifting, it turns around where it is instead of starting over.
     func lower(on screen: NSScreen) {
-        let frame = NSRect(x: screen.frame.minX, y: screen.visibleFrame.maxY - Self.height, width: screen.frame.width, height: Self.height)
         if isVisible && !rope.isLifting { return }
-        setFrame(frame, display: false)
-        orderFrontRegardless()
-        rope.drop()
+        let frame = NSRect(x: screen.frame.minX, y: screen.visibleFrame.maxY - Self.height, width: screen.frame.width, height: Self.height)
+        let fromHidden = !isVisible || frame != self.frame
+        if frame != self.frame { setFrame(frame, display: false) }
+        rope.drop(fromHidden: fromHidden)  // lays out and draws at this width before the panel is seen
+        if !isVisible { orderFrontRegardless() }
+        rope.wake()
     }
 
     func raise() {
@@ -292,25 +515,43 @@ final class RopePanel: NSPanel {
 
 // MARK: - Rope
 
-/// Draws the rope and its prints with Core Animation layers, moved every frame by a small physics model:
-/// the rope falls on a spring and sags, each print is a damped pendulum on its peg, and a light breeze keeps
-/// them moving. Everything is interruptible because the state is simulated, not tweened.
+/// Draws the rope and its prints with Core Animation layers, moved on every display frame by a small physics
+/// model: the rope falls on a spring and sags, each print is a damped pendulum on its peg, and a light breeze
+/// keeps them moving. Hover, press and sliding along the rope are retargetable springs. Everything is
+/// interruptible because the state is simulated, not tweened.
 final class RopeView: NSView, NSDraggingSource {
+    /// How a newly hung print appears.
+    enum Arrival {
+        case fromAbove   // hung from the Actions menu: drops onto the rope and swings a little
+        case inPlace     // dropped on the rope: fades in where the drag image landed
+        case handOff     // its card is flying up to it: hidden until `handOff(_:)`
+    }
+
     private final class Print {
         let url: URL
         let layer = CALayer()
         let ring = CALayer()
         let close = CALayer()
+        let chip = CALayer()           // "Copied"
         var size: CGSize
         var image: CGImage?
-        var x: CGFloat = 0
+        var placed = false
+        var slot = Spring(0, response: RopeTuning.slide.response, damping: RopeTuning.slide.damping)  // x along the rope
         var tilt: CGFloat = 0          // resting angle, so the line doesn't look ruled
         var angle: CGFloat = 0, angleV: CGFloat = 0
-        var lift: CGFloat = 0, liftV: CGFloat = 0
         var drop: CGFloat = 0, dropV: CGFloat = 0
+        var lift = Spring(0, response: RopeTuning.lift.response, damping: RopeTuning.lift.damping)
+        var hover = Spring(0, response: RopeTuning.fadeIn, damping: 1)       // ring, × and shadow
+        var press = Spring(0, response: RopeTuning.pressIn.response, damping: RopeTuning.pressIn.damping)
+        var opacity = Spring(1, response: RopeTuning.fadeIn, damping: 1)     // a ghost while dragged off; fades in on arrival
+        var flash = Spring(0, response: 0.35, damping: 1)                     // the ring turns green after a copy
+        var closePress = Spring(0, response: 0.08, damping: 1)
         var kickAt: CFTimeInterval?, kick: CGFloat = 0
-        var falling = false
+        var awaitingSince: CFTimeInterval?     // its card is still flying here
+        var lifted = false                     // being dragged away
         let phase = CGFloat.random(in: 0...(2 * .pi))
+
+        var isTouchable: Bool { !layer.isHidden && awaitingSince == nil && !lifted }
 
         init(url: URL, size: CGSize) {
             self.url = url
@@ -321,21 +562,39 @@ final class RopeView: NSView, NSDraggingSource {
     private let root = CALayer()
     private let ropeLayer = CAShapeLayer()
     private var prints: [Print] = []
-    private var newcomers: Set<URL> = []
-    private var timer: Timer?
+    private var arrivals: [URL: Arrival] = [:]
+    private var thumbnails: [URL: CGImage] = [:]      // handed over by the card so the print needn't decode again
+    private var departing: Set<URL> = []              // already off the rope; reloads ignore them until the file goes
+    private lazy var driver: FrameDriver = {
+        let driver = FrameDriver(view: self)
+        driver.onFrame = { [weak self] dt in self?.advance(dt) ?? false }
+        return driver
+    }()
+    private var accumulator: CGFloat = 0
     private var clock: CFTimeInterval = 0
 
-    // Rope state: vertical offset of the whole rope (falls in from above) and extra sag.
-    private var offset: CGFloat = -RopePanel.height, offsetV: CGFloat = 0, offsetTarget: CGFloat = 0
+    // Rope state: vertical offset of the whole rope (falls in from above) and extra sag. A hidden rope stays hidden.
+    private static let hiddenOffset = -(RopePanel.height + 30)
+    private var offset: CGFloat = -RopePanel.height, offsetV: CGFloat = 0, offsetTarget: CGFloat = RopeView.hiddenOffset
     private var sag: CGFloat = 0, sagV: CGFloat = 0
+    private var fade = Spring(1, response: 0.16, damping: 1)      // the panel's alpha; animates only under Reduce Motion
+    private var highlight = Spring(0, response: 0.12, damping: 1) // something droppable is over the rope
+    private var insertGap: CGFloat = 0                            // room held open at the front for that drop
     private var onLifted: (() -> Void)?
     private(set) var isLifting = false
-    private var hovered: Int? { didSet { if hovered != oldValue { updateHover() } } }
+    private var hovered: URL?
     private var receivingHighlight = false
+    var isDraggingItem = false           // a print is being dragged off (or its context menu is open)
+    var isReceiving = false              // a card is being dragged toward the rope
+    /// For tests and frame renders: a pointer in view coordinates instead of the real mouse, and a fixed motion setting.
+    var simulatedPointer: NSPoint?
+    var reducedMotionOverride: Bool?
+    private var isMotionReduced: Bool { reducedMotionOverride ?? Motion.reduced }
 
     private static let ropeTop: CGFloat = 18
     private static let restSag: CGFloat = 16
-    private static let maxPrint = CGSize(width: 168, height: 112)
+    private static let ropeColor = NSColor(srgbRed: 0.9, green: 0.86, blue: 0.78, alpha: 1)
+    private static let tilts: [CGFloat] = [0.018, -0.015, 0.012, -0.02, 0.015, -0.012]
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -343,7 +602,7 @@ final class RopeView: NSView, NSDraggingSource {
         layer = root
         wantsLayer = true
         ropeLayer.fillColor = nil
-        ropeLayer.strokeColor = NSColor(srgbRed: 0.9, green: 0.86, blue: 0.78, alpha: 1).cgColor
+        ropeLayer.strokeColor = Self.ropeColor.cgColor
         ropeLayer.lineWidth = 2.6
         ropeLayer.lineCap = .round
         ropeLayer.shadowOpacity = 0.35
@@ -359,53 +618,74 @@ final class RopeView: NSView, NSDraggingSource {
 
     // MARK: Contents
 
-    func markNew(_ url: URL) { newcomers.insert(url) }
-
-    func setItems(_ urls: [URL]) {
-        let existing = Dictionary(prints.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
-        let kept = prints.filter { urls.contains($0.url) }
-        for gone in prints where !urls.contains(gone.url) && !gone.falling { gone.layer.removeFromSuperlayer() }
-        prints = urls.map { existing[$0] ?? makePrint($0) }
-        for print in kept where !prints.contains(where: { $0 === print }) { print.layer.removeFromSuperlayer() }
-        layoutPrints()
-        for print in prints where newcomers.contains(print.url) {
-            // Arrives from above, bounces on the rope and swings.
-            print.drop = -110
-            print.dropV = 0
-            print.angleV = CGFloat.random(in: 0.9...1.4) * (Bool.random() ? 1 : -1)
-        }
-        newcomers.removeAll()
-        startTimer()
+    func markNew(_ url: URL, arrival: Arrival = .fromAbove, thumbnail: CGImage? = nil) {
+        arrivals[url] = arrival
+        if let thumbnail { thumbnails[url] = thumbnail }
     }
 
-    private func layoutPrints() {
-        var x: CGFloat = 76
+    func setItems(_ urls: [URL]) {
+        let urls = urls.filter { !departing.contains($0) }
+        let wanted = Set(urls)
+        let existing = Dictionary(prints.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
+        for print in prints where !wanted.contains(print.url) { retire(print) }
+        var fresh: [Print] = []
+        prints = urls.map { url in
+            if let print = existing[url] { return print }
+            let print = makePrint(url)
+            fresh.append(print)
+            return print
+        }
+        // A drop's gap closes as the new print takes its place.
+        if !receivingHighlight { insertGap = 0 }
+        layoutPrints()
+        for print in fresh { arrive(print, arrivals[print.url]) }
+        arrivals.removeAll()
+        thumbnails.removeAll()
+        // Place new layers now: otherwise one frame could show them at the origin before the frame loop runs.
+        render(reduced: isMotionReduced)
+        wake()
+    }
+
+    private func arrive(_ print: Print, _ arrival: Arrival?) {
+        let reduced = isMotionReduced
+        let sign: CGFloat = Bool.random() ? 1 : -1
+        switch arrival {
+        case .fromAbove? where !reduced:
+            // Falls onto the rope, settles and swings a little.
+            print.drop = RopeTuning.arrivalHeight
+            print.angleV = CGFloat.random(in: RopeTuning.arrivalSwingFromAbove) * sign
+        case .handOff?:
+            print.awaitingSince = clock
+        default:
+            // Dropped in place, or a file that appeared some other way: it fades in where it hangs.
+            if window?.isVisible == true {
+                print.opacity.snap(0)
+                print.opacity.target = 1
+            }
+            if arrival == .inPlace, !reduced { print.angleV = CGFloat.random(in: RopeTuning.arrivalSwingInPlace) * sign }
+        }
+    }
+
+    private func layoutPrints(snap: Bool = false) {
+        let slots = RopeTuning.slots(widths: prints.map(\.size.width), in: bounds.width, gap: insertGap)
+        let instant = snap || isMotionReduced
         for (i, print) in prints.enumerated() {
-            let fits = x + print.size.width < bounds.width - 40
-            print.layer.isHidden = !fits
-            print.x = x + print.size.width / 2
-            print.tilt = [0.018, -0.015, 0.012, -0.02, 0.015, -0.012][i % 6]
-            x += print.size.width + 22
+            print.layer.isHidden = !slots[i].fits
+            print.tilt = Self.tilts[i % Self.tilts.count]
+            if instant || !print.placed {
+                print.slot.snap(slots[i].x)
+                print.placed = true
+            } else {
+                print.slot.target = slots[i].x
+            }
         }
     }
 
     private func makePrint(_ url: URL) -> Print {
         let isMovie = ["mov", "mp4"].contains(url.pathExtension.lowercased())
-        var thumb: CGImage?
-        if isMovie {
-            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: 400, height: 400)
-            thumb = try? generator.copyCGImage(at: .zero, actualTime: nil)
-        } else {
-            thumb = try? Images.load(url, maxPixels: 400)
-        }
-        var size = CGSize(width: 150, height: 100)
-        if let thumb {
-            let s = min(Self.maxPrint.width / CGFloat(thumb.width), Self.maxPrint.height / CGFloat(thumb.height))
-            size = CGSize(width: CGFloat(thumb.width) * s, height: CGFloat(thumb.height) * s)
-        }
-        size = CGSize(width: size.width + 10, height: size.height + 10)  // white border
+        let thumb = thumbnails[url] ?? Clothesline.thumbnail(url, maxPixels: 400)
+        let size = thumb.map { RopeTuning.printSize(aspect: CGFloat($0.width) / CGFloat(max($0.height, 1))) }
+            ?? CGSize(width: 160, height: 110)
         let print = Print(url: url, size: size)
         print.image = Self.renderPrint(thumb, size: size, movie: isMovie)
 
@@ -427,17 +707,19 @@ final class RopeView: NSView, NSDraggingSource {
         peg.shadowOpacity = 0.4
         peg.shadowRadius = 1.5
         peg.shadowOffset = CGSize(width: 0, height: 1)
+        peg.shadowPath = CGPath(roundedRect: peg.bounds, cornerWidth: 2.5, cornerHeight: 2.5, transform: nil)
         let spring = CALayer()
         spring.frame = CGRect(x: 0, y: 12, width: 10, height: 2)
         spring.backgroundColor = NSColor(white: 0.62, alpha: 1).cgColor
         peg.addSublayer(spring)
         layer.addSublayer(peg)
 
+        // Ring and × fade with the hover spring instead of snapping on and off.
         print.ring.frame = layer.bounds.insetBy(dx: -2, dy: -2)
         print.ring.borderWidth = 2
         print.ring.cornerRadius = 4
         print.ring.borderColor = NSColor.controlAccentColor.cgColor
-        print.ring.isHidden = true
+        print.ring.opacity = 0
         layer.addSublayer(print.ring)
 
         print.close.frame = CGRect(x: size.width - 13, y: -9, width: 22, height: 22)
@@ -452,10 +734,18 @@ final class RopeView: NSView, NSDraggingSource {
         cross.lineWidth = 1.7
         cross.lineCap = .round
         print.close.addSublayer(cross)
-        print.close.isHidden = true
+        print.close.opacity = 0
         layer.addSublayer(print.close)
 
+        print.chip.opacity = 0
+        print.chip.contentsScale = 2
+        layer.addSublayer(print.chip)
+
+        // No implicit fade on insertion: arrivals animate themselves.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         root.addSublayer(layer)
+        CATransaction.commit()
         return print
     }
 
@@ -483,66 +773,79 @@ final class RopeView: NSView, NSDraggingSource {
         return ctx.makeImage()
     }
 
+    private func find(_ url: URL) -> Print? { prints.first { $0.url == url } }
+
+    /// The print's picture, for Quick Look's zoom and the card's flight.
+    func image(of url: URL) -> CGImage? { find(url)?.image }
+
+    /// Where a print hangs right now in screen coordinates (unrotated), and its angle. Used to land the card's
+    /// flight exactly on it, even while the rope is still settling.
+    func landing(for url: URL) -> (rect: NSRect, angle: CGFloat)? {
+        guard let window, let print = find(url), !print.layer.isHidden else { return nil }
+        let x = print.slot.value
+        let rect = NSRect(x: x - print.size.width / 2, y: ropeY(x) + 4 + print.drop, width: print.size.width, height: print.size.height)
+        return (window.convertToScreen(convert(rect, to: nil)), print.angle)
+    }
+
+    /// The print's frame on screen while the rope is down; nil once it has gone (Quick Look then fades instead).
+    func screenFrame(of url: URL) -> NSRect? {
+        guard window?.isVisible == true, !isLifting, let print = find(url), let window else { return nil }
+        let p = print.layer.position
+        let rect = NSRect(x: p.x - print.size.width / 2, y: p.y, width: print.size.width, height: print.size.height)
+        return window.convertToScreen(convert(rect, to: nil))
+    }
+
     // MARK: Motion
 
-    /// The rope falls in from under the menu bar on a spring; prints get a staggered nudge so they swing in turn.
-    func drop() {
+    /// Lowers the rope. From fully hidden it falls in on its spring and the prints get a staggered nudge; caught
+    /// while still lifting, it turns around from where it is and keeps its speed. Under Reduce Motion it fades in.
+    func drop(fromHidden: Bool) {
+        let reduced = isMotionReduced
         isLifting = false
         onLifted = nil
-        offset = -bounds.height
-        offsetV = 0
         offsetTarget = 0
-        layoutPrints()
-        for (i, print) in prints.enumerated() {
-            print.kickAt = clock + 0.12 + Double(i) * 0.045
-            print.kick = CGFloat.random(in: 0.35...0.6) * (i % 2 == 0 ? 1 : -1)
+        if fromHidden {
+            offset = reduced ? 0 : -bounds.height
+            offsetV = 0
+            sag = 0
+            sagV = 0
+            accumulator = 0
+            // A press whose mouse-up went elsewhere (Quick Look took focus) mustn't keep a print lit.
+            downURL = nil
+            handled = true
+            for print in prints { print.press.snap(0) }
+            layoutPrints(snap: true)
+            if !reduced {
+                for (i, print) in prints.enumerated() {
+                    print.kickAt = clock + 0.12 + Double(i) * 0.045
+                    print.kick = CGFloat.random(in: RopeTuning.dropKick) * (i % 2 == 0 ? 1 : -1)
+                }
+            }
+            fade.snap(reduced ? 0 : 1)
+        } else if reduced {
+            offset = 0
+            offsetV = 0
         }
-        startTimer()
+        fade.target = 1
+        render(reduced: reduced)
     }
 
-    /// Pulled back up; the prints trail a little behind.
+    /// Pulled back up; the prints trail a little behind. Under Reduce Motion it fades out where it is.
     func lift(_ done: @escaping () -> Void) {
         isLifting = true
-        offsetTarget = -bounds.height - 30
         onLifted = done
-        for print in prints { print.angleV += CGFloat.random(in: -0.25...0.25) }
-        startTimer()
-    }
-
-    /// Discarded: the print drops off the rope and fades.
-    func letFall(_ url: URL) {
-        guard let print = prints.first(where: { $0.url == url }) else { return }
-        print.falling = true
-        let fall = CABasicAnimation(keyPath: "position.y")
-        fall.byValue = 240
-        fall.duration = 0.35
-        fall.timingFunction = CAMediaTimingFunction(name: .easeIn)
-        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
-        spin.byValue = print.angle > 0 ? 0.6 : -0.6
-        spin.duration = 0.35
-        let fade = CABasicAnimation(keyPath: "opacity")
-        fade.toValue = 0
-        fade.duration = 0.35
-        let group = CAAnimationGroup()
-        group.animations = [fall, spin, fade]
-        group.duration = 0.35
-        group.fillMode = .forwards
-        group.isRemovedOnCompletion = false
-        print.layer.add(group, forKey: "fall")
-    }
-
-    private func startTimer() {
-        guard timer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.step() }
+        if isMotionReduced {
+            fade.target = 0
+        } else {
+            offsetTarget = Self.hiddenOffset
+            for print in prints { print.angleV += CGFloat.random(in: -RopeTuning.liftKick...RopeTuning.liftKick) }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        wake()
     }
 
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
+    /// Starts the frame loop while the rope is on screen; it stops by itself once the rope is put away.
+    func wake() {
+        if window?.isVisible == true { driver.start() }
     }
 
     func ropeY(_ x: CGFloat) -> CGFloat {
@@ -550,108 +853,332 @@ final class RopeView: NSView, NSDraggingSource {
         return Self.ropeTop + offset + (Self.restSag + sag) * 4 * t * (1 - t)
     }
 
-    private func step() {
-        let dt: CGFloat = 1.0 / 120.0
-        let mouse = window.map { convert($0.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil) }
-        hovered = isLifting || Clothesline.shared.isDraggingItem ? nil : mouse.flatMap(printIndex(at:))
-
-        for _ in 0..<2 {  // two half-steps per frame keeps the springs stable
-            clock += Double(dt)
-            // Whole rope: an under-damped spring, so it overshoots and settles.
-            let offsetA = -260 * (offset - offsetTarget) - 24 * offsetV
-            offsetV += offsetA * dt
-            offset += offsetV * dt
-            // The cord lags behind the rope's motion, so it bounces in the middle when the rope stops.
-            let sagA = -150 * sag - 9 * sagV - 0.05 * offsetA
-            sagV += sagA * dt
-            sag += sagV * dt
-
-            for (i, print) in prints.enumerated() where !print.falling {
-                if let at = print.kickAt, clock >= at { print.angleV += print.kick; print.kickAt = nil }
-                // Pendulum on its peg, pulled toward its resting tilt (straight when hovered), plus a breeze.
-                let rest = i == hovered ? 0 : print.tilt
-                let t = CGFloat(clock)
-                let breeze = Prefs.clotheslineEnabled ? 0.07 * sin(1.1 * t + print.phase) + 0.03 * sin(2.7 * t + print.phase * 1.7) : 0
-                let angleA = -34 * (print.angle - rest) - 6.0 * print.angleV + breeze
-                print.angleV += angleA * dt
-                print.angle += print.angleV * dt
-                let liftTarget: CGFloat = i == hovered ? -6 : 0
-                let liftA = -340 * (print.lift - liftTarget) - 30 * print.liftV
-                print.liftV += liftA * dt
-                print.lift += print.liftV * dt
-                let dropA = -200 * print.drop - 16 * print.dropV
-                print.dropV += dropA * dt
-                print.drop += print.dropV * dt
-            }
+    /// One display frame: physics in fixed steps, springs by the frame's measured length, then the layers.
+    /// Returns false once there is nothing left on screen to animate.
+    @discardableResult
+    func advance(_ dt: CGFloat) -> Bool {
+        let reduced = isMotionReduced
+        updateHover(reduced: reduced)
+        accumulator = min(accumulator + dt, RopeTuning.step * CGFloat(RopeTuning.maxSteps))
+        while accumulator >= RopeTuning.step {
+            physics(RopeTuning.step, breeze: !reduced)
+            accumulator -= RopeTuning.step
         }
-        render()
-
-        // Only catch the mouse where it matters, so the strip doesn't block the windows below.
-        if let panel = window as? NSPanel {
-            panel.ignoresMouseEvents = hovered == nil && !Clothesline.shared.isReceiving && !Clothesline.shared.isDraggingItem
+        for print in prints {
+            print.slot.step(dt)
+            print.lift.step(dt)
+            print.hover.step(dt)
+            print.press.step(dt)
+            print.opacity.step(dt)
+            print.flash.step(dt)
+            print.closePress.step(dt)
+            // A hand-off that never comes (the flight was cut short) mustn't leave a hole in the rope.
+            if let since = print.awaitingSince, clock - since > 1.2 { reveal(print) }
         }
+        fade.step(dt)
+        highlight.step(dt)
+        render(reduced: reduced)
+        updateMouseCatching()
 
-        if isLifting && offset < -bounds.height + 1 {
+        let raised = fade.target == 0 ? fade.value < 0.02 : offset < -bounds.height + 1
+        if isLifting && raised {
             isLifting = false
-            stopTimer()
+            offset = -bounds.height
+            offsetV = 0
+            offsetTarget = Self.hiddenOffset
             let done = onLifted
             onLifted = nil
             done?()
+            return false
+        }
+        return window?.isVisible == true
+    }
+
+    private func physics(_ h: CGFloat, breeze: Bool) {
+        clock += Double(h)
+        // Whole rope: a spring that overshoots a little and settles; the cord lags behind its acceleration, so it
+        // dips once in the middle when the rope stops.
+        let a = RopeTuning.advance(&offset, &offsetV, toward: offsetTarget, RopeTuning.fall, h: h)
+        RopeTuning.advance(&sag, &sagV, toward: 0, RopeTuning.sag, force: -RopeTuning.sagCoupling * a, h: h)
+        let t = CGFloat(clock)
+        for print in prints {
+            if let at = print.kickAt, clock >= at { print.angleV += print.kick; print.kickAt = nil }
+            // Pendulum on its peg, pulled toward its resting tilt (straight when hovered), plus a breeze.
+            let rest = print.url == hovered ? 0 : print.tilt
+            let wind = breeze ? 0.07 * sin(1.1 * t + print.phase) + 0.03 * sin(2.7 * t + print.phase * 1.7) : 0
+            RopeTuning.advance(&print.angle, &print.angleV, toward: rest, RopeTuning.swing, force: wind, h: h)
+            RopeTuning.advance(&print.drop, &print.dropV, toward: 0, RopeTuning.arrive, h: h)
         }
     }
 
-    private func render() {
+    private func updateHover(reduced: Bool) {
+        var now: URL?
+        if let held = downURL, !isDraggingItem {
+            now = held  // a press keeps its print lit even if the pointer slips off it
+        } else if !isLifting, !isDraggingItem,
+                  let pointer = simulatedPointer ?? window.map({ convert($0.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil) }) {
+            now = hit(pointer)?.url
+        }
+        if now != hovered {
+            hovered = now
+            toolTip = now.map { $0.lastPathComponent + "\n" + L("Click: copy · Double-click: open · Hold: Quick Look · Drag: take it down") }
+        }
+        for print in prints {
+            let on = print.url == hovered
+            print.hover.target = on ? 1 : 0
+            print.hover.response = on ? RopeTuning.fadeIn : RopeTuning.fadeOut
+            print.lift.target = on && !reduced ? -RopeTuning.hoverLift : 0
+        }
+    }
+
+    private func render(reduced: Bool) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: -4, y: ropeY(0)))
-        for x in stride(from: CGFloat(0), through: bounds.width + 4, by: 6) { path.addLine(to: CGPoint(x: x, y: ropeY(x))) }
+        let path = RopeTuning.ropePath(width: bounds.width, y: Self.ropeTop + offset, sag: Self.restSag + sag)
+        let width = 2.6 + 0.8 * highlight.value
         ropeLayer.path = path
-        ropeLayer.strokeColor = (receivingHighlight ? NSColor.controlAccentColor : NSColor(srgbRed: 0.9, green: 0.86, blue: 0.78, alpha: 1)).cgColor
-        ropeLayer.lineWidth = receivingHighlight ? 3.4 : 2.6
-        for print in prints where !print.falling {
-            print.layer.position = CGPoint(x: print.x, y: ropeY(print.x) + 4 + print.lift + print.drop)
-            print.layer.transform = CATransform3DMakeRotation(print.angle, 0, 0, 1)
+        ropeLayer.lineWidth = width
+        ropeLayer.strokeColor = Self.ropeColor.mix(.controlAccentColor, highlight.value).cgColor
+        // An explicit shadow path spares Core Animation an offscreen pass over the rope every frame.
+        ropeLayer.shadowPath = path.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        let now = CACurrentMediaTime()
+        for print in prints {
+            let p = print.hover.value, press = print.press.value
+            var charge: CGFloat = 0
+            if print.url == downURL, !handled, !closeDown {
+                charge = max(RopeTuning.charge(heldFor: now - downTime), forceCharge)
+            }
+            let x = print.slot.value
+            let sink = reduced ? 0 : RopeTuning.pressSink * press
+            print.layer.position = CGPoint(x: x, y: ropeY(x) + 4 + print.lift.value + print.drop + sink)
+            let scale = reduced ? 1 : 1 + RopeTuning.hoverScale * p - RopeTuning.pressScale * press + RopeTuning.chargeScale * charge
+            print.layer.transform = CATransform3DScale(CATransform3DMakeRotation(print.angle, 0, 0, 1), scale, scale, 1)
+            print.layer.opacity = Float(print.awaitingSince == nil ? print.opacity.value : 0)
+            // Coming toward you on hover, pressed flat against the rope on mouse-down.
+            print.layer.shadowRadius = max(6 + 3 * p - 4 * press, 1.5)
+            print.layer.shadowOffset = CGSize(width: 0, height: max(4 + 3 * p - 2.5 * press, 1))
+            print.layer.shadowOpacity = Float(0.32 + 0.06 * p - 0.08 * press)
+            let ring = max(p, charge, print.flash.value)
+            print.ring.opacity = Float(ring)
+            if ring > 0.005 { print.ring.borderColor = NSColor.controlAccentColor.mix(.systemGreen, print.flash.value).cgColor }
+            let shown = print.lifted ? 0 : p
+            print.close.opacity = Float(shown)
+            if shown > 0.005 {
+                let s = (0.85 + 0.15 * shown) * (1 - 0.12 * print.closePress.value)
+                print.close.transform = CATransform3DMakeScale(s, s, 1)
+                print.close.backgroundColor = NSColor(white: 0.12, alpha: 0.85 + 0.15 * print.closePress.value).cgColor
+            }
+            // Stays on top while it settles back, so it doesn't slip behind a neighbour mid-way.
+            print.layer.zPosition = p > 0.05 || press > 0.01 ? 10 : 0
         }
+        if let window, abs(window.alphaValue - fade.value) > 0.001 { window.alphaValue = fade.value }
         CATransaction.commit()
     }
 
-    private func updateHover() {
+    /// Only catch the mouse where it matters, so the strip doesn't block the windows below.
+    private func updateMouseCatching() {
+        guard let window else { return }
+        let ignore = hovered == nil && downURL == nil && !isReceiving && !isDraggingItem && !receivingHighlight
+        if window.ignoresMouseEvents != ignore { window.ignoresMouseEvents = ignore }
+    }
+
+    /// The card has landed: its print appears with a small swing, the rope takes the weight, and the trackpad
+    /// confirms it.
+    func handOff(_ url: URL) {
+        guard let print = find(url), print.awaitingSince != nil else { return }
+        reveal(print)
+        Feedback.press()
+    }
+
+    private func reveal(_ print: Print) {
+        print.awaitingSince = nil
+        if isMotionReduced {
+            print.opacity.snap(0)
+            print.opacity.target = 1
+        } else {
+            print.angleV = CGFloat.random(in: RopeTuning.arrivalSwingInPlace) * (Bool.random() ? 1 : -1)
+            sagV += 40
+        }
+        render(reduced: isMotionReduced)
+        wake()
+    }
+
+    /// Confirms a click-to-copy on the print itself: a "Copied" chip, the ring flashing green, a small nod.
+    func confirmCopy(_ url: URL) {
+        guard let print = find(url) else { return }
+        let reduced = isMotionReduced
+        print.flash.snap(1)
+        print.flash.target = 0
+        if !reduced { print.angleV += 0.25 }
+        let text = L("Copied")
+        if let image = Self.chipImage(text) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            print.chip.contents = image
+            print.chip.bounds = CGRect(x: 0, y: 0, width: CGFloat(image.width) / 2, height: CGFloat(image.height) / 2)
+            print.chip.position = CGPoint(x: print.size.width / 2, y: print.size.height)
+            print.chip.zPosition = 1
+            CATransaction.commit()
+            // Rises into place over 0.12 s, holds, then fades out.
+            let total: CFTimeInterval = 1.17
+            let fade = CAKeyframeAnimation(keyPath: "opacity")
+            fade.values = [0, 1, 1, 0]
+            fade.keyTimes = [0, NSNumber(value: 0.12 / total), NSNumber(value: 0.92 / total), 1]
+            fade.timingFunctions = [CAMediaTimingFunction(name: .easeOut), CAMediaTimingFunction(name: .linear), CAMediaTimingFunction(name: .easeIn)]
+            let group = CAAnimationGroup()
+            group.animations = [fade]
+            if !reduced {
+                let rise = CAKeyframeAnimation(keyPath: "transform.translation.y")
+                rise.values = [4, 0, 0, 0]
+                rise.keyTimes = fade.keyTimes
+                rise.timingFunctions = fade.timingFunctions
+                group.animations?.append(rise)
+            }
+            group.duration = total
+            print.chip.add(group, forKey: "copied")
+        }
+        NSAccessibility.post(element: self, notification: .announcementRequested,
+                             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
+        wake()
+    }
+
+    private static func chipImage(_ text: String) -> CGImage? {
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white]
+        let textSize = (text as NSString).size(withAttributes: attrs)
+        let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .bold).applying(.init(paletteColors: [.white]))
+        let mark = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?.withSymbolConfiguration(config)
+        let markWidth = mark.map { $0.size.width + 4 } ?? 0
+        let size = NSSize(width: (textSize.width + markWidth + 20).rounded(.up), height: 20)
+        return renderImage(size, scale: 2) { _ in
+            NSColor.black.withAlphaComponent(0.7).setFill()
+            NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
+            var x: CGFloat = 10
+            if let mark {
+                mark.draw(in: NSRect(x: x, y: (size.height - mark.size.height) / 2, width: mark.size.width, height: mark.size.height))
+                x += markWidth
+            }
+            (text as NSString).draw(at: NSPoint(x: x, y: (size.height - textSize.height) / 2), withAttributes: attrs)
+        }
+    }
+
+    /// Takes a print off the rope now, before its file has gone: it falls (× clicked) or shrinks away (already
+    /// dragged to the Trash). Its neighbours close the gap, and reloads ignore it until `departed(_:)`.
+    func remove(_ url: URL, falling: Bool) {
+        guard let index = prints.firstIndex(where: { $0.url == url }) else { return }
+        let print = prints.remove(at: index)
+        departing.insert(url)
+        if hovered == url { hovered = nil }
+        if !isMotionReduced { sagV -= 20 }  // the rope springs up a little as the weight leaves
+        layoutPrints()
+        if falling { letFall(print) } else { retire(print) }
+        wake()
+    }
+
+    /// The file has gone, or couldn't be thrown away (then the next reload hangs it again).
+    func departed(_ url: URL) { departing.remove(url) }
+
+    /// Discarded: the print drops off the rope, turning a little, and fades on the way down.
+    private func letFall(_ print: Print) {
+        let layer = print.layer
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for (i, print) in prints.enumerated() {
-            print.ring.isHidden = i != hovered
-            print.close.isHidden = i != hovered
-            print.layer.zPosition = i == hovered ? 10 : 0
-        }
+        layer.zPosition = 20
+        print.close.opacity = 0
         CATransaction.commit()
-        toolTip = hovered.map { prints[$0].url.lastPathComponent + "\n" + L("Click: copy · Double-click: open · Hold: Quick Look · Drag: take it down") }
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { layer.removeFromSuperlayer() }
+        let group = CAAnimationGroup()
+        if isMotionReduced {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = layer.opacity
+            fade.toValue = 0
+            group.animations = [fade]
+            group.duration = 0.2
+        } else {
+            let fall = CABasicAnimation(keyPath: "position.y")
+            fall.byValue = 240
+            fall.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+            spin.byValue = print.angle > 0 ? 0.35 : -0.35
+            // Falls first, fades late, so it reads as dropping rather than dissolving.
+            let fade = CAKeyframeAnimation(keyPath: "opacity")
+            fade.values = [layer.opacity, layer.opacity, 0]
+            fade.keyTimes = [0, 0.45, 1]
+            group.animations = [fall, spin, fade]
+            group.duration = 0.42
+        }
+        group.fillMode = .forwards
+        group.isRemovedOnCompletion = false
+        layer.add(group, forKey: "leave")
+        CATransaction.commit()
+    }
+
+    /// Gone from the folder (moved away, deleted elsewhere): the print shrinks a little and fades where it hangs.
+    private func retire(_ print: Print) {
+        let layer = print.layer
+        if hovered == print.url { hovered = nil }
+        guard window?.isVisible == true, !layer.isHidden else {
+            layer.removeFromSuperlayer()
+            return
+        }
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { layer.removeFromSuperlayer() }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = layer.opacity
+        fade.toValue = 0
+        let group = CAAnimationGroup()
+        group.animations = [fade]
+        if !isMotionReduced {
+            let shrink = CABasicAnimation(keyPath: "transform")
+            shrink.fromValue = NSValue(caTransform3D: layer.transform)
+            shrink.toValue = NSValue(caTransform3D: CATransform3DScale(layer.transform, 0.92, 0.92, 1))
+            group.animations?.append(shrink)
+        }
+        group.duration = 0.18
+        group.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        group.fillMode = .forwards
+        group.isRemovedOnCompletion = false
+        layer.add(group, forKey: "leave")
+        CATransaction.commit()
     }
 
     // MARK: Hit testing
 
-    private func printIndex(at point: NSPoint) -> Int? {
-        for i in prints.indices.reversed() where !prints[i].layer.isHidden && !prints[i].falling {
-            let local = prints[i].layer.convert(point, from: root)
-            if prints[i].layer.bounds.insetBy(dx: -4, dy: -14).contains(local) { return i }
+    private func hit(_ point: NSPoint) -> Print? {
+        for print in prints.reversed() where print.isTouchable {
+            let local = print.layer.convert(point, from: root)
+            if print.layer.bounds.insetBy(dx: -4, dy: -14).contains(local) { return print }
         }
         return nil
     }
 
-    private func hitsClose(_ index: Int, _ point: NSPoint) -> Bool {
-        let local = prints[index].layer.convert(point, from: root)
-        return prints[index].close.frame.insetBy(dx: -3, dy: -3).contains(local)
+    private func hitsClose(_ print: Print, _ point: NSPoint) -> Bool {
+        let local = print.layer.convert(point, from: root)
+        return print.close.frame.insetBy(dx: -3, dy: -3).contains(local)
     }
 
     func isOverPrint(screenPoint: NSPoint) -> Bool {
         guard let window else { return false }
-        return printIndex(at: convert(window.convertPoint(fromScreen: screenPoint), from: nil)) != nil
+        return hit(convert(window.convertPoint(fromScreen: screenPoint), from: nil)) != nil
+    }
+
+    /// Around the prints: 60 pt either side of the visible ones, from the panel's bottom up to the top of the screen.
+    func isNear(screenPoint: NSPoint) -> Bool {
+        guard let window, window.isVisible, screenPoint.y >= window.frame.minY else { return false }
+        let visible = prints.filter { !$0.layer.isHidden }
+        guard let first = visible.first, let last = visible.last else { return false }
+        let x = screenPoint.x - window.frame.minX
+        return x >= first.slot.target - first.size.width / 2 - 60 && x <= last.slot.target + last.size.width / 2 + 60
     }
 
     // MARK: Gestures
 
     private var downEvent: NSEvent?
-    private var downIndex: Int?
+    private var downURL: URL?              // gestures follow the print, not its index, so a reload can't misdirect them
+    private var downTime: CFTimeInterval = 0
+    private var closeDown = false          // the press began on the ×
+    private var forceCharge: CGFloat = 0
     private var longPress: DispatchWorkItem?
     private var singleClick: DispatchWorkItem?
     private var handled = false
@@ -660,15 +1187,14 @@ final class RopeView: NSView, NSDraggingSource {
 
     override func rightMouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        guard let index = printIndex(at: point), Feature.textCapture.isOn,
-              FileKind.of(prints[index].url) == .image else { return }
+        guard let print = hit(point), Feature.textCapture.isOn, FileKind.of(print.url) == .image else { return }
         let menu = NSMenu()
         let item = NSMenuItem(title: L("Extract Text"), action: #selector(extractPrintText(_:)), keyEquivalent: "")
         item.target = self
-        item.representedObject = prints[index].url
+        item.representedObject = print.url
         menu.addItem(item)
-        Clothesline.shared.isDraggingItem = true
-        defer { Clothesline.shared.isDraggingItem = false }
+        isDraggingItem = true
+        defer { isDraggingItem = false }
         NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
@@ -678,64 +1204,133 @@ final class RopeView: NSView, NSDraggingSource {
         TextCaptureWindow.present(url)
     }
 
+    /// Pressed prints sink quickly; released, they spring back a little more slowly. The rope gives under the finger.
+    private func setPressed(_ print: Print, _ on: Bool) {
+        guard (print.press.target > 0) != on else { return }
+        let tune = on ? RopeTuning.pressIn : RopeTuning.pressOut
+        print.press.response = tune.response
+        print.press.damping = tune.damping
+        print.press.target = on ? 1 : 0
+        if !isMotionReduced { sagV += on ? 5 : -3 }
+        wake()
+    }
+
+    /// For tests and frame renders: shows a print pressed or released.
+    func previewPress(_ url: URL, _ on: Bool) {
+        if let print = find(url) { setPressed(print, on) }
+    }
+
     override func mouseDown(with event: NSEvent) {
         if event.modifierFlags.contains(.control) { rightMouseDown(with: event); return }
+        longPress?.cancel()
         handled = false
+        closeDown = false
+        forceCharge = 0
         downEvent = event
+        downTime = CACurrentMediaTime()
         let p = convert(event.locationInWindow, from: nil)
-        downIndex = printIndex(at: p)
-        guard let index = downIndex else { handled = true; return }
-        if hitsClose(index, p) {
+        guard let print = hit(p) else {
+            downURL = nil
             handled = true
-            Clothesline.shared.discard(prints[index].url)
             return
         }
-        let url = prints[index].url
+        let url = print.url
+        downURL = url
+        if hitsClose(print, p) {
+            // The × presses in and only discards on release over it, like any button.
+            closeDown = true
+            print.closePress.target = 1
+            wake()
+            return
+        }
+        setPressed(print, true)
         let press = DispatchWorkItem { [weak self] in
-            guard let self, !self.handled else { return }
+            guard let self, !self.handled, self.downURL == url else { return }
             self.handled = true
+            Haptics.tick(.levelChange)  // the detent where holding turns into Quick Look
+            if let print = self.find(url) { self.setPressed(print, false) }
             Clothesline.shared.quickLook(url)
         }
         longPress = press
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55, execute: press)
+        DispatchQueue.main.asyncAfter(deadline: .now() + RopeTuning.chargeEnd, execute: press)
     }
 
     override func pressureChange(with event: NSEvent) {
-        guard event.stage >= 2, !handled, let index = downIndex else { return }
-        handled = true
-        longPress?.cancel()
-        Clothesline.shared.quickLook(prints[index].url)
+        guard !handled, !closeDown, let url = downURL, let print = find(url) else { return }
+        if event.stage >= 2 {
+            handled = true
+            longPress?.cancel()
+            setPressed(print, false)
+            Clothesline.shared.quickLook(url)  // no haptic of our own: the trackpad already gave the deep click
+        } else if event.stage == 1 {
+            // Pressing harder sinks the print further; nearing the deep click it gathers as it does when held.
+            print.press.target = 0.6 + 0.4 * CGFloat(event.pressure)
+            forceCharge = max(0, event.stageTransition)
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard !handled, let down = downEvent, let index = downIndex else { return }
+        guard !handled, let down = downEvent, let url = downURL, let print = find(url) else { return }
+        if closeDown {
+            // Sliding off the × cancels, as with a button.
+            print.closePress.target = hitsClose(print, convert(event.locationInWindow, from: nil)) ? 1 : 0
+            return
+        }
         let a = down.locationInWindow, b = event.locationInWindow
         guard hypot(b.x - a.x, b.y - a.y) > 4 else { return }
         handled = true
         longPress?.cancel()
-        let print = prints[index]
-        let item = NSDraggingItem(pasteboardWriter: print.url as NSURL)
-        let image = print.image.map { NSImage(cgImage: $0, size: print.size) } ?? NSWorkspace.shared.icon(forFile: print.url.path)
-        item.setDraggingFrame(print.layer.frame, contents: image)
-        Clothesline.shared.isDraggingItem = true
+        setPressed(print, false)
+        // Unclipped: what stays on the rope dims to a ghost, the rope springs up as the weight leaves, and the
+        // trackpad gives a small detent.
+        print.lifted = true
+        print.opacity.target = 0.3
+        if !isMotionReduced { sagV -= 25 }
+        Haptics.tick(.alignment)
+        let item = NSDraggingItem(pasteboardWriter: url as NSURL)
+        let image = print.image.map { NSImage(cgImage: $0, size: print.size) } ?? NSWorkspace.shared.icon(forFile: url.path)
+        // The unrotated frame, so the drag image isn't stretched to the tilted print's bounding box.
+        let top = print.layer.position
+        item.setDraggingFrame(NSRect(x: top.x - print.size.width / 2, y: top.y, width: print.size.width, height: print.size.height),
+                              contents: image)
+        isDraggingItem = true
         beginDraggingSession(with: [item], event: down, source: self)
+        wake()
     }
 
     override func mouseUp(with event: NSEvent) {
         longPress?.cancel()
-        guard !handled, let index = downIndex else { return }
+        defer {
+            downURL = nil
+            closeDown = false
+            forceCharge = 0
+        }
+        guard let url = downURL, let print = find(url) else { return }
+        if closeDown {
+            print.closePress.target = 0
+            guard !handled, hitsClose(print, convert(event.locationInWindow, from: nil)) else { return }
+            handled = true
+            Haptics.tick(.generic)
+            Clothesline.shared.discard(url)
+            return
+        }
+        setPressed(print, false)
+        guard !handled else { return }
         handled = true
-        let url = prints[index].url
         if event.clickCount >= 2 {
             singleClick?.cancel()
+            // A quick pulse toward the viewer, so the eye catches the print before the rope leaves.
+            if !isMotionReduced { print.press.velocity -= 14 }
             Clothesline.shared.openInPreview(url)
         } else {
-            // A little bounce so the click feels received.
-            prints[index].liftV -= 120
+            // Released with a small pop; the copy waits only to tell a click from a double-click.
+            if !isMotionReduced { print.lift.velocity -= 60 }
+            singleClick?.cancel()
             let click = DispatchWorkItem { Clothesline.shared.copy(url) }
             singleClick = click
             DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: click)
         }
+        wake()
     }
 
     // Into an app: a copy (the original stays). Into a folder: moved off the rope. Onto the Trash: discarded.
@@ -744,45 +1339,125 @@ final class RopeView: NSView, NSDraggingSource {
     }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
-        Clothesline.shared.isDraggingItem = false
-        guard let index = downIndex, prints.indices.contains(index) else { return }
-        if operation == .delete {
-            Clothesline.shared.discard(prints[index].url)
-        } else {
-            Clothesline.shared.reload()
+        isDraggingItem = false
+        let url = downURL
+        downURL = nil
+        guard let url, let print = find(url) else { return }
+        switch operation {
+        case .delete:
+            Clothesline.shared.discard(url, fall: false)  // its picture already went into the Trash
+        case [], .copy:
+            // The original stays: it fills back in where it hangs.
+            print.lifted = false
+            print.opacity.target = 1
+        default:
+            // Moved into a folder: once the file has gone the reload lets the print go and the neighbours close up.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+                if FileManager.default.fileExists(atPath: url.path), let print = self?.find(url) {
+                    print.lifted = false
+                    print.opacity.target = 1
+                }
+                Clothesline.shared.reload()
+            }
         }
+        wake()
     }
 
     // MARK: Receiving drops (a screenshot card, or images from Finder)
 
+    private var acceptedSequence: Int?
+    private var acceptedURLs: [URL] = []
+    private var aspects: [URL: CGFloat] = [:]
+
+    /// The drag's media files, read once per drag rather than on every update (pasteboard reads are IPC).
     private func acceptable(_ info: NSDraggingInfo) -> [URL] {
         guard info.draggingSource as? RopeView !== self else { return [] }
-        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        return urls.filter { Clothesline.mediaExtensions.contains($0.pathExtension.lowercased()) }
+        if acceptedSequence != info.draggingSequenceNumber {
+            acceptedSequence = info.draggingSequenceNumber
+            aspects.removeAll()
+            let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+            acceptedURLs = urls.filter { Clothesline.mediaExtensions.contains($0.pathExtension.lowercased()) }
+        }
+        return acceptedURLs
+    }
+
+    /// A file's picture aspect from its header (no decoding), so the gap and the landing match the print to come.
+    private func aspect(of url: URL) -> CGFloat {
+        if let known = aspects[url] { return known }
+        var aspect: CGFloat = 1.5
+        if let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+           let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let w = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+           let h = (props[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue, w > 0, h > 0 {
+            let rotated = ((props[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1) >= 5
+            aspect = CGFloat(rotated ? h / w : w / h)
+        }
+        aspects[url] = aspect
+        return aspect
     }
 
     private func operation(_ info: NSDraggingInfo) -> NSDragOperation {
-        let ok = !acceptable(info).isEmpty
-        if ok != receivingHighlight { receivingHighlight = ok; startTimer() }
-        guard ok else { return [] }
+        let urls = acceptable(info)
+        setReceivingHighlight(urls.first)
+        guard !urls.isEmpty else { return [] }
         return info.draggingSourceOperationMask.contains(.move) ? .move : .copy
     }
 
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        let op = operation(sender)
-        if op != [] { sagV += 30 }  // the rope dips as something comes near
-        return op
+    /// Crossing onto the rope engages it: the cord lights up and dips, the trackpad gives a detent, and room opens
+    /// at the front where the print will hang. Leaving undoes it.
+    private func setReceivingHighlight(_ incoming: URL?) {
+        let on = incoming != nil
+        guard on != receivingHighlight else { return }
+        receivingHighlight = on
+        highlight.target = on ? 1 : 0
+        if let incoming {
+            Haptics.tick(.alignment)
+            if !isMotionReduced { sagV += 30 }
+            insertGap = RopeTuning.printSize(aspect: aspect(of: incoming)).width + RopeTuning.spacing
+        } else {
+            insertGap = 0
+        }
+        layoutPrints()
+        wake()
     }
 
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { operation(sender) }
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { operation(sender) }
-    override func draggingExited(_ sender: NSDraggingInfo?) { receivingHighlight = false }
+    override func draggingExited(_ sender: NSDraggingInfo?) { setReceivingHighlight(nil) }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        // A drop keeps its gap until the print arrives (setItems closes it); a cancelled drag closes it now.
+        if receivingHighlight { setReceivingHighlight(nil) }
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard !acceptable(sender).isEmpty else { return false }
+        // Let the system slide the drag image into its slot at the front of the rope (see performDragOperation).
+        sender.animatesToDestination = !isMotionReduced
+        return true
+    }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        receivingHighlight = false
         let urls = acceptable(sender)
         guard !urls.isEmpty else { return false }
-        sagV += 80  // catches the weight
-        DispatchQueue.main.async { Clothesline.shared.receive(urls) }
+        if sender.animatesToDestination {
+            var x = RopeTuning.firstSlot
+            sender.enumerateDraggingItems(options: [], for: self, classes: [NSURL.self],
+                                          searchOptions: [.urlReadingFileURLsOnly: true]) { item, _, _ in
+                let size = RopeTuning.printSize(aspect: (item.item as? URL).map { self.aspect(of: $0) } ?? 1.5)
+                item.draggingFrame = NSRect(x: x, y: self.ropeY(x + size.width / 2) + 4, width: size.width, height: size.height)
+                x += size.width + RopeTuning.spacing
+            }
+        }
+        // The highlight goes; the gap stays open for the print that's about to hang there.
+        receivingHighlight = false
+        highlight.target = 0
+        if !isMotionReduced { sagV += 80 }  // catches the weight
+        Feedback.press()
+        Clothesline.shared.take(urls)
+        let thumbs = IncomingCard.shared.thumbnails(for: urls)
+        DispatchQueue.main.async { Clothesline.shared.receive(urls, arrival: .inPlace, thumbnails: thumbs) }
+        wake()
         return true
     }
 }
@@ -800,6 +1475,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
     private(set) var url: URL?
     private var dismissal: DispatchWorkItem?
     private var dragging = false
+    private var next: URL?                  // arrived during a drag; shown once the drag ends
     private var presentation = 0
     private static let waitSeconds: TimeInterval = 2.5
     private static let resumeSeconds: TimeInterval = 1
@@ -815,41 +1491,44 @@ final class IncomingCard: NSObject, NSDraggingSource {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
+        panel.animationBehavior = .none
         panel.contentView = view
         view.card = self
     }
 
     func present(_ url: URL) {
-        if let current = self.url, current != url { putAway(current, animated: false) }
+        // A newer screenshot never pulls the file out from under a drag; it waits until the drag ends.
+        if dragging {
+            if let waiting = next, waiting != url { release(waiting) }
+            next = url
+            return
+        }
+        // Replacing a card that's showing: the old one fades away in place as the new one slides in.
+        let ghost = self.url != nil && self.url != url && panel.isVisible ? view.snapshot() : nil
+        if let current = self.url, current != url { release(current) }
         pauseDismissal()
         presentation += 1
         self.url = url
         view.resetInteraction()
-        let isMovie = ["mov", "mp4"].contains(url.pathExtension.lowercased())
-        var thumb: CGImage?
-        if isMovie {
-            let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
-            generator.appliesPreferredTrackTransform = true
-            generator.maximumSize = CGSize(width: 480, height: 480)
-            thumb = try? generator.copyCGImage(at: .zero, actualTime: nil)
-        } else {
-            thumb = try? Images.load(url, maxPixels: 480)
-        }
-        view.thumbnail = thumb.map { NSImage(cgImage: $0, size: NSSize(width: $0.width, height: $0.height)) }
+        view.setThumbnail(Clothesline.thumbnail(url, maxPixels: 480))
         let size = view.preferredSize
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
         guard let area = screen?.visibleFrame else { return }
-        let final = NSRect(x: area.maxX - size.width - 14, y: area.minY + 14, width: size.width, height: size.height)
-        view.resetInteraction(hovered: NSPointInRect(NSEvent.mouseLocation, final))
-        panel.setFrame(final.offsetBy(dx: size.width + 40, dy: 0), display: false)
+        // The panel reaches the screen's right edge, so the card slides in from (and out through) the edge itself.
+        panel.setFrame(NSRect(x: area.maxX - size.width, y: area.minY + 14, width: size.width, height: size.height), display: false)
+        view.layoutCard()
+        view.resetInteraction(hovered: NSPointInRect(NSEvent.mouseLocation, view.cardScreenRect))
+        if let ghost { view.fadeGhost(ghost) }
         panel.alphaValue = 1
         panel.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.32
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().setFrame(final, display: true)
-        }
+        view.enter()
         scheduleDismissal()
+    }
+
+    /// The card's thumbnail, for the rope to reuse instead of decoding the file again.
+    func thumbnails(for urls: [URL]) -> [URL: CGImage] {
+        guard let url, urls.contains(url), let thumb = view.thumbnail else { return [:] }
+        return [url: thumb]
     }
 
     func pauseDismissal() {
@@ -859,7 +1538,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
 
     func resumeDismissal() { scheduleDismissal(after: Self.resumeSeconds) }
 
-    private func scheduleDismissal(after delay: TimeInterval = IncomingCard.waitSeconds) {
+    private func scheduleDismissal(after delay: TimeInterval? = nil) {
         pauseDismissal()
         guard let url, !dragging, !view.isHovered, !view.isInteracting else { return }
         let generation = presentation
@@ -869,59 +1548,75 @@ final class IncomingCard: NSObject, NSDraggingSource {
             self.putAway(url)
         }
         dismissal = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (delay ?? Self.waitSeconds), execute: work)
+    }
+
+    /// Takes the card off screen; its frame loop stops with it, so the next card starts it afresh.
+    private func orderOut() {
+        panel.orderOut(nil)
+        view.halt()
+    }
+
+    /// Saves the file where screenshots normally go.
+    private func release(_ url: URL) {
+        let destination = Paths.unique(ScreenshotTakeover.originalLocation.appendingPathComponent(url.lastPathComponent))
+        try? FileManager.default.moveItem(at: url, to: destination)
     }
 
     /// Not wanted on the rope: saved where screenshots normally go, and the card slides away.
     func putAway(_ url: URL, animated: Bool = true) {
-        let destination = Paths.unique(ScreenshotTakeover.originalLocation.appendingPathComponent(url.lastPathComponent))
-        try? FileManager.default.moveItem(at: url, to: destination)
+        release(url)
         guard url == self.url else { return }
         self.url = nil
         pauseDismissal()
-        guard animated else { panel.orderOut(nil); return }
+        guard animated else { orderOut(); return }
         let generation = presentation
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.22
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            panel.animator().setFrame(panel.frame.offsetBy(dx: panel.frame.width + 40, dy: 0), display: true)
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, self.presentation == generation else { return }
-                self.panel.orderOut(nil)
-            }
-        })
+        view.exit { [weak self] in
+            guard let self, self.presentation == generation else { return }
+            self.orderOut()
+        }
     }
 
-    /// Click: the card flies up to the rope.
+    /// Click: the file is hung at once, and the card flies up to its peg to show where it went.
     func hangNow() {
         guard let url else { return }
+        let thumbs = thumbnails(for: [url])
         self.url = nil
         pauseDismissal()
         let generation = presentation
-        Clothesline.shared.show(force: true)
-        let area = panel.screen?.visibleFrame ?? .zero
-        let target = NSRect(x: area.midX - panel.frame.width * 0.25, y: area.maxY - 130,
-                            width: panel.frame.width * 0.5, height: panel.frame.height * 0.5)
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.38
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.5, 0, 0.3, 1)
-            panel.animator().setFrame(target, display: true)
-            panel.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                if let self, self.presentation == generation { self.panel.orderOut(nil) }
-                Clothesline.shared.receive([url])
+        let from = view.photoScreenRect
+        let photo = view.photoImage
+        let screen = panel.screen ?? NSScreen.main
+        let flies = !Motion.reduced && photo != nil && screen != nil
+        let hung = Clothesline.shared.receive([url], arrival: flies ? .handOff : .inPlace, thumbnails: thumbs)
+        let rope = Clothesline.shared.panel.rope
+        guard flies, let destination = hung.first, let photo, let screen else {
+            if !hung.isEmpty { Feedback.press() }  // hung in place (Reduce Motion): the click still lands firmly
+            view.fadeOut { [weak self] in
+                guard let self, self.presentation == generation else { return }
+                self.orderOut()
             }
-        })
+            return
+        }
+        CardFlight.shared.fly(photo, printImage: rope.image(of: destination), from: from, on: screen,
+                              to: { [weak rope] in rope?.landing(for: destination) },
+                              started: { [weak self] in
+                                  // The flight has drawn its first frame over the card, so the card can go.
+                                  guard let self, self.presentation == generation else { return }
+                                  self.orderOut()
+                              },
+                              landed: { [weak rope] in rope?.handOff(destination) })
     }
 
     func open() {
         guard let url else { return }
         pauseDismissal()
-        panel.orderOut(nil)
         self.url = nil
+        let generation = presentation
+        view.fadeOut { [weak self] in
+            guard let self, self.presentation == generation else { return }
+            self.orderOut()
+        }
         Clothesline.shared.openInPreview(url)
     }
 
@@ -929,9 +1624,11 @@ final class IncomingCard: NSObject, NSDraggingSource {
         guard let url else { return }
         dragging = true
         pauseDismissal()
+        Feedback.prepare()
         let item = NSDraggingItem(pasteboardWriter: url as NSURL)
-        item.setDraggingFrame(view.photoRect, contents: view.thumbnail ?? NSWorkspace.shared.icon(forFile: url.path))
-        panel.animator().alphaValue = 0.25
+        let image = view.photoImage.map { NSImage(cgImage: $0, size: view.photoRect.size) } ?? NSWorkspace.shared.icon(forFile: url.path)
+        item.setDraggingFrame(view.photoRect, contents: image)
+        view.setDimmed(true)
         Clothesline.shared.beginReceiving()
         view.beginDraggingSession(with: [item], event: event, source: self)
     }
@@ -942,37 +1639,88 @@ final class IncomingCard: NSObject, NSDraggingSource {
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         dragging = false
-        view.resetInteraction(hovered: NSPointInRect(screenPoint, panel.frame), afterDrag: true)
+        view.resetInteraction(hovered: NSPointInRect(screenPoint, view.cardScreenRect), afterDrag: true)
         Clothesline.shared.endReceiving()
-        guard let url else { return }
+        defer {
+            if let waiting = next {
+                next = nil
+                present(waiting)
+            }
+        }
+        guard let url else {
+            view.setDimmed(false)
+            return
+        }
         if operation == .delete {
             NSWorkspace.shared.recycle([url])
         }
-        if !FileManager.default.fileExists(atPath: url.path) || operation == .delete {
+        // The rope may have taken it without having moved it yet (that happens on the next turn of the run loop).
+        if Clothesline.shared.isTaking(url) || operation == .delete || !FileManager.default.fileExists(atPath: url.path) {
             // Hung on the rope, moved to a folder or thrown away: the card's job is done.
             self.url = nil
             pauseDismissal()
-            panel.orderOut(nil)
-            panel.alphaValue = 1
+            orderOut()
+            view.setDimmed(false, animated: false)
         } else {
             // Copied into an app, or dropped nowhere: the card comes back and waits again.
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.2
-                panel.animator().alphaValue = 1
-            }
+            view.setDimmed(false)
             resumeDismissal()
         }
     }
 }
 
+/// The card's picture: a photo with a white border over a "Drag up to hang" capsule, drawn as layers so it can
+/// slide, lift and press on springs at the display's refresh rate.
 final class IncomingView: NSView {
     weak var card: IncomingCard?
-    var thumbnail: NSImage? { didSet { needsDisplay = true } }
-    private(set) var isHovered = false { didSet { needsDisplay = true } }
+    private(set) var thumbnail: CGImage?
+    private(set) var photoImage: CGImage?
+    private(set) var isHovered = false
     private var downEvent: NSEvent?
     private var dragged = false
     private var singleClick: DispatchWorkItem?
     var isInteracting: Bool { downEvent != nil || singleClick != nil }
+    /// For tests and frame renders.
+    var reducedMotionOverride: Bool?
+    private var isMotionReduced: Bool { reducedMotionOverride ?? Motion.reduced }
+
+    private let cardLayer = CALayer()      // everything that moves together
+    private let photoLayer = CALayer()
+    private let capsuleLayer = CALayer()
+    private lazy var driver: FrameDriver = {
+        let driver = FrameDriver(view: self)
+        driver.onFrame = { [weak self] dt in self?.advance(dt) ?? false }
+        return driver
+    }()
+    private var slide = Spring(0, response: 0.32, damping: 0.9)    // points to the right of its place
+    private var alpha = Spring(1, response: 0.14, damping: 1)
+    private var hover = Spring(0, response: 0.25, damping: 0.9)
+    private var press = Spring(0, response: RopeTuning.pressIn.response, damping: RopeTuning.pressIn.damping)
+    private var ready = Spring(0, response: 0.25, damping: 0.9)    // clicked: lifts a little while it waits to fly
+    private var exitProgress: CGFloat?                              // leaving through the screen edge, 0…1
+    private var exitFrom: CGFloat = 0
+    private var onGone: (() -> Void)?
+
+    /// Room for the hover shadow on the left and top; the photo keeps 22 pt from the screen's right edge.
+    static let margin: CGFloat = 24
+    static let edgeInset: CGFloat = 22
+    private static let exitDuration: CGFloat = 0.22
+    private static let maxThumb = NSSize(width: 200, height: 128)
+    private static let photoBottom: CGFloat = 34   // the capsule sits below the photo
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        let root = CALayer()
+        layer = root
+        wantsLayer = true
+        root.addSublayer(cardLayer)
+        cardLayer.addSublayer(photoLayer)
+        cardLayer.addSublayer(capsuleLayer)
+        photoLayer.shadowColor = NSColor.black.cgColor
+        photoLayer.shadowOpacity = 0.35
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
 
     func resetInteraction(hovered: Bool = false, afterDrag: Bool = false) {
         singleClick?.cancel()
@@ -980,73 +1728,286 @@ final class IncomingView: NSView {
         downEvent = nil
         dragged = afterDrag
         isHovered = hovered
+        hover.target = hovered ? 1 : 0
+        press.target = 0
+        ready.target = 0
+        wake()
     }
 
-    private static let maxThumb = NSSize(width: 200, height: 128)
-    private static let caption: CGFloat = 26
+    // MARK: Layout
 
     private var thumbSize: NSSize {
-        guard let thumbnail, thumbnail.size.width > 0 else { return NSSize(width: 180, height: 110) }
-        let s = min(Self.maxThumb.width / thumbnail.size.width, Self.maxThumb.height / thumbnail.size.height)
-        return NSSize(width: thumbnail.size.width * s, height: thumbnail.size.height * s)
+        guard let thumbnail, thumbnail.width > 0, thumbnail.height > 0 else { return NSSize(width: 180, height: 110) }
+        let w = CGFloat(thumbnail.width), h = CGFloat(thumbnail.height)
+        let s = min(Self.maxThumb.width / w, Self.maxThumb.height / h)
+        return NSSize(width: w * s, height: h * s)
     }
 
-    var preferredSize: NSSize { NSSize(width: max(thumbSize.width + 24, 170), height: thumbSize.height + 24 + Self.caption) }
+    private var photoSize: NSSize { NSSize(width: thumbSize.width + 8, height: thumbSize.height + 8) }
+
+    private static var hint: String { "↑  " + L("Drag up to hang") }
+    private static let hintAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                                                                        .foregroundColor: NSColor.white]
+    private var capsuleSize: NSSize {
+        NSSize(width: ((Self.hint as NSString).size(withAttributes: Self.hintAttributes).width + 20).rounded(.up), height: 20)
+    }
+
+    private var contentSize: NSSize {
+        NSSize(width: max(photoSize.width, capsuleSize.width, 154), height: Self.photoBottom + photoSize.height)
+    }
+
+    var preferredSize: NSSize {
+        NSSize(width: Self.margin + contentSize.width + Self.edgeInset, height: contentSize.height + Self.margin)
+    }
+
+    /// The photo and capsule, in view coordinates; only this part tracks hover.
+    var contentRect: NSRect { NSRect(origin: NSPoint(x: Self.margin, y: 0), size: contentSize) }
 
     var photoRect: NSRect {
-        let t = thumbSize
-        return NSRect(x: (bounds.width - t.width - 8) / 2, y: Self.caption + 8, width: t.width + 8, height: t.height + 8)
+        let content = contentRect, photo = photoSize
+        return NSRect(x: content.minX + (content.width - photo.width) / 2, y: Self.photoBottom, width: photo.width, height: photo.height)
     }
+
+    var cardScreenRect: NSRect { window.map { $0.convertToScreen(convert(contentRect, to: nil)) } ?? .zero }
+
+    /// The photo as it is drawn now, lift and press included.
+    var photoScreenRect: NSRect {
+        guard let window, let root = layer else { return .zero }
+        return window.convertToScreen(convert(root.convert(photoLayer.bounds, from: photoLayer), to: nil))
+    }
+
+    private var offscreen: CGFloat { contentSize.width + Self.edgeInset + 24 }
+
+    func setThumbnail(_ image: CGImage?) {
+        thumbnail = image
+        let scale = window?.backingScaleFactor ?? 2
+        let size = photoSize, thumb = thumbSize
+        photoImage = renderImage(size, scale: scale) { ctx in
+            let rect = CGRect(origin: .zero, size: size)
+            ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil))
+            ctx.setFillColor(.white)
+            ctx.fillPath()
+            guard let image else { return }
+            let inner = CGRect(x: 4, y: 4, width: thumb.width, height: thumb.height)
+            ctx.addPath(CGPath(roundedRect: inner, cornerWidth: 3, cornerHeight: 3, transform: nil))
+            ctx.clip()
+            ctx.interpolationQuality = .high
+            ctx.draw(image, in: inner)
+        }
+        let capsule = capsuleSize
+        let capsuleImage = renderImage(capsule, scale: scale) { _ in
+            NSColor.black.withAlphaComponent(0.55).setFill()
+            NSBezierPath(roundedRect: NSRect(origin: .zero, size: capsule), xRadius: 10, yRadius: 10).fill()
+            let text = (Self.hint as NSString).size(withAttributes: Self.hintAttributes)
+            (Self.hint as NSString).draw(at: NSPoint(x: 10, y: (capsule.height - text.height) / 2), withAttributes: Self.hintAttributes)
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        photoLayer.contents = photoImage
+        photoLayer.contentsScale = scale
+        capsuleLayer.contents = capsuleImage
+        capsuleLayer.contentsScale = scale
+        CATransaction.commit()
+        layoutCard()
+    }
+
+    func layoutCard() {
+        let content = contentRect, photo = photoSize, capsule = capsuleSize
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        cardLayer.bounds = CGRect(origin: .zero, size: content.size)
+        cardLayer.position = CGPoint(x: content.midX, y: content.midY)
+        photoLayer.frame = CGRect(x: (content.width - photo.width) / 2, y: Self.photoBottom, width: photo.width, height: photo.height)
+        photoLayer.shadowPath = CGPath(roundedRect: photoLayer.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        capsuleLayer.frame = CGRect(x: (content.width - capsule.width) / 2, y: 2, width: capsule.width, height: capsule.height)
+        CATransaction.commit()
+        render()
+    }
+
+    // MARK: Motion
+
+    private func wake() {
+        if window?.isVisible == true { driver.start() }
+    }
+
+    /// Slides in from the screen's right edge like the system's thumbnail (fades in place under Reduce Motion).
+    func enter() {
+        exitProgress = nil
+        onGone = nil
+        press.snap(0)
+        ready.snap(0)
+        hover.snap(isHovered ? 1 : 0)
+        alpha.response = 0.14
+        if isMotionReduced {
+            slide.snap(0)
+            alpha.snap(0)
+        } else {
+            slide.snap(offscreen)
+            slide.target = 0
+            alpha.snap(1)
+        }
+        alpha.target = 1
+        render()
+        wake()
+    }
+
+    /// Leaves through the screen edge, accelerating away; an exit is quicker than the entrance.
+    func exit(_ done: @escaping () -> Void) {
+        onGone = done
+        if isMotionReduced {
+            alpha.response = 0.1
+            alpha.target = 0
+        } else {
+            exitFrom = slide.value
+            exitProgress = 0
+        }
+        wake()
+    }
+
+    /// Fades out where it is (opened, or hung under Reduce Motion).
+    func fadeOut(_ done: @escaping () -> Void) {
+        onGone = done
+        exitProgress = nil
+        alpha.response = 0.1
+        alpha.target = 0
+        wake()
+    }
+
+    /// While the card is being dragged it stays behind as a faint outline of where it came from.
+    func setDimmed(_ dimmed: Bool, animated: Bool = true) {
+        alpha.response = 0.16
+        if animated { alpha.target = dimmed ? 0.25 : 1 } else { alpha.snap(dimmed ? 0.25 : 1) }
+        render()
+        wake()
+    }
+
+    /// The card as it looks now, for fading out in place when a newer screenshot replaces it.
+    func snapshot() -> (image: CGImage, rect: NSRect)? {
+        guard let photoImage, cardLayer.opacity > 0.05, window?.isVisible == true else { return nil }
+        return (photoImage, photoScreenRect)
+    }
+
+    func fadeGhost(_ ghost: (image: CGImage, rect: NSRect)) {
+        guard let window, let root = layer else { return }
+        let rect = convert(window.convertFromScreen(ghost.rect), from: nil)
+        let layer = CALayer()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.contents = ghost.image
+        layer.contentsScale = window.backingScaleFactor
+        layer.frame = rect
+        layer.shadowOpacity = 0.3
+        layer.shadowRadius = 7
+        layer.shadowOffset = CGSize(width: 0, height: -4)
+        layer.shadowPath = CGPath(roundedRect: layer.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        root.insertSublayer(layer, below: cardLayer)
+        CATransaction.commit()
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { layer.removeFromSuperlayer() }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1
+        fade.toValue = 0
+        let group = CAAnimationGroup()
+        group.animations = [fade]
+        if !isMotionReduced {
+            let sink = CABasicAnimation(keyPath: "position.y")
+            sink.byValue = -16
+            group.animations?.append(sink)
+        }
+        group.duration = 0.18
+        group.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        group.fillMode = .forwards
+        group.isRemovedOnCompletion = false
+        layer.add(group, forKey: "replaced")
+        CATransaction.commit()
+    }
+
+    /// Stops the frame loop (the card is off screen).
+    func halt() { driver.stop() }
+
+    /// One display frame. Returns false when everything has settled.
+    @discardableResult
+    func advance(_ dt: CGFloat) -> Bool {
+        if var progress = exitProgress {
+            progress = min(progress + dt / Self.exitDuration, 1)
+            exitProgress = progress
+            slide.snap(exitFrom.mix(offscreen, RopeTuning.ease(progress, 0.4, 0, 1, 1)))
+        } else {
+            slide.step(dt)
+        }
+        alpha.step(dt)
+        hover.step(dt)
+        press.step(dt)
+        ready.step(dt)
+        render()
+        let gone = exitProgress.map { $0 >= 1 } ?? (alpha.target == 0 && alpha.value < 0.02)
+        if gone {
+            exitProgress = nil
+            let done = onGone
+            onGone = nil
+            done?()
+            return false
+        }
+        return exitProgress != nil || !(slide.isSettled && alpha.isSettled && hover.isSettled && press.isSettled && ready.isSettled)
+    }
+
+    private func render() {
+        let reduced = isMotionReduced
+        let h = hover.value, p = press.value, r = ready.value
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // Hover lifts the card 2 pt toward you, a click readies it 4 pt more; a press gives 3 %.
+        let lift = reduced ? 0 : 2 * h + 4 * r
+        let scale = reduced ? 1 : 1 - 0.03 * p
+        cardLayer.transform = CATransform3DScale(CATransform3DMakeTranslation(slide.value, lift, 0), scale, scale, 1)
+        cardLayer.opacity = Float(alpha.value)
+        photoLayer.shadowRadius = max(7 + 3 * h + 2 * r - 3 * p, 3)
+        photoLayer.shadowOffset = CGSize(width: 0, height: -max(4 + 3 * h + 2 * r - 2 * p, 1))
+        CATransaction.commit()
+    }
+
+    // MARK: Events
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self))
+        addTrackingArea(NSTrackingArea(rect: contentRect, options: [.mouseEnteredAndExited, .activeAlways], owner: self))
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        contentRect.contains(convert(point, from: superview)) ? super.hitTest(point) : nil
     }
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
+        hover.target = 1
         card?.pauseDismissal()
+        wake()
     }
+
     override func mouseExited(with event: NSEvent) {
         isHovered = false
+        hover.target = 0
         card?.resumeDismissal()
+        wake()
     }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func draw(_ dirtyRect: NSRect) {
-        let photo = photoRect
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = isHovered ? 14 : 10
-        shadow.shadowOffset = NSSize(width: 0, height: -4)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
-        shadow.set()
-        NSColor.white.setFill()
-        NSBezierPath(roundedRect: photo, xRadius: 6, yRadius: 6).fill()
-        NSGraphicsContext.restoreGraphicsState()
-        if let thumbnail {
-            NSGraphicsContext.saveGraphicsState()
-            NSBezierPath(roundedRect: photo.insetBy(dx: 4, dy: 4), xRadius: 3, yRadius: 3).addClip()
-            thumbnail.draw(in: photo.insetBy(dx: 4, dy: 4))
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
-        // "Drag up to hang" with an upward arrow, on a small frosted capsule.
-        let text = "↑  " + L("Drag up to hang")
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                                                    .foregroundColor: NSColor.white]
-        let size = (text as NSString).size(withAttributes: attrs)
-        let capsule = NSRect(x: bounds.midX - size.width / 2 - 10, y: 2, width: size.width + 20, height: 20)
-        NSColor.black.withAlphaComponent(0.55).setFill()
-        NSBezierPath(roundedRect: capsule, xRadius: 10, yRadius: 10).fill()
-        (text as NSString).draw(at: NSPoint(x: capsule.minX + 10, y: capsule.midY - size.height / 2), withAttributes: attrs)
+    private func setPressed(_ on: Bool) {
+        let tune = on ? RopeTuning.pressIn : RopeTuning.pressOut
+        press.response = tune.response
+        press.damping = tune.damping
+        press.target = on ? 1 : 0
+        wake()
     }
 
     override func mouseDown(with event: NSEvent) {
         card?.pauseDismissal()
         downEvent = event
         dragged = false
+        setPressed(true)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -1056,17 +2017,22 @@ final class IncomingView: NSView {
         dragged = true
         singleClick?.cancel()
         singleClick = nil
+        setPressed(false)
         card?.beginDrag(with: down)
     }
 
     override func mouseUp(with event: NSEvent) {
         downEvent = nil
+        setPressed(false)
         guard !dragged else { return }
         if event.clickCount >= 2 {
             singleClick?.cancel()
             singleClick = nil
             card?.open()
         } else {
+            // Readied at once, so the wait that tells a click from a double-click doesn't feel dead.
+            ready.target = 1
+            wake()
             let click = DispatchWorkItem { [weak self] in
                 self?.singleClick = nil
                 self?.card?.hangNow()
@@ -1074,5 +2040,136 @@ final class IncomingView: NSView {
             singleClick = click
             DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: click)
         }
+    }
+}
+
+// MARK: - Card flight
+
+/// A clicked card's trip from the corner up to its peg. A transparent, click-through panel over the screen carries
+/// the photo and aims every frame at the print's live position, so the hand-off lands exactly where the print
+/// hangs even while the rope is still settling. On the way the photo turns into the print's own picture.
+@MainActor
+final class CardFlight {
+    static let shared = CardFlight()
+
+    private let panel: NSPanel
+    private let host = NSView()
+    private let photo = CALayer()
+    private let print = CALayer()
+    private lazy var driver: FrameDriver = {
+        let driver = FrameDriver(view: host)
+        driver.onFrame = { [weak self] dt in self?.advance(dt) ?? false }
+        return driver
+    }()
+    private var elapsed: CGFloat = 0
+    private var from = NSRect.zero
+    private var origin = NSPoint.zero
+    private var target: (() -> (rect: NSRect, angle: CGFloat)?)?
+    private var started: (() -> Void)?
+    private var landed: (() -> Void)?
+    private var showingLanding = false
+    static let duration: CGFloat = 0.36
+
+    private init() {
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10),
+                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.level = .statusBar
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.animationBehavior = .none
+        let root = CALayer()
+        host.layer = root
+        host.wantsLayer = true
+        panel.contentView = host
+        photo.anchorPoint = CGPoint(x: 0.5, y: 1)   // the top centre, where the peg will grip
+        photo.shadowColor = NSColor.black.cgColor
+        photo.shadowOpacity = 0.35
+        photo.addSublayer(print)
+        root.addSublayer(photo)
+    }
+
+    func fly(_ image: CGImage, printImage: CGImage?, from: NSRect, on screen: NSScreen,
+             to target: @escaping () -> (rect: NSRect, angle: CGFloat)?,
+             started: @escaping () -> Void, landed: @escaping () -> Void) {
+        land()  // one still in the air lands at once
+        self.from = from
+        self.target = target
+        self.started = started
+        self.landed = landed
+        elapsed = 0
+        origin = screen.frame.origin
+        panel.setFrame(screen.frame, display: false)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        photo.contents = image
+        photo.contentsScale = screen.backingScaleFactor
+        photo.bounds = CGRect(origin: .zero, size: from.size)
+        photo.position = CGPoint(x: from.midX - origin.x, y: from.maxY - origin.y)
+        photo.transform = CATransform3DIdentity
+        photo.shadowPath = CGPath(roundedRect: photo.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        print.contents = printImage
+        print.contentsScale = 2
+        print.frame = photo.bounds
+        print.opacity = 0
+        CATransaction.commit()
+        panel.orderFrontRegardless()
+        driver.start()
+    }
+
+    private func advance(_ dt: CGFloat) -> Bool {
+        if showingLanding {
+            // The print has been showing for a frame underneath, so nothing blinks when the flight goes.
+            showingLanding = false
+            panel.orderOut(nil)
+            return false
+        }
+        if let started {
+            self.started = nil
+            started()
+        }
+        guard let goal = target?() else {
+            land()
+            return false
+        }
+        elapsed += dt
+        let t = min(elapsed / Self.duration, 1)
+        let e = RopeTuning.ease(t, 0.3, 0, 0.2, 1)
+        let scale = CGFloat(1).mix(goal.rect.width / max(from.width, 1), e)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        photo.position = CGPoint(x: from.midX.mix(goal.rect.midX, e) - origin.x, y: from.maxY.mix(goal.rect.maxY, e) - origin.y)
+        // The rope's view is flipped, so its clockwise tilt is a negative angle here.
+        photo.transform = CATransform3DScale(CATransform3DMakeRotation(-goal.angle * e, 0, 0, 1), scale, scale, 1)
+        photo.shadowRadius = CGFloat(7).mix(6, e) / max(scale, 0.1)
+        photo.shadowOffset = CGSize(width: 0, height: -4 / max(scale, 0.1))
+        print.opacity = Float(min(max((t - 0.55) / 0.45, 0), 1))
+        CATransaction.commit()
+        if t >= 1 {
+            target = nil
+            let landed = self.landed
+            self.landed = nil
+            landed?()
+            showingLanding = true
+        }
+        return true
+    }
+
+    /// Ends a flight now: the card goes, the print shows, and the panel is put away.
+    private func land() {
+        guard target != nil || showingLanding else { return }
+        let started = self.started, landed = self.landed
+        self.started = nil
+        self.landed = nil
+        target = nil
+        showingLanding = false
+        started?()
+        landed?()
+        driver.stop()
+        panel.orderOut(nil)
     }
 }
