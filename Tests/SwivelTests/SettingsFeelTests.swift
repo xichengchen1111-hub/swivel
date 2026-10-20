@@ -62,6 +62,32 @@ struct SettingsFeelTests {
         #expect(slot.move(to: 4) == false)  // a new drag starts fresh
     }
 
+    @Test func testCustomizeSaveKeepsStoredEntriesForItemsWhoseToolIsOff() {
+        // Stored while Image Presets and Clothesline were on: the preset led the list and was hidden, Hang followed Copy.
+        let storedOrder = ["preset.X", "Copy", "Hang", "Move", "AirDrop"]
+        let storedHidden: Set<String> = ["preset.X", "Move"]
+        // Both tools are off now, so Customize shows three rows; the user drags Move up and unticks Copy.
+        let merged = Arrangement.merged(rows: [(title: "Move", shown: true), (title: "Copy", shown: false), (title: "AirDrop", shown: true)],
+                                        storedOrder: storedOrder, storedHidden: storedHidden)
+        #expect(merged.order == ["preset.X", "Move", "Copy", "Hang", "AirDrop"])
+        // The rows decide for themselves (Move is shown again); the preset stays hidden.
+        #expect(merged.hidden == ["preset.X", "Copy"])
+
+        // A run of absent titles keeps its order after the title it followed, wherever that title moved to.
+        let run = Arrangement.merged(rows: [(title: "B", shown: true), (title: "A", shown: true)],
+                                     storedOrder: ["A", "X", "Y", "B", "Z"], storedHidden: ["Y", "Z"])
+        #expect(run.order == ["B", "Z", "A", "X", "Y"])
+        #expect(run.hidden == ["Y", "Z"])
+
+        // With everything present (or nothing stored) the rows are saved exactly as shown, as before.
+        let rows = [(title: "A", shown: true), (title: "B", shown: false)]
+        #expect(Arrangement.merged(rows: rows, storedOrder: [], storedHidden: []).order == ["A", "B"])
+        let present = Arrangement.merged(rows: rows, storedOrder: ["B", "A"], storedHidden: ["A"])
+        #expect(present.order == ["A", "B"] && present.hidden == ["B"])
+        // A title stored twice is put back once.
+        #expect(Arrangement.merged(rows: rows, storedOrder: ["X", "A", "X"], storedHidden: []).order == ["X", "A", "B"])
+    }
+
     private func host(_ style: MenuStyle = .wheel, hovered: Int? = 1) -> PreviewHost {
         let host = PreviewHost(frame: NSRect(x: 0, y: 0, width: 250, height: 170))
         host.show(menuPreview(style: style, titles: ["JPG", "PNG", "HEIC", "WebP", "TIFF", "GIF", "PDF"], mode: .convert,
@@ -118,6 +144,46 @@ struct SettingsFeelTests {
         #expect(preview.isLive)
         host.isInteractive = false
         #expect(preview.isLive == false && preview.hovered == 1)
+        window.close()
+    }
+
+    @Test func testPreviewRestingHoverIsNotAVisitSoEmptySpotsDontCancel() throws {
+        _ = NSApplication.shared
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 200), styleMask: [.borderless],
+                              backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 200))
+        window.contentView = container
+        // Styles with a header band and gaps: their top centre isn't an item.
+        for style in [MenuStyle.list, .shelf, .notes, .clothesline] {
+            let host = host(style)
+            let preview = try #require(host.preview)
+            container.addSubview(host)
+            #expect(preview.isLive)
+            let top = NSPoint(x: preview.bounds.midX, y: preview.bounds.maxY - 1)
+            // First entry over the header: the resting hover doesn't count, so this isn't "Cancel".
+            #expect(preview.track(top) == false)
+            #expect(preview.hovered == nil && preview.cancelArmed == false, "\(style) after first entry")
+
+            // After leaving the screen it rests on its hovered item again, which still isn't a visit.
+            host.removeFromSuperview()
+            #expect(preview.hovered == 1)
+            container.addSubview(host)
+            preview.track(top)
+            #expect(preview.hovered == nil && preview.cancelArmed == false, "\(style) after coming back")
+
+            // A try that visited an item, left, and comes back in starts afresh. (The visit is set while not live
+            // so the test makes no sound.)
+            preview.isLive = false
+            preview.hovered = 3
+            preview.isLive = true
+            preview.pointerLeft()
+            let entry = NSPoint(x: preview.frame.midX, y: preview.frame.maxY - 0.5)  // host and window share coordinates
+            #expect(host.previewPoint(forWindowPoint: entry) != nil)
+            host.mouseEntered(with: event(.mouseMoved, at: entry))
+            #expect(preview.hovered == nil && preview.cancelArmed == false, "\(style) on a new entry")
+            host.removeFromSuperview()
+        }
         window.close()
     }
 
