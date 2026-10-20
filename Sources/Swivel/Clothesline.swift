@@ -51,18 +51,73 @@ final class Clothesline: NSObject {
         for url in mediaFiles(in: incoming) { IncomingCard.shared.putAway(url) }
         watch(folder) { [weak self] in self?.reload() }
         watch(incoming) { [weak self] in self?.checkIncoming() }
+        hotKey = HotKey { [weak self] in self?.toggle() }
+        // The pointer is only watched while the feature is on, wherever the setting gets changed.
+        NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncWatching() }
+        }
+        syncWatching()
+        if Prefs.clotheslineEnabled && Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: incoming) }
+    }
+
+    /// Turning the feature off puts the rope and any waiting card away, stops hanging copies and gives screenshots
+    /// back to macOS.
+    func setEnabled(_ on: Bool) {
+        if !on { hide() }
+        Prefs.clotheslineEnabled = on  // posts Prefs.changed, which starts or stops watching the pointer
+        if on {
+            if Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: incoming) }
+        } else {
+            ScreenshotTakeover.restore()
+            putAwayWaiting(animated: true)
+        }
+        syncWatching()
+    }
+
+    /// Called on quit so the user's own screenshot settings come back, and nothing stays behind in the hidden
+    /// Incoming folder: a card still up, one queued behind a drag, or one that arrived a moment ago.
+    func stop() {
+        stopWatching()
+        ScreenshotTakeover.restore()  // first, so a screenshot taken from here on goes straight to the usual folder
+        putAwayWaiting(animated: false)
+    }
+
+    /// Everything waiting in Incoming goes where screenshots normally go, and the card leaves.
+    private func putAwayWaiting(animated: Bool) {
+        IncomingCard.shared.putAwayAll(animated: animated)
+        for url in mediaFiles(in: incoming) { IncomingCard.shared.putAway(url, animated: false) }
+        seenIncoming = []
+    }
+
+    // MARK: Watching the pointer
+
+    /// The edge poll and the mouse monitors run only while the clothesline is on, so a switched-off tool doesn't
+    /// wake Swivel for every pointer move on the system.
+    private func syncWatching() {
+        let on = Prefs.clotheslineEnabled
+        if on && hoverTimer == nil {
+            startWatching()
+        } else if !on && hoverTimer != nil {
+            stopWatching()
+            if isShown && !panel.rope.isLifting { hide() }
+        }
+    }
+
+    private func startWatching() {
+        wasAtTopEdge = false
+        pasteboardCount = NSPasteboard.general.changeCount  // what was copied while it was off isn't hung now
         let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         timer.tolerance = 0.01
         RunLoop.main.add(timer, forMode: .common)
         hoverTimer = timer
-        // Mouse monitors (no Accessibility permission needed) see the pointer reach the top edge on the very next
-        // event instead of the next poll, and see clicks that should put the rope away.
+        // Mouse monitors (no Accessibility permission needed) see the pointer reach the top edge or a print on the very
+        // next event instead of the next poll, and see clicks that should put the rope away.
         let moved: (NSEvent) -> Void = { [weak self] _ in MainActor.assumeIsolated { self?.pointerMoved() } }
         let clicked: (NSEvent) -> Void = { [weak self] event in
-            let down = event.type == .leftMouseDown
-            MainActor.assumeIsolated { self?.mouse(down: down, at: NSEvent.mouseLocation) }
+            let down = event.type == .leftMouseDown, window = event.window
+            MainActor.assumeIsolated { self?.mouse(down: down, at: NSEvent.mouseLocation, in: window) }
         }
         if let global = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: moved) { monitors.append(global) }
         if let local = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { event in moved(event); return event }) {
@@ -72,23 +127,16 @@ final class Clothesline: NSObject {
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp], handler: { event in clicked(event); return event }) {
             monitors.append(local)
         }
-        hotKey = HotKey { [weak self] in self?.toggle() }
-        if Prefs.clotheslineEnabled && Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: incoming) }
     }
 
-    /// Turning the feature off puts the rope away, stops hanging copies and gives screenshots back to macOS.
-    func setEnabled(_ on: Bool) {
-        Prefs.clotheslineEnabled = on
-        if on {
-            if Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: incoming) }
-        } else {
-            hide()
-            ScreenshotTakeover.restore()
-        }
+    private func stopWatching() {
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        monitors.forEach(NSEvent.removeMonitor)
+        monitors.removeAll()
+        wasAtTopEdge = false
+        pressedAt = nil
     }
-
-    /// Called on quit so the user's own screenshot settings come back.
-    func stop() { ScreenshotTakeover.restore() }
 
     // MARK: Contents
 
@@ -126,7 +174,9 @@ final class Clothesline: NSObject {
             do {
                 if waiting { try fm.moveItem(at: url, to: destination) } else { try fm.copyItem(at: url, to: destination) }
             } catch {
-                continue  // nothing to hang for a file that didn't make it
+                // Nothing to hang for a file that didn't make it; a waiting screenshot still leaves Incoming.
+                if waiting { IncomingCard.shared.putAway(url) }
+                continue
             }
             panel.rope.markNew(destination, arrival: arrival, thumbnail: thumbnails[url])
             landed.append(destination)
@@ -150,10 +200,19 @@ final class Clothesline: NSObject {
     func isTaking(_ url: URL) -> Bool { taking.contains(url) }
 
     private func checkIncoming() {
-        let waiting = mediaFiles(in: incoming)
-        let fresh = waiting.filter { !seenIncoming.contains($0.lastPathComponent) }
-        seenIncoming = Set(waiting.map(\.lastPathComponent))
-        if let newest = fresh.first { IncomingCard.shared.present(newest) }
+        let decision = Self.triage(mediaFiles(in: incoming), seen: seenIncoming, showCard: Prefs.clotheslineEnabled)
+        seenIncoming = decision.seen
+        for url in decision.putAway { IncomingCard.shared.putAway(url, animated: false) }
+        if let newest = decision.card { IncomingCard.shared.present(newest) }
+    }
+
+    /// What one look at Incoming (newest first) decides. The card shows one file at a time, so the newest new file
+    /// gets it and every other new file goes straight to the usual screenshot folder (with two displays, one capture
+    /// writes two files at once); with the clothesline off, they all do. Nothing new is left without a destination.
+    static func triage(_ waiting: [URL], seen: Set<String>, showCard: Bool) -> (card: URL?, putAway: [URL], seen: Set<String>) {
+        let fresh = waiting.filter { !seen.contains($0.lastPathComponent) }
+        let card = showCard ? fresh.first : nil
+        return (card, Array(fresh.dropFirst(card == nil ? 0 : 1)), Set(waiting.map(\.lastPathComponent)))
     }
 
     private func watch(_ directory: URL, _ changed: @escaping @MainActor () -> Void) {
@@ -220,9 +279,11 @@ final class Clothesline: NSObject {
         max(screen.frame.maxY - screen.visibleFrame.maxY, 24)
     }
 
+    /// From the mouse monitors, which only exist while the feature is on.
     private func pointerMoved() {
-        guard Prefs.clotheslineEnabled else { return }
         checkTopEdge(NSEvent.mouseLocation)
+        // The rope's frame loop rests while nothing moves; a pointer arriving on or leaving a print wakes it.
+        if isShown { panel.rope.pointerMoved() }
     }
 
     /// Touching the edge reveals immediately. Moving away rearms it, so a menu-bar click or the hide shortcut can
@@ -239,8 +300,10 @@ final class Clothesline: NSObject {
 
     /// Pressing in the menu bar puts the rope away at once. A pinned rope also goes when the user clicks away from
     /// the prints, on the release, and only for a click: a drag that starts elsewhere may be bringing a file to it.
-    private func mouse(down: Bool, at point: NSPoint) {
-        guard isShown, !panel.rope.isLifting, !isDraggingItem, !isReceiving, let screen = screen(containing: point) else {
+    private func mouse(down: Bool, at point: NSPoint, in window: NSWindow?) {
+        // A click on the screenshot card is the card's own (it hangs the screenshot), not a click away from the rope.
+        guard isShown, !panel.rope.isLifting, !isDraggingItem, !isReceiving, !IncomingCard.shared.owns(window),
+              let screen = screen(containing: point) else {
             pressedAt = nil
             return
         }
@@ -263,6 +326,8 @@ final class Clothesline: NSObject {
         let point = NSEvent.mouseLocation
         checkTopEdge(point)
         guard isShown, let screen = screen(containing: point) else { return }
+        // The poll also catches what the monitors don't see, such as a drag from another app passing over a print.
+        panel.rope.pointerMoved()
         let inMenuBar = point.y >= screen.frame.maxY - menuBarHeight(screen)
 
         if isDraggingItem || isReceiving { return }
@@ -374,6 +439,11 @@ enum RopeTuning {
     static let arrivalSwingFromAbove: ClosedRange<CGFloat> = 0.5...0.8
     static let arrivalSwingInPlace: ClosedRange<CGFloat> = 0.3...0.5
     static let arrivalHeight: CGFloat = -110           // hung from the menu: falls this far onto the rope
+
+    /// The breeze blows while something happens and for this long after, then dies down (critically damped, over
+    /// about two seconds), so a rope left down comes to rest and its frame loop can stop.
+    static let breezeHold: CFTimeInterval = 3
+    static let breezeFade: CGFloat = 1.2
 
     // Hover and press, as retargetable springs.
     static let lift = (response: CGFloat(0.34), damping: CGFloat(0.81))      // the old k = 340, c = 30
@@ -517,8 +587,9 @@ final class RopePanel: NSPanel {
 
 /// Draws the rope and its prints with Core Animation layers, moved on every display frame by a small physics
 /// model: the rope falls on a spring and sags, each print is a damped pendulum on its peg, and a light breeze
-/// keeps them moving. Hover, press and sliding along the rope are retargetable springs. Everything is
-/// interruptible because the state is simulated, not tweened.
+/// stirs them for a few seconds after anything happens. Hover, press and sliding along the rope are retargetable
+/// springs. Everything is interruptible because the state is simulated, not tweened. Once nothing moves the frame
+/// loop stops, and anything that changes the picture wakes it.
 final class RopeView: NSView, NSDraggingSource {
     /// How a newly hung print appears.
     enum Arrival {
@@ -579,13 +650,17 @@ final class RopeView: NSView, NSDraggingSource {
     private var sag: CGFloat = 0, sagV: CGFloat = 0
     private var fade = Spring(1, response: 0.16, damping: 1)      // the panel's alpha; animates only under Reduce Motion
     private var highlight = Spring(0, response: 0.12, damping: 1) // something droppable is over the rope
+    private var breeze = Spring(0, response: RopeTuning.breezeFade, damping: 1)  // the wind's strength, 0…1
+    private var calmAt: CFTimeInterval = 0                        // when the breeze starts to die down
+    private var drawnRope: [CGFloat] = []                         // what the rope's path was last built from
     private var insertGap: CGFloat = 0                            // room held open at the front for that drop
     private var onLifted: (() -> Void)?
     private(set) var isLifting = false
     private var hovered: URL?
     private var receivingHighlight = false
-    var isDraggingItem = false           // a print is being dragged off (or its context menu is open)
-    var isReceiving = false              // a card is being dragged toward the rope
+    // These change whether the panel catches the mouse, so they wake a resting frame loop.
+    var isDraggingItem = false { didSet { if isDraggingItem != oldValue { wake() } } }  // a print is being dragged off (or its context menu is open)
+    var isReceiving = false { didSet { if isReceiving != oldValue { wake() } } }        // a card is being dragged toward the rope
     /// For tests and frame renders: a pointer in view coordinates instead of the real mouse, and a fixed motion setting.
     var simulatedPointer: NSPoint?
     var reducedMotionOverride: Bool?
@@ -668,10 +743,15 @@ final class RopeView: NSView, NSDraggingSource {
 
     private func layoutPrints(snap: Bool = false) {
         let slots = RopeTuning.slots(widths: prints.map(\.size.width), in: bounds.width, gap: insertGap)
-        let instant = snap || isMotionReduced
+        let reduced = isMotionReduced
+        let instant = snap || reduced
         for (i, print) in prints.enumerated() {
             print.layer.isHidden = !slots[i].fits
             print.tilt = Self.tilts[i % Self.tilts.count]
+            if reduced {
+                print.angle = print.tilt  // no swing to a new resting angle
+                print.angleV = 0
+            }
             if instant || !print.placed {
                 print.slot.snap(slots[i].x)
                 print.placed = true
@@ -722,7 +802,7 @@ final class RopeView: NSView, NSDraggingSource {
         print.ring.opacity = 0
         layer.addSublayer(print.ring)
 
-        print.close.frame = CGRect(x: size.width - 13, y: -9, width: 22, height: 22)
+        print.close.frame = Self.closeFrame(for: size)
         print.close.cornerRadius = 11
         print.close.backgroundColor = NSColor(white: 0.12, alpha: 0.85).cgColor
         let cross = CAShapeLayer()
@@ -822,11 +902,13 @@ final class RopeView: NSView, NSDraggingSource {
                 }
             }
             fade.snap(reduced ? 0 : 1)
+            breeze.snap(reduced ? 0 : 1)  // already blowing as it comes down
         } else if reduced {
             offset = 0
             offsetV = 0
         }
         fade.target = 1
+        stir()
         render(reduced: reduced)
     }
 
@@ -843,9 +925,48 @@ final class RopeView: NSView, NSDraggingSource {
         wake()
     }
 
-    /// Starts the frame loop while the rope is on screen; it stops by itself once the rope is put away.
+    /// Starts the frame loop while the rope is on screen. It stops by itself once nothing moves (see `needsFrames`)
+    /// or the rope is put away, so everything that changes what the rope shows calls this.
     func wake() {
+        stir()
         if window?.isVisible == true { driver.start() }
+    }
+
+    /// Something happened: the breeze blows for a little while, then dies down.
+    private func stir() { calmAt = clock + RopeTuning.breezeHold }
+
+    /// The pointer moved (or the controller's poll came round). The frame loop may be resting, so wake it when the
+    /// print under the pointer has changed: hover, the ring, the × and mouse catching then follow.
+    func pointerMoved() {
+        guard window?.isVisible == true, !driver.isRunning, pointerChangesHover else { return }
+        wake()
+    }
+
+    /// Whether a frame now would hover a different print (or none).
+    var pointerChangesHover: Bool { hoverTarget() != hovered }
+
+    /// Whether anything on the rope is still moving or about to, so the frame loop must keep running. A rope left
+    /// down comes to rest once the breeze has died down; under Reduce Motion, as soon as it has faded in.
+    var needsFrames: Bool {
+        let reduced = isMotionReduced
+        let charging = downURL != nil && !handled && !closeDown   // a held print gathers toward Quick Look
+        let blowing = !reduced && (clock < calmAt || !breeze.isSettled)
+        if isLifting || charging || blowing || !fade.isSettled || !highlight.isSettled { return true }
+        let still: CGFloat = 0.01   // points (and points per second): well below a pixel
+        if abs(offset - offsetTarget) > still || abs(offsetV) > still || abs(sag) > still || abs(sagV) > still { return true }
+        return prints.contains { print in
+            print.kickAt != nil || print.awaitingSince != nil
+                || !(print.slot.isSettled && print.lift.isSettled && print.hover.isSettled && print.press.isSettled
+                     && print.opacity.isSettled && print.flash.isSettled && print.closePress.isSettled)
+                || abs(print.angle - rest(of: print, reduced: reduced)) > 1e-4 || abs(print.angleV) > 1e-3
+                || abs(print.drop) > still || abs(print.dropV) > still
+        }
+    }
+
+    /// The angle a print hangs at: its own little tilt, or straight while hovered. Under Reduce Motion it keeps its
+    /// tilt, since straightening would turn it.
+    private func rest(of print: Print, reduced: Bool) -> CGFloat {
+        print.url == hovered && !reduced ? 0 : print.tilt
     }
 
     func ropeY(_ x: CGFloat) -> CGFloat {
@@ -859,9 +980,15 @@ final class RopeView: NSView, NSDraggingSource {
     func advance(_ dt: CGFloat) -> Bool {
         let reduced = isMotionReduced
         updateHover(reduced: reduced)
+        if reduced {
+            breeze.snap(0)
+        } else {
+            breeze.target = clock < calmAt ? 1 : 0
+            breeze.step(dt)
+        }
         accumulator = min(accumulator + dt, RopeTuning.step * CGFloat(RopeTuning.maxSteps))
         while accumulator >= RopeTuning.step {
-            physics(RopeTuning.step, breeze: !reduced)
+            physics(RopeTuning.step, reduced: reduced)
             accumulator -= RopeTuning.step
         }
         for print in prints {
@@ -891,10 +1018,11 @@ final class RopeView: NSView, NSDraggingSource {
             done?()
             return false
         }
-        return window?.isVisible == true
+        // At rest the loop stops; a hover change, a press, a drop or an arrival wakes it again.
+        return window?.isVisible == true && needsFrames
     }
 
-    private func physics(_ h: CGFloat, breeze: Bool) {
+    private func physics(_ h: CGFloat, reduced: Bool) {
         clock += Double(h)
         // Whole rope: a spring that overshoots a little and settles; the cord lags behind its acceleration, so it
         // dips once in the middle when the rope stops.
@@ -903,24 +1031,34 @@ final class RopeView: NSView, NSDraggingSource {
         let t = CGFloat(clock)
         for print in prints {
             if let at = print.kickAt, clock >= at { print.angleV += print.kick; print.kickAt = nil }
-            // Pendulum on its peg, pulled toward its resting tilt (straight when hovered), plus a breeze.
-            let rest = print.url == hovered ? 0 : print.tilt
-            let wind = breeze ? 0.07 * sin(1.1 * t + print.phase) + 0.03 * sin(2.7 * t + print.phase * 1.7) : 0
-            RopeTuning.advance(&print.angle, &print.angleV, toward: rest, RopeTuning.swing, force: wind, h: h)
+            let rest = rest(of: print, reduced: reduced)
+            if reduced {
+                // Under Reduce Motion a print just hangs at its tilt: no swing on hover, arrival or reordering.
+                print.angle = rest
+                print.angleV = 0
+            } else {
+                // Pendulum on its peg, pulled toward its resting tilt (straight when hovered), plus a breeze.
+                let wind = breeze.value * (0.07 * sin(1.1 * t + print.phase) + 0.03 * sin(2.7 * t + print.phase * 1.7))
+                RopeTuning.advance(&print.angle, &print.angleV, toward: rest, RopeTuning.swing, force: wind, h: h)
+            }
             RopeTuning.advance(&print.drop, &print.dropV, toward: 0, RopeTuning.arrive, h: h)
         }
     }
 
+    /// The print hover should show: the one being pressed, or the one under the pointer.
+    private func hoverTarget() -> URL? {
+        if let held = downURL, !isDraggingItem { return held }  // a press keeps its print lit even if the pointer slips off it
+        guard !isLifting, !isDraggingItem,
+              let pointer = simulatedPointer ?? window.map({ convert($0.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil) })
+        else { return nil }
+        return hit(pointer)?.url
+    }
+
     private func updateHover(reduced: Bool) {
-        var now: URL?
-        if let held = downURL, !isDraggingItem {
-            now = held  // a press keeps its print lit even if the pointer slips off it
-        } else if !isLifting, !isDraggingItem,
-                  let pointer = simulatedPointer ?? window.map({ convert($0.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil) }) {
-            now = hit(pointer)?.url
-        }
+        let now = hoverTarget()
         if now != hovered {
             hovered = now
+            stir()
             toolTip = now.map { $0.lastPathComponent + "\n" + L("Click: copy · Double-click: open · Hold: Quick Look · Drag: take it down") }
         }
         for print in prints {
@@ -934,13 +1072,18 @@ final class RopeView: NSView, NSDraggingSource {
     private func render(reduced: Bool) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let path = RopeTuning.ropePath(width: bounds.width, y: Self.ropeTop + offset, sag: Self.restSag + sag)
-        let width = 2.6 + 0.8 * highlight.value
-        ropeLayer.path = path
-        ropeLayer.lineWidth = width
-        ropeLayer.strokeColor = Self.ropeColor.mix(.controlAccentColor, highlight.value).cgColor
-        // An explicit shadow path spares Core Animation an offscreen pass over the rope every frame.
-        ropeLayer.shadowPath = path.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        // The cord (and its shadow) is rebuilt only when it has moved or changed colour, not for every print's hover.
+        let shape = [bounds.width, offset, sag, highlight.value]
+        if shape.count != drawnRope.count || zip(shape, drawnRope).contains(where: { abs($0 - $1) > 0.005 }) {
+            drawnRope = shape
+            let path = RopeTuning.ropePath(width: bounds.width, y: Self.ropeTop + offset, sag: Self.restSag + sag)
+            let width = 2.6 + 0.8 * highlight.value
+            ropeLayer.path = path
+            ropeLayer.lineWidth = width
+            ropeLayer.strokeColor = Self.ropeColor.mix(.controlAccentColor, highlight.value).cgColor
+            // An explicit shadow path spares Core Animation an offscreen pass over the rope.
+            ropeLayer.shadowPath = path.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 10)
+        }
         let now = CACurrentMediaTime()
         for print in prints {
             let p = print.hover.value, press = print.press.value
@@ -964,7 +1107,8 @@ final class RopeView: NSView, NSDraggingSource {
             let shown = print.lifted ? 0 : p
             print.close.opacity = Float(shown)
             if shown > 0.005 {
-                let s = (0.85 + 0.15 * shown) * (1 - 0.12 * print.closePress.value)
+                // It grows in and gives under the finger, except under Reduce Motion (the darker fill still shows a press).
+                let s: CGFloat = reduced ? 1 : (0.85 + 0.15 * shown) * (1 - 0.12 * print.closePress.value)
                 print.close.transform = CATransform3DMakeScale(s, s, 1)
                 print.close.backgroundColor = NSColor(white: 0.12, alpha: 0.85 + 0.15 * print.closePress.value).cgColor
             }
@@ -1145,17 +1289,25 @@ final class RopeView: NSView, NSDraggingSource {
 
     // MARK: Hit testing
 
+    /// The × badge in its print's coordinates: centred on the top-right corner, so it reaches 9 pt past the edge.
+    private static func closeFrame(for size: CGSize) -> CGRect { CGRect(x: size.width - 13, y: -9, width: 22, height: 22) }
+
+    /// Where a press counts as on the ×: the badge and a little slack around it.
+    private static func closeTarget(for size: CGSize) -> CGRect { closeFrame(for: size).insetBy(dx: -3, dy: -3) }
+
     private func hit(_ point: NSPoint) -> Print? {
         for print in prints.reversed() where print.isTouchable {
             let local = print.layer.convert(point, from: root)
             if print.layer.bounds.insetBy(dx: -4, dy: -14).contains(local) { return print }
+            // While the × shows, all of it belongs to its print, so the part past the corner can be pointed at and
+            // clicked. A hidden × doesn't widen the print.
+            if print.url == hovered, Self.closeTarget(for: print.size).contains(local) { return print }
         }
         return nil
     }
 
     private func hitsClose(_ print: Print, _ point: NSPoint) -> Bool {
-        let local = print.layer.convert(point, from: root)
-        return print.close.frame.insetBy(dx: -3, dy: -3).contains(local)
+        Self.closeTarget(for: print.size).contains(print.layer.convert(point, from: root))
     }
 
     func isOverPrint(screenPoint: NSPoint) -> Bool {
@@ -1232,6 +1384,7 @@ final class RopeView: NSView, NSDraggingSource {
         guard let print = hit(p) else {
             downURL = nil
             handled = true
+            wake()
             return
         }
         let url = print.url
@@ -1266,6 +1419,7 @@ final class RopeView: NSView, NSDraggingSource {
             // Pressing harder sinks the print further; nearing the deep click it gathers as it does when held.
             print.press.target = 0.6 + 0.4 * CGFloat(event.pressure)
             forceCharge = max(0, event.stageTransition)
+            wake()
         }
     }
 
@@ -1274,6 +1428,7 @@ final class RopeView: NSView, NSDraggingSource {
         if closeDown {
             // Sliding off the × cancels, as with a button.
             print.closePress.target = hitsClose(print, convert(event.locationInWindow, from: nil)) ? 1 : 0
+            wake()
             return
         }
         let a = down.locationInWindow, b = event.locationInWindow
@@ -1304,6 +1459,7 @@ final class RopeView: NSView, NSDraggingSource {
             downURL = nil
             closeDown = false
             forceCharge = 0
+            wake()  // every way out changes the press, the × or what the panel catches
         }
         guard let url = downURL, let print = find(url) else { return }
         if closeDown {
@@ -1330,7 +1486,6 @@ final class RopeView: NSView, NSDraggingSource {
             singleClick = click
             DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval, execute: click)
         }
-        wake()
     }
 
     // Into an app: a copy (the original stays). Into a folder: moved off the rope. Onto the Trash: discarded.
@@ -1513,7 +1668,10 @@ final class IncomingCard: NSObject, NSDraggingSource {
         view.setThumbnail(Clothesline.thumbnail(url, maxPixels: 480))
         let size = view.preferredSize
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
-        guard let area = screen?.visibleFrame else { return }
+        guard let area = screen?.visibleFrame else {
+            putAway(url, animated: false)  // nowhere to show it: it goes straight to the usual folder
+            return
+        }
         // The panel reaches the screen's right edge, so the card slides in from (and out through) the edge itself.
         panel.setFrame(NSRect(x: area.maxX - size.width, y: area.minY + 14, width: size.width, height: size.height), display: false)
         view.layoutCard()
@@ -1557,11 +1715,42 @@ final class IncomingCard: NSObject, NSDraggingSource {
         view.halt()
     }
 
-    /// Saves the file where screenshots normally go.
-    private func release(_ url: URL) {
-        let destination = Paths.unique(ScreenshotTakeover.originalLocation.appendingPathComponent(url.lastPathComponent))
-        try? FileManager.default.moveItem(at: url, to: destination)
+    /// Saves the file where screenshots normally go, and returns where it ended up.
+    @discardableResult
+    private func release(_ url: URL) -> URL? {
+        Self.save(url, to: ScreenshotTakeover.originalLocation, otherwise: Clothesline.shared.folder)
     }
+
+    /// Moves a waiting screenshot into `folder` without overwriting anything. If that fails (the folder is gone or
+    /// read-only, or it is Incoming itself) it hangs on the rope (`fallback`) instead, so it never stays behind in the
+    /// hidden Incoming folder. Returns where it went, or nil if neither worked (the next launch tries again).
+    nonisolated static func save(_ url: URL, to folder: URL, otherwise fallback: URL) -> URL? {
+        let fm = FileManager.default
+        let home = url.deletingLastPathComponent().resolvingSymlinksInPath().path
+        for directory in [folder, fallback] where directory.resolvingSymlinksInPath().path != home {
+            let destination = Paths.unique(directory.appendingPathComponent(url.lastPathComponent))
+            do {
+                try fm.moveItem(at: url, to: destination)
+                return destination
+            } catch {
+                continue
+            }
+        }
+        return nil
+    }
+
+    /// The clothesline is going away (switched off, or Swivel is quitting): the card's file and one queued behind a
+    /// drag go where screenshots normally go now, and the card leaves.
+    func putAwayAll(animated: Bool) {
+        if let waiting = next {
+            next = nil
+            release(waiting)
+        }
+        if let url { putAway(url, animated: animated) }
+    }
+
+    /// Whether a window is the card's, so a click on it isn't taken for a click away from the rope.
+    func owns(_ window: NSWindow?) -> Bool { window != nil && window === panel }
 
     /// Not wanted on the rope: saved where screenshots normally go, and the card slides away.
     func putAway(_ url: URL, animated: Bool = true) {
@@ -1608,16 +1797,19 @@ final class IncomingCard: NSObject, NSDraggingSource {
                               landed: { [weak rope] in rope?.handOff(destination) })
     }
 
+    /// Double-click: opened to look at, not hung. It's saved where screenshots normally go first and opened from
+    /// there, so it doesn't stay behind in the hidden Incoming folder.
     func open() {
         guard let url else { return }
         pauseDismissal()
         self.url = nil
+        let saved = release(url) ?? url
         let generation = presentation
         view.fadeOut { [weak self] in
             guard let self, self.presentation == generation else { return }
             self.orderOut()
         }
-        Clothesline.shared.openInPreview(url)
+        Clothesline.shared.openInPreview(saved)
     }
 
     func beginDrag(with event: NSEvent) {

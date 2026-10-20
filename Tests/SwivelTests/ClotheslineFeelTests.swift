@@ -250,11 +250,75 @@ struct ClotheslineFeelTests {
         #expect(abs(view.ropeY(0) - 18) < 0.001)       // no fall: it fades in place
         run(view, for: 0.5)
         let layer = printLayers(view)[0]
-        let restY = layer.position.y
+        let restY = layer.position.y, restTransform = layer.transform
         view.simulatedPointer = NSPoint(x: layer.position.x, y: layer.position.y + layer.bounds.height / 2)
         run(view, for: 0.5)
         #expect(layer.position.y == restY)
         #expect(layer.sublayers![1].opacity > 0.99)
+        // It keeps its tilt instead of swinging straight, and the × appears at full size instead of growing in.
+        #expect(CATransform3DEqualToTransform(layer.transform, restTransform))
+        #expect(CATransform3DIsIdentity(layer.sublayers![2].transform))
+        #expect(layer.sublayers![2].opacity > 0.99)
+    }
+
+    @Test func testTheWholeCloseButtonKeepsItsPrintHovered() {
+        let view = rope(reduced: true)
+        view.drop(fromHidden: true)
+        run(view, for: 0.5)
+        let layer = printLayers(view)[0], close = layer.sublayers![2]
+        let w = layer.bounds.width
+        // The × reaches 9 pt past the print's corner; aim near its right edge, beyond the print itself.
+        let edge = layer.convert(CGPoint(x: w + 7, y: 2), to: view.layer!)
+        view.simulatedPointer = edge
+        run(view, for: 0.3)
+        #expect(close.opacity < 0.01, "a hidden × mustn't widen the print")
+        view.simulatedPointer = layer.convert(CGPoint(x: w / 2, y: layer.bounds.height / 2), to: view.layer!)
+        run(view, for: 0.3)
+        #expect(close.opacity > 0.99)
+        view.simulatedPointer = edge
+        run(view, for: 0.3)
+        #expect(close.opacity > 0.99, "the × faded under the pointer")
+    }
+
+    @Test func testFrameLoopRestsOnceNothingMoves() {
+        // Reduce Motion: nothing to animate once the rope has faded in.
+        let still = rope(reduced: true)
+        still.drop(fromHidden: true)
+        run(still, for: 1)
+        #expect(!still.needsFrames)
+
+        // Otherwise the breeze blows for a few seconds after the rope comes down, then dies down and it rests.
+        let view = rope()
+        view.drop(fromHidden: true)
+        run(view, for: 1.5)
+        #expect(view.needsFrames, "the breeze stopped too soon")
+        run(view, for: 8)
+        #expect(!view.needsFrames)
+        // Anything that happens starts it again, until that has settled too.
+        view.previewPress(Self.fixtures[0], true)
+        #expect(view.needsFrames)
+        run(view, for: 0.3)
+        view.previewPress(Self.fixtures[0], false)
+        run(view, for: 8)
+        #expect(!view.needsFrames)
+    }
+
+    @Test func testPointerWakesARestingRopeOnlyWhenTheHoverChanges() {
+        let view = rope(reduced: true)
+        view.drop(fromHidden: true)
+        run(view, for: 1)
+        let layer = printLayers(view)[0]
+        #expect(!view.pointerChangesHover)
+        view.simulatedPointer = NSPoint(x: 8, y: RopePanel.height - 8)        // empty strip below the rope
+        #expect(!view.pointerChangesHover)
+        view.simulatedPointer = NSPoint(x: layer.position.x, y: layer.position.y + layer.bounds.height / 2)
+        #expect(view.pointerChangesHover)
+        run(view, for: 0.5)
+        #expect(!view.pointerChangesHover && !view.needsFrames)              // hovered and settled: resting again
+        view.simulatedPointer = NSPoint(x: layer.position.x + 10, y: layer.position.y + layer.bounds.height / 3)
+        #expect(!view.pointerChangesHover)                                    // moving about on the same print
+        view.simulatedPointer = NSPoint(x: 8, y: RopePanel.height - 8)
+        #expect(view.pointerChangesHover)                                     // leaving it must wake the loop
     }
 
     @Test func testRemovedPrintLeavesAtOnceAndItsNeighboursCloseUp() {
@@ -270,6 +334,60 @@ struct ClotheslineFeelTests {
         view.departed(urls[0])
         view.setItems(urls)                             // recycling failed: it comes back
         #expect(printLayers(view).count >= 3)
+    }
+
+    // MARK: Incoming hand-off: every screenshot ends up in the usual folder or on the rope
+
+    @Test func testEveryNewScreenshotGetsTheCardOrGoesToTheUsualFolder() {
+        let incoming = URL(fileURLWithPath: "/tmp/Incoming", isDirectory: true)
+        let second = incoming.appendingPathComponent("Screenshot (2).png")
+        let first = incoming.appendingPathComponent("Screenshot (1).png")
+        let card = incoming.appendingPathComponent("Earlier.png")
+        // Two displays: one capture writes two files that arrive in the same look. The card takes the newest; the
+        // other must not be marked seen and forgotten.
+        let both = Clothesline.triage([second, first, card], seen: ["Earlier.png"], showCard: true)
+        #expect(both.card == second)
+        #expect(both.putAway == [first])
+        #expect(both.seen == ["Screenshot (2).png", "Screenshot (1).png", "Earlier.png"])
+        // Nothing new: nothing happens (the card's own file is the card's business).
+        let none = Clothesline.triage([card], seen: ["Earlier.png"], showCard: true)
+        #expect(none.card == nil && none.putAway.isEmpty)
+        // With the clothesline off, no card: every new file goes straight to the usual folder.
+        let off = Clothesline.triage([second, first], seen: [], showCard: false)
+        #expect(off.card == nil && off.putAway == [second, first])
+    }
+
+    @Test func testAWaitingScreenshotIsSavedAndNeverLeftBehind() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("swivel-incoming-\(UUID().uuidString)", isDirectory: true)
+        let incoming = root.appendingPathComponent("Incoming", isDirectory: true)
+        let usual = root.appendingPathComponent("Desktop", isDirectory: true)
+        let ropeFolder = root.appendingPathComponent("Swivel Clothesline", isDirectory: true)
+        for folder in [incoming, usual, ropeFolder] { try fm.createDirectory(at: folder, withIntermediateDirectories: true) }
+        defer { try? fm.removeItem(at: root) }
+        func waiting(_ name: String) throws -> URL {
+            let url = incoming.appendingPathComponent(name)
+            try Data(name.utf8).write(to: url)
+            return url
+        }
+
+        // Saved in the usual folder, next to (never over) a file of the same name.
+        try Data("older".utf8).write(to: usual.appendingPathComponent("Shot.png"))
+        let saved = IncomingCard.save(try waiting("Shot.png"), to: usual, otherwise: ropeFolder)
+        #expect(saved?.path == usual.appendingPathComponent("Shot 2.png").path)
+        #expect(try String(contentsOf: usual.appendingPathComponent("Shot.png"), encoding: .utf8) == "older")
+        #expect(try String(contentsOf: usual.appendingPathComponent("Shot 2.png"), encoding: .utf8) == "Shot.png")
+
+        // The usual folder is gone (an unplugged drive): it hangs on the rope instead of staying hidden.
+        let gone = root.appendingPathComponent("Unplugged/Screenshots", isDirectory: true)
+        let rescued = IncomingCard.save(try waiting("Other.png"), to: gone, otherwise: ropeFolder)
+        #expect(rescued?.path == ropeFolder.appendingPathComponent("Other.png").path)
+
+        // The usual folder is Incoming itself (settings never restored): moving it in place would strand it.
+        let looped = IncomingCard.save(try waiting("Loop.png"), to: incoming, otherwise: ropeFolder)
+        #expect(looped?.path == ropeFolder.appendingPathComponent("Loop.png").path)
+
+        #expect(try fm.contentsOfDirectory(atPath: incoming.path).isEmpty)
     }
 
     // MARK: Filmstrips for review (only with SWIVEL_ROPE_FRAMES set)
