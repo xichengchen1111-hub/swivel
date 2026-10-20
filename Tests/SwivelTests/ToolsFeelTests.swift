@@ -1,9 +1,10 @@
-import Foundation
+import AppKit
 import Testing
 @testable import Swivel
 
 /// The pure logic behind the tools' feedback: what the shelf highlights and restores, which preset field gets
-/// pointed at, and where the quality slider rests.
+/// pointed at, and where the quality slider rests. Also where the keyboard goes: Return in Text Capture, Quick
+/// Actions closing behind a command's picker, and Quick Look handing activation back.
 @Suite(.serialized)
 @MainActor
 struct ToolsFeelTests {
@@ -85,5 +86,82 @@ struct ToolsFeelTests {
         #expect(QualityDetent.isDetent(90))
         #expect(!QualityDetent.isDetent(91))
         #expect(!QualityDetent.isDetent(0))
+    }
+
+    private func key(_ characters: String, code: UInt16, flags: NSEvent.ModifierFlags = [], in window: NSWindow) -> NSEvent {
+        NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: window.windowNumber,
+                         context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!
+    }
+
+    /// Return reaches the default Copy button once the text is ready; inside the text it types a new line and
+    /// ⌘Return copies. The window is never shown, so nothing appears on screen.
+    @Test func testTextCaptureReturnCopiesUntilTheUserIsInTheText() throws {
+        _ = NSApplication.shared
+        let defaults = UserDefaults.standard
+        let keys = ["feature.textCapture", "feedback.sounds"]
+        let before = keys.map { defaults.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
+        Prefs.setFeatureEnabled(.textCapture, true)
+        Prefs.soundEffects = false
+        let board = NSPasteboard(name: NSPasteboard.Name("SwivelTests-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        let capture = TextCaptureWindow(URL(fileURLWithPath: "/tmp/swivel-capture-test.png"))
+        capture.pasteboard = board
+        let window = capture.window
+        let text = capture.text
+        // AppKit would focus the text as the window first appears; the window starts on Copy instead.
+        #expect(window.initialFirstResponder is NSButton)
+
+        // Even if the user clicked into the empty box while it was recognizing, focus leaves it once the text is in.
+        window.makeFirstResponder(text)
+        capture.showRecognized("Hello world")
+        #expect(window.firstResponder !== text)
+        window.sendEvent(key("\r", code: 36, in: window))
+        #expect(text.string == "Hello world")
+        #expect(board.string(forType: .string) == "Hello world")
+
+        // Clicked into the text: Return is a new line, and only ⌘Return copies.
+        board.clearContents()
+        #expect(window.makeFirstResponder(text))
+        text.setSelectedRange(NSRange(location: 5, length: 0))
+        window.sendEvent(key("\r", code: 36, in: window))
+        #expect(text.string == "Hello\n world")
+        #expect(board.string(forType: .string) == nil)
+        #expect(window.performKeyEquivalent(with: key("\r", code: 36, flags: .command, in: window)))
+        #expect(board.string(forType: .string) == "Hello\n world")
+    }
+
+    /// Quick Actions blinks and closes on `ToolUI.after`, so it still closes while a command it started has an Open
+    /// panel or alert up. Running the run loop in the modal-panel mode from inside this main-actor job stands in for
+    /// that modal session; GCD's main queue would wait until the job ends.
+    @Test func testDelayedCloseFiresWhileAModalSessionRuns() {
+        @MainActor final class Box { var fired = false }
+        let box = Box()
+        let start = Date()
+        ToolUI.after(0.02) { box.fired = true }
+        while !box.fired, Date().timeIntervalSince(start) < 1 {
+            _ = RunLoop.main.run(mode: .modalPanel, before: Date().addingTimeInterval(0.05))
+        }
+        #expect(box.fired)
+        #expect(Date().timeIntervalSince(start) < 0.5)
+    }
+
+    /// Closing a shelf preview gives activation back only to another app that's still running, only while Swivel is
+    /// still active, and only once.
+    @Test func testQuickLookHandsActivationBackOnlyWhenItShould() throws {
+        let other = try #require(NSWorkspace.shared.runningApplications.first { $0 != NSRunningApplication.current && !$0.isTerminated })
+        var handBack = ActivationReturn()
+        handBack.remember(other)
+        #expect(handBack.take(swivelIsActive: true) == other)
+        #expect(handBack.take(swivelIsActive: true) == nil)
+        // The user clicked into another app while previewing: leave activation where they put it.
+        handBack.remember(other)
+        #expect(handBack.take(swivelIsActive: false) == nil)
+        #expect(handBack.app == nil)
+        // Swivel itself (or nothing) was in front: nothing to give back.
+        handBack.remember(.current)
+        #expect(handBack.app == nil)
+        handBack.remember(nil)
+        #expect(handBack.take(swivelIsActive: true) == nil)
     }
 }

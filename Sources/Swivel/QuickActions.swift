@@ -248,8 +248,14 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         runButton?.isEnabled = !commands.isEmpty
         hint.stringValue = commands.isEmpty ? L("No matching actions. Try another search.") : L("↑ ↓ to select · Return to run · Esc to close")
     }
+    /// The panel stays up behind its own picker (that runs at the modal-panel level, above this floating panel): the
+    /// files are for it. Afterwards it takes the keyboard back, so typing goes on into the search field.
     @objc private func chooseFiles() {
         let urls = ToolUI.chooseFiles(folders: true)
+        if let window, window.isVisible {
+            ToolUI.present(window, focus: true)
+            if window.firstResponder !== search.currentEditor() { window.makeFirstResponder(search) }
+        }
         if !urls.isEmpty { chosenFiles = urls; rebuild() }
     }
     @objc private func clearFiles() { chosenFiles = []; rebuild() }
@@ -271,16 +277,20 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
 
     /// Blinks the chosen row off and on, the way a menu item confirms a choice, then closes. It stays under 150 ms
     /// because the keyboard started it; the command itself has already begun.
+    ///
+    /// Some commands open an Open panel or an alert straight away, from inside their first main-queue job. The blink
+    /// runs on run-loop timers (`ToolUI.after`) so the panel still closes behind that picker instead of waiting
+    /// for it, and it goes at once if the picker (or any window the command opens) takes focus first.
     private func confirm(_ row: Int) {
         confirming = true
         generation += 1
         let token = generation
         table.deselectAll(nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+        ToolUI.after(0.05) { [weak self] in
             guard let self, generation == token else { return }
             table.selectRowIndexes([row], byExtendingSelection: false)
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+        ToolUI.after(0.12) { [weak self] in
             guard let self, generation == token else { return }
             hide()
         }
@@ -373,7 +383,12 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
     }
     func windowWillClose(_ notification: Notification) { ToolUI.didClose() }
     func windowDidBecomeKey(_ notification: Notification) { updateRowEmphasis() }
-    func windowDidResignKey(_ notification: Notification) { updateRowEmphasis() }
+    func windowDidResignKey(_ notification: Notification) {
+        // A chosen command moved focus on (its Open panel, alert or window): the panel's job is done, so don't
+        // leave it sitting behind that until the blink ends.
+        if confirming { hide(); return }
+        updateRowEmphasis()
+    }
 }
 
 /// The command list. Moving the pointer over a row reports it, so the selection can follow the mouse.
