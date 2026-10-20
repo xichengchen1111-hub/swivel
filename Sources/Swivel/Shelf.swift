@@ -61,6 +61,10 @@ final class Shelf: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableVie
     private var notice: String?
     private var noticeGeneration = 0
     private var previewItems: [URL] = []
+    /// Who was in front when Quick Look brought Swivel forward, and whether the shelf had the keyboard then.
+    private var previewReturn = ActivationReturn()
+    private var previewHadKeyboard = false
+    private var rekeyObserver: NSObjectProtocol?
 
     /// Adds files without taking focus, so collecting from Finder or the Wheel never interrupts the drag.
     func add(_ urls: [URL]) {
@@ -317,6 +321,10 @@ final class Shelf: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableVie
         }
         previewItems = availableSelection
         guard !previewItems.isEmpty, let panel, let preview = QLPreviewPanel.shared() else { return }
+        // Quick Look only works while Swivel is active, but the shelf is non-activating: remember who was in front
+        // (no preview is up, so this is the user's own app), so closing the preview can hand activation back.
+        previewReturn.remember(NSWorkspace.shared.frontmostApplication)
+        previewHadKeyboard = panel.isKeyWindow
         NSApp.activate()
         panel.makeKey()
         preview.updateController()
@@ -334,6 +342,37 @@ final class Shelf: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableVie
     fileprivate func endPreview(_ preview: QLPreviewPanel) {
         preview.dataSource = nil
         preview.delegate = nil
+        DispatchQueue.main.async { [weak self] in self?.previewClosed() }
+    }
+
+    /// Once the preview has really closed, give activation back to the app the user was in, unless they've already
+    /// clicked into another app (then Swivel isn't active any more). Mirrors the clothesline's QuickLooker.
+    private func previewClosed() {
+        if QLPreviewPanel.sharedPreviewPanelExists(), QLPreviewPanel.shared()?.isVisible == true { return }
+        let rekey = previewHadKeyboard
+        previewHadKeyboard = false
+        guard let app = previewReturn.take(swivelIsActive: NSApp.isActive) else { return }
+        if rekey { rekeyShelf(after: app) }
+        NSApp.yieldActivation(to: app)
+        app.activate(from: .current, options: [])
+    }
+
+    /// The shelf had the keyboard before the preview, so it takes it back, without activating Swivel, once `app`
+    /// is active again (making it key any earlier would lose out to that app's own key window). If another app
+    /// comes forward first, the user has moved on and the keyboard stays there.
+    private func rekeyShelf(after app: NSRunningApplication) {
+        let center = NSWorkspace.shared.notificationCenter
+        if let rekeyObserver { center.removeObserver(rekeyObserver) }
+        let pid = app.processIdentifier
+        rekeyObserver = center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let activated = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.processIdentifier
+            MainActor.assumeIsolated {
+                guard let shelf = self else { return }
+                if let token = shelf.rekeyObserver { center.removeObserver(token) }
+                shelf.rekeyObserver = nil
+                if activated == pid, let panel = shelf.panel, panel.isVisible { panel.makeKey() }
+            }
+        }
     }
 
     nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {

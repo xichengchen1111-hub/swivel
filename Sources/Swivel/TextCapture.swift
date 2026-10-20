@@ -25,7 +25,9 @@ enum TextRecognition {
 final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
     private static var open: [TextCaptureWindow] = []
     let window: NSWindow
-    private let text = CaptureTextView()
+    let text = CaptureTextView()
+    /// Where Copy puts the text. Tests use a private pasteboard so they leave the user's clipboard alone.
+    var pasteboard = NSPasteboard.general
     private let scroll = NSScrollView()
     private let preview = NSImageView()
     private let status = ToolUI.note("Recognizing text…")
@@ -48,7 +50,8 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
 
     static func closeAll() { for controller in open { controller.window.close() } }
 
-    private init(_ url: URL) {
+    /// Builds the window without showing it; `present` shows it and starts recognition.
+    init(_ url: URL) {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 780, height: 540),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
@@ -99,6 +102,10 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
         // The checkmark sits beside the title instead of at the edge of the (reserved) wider button.
         copyButton.imageHugsTitle = true
         ToolUI.reserveWidth(copyButton, for: [(L("Copy Text"), nil), (L("Copy Selection"), nil), (L("Copied"), Self.checkmark)])
+        // Left alone, AppKit puts focus in the text when the window first appears (it's the only view that takes
+        // focus), and there Return types a new line instead of reaching Copy. Starting on Copy keeps it off the
+        // text; the button itself only takes focus with Full Keyboard Access, and otherwise the window keeps it.
+        window.initialFirstResponder = copyButton
         let close = ToolUI.button("Close", target: self, action: #selector(closeWindow))
         close.keyEquivalent = "\u{1b}"
         let footer = NSStackView()
@@ -136,21 +143,30 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
             do {
                 let value = try await TextRecognition.recognize(url)
                 guard !Task.isCancelled, let self else { return }
-                text.string = value
-                text.isEditable = true
-                text.setSelectedRange(NSRange(location: 0, length: 0))
-                text.scrollToBeginningOfDocument(nil)
-                status.stringValue = value.isEmpty ? L("No text found in this image.") : L("Ready to copy")
-                progress.stopAnimation(nil)
-                updateCopy()
-                // Settle in softly. Focus stays off the text, so Return copies straight away.
-                if !value.isEmpty { ToolUI.fadeIn(text, from: 0.4) }
+                showRecognized(value)
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 progress.stopAnimation(nil)
                 status.stringValue = L("Could not recognize text: %@", error.localizedDescription)
             }
         }
+    }
+
+    /// The text is ready to review. Focus stays off it, so Return copies straight away (Copy is the default button).
+    /// Once the user clicks or tabs into the text, Return types a new line there and ⌘Return copies, as the Copy
+    /// button's tooltip says.
+    func showRecognized(_ value: String) {
+        text.string = value
+        text.isEditable = true
+        text.setSelectedRange(NSRange(location: 0, length: 0))
+        text.scrollToBeginningOfDocument(nil)
+        // A click into the empty box while waiting would otherwise leave focus there.
+        if window.firstResponder === text { window.makeFirstResponder(nil) }
+        status.stringValue = value.isEmpty ? L("No text found in this image.") : L("Ready to copy")
+        progress.stopAnimation(nil)
+        updateCopy()
+        // Settle in softly.
+        if !value.isEmpty { ToolUI.fadeIn(text, from: 0.4) }
     }
 
     func textDidChange(_ notification: Notification) { updateCopy() }
@@ -171,8 +187,8 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
         guard Feature.textCapture.isOn, copyButton.isEnabled else { return }
         let ranges = selectedRanges
         let value = ranges.isEmpty ? text.string : ranges.map { (text.string as NSString).substring(with: $0) }.joined(separator: "\n")
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(value, forType: .string)
+        pasteboard.clearContents()
+        pasteboard.setString(value, forType: .string)
         status.stringValue = L("Text copied")
         Feedback.done()
         // The button itself says it worked, for a moment.
@@ -199,7 +215,7 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
 
 /// ⌘Return copies from anywhere in the window, including while the text is being edited, where plain Return
 /// types a new line.
-private final class CaptureTextView: NSTextView {
+final class CaptureTextView: NSTextView {
     var onCommandReturn: (() -> Void)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {

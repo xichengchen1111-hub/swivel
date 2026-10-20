@@ -32,6 +32,16 @@ enum ToolUI {
         if focus { panel.makeKey() }
     }
 
+    /// Runs `body` on the main thread after `delay`, even while a modal session (an Open panel, an alert) is running
+    /// inside the current main-queue job. `DispatchQueue.main.asyncAfter` can't do that: GCD holds main-queue blocks
+    /// back until that job returns, which is after the modal ends. Run-loop timers keep firing in the modal-panel and
+    /// event-tracking modes; they're named here as well as in the common modes, so this doesn't depend on AppKit
+    /// having registered them yet. For timing a step (closing a panel), never for motion: that's a Spring.
+    static func after(_ delay: TimeInterval, _ body: @escaping @MainActor @Sendable () -> Void) {
+        let timer = Timer(timeInterval: delay, repeats: false) { _ in MainActor.assumeIsolated { body() } }
+        for mode: RunLoop.Mode in [.common, .modalPanel, .eventTracking] { RunLoop.main.add(timer, forMode: mode) }
+    }
+
     static func didClose() {
         DispatchQueue.main.async {
             // Non-activating panels never asked for the Dock icon, so they don't keep it either.
@@ -111,6 +121,25 @@ enum ToolUI {
         }
         (button.title, button.image, button.imagePosition) = (title, image, position)
         button.widthAnchor.constraint(greaterThanOrEqualToConstant: ceil(widest)).isActive = true
+    }
+}
+
+/// The app the user was in when Swivel had to come forward for a moment (Quick Look only works while Swivel is
+/// active), so activation can go back to it afterwards, as the clothesline's QuickLooker does.
+struct ActivationReturn {
+    private(set) var app: NSRunningApplication?
+
+    /// Call just before activating Swivel. Nothing is remembered when Swivel itself (or nothing) was in front.
+    mutating func remember(_ frontmost: NSRunningApplication?, current: NSRunningApplication = .current) {
+        app = frontmost == current ? nil : frontmost
+    }
+
+    /// The app to give activation back to, at most once: only while Swivel is still the active app (the user hasn't
+    /// clicked into another one meanwhile) and that app is still running.
+    mutating func take(swivelIsActive: Bool) -> NSRunningApplication? {
+        defer { app = nil }
+        guard swivelIsActive, let app, !app.isTerminated else { return nil }
+        return app
     }
 }
 
