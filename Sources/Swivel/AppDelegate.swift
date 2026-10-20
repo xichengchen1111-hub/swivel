@@ -16,6 +16,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         watcher.onDragEnd = { [weak self] in self?.wheel.dragEnded() }
         watcher.start()
+        launchToast.show("Swivel is running — drag a file, then tap ⇧", symbol: "circle.circle")
+    }
+
+    private let launchToast = Toast()
+
+    /// Opening the app again (Spotlight, Launchpad, Finder) shows instructions, since the menu bar icon
+    /// can be hidden behind the notch when the menu bar is crowded.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NSApp.activate()
+        let alert = NSAlert()
+        alert.messageText = "Swivel is running"
+        alert.informativeText = """
+            Start dragging a file in Finder, keep holding the mouse button, then tap:
+
+            ⇧ Shift — convert formats
+            ⌘ Command — file tools
+            ⌃ Control — file actions
+
+            Drop the file on a segment of the wheel. Tap the same key again for more options.
+            """
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Quit Swivel")
+        if alert.runModal() == .alertSecondButtonReturn { NSApp.terminate(nil) }
+        return false
     }
 
     private func setUpStatusItem() {

@@ -14,7 +14,7 @@ final class WheelView: NSView {
     private var page = 0
     private var pageCount = 1
 
-    private let outerRadius: CGFloat = 122
+    let outerRadius: CGFloat = 122
     private let innerRadius: CGFloat = 52
     private let rimWidth: CGFloat = 9
     private let gap: CGFloat = 7
@@ -37,23 +37,6 @@ final class WheelView: NSView {
         self.pageCount = pageCount
         hovered = nil
         needsDisplay = true
-    }
-
-    func popIn() {
-        guard let layer else { return }
-        let c = center
-        func scaled(_ s: CGFloat) -> CATransform3D {
-            var t = CATransform3DMakeTranslation(c.x, c.y, 0)
-            t = CATransform3DScale(t, s, s, 1)
-            return CATransform3DTranslate(t, -c.x, -c.y, 0)
-        }
-        let anim = CASpringAnimation(keyPath: "transform")
-        anim.fromValue = scaled(0.82)
-        anim.toValue = CATransform3DIdentity
-        anim.damping = 16
-        anim.stiffness = 260
-        anim.duration = anim.settlingDuration
-        layer.add(anim, forKey: "pop")
     }
 
     // MARK: Geometry
@@ -97,23 +80,11 @@ final class WheelView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let dark = isDark
-        let base = dark ? NSColor(white: 0.16, alpha: 0.96) : NSColor(white: 0.88, alpha: 0.97)
-        let segTop = dark ? NSColor(white: 0.30, alpha: 1) : NSColor(white: 0.995, alpha: 1)
-        let segBottom = dark ? NSColor(white: 0.24, alpha: 1) : NSColor(white: 0.925, alpha: 1)
-        let text = dark ? NSColor(white: 0.92, alpha: 1) : NSColor(white: 0.22, alpha: 1)
-        let accent = NSColor(srgbRed: 1.0, green: 0.47, blue: 0.12, alpha: 1)
-
-        // Base disc with a soft shadow.
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = 22
-        shadow.shadowOffset = NSSize(width: 0, height: -6)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(dark ? 0.55 : 0.22)
-        shadow.set()
-        base.setFill()
-        NSBezierPath(ovalIn: NSRect(x: center.x - outerRadius, y: center.y - outerRadius,
-                                    width: outerRadius * 2, height: outerRadius * 2)).fill()
-        NSGraphicsContext.restoreGraphicsState()
+        // Translucent keycaps over the glass disc that sits behind this view.
+        let segTop = dark ? NSColor(white: 1, alpha: 0.16) : NSColor(white: 1, alpha: 0.62)
+        let segBottom = dark ? NSColor(white: 1, alpha: 0.07) : NSColor(white: 1, alpha: 0.34)
+        let text = dark ? NSColor(white: 0.95, alpha: 1) : NSColor(white: 0.18, alpha: 1)
+        let accent = NSColor(srgbRed: 1.0, green: 0.47, blue: 0.12, alpha: 0.92)
 
         // Segments, drawn like keycaps.
         let gradient = NSGradient(starting: segTop, ending: segBottom)!
@@ -125,13 +96,13 @@ final class WheelView: NSView {
             let capShadow = NSShadow()
             capShadow.shadowBlurRadius = 1.5
             capShadow.shadowOffset = NSSize(width: 0, height: -1.5)
-            capShadow.shadowColor = NSColor.black.withAlphaComponent(dark ? 0.5 : 0.18)
+            capShadow.shadowColor = NSColor.black.withAlphaComponent(dark ? 0.35 : 0.10)
             capShadow.set()
             (isHovered ? accent : segBottom).setFill()
             path.fill()
             NSGraphicsContext.restoreGraphicsState()
             (isHovered ? hoverGradient : gradient).draw(in: path, angle: -90)
-            NSColor.white.withAlphaComponent(dark ? 0.06 : 0.7).setStroke()
+            NSColor.white.withAlphaComponent(dark ? 0.18 : 0.75).setStroke()
             path.lineWidth = 1
             path.stroke()
 
@@ -150,9 +121,9 @@ final class WheelView: NSView {
         let hubShadow = NSShadow()
         hubShadow.shadowBlurRadius = 3
         hubShadow.shadowOffset = NSSize(width: 0, height: -1)
-        hubShadow.shadowColor = NSColor.black.withAlphaComponent(0.2)
+        hubShadow.shadowColor = NSColor.black.withAlphaComponent(0.12)
         hubShadow.set()
-        (dark ? NSColor(white: 0.12, alpha: 1) : NSColor.white).setFill()
+        (dark ? NSColor(white: 0, alpha: 0.28) : NSColor(white: 1, alpha: 0.72)).setFill()
         NSBezierPath(ovalIn: hub).fill()
         NSGraphicsContext.restoreGraphicsState()
 
@@ -213,5 +184,26 @@ final class WheelView: NSView {
         let item = items[index]
         DispatchQueue.main.async { [weak self] in self?.onDrop?(item, urls) }
         return true
+    }
+}
+
+extension NSView {
+    /// A small spring "pop" from 82% scale around the view's centre.
+    func popIn() {
+        wantsLayer = true
+        guard let layer else { return }
+        let c = NSPoint(x: bounds.midX, y: bounds.midY)
+        func scaled(_ s: CGFloat) -> CATransform3D {
+            var t = CATransform3DMakeTranslation(c.x, c.y, 0)
+            t = CATransform3DScale(t, s, s, 1)
+            return CATransform3DTranslate(t, -c.x, -c.y, 0)
+        }
+        let anim = CASpringAnimation(keyPath: "transform")
+        anim.fromValue = scaled(0.82)
+        anim.toValue = CATransform3DIdentity
+        anim.damping = 16
+        anim.stiffness = 260
+        anim.duration = anim.settlingDuration
+        layer.add(anim, forKey: "pop")
     }
 }

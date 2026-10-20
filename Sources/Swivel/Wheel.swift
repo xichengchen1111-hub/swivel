@@ -99,12 +99,35 @@ final class WheelPanel: NSPanel {
                    backing: .buffered, defer: false)
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = false
+        hasShadow = true
         level = .popUpMenu
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         isReleasedWhenClosed = false
         hidesOnDeactivate = false
-        contentView = wheel
+
+        // Frosted glass disc behind the segments, which the wheel draws translucently on top.
+        let container = NSView(frame: wheel.frame)
+        let r = wheel.outerRadius
+        let disc = NSRect(x: wheel.frame.midX - r, y: wheel.frame.midY - r, width: r * 2, height: r * 2)
+        container.addSubview(Self.makeGlass(frame: disc, radius: r))
+        container.addSubview(wheel)
+        contentView = container
+    }
+
+    private static func makeGlass(frame: NSRect, radius: CGFloat) -> NSView {
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView(frame: frame)
+            glass.cornerRadius = radius
+            return glass
+        }
+        let blur = NSVisualEffectView(frame: frame)
+        blur.material = .hudWindow
+        blur.blendingMode = .behindWindow
+        blur.state = .active
+        blur.wantsLayer = true
+        blur.layer?.cornerRadius = radius
+        blur.layer?.masksToBounds = true
+        return blur
     }
 
     override var canBecomeKey: Bool { false }
@@ -121,7 +144,7 @@ final class WheelPanel: NSPanel {
         setFrameOrigin(origin)
         alphaValue = 0
         orderFrontRegardless()
-        wheel.popIn()
+        contentView?.popIn()
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.14
             animator().alphaValue = 1

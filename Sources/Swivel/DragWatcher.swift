@@ -1,4 +1,7 @@
 import AppKit
+import os
+
+let log = Logger(subsystem: "local.swivel.app", category: "drag")
 
 enum WheelMode {
     case convert, tools, actions
@@ -64,23 +67,29 @@ final class DragWatcher {
 
         if !wasDown {
             baselineCount = dragPasteboard.changeCount
+            log.debug("mouse down, drag pasteboard count \(self.baselineCount)")
             return
         }
 
         if !active {
             let count = dragPasteboard.changeCount
             guard count != baselineCount else { return }
-            baselineCount = count
+            // Keep retrying until the source has finished writing file URLs to the pasteboard.
+            let types = dragPasteboard.types?.map(\.rawValue) ?? []
             let found = dragPasteboard.readObjects(forClasses: [NSURL.self],
                                                    options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+            log.debug("drag pasteboard changed \(count): types \(types, privacy: .public), \(found.count) file URLs")
             guard !found.isEmpty else { return }
+            baselineCount = count
             urls = found
             active = true
+            log.info("file drag started: \(found.map(\.lastPathComponent), privacy: .public)")
             // Keys already held when the drag began don't count; the wheel opens on a fresh tap.
             return
         }
 
         let pressed = flags.subtracting(lastFlags)
+        if !pressed.isEmpty { log.info("key tap during drag: \(pressed.rawValue)") }
         if pressed.contains(.shift) {
             onKeyTap?(.convert)
         } else if pressed.contains(.command) {
