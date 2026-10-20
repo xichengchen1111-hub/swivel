@@ -180,6 +180,7 @@ func menuPreview(style: MenuStyle, titles: [String], mode: WheelMode, hovered: I
     view.configure(items: shown.map { WheelItem(title: $0) { _ in ActionResult(message: "") } }, mode: mode, page: 0,
                    pageCount: titles.count > 8 ? 2 : 1)
     view.hovered = hovered
+    view.resetVisit()  // the resting hover is only a picture; the user hasn't visited anything yet
     return view
 }
 
@@ -229,6 +230,7 @@ final class PreviewHost: NSView {
         preview?.removeFromSuperview()
         natural = view.bounds.size
         restingHover = view.hovered
+        view.resetVisit()
         preview = view
         addSubview(view)
         layoutPreview()
@@ -272,6 +274,8 @@ final class PreviewHost: NSView {
         if preview.pressed != nil { preview.beginOpen() }
         preview.pointerLeft()
         preview.hovered = restingHover
+        // Setting the resting hover marks it visited; clear that, or the next try opens on "Cancel" with a tick.
+        preview.resetVisit()
         preview.settle()
     }
 
@@ -298,7 +302,12 @@ final class PreviewHost: NSView {
 
     private var livePreview: WheelView? { preview?.isLive == true ? preview : nil }
 
-    override func mouseEntered(with event: NSEvent) { follow(event) }
+    override func mouseEntered(with event: NSEvent) {
+        // Each entry is a fresh try: items visited last time don't make an empty spot mean "cancel" now.
+        if let preview = livePreview, preview.pressed == nil { preview.resetVisit() }
+        follow(event)
+    }
+
     override func mouseMoved(with event: NSEvent) { follow(event) }
 
     override func mouseExited(with event: NSEvent) {
@@ -881,6 +890,27 @@ struct DropSlot {
     mutating func reset() { destination = nil }
 }
 
+/// What Customize saves for one menu. Its rows list only the items whose tools are on right now (Extract Text, image
+/// presets, Hang and Float come and go with their features), so the stored entries for every other title are carried
+/// over: they stay hidden if they were, and each keeps its place right after the title it followed.
+enum Arrangement {
+    static func merged(rows: [(title: String, shown: Bool)], storedOrder: [String],
+                       storedHidden: Set<String>) -> (order: [String], hidden: Set<String>) {
+        let present = Set(rows.map(\.title))
+        let hidden = Set(rows.filter { !$0.shown }.map(\.title)).union(storedHidden.subtracting(present))
+        var order = rows.map(\.title)
+        var placed = present
+        for (i, title) in storedOrder.enumerated() where !placed.contains(title) {
+            placed.insert(title)
+            // Everything before it in the stored order is already placed (shown now, or put back just before), so
+            // it goes right after its predecessor; one that led the list stays at the front.
+            let after = i > 0 ? order.firstIndex(of: storedOrder[i - 1]) : nil
+            order.insert(title, at: after.map { $0 + 1 } ?? 0)
+        }
+        return (order, hidden)
+    }
+}
+
 /// A Customize row: a native checkbox and a grip. Anywhere but the checkbox starts a drag, so reordering doesn't
 /// fight with ticking.
 private final class ArrangeCell: NSTableCellView {
@@ -1037,9 +1067,12 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         host.show(menuPreview(style: key.style, titles: titles, mode: mode), crossfade: crossfade)
     }
 
+    /// Writes the rows over the stored arrangement, keeping what's stored for items whose tools are off right now.
+    /// (Restore Defaults is the one thing that clears those too.)
     private func save() {
+        let merged = Arrangement.merged(rows: rows, storedOrder: Prefs.order(mode, kind), storedHidden: Prefs.hidden(mode, kind))
         isSaving = true
-        Prefs.setArrangement(order: rows.map(\.title), hidden: Set(rows.filter { !$0.shown }.map(\.title)), mode, kind)
+        Prefs.setArrangement(order: merged.order, hidden: merged.hidden, mode, kind)
         isSaving = false
         updatePreview(crossfade: true)
     }
@@ -1076,6 +1109,8 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
                    forRowIndexes rowIndexes: IndexSet) {
         dragged = rowIndexes.first
         slot.reset()
+        // The parting gap slides rows aside as it moves; with Reduce Motion a drop line marks the place instead.
+        tableView.draggingDestinationFeedbackStyle = Motion.reduced ? .regular : .gap
     }
 
     func tableView(_ tableView: NSTableView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint,
@@ -1102,10 +1137,14 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         guard to != from else { return true }  // put back where it was
         rows.insert(rows.remove(at: from), at: to)
         labels.insert(labels.remove(at: from), at: to)
-        // Slide the row into the gap rather than reloading the list.
-        tableView.beginUpdates()
-        tableView.moveRow(at: from, to: to)
-        tableView.endUpdates()
+        if Motion.reduced {
+            tableView.reloadData()  // appears in place: moveRow always animates the slide
+        } else {
+            // Slide the row into the gap rather than reloading the list.
+            tableView.beginUpdates()
+            tableView.moveRow(at: from, to: to)
+            tableView.endUpdates()
+        }
         save()
         Haptics.tick(.generic)
         return true
