@@ -37,7 +37,18 @@ final class Clothesline: NSObject {
         RunLoop.main.add(timer, forMode: .common)
         hoverTimer = timer
         hotKey = HotKey { [weak self] in self?.toggle() }
-        if Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: folder) }
+        if Prefs.clotheslineEnabled && Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: folder) }
+    }
+
+    /// Turning the feature off puts the rope away, stops hanging copies and gives screenshots back to macOS.
+    func setEnabled(_ on: Bool) {
+        Prefs.clotheslineEnabled = on
+        if on {
+            if Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: folder) }
+        } else {
+            hide()
+            ScreenshotTakeover.restore()
+        }
     }
 
     /// Called on quit so the user's own screenshot settings come back.
@@ -123,8 +134,8 @@ final class Clothesline: NSObject {
     }
 
     private func tick() {
-        checkPasteboard()
         guard Prefs.clotheslineEnabled else { if isShown { hide() }; return }
+        checkPasteboard()
         let point = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) else { return }
         let inMenuBar = point.y >= screen.frame.maxY - menuBarHeight(screen)

@@ -14,13 +14,14 @@ Everything runs locally, using built-in macOS frameworks (ImageIO, AVFoundation,
 
 ## The app window
 
-Open Swivel from Launchpad or Finder (or choose **Open Swivel…** from the ◎ menu) for:
+Swivel is a bundle of two tools, each switched on or off on its own — from the app window (open Swivel from Launchpad or Finder, or **Open Swivel…** in the ◎ menu) or straight from the ◎ menu.
 
-- **General**: turn Swivel on or off, open at login.
-- **Shortcuts**: pick which key (⇧ ⌘ ⌃ ⌥ fn) opens each menu.
-- **Style**: menu templates — Wheel, List, Bookshelf, Sticky Notes, Clothesline.
-- **Customize**: choose which options each menu shows per file type, and their order.
-- **Clothesline**: a rope under the menu bar. New screenshots hang on it instead of the desktop; rest the pointer on the menu bar (or press ⌃⌥T) to lower it. Click to copy, double-click to open, hold for Quick Look, drag into an app for a copy or into a folder to take it down, drag to the Trash or click × to discard. Images can also be hung from the ⌃ Actions menu.
+The window works like PowerToys: features in a sidebar, each page starting with the feature's switch.
+
+- **Overview**: both features with their switches.
+- **Wheel**: the drag-and-tap menu. Sections for **Shortcuts** (which key, ⇧ ⌘ ⌃ ⌥ fn, opens each menu), **Style** (Wheel, List, Bookshelf, Sticky Notes, Clothesline templates) and **Customize** (which options each menu shows per file type, and their order).
+- **Clothesline**: a rope under the menu bar. New screenshots hang on it instead of the desktop; rest the pointer on the menu bar (or press ⌃⌥T) to lower it. Click to copy, double-click to open, hold for Quick Look, drag into an app for a copy or into a folder to take it down, drag to the Trash or click × to discard. Images can also be hung from the Wheel's ⌃ Actions menu.
+- **General**: open at login.
 
 ## Formats
 

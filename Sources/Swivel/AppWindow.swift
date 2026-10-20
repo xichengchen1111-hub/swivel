@@ -1,20 +1,21 @@
 import AppKit
 import ServiceManagement
 
-/// The app's main window: settings tabs plus the clothesline. While it is open Swivel shows in the Dock with a normal menu bar.
+/// The app's main window, laid out like PowerToys: features in a sidebar, each with its own switch and settings.
+/// While it is open Swivel shows in the Dock with a normal menu bar.
 @MainActor
 final class AppWindow: NSObject, NSWindowDelegate {
     static let shared = AppWindow()
 
-    enum Tab: Int { case general, shortcuts, style, customize, clothesline }
+    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview }
 
     private var window: NSWindow?
-    private var tabs: NSTabViewController?
+    private var split: BundleSplit?
 
     func show(_ tab: Tab? = nil) {
         let window = self.window ?? makeWindow()
         self.window = window
-        if let tab { tabs?.selectedTabViewItemIndex = tab.rawValue }
+        split?.select(tab ?? .overview)
         NSApp.setActivationPolicy(.regular)
         NSApp.mainMenu = Self.mainMenu()
         NSApp.activate()
@@ -22,28 +23,18 @@ final class AppWindow: NSObject, NSWindowDelegate {
     }
 
     private func makeWindow() -> NSWindow {
-        let tabs = TitledTabs()
-        tabs.tabStyle = .toolbar
-        tabs.transitionOptions = [.crossfade, .allowUserInteraction]
-        for (vc, title, symbol) in [(GeneralPane() as NSViewController, "General", "gearshape"),
-                                    (ShortcutsPane(), "Shortcuts", "keyboard"),
-                                    (StylePane(), "Style", "paintpalette"),
-                                    (CustomizePane(), "Customize", "slider.horizontal.3"),
-                                    (ClotheslinePane(), "Clothesline", "tshirt")] {
-            vc.title = title  // shown as the window title for the selected tab
-            let item = NSTabViewItem(viewController: vc)
-            item.label = title
-            item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
-            tabs.addTabViewItem(item)
-        }
-        self.tabs = tabs
-        let window = NSWindow(contentViewController: tabs)
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.toolbarStyle = .preference
+        let split = BundleSplit()
+        self.split = split
+        let window = NSWindow(contentViewController: split)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.toolbarStyle = .unified
         window.title = "Swivel"
+        window.setContentSize(NSSize(width: 1100, height: 780))
+        window.minSize = NSSize(width: 900, height: 600)
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.setFrameAutosaveName("SwivelMain")
+        window.setFrameAutosaveName("SwivelBundle")
         window.center()
         return window
     }
@@ -83,19 +74,6 @@ final class AppWindow: NSObject, NSWindowDelegate {
         }
         NSApp.windowsMenu = windowMenu
         return main
-    }
-}
-
-/// Keeps the window title in step with the selected tab ("Swivel — Style").
-final class TitledTabs: NSTabViewController {
-    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
-        super.tabView(tabView, didSelect: tabViewItem)
-        view.window?.title = "Swivel — \(tabViewItem?.label ?? "")"
-    }
-
-    override func viewDidAppear() {
-        super.viewDidAppear()
-        view.window?.title = "Swivel — \(tabViewItems[selectedTabViewItemIndex].label)"
     }
 }
 
@@ -210,7 +188,6 @@ final class PreviewHost: NSView {
 // MARK: - General
 
 final class GeneralPane: Pane {
-    private let enabled = NSButton(checkboxWithTitle: "Open menus while dragging files", target: nil, action: nil)
     private let login = NSButton(checkboxWithTitle: "Open Swivel at login", target: nil, action: nil)
 
     init() { super.init(size: NSSize(width: 620, height: 420)) }
@@ -221,18 +198,15 @@ final class GeneralPane: Pane {
         icon.symbolConfiguration = .init(pointSize: 40, weight: .light)
         icon.contentTintColor = .controlAccentColor
         let title = label("Swivel", size: 22, weight: .bold)
-        let subtitle = label("Drag a file, tap a key, drop it on the menu that appears.", secondary: true)
+        let subtitle = label("A bundle of small Mac tools. Turn on the ones you want.", secondary: true)
         let titles = NSStackView(views: [title, subtitle])
         titles.orientation = .vertical
         titles.alignment = .leading
         titles.spacing = 2
         stack.addArrangedSubview(NSStackView(views: [icon, titles]))
 
-        enabled.target = self
-        enabled.action = #selector(toggleEnabled)
         login.target = self
         login.action = #selector(toggleLogin)
-        stack.addArrangedSubview(row("Swivel", enabled))
         stack.addArrangedSubview(row("Startup", login))
 
         let steps = label("""
@@ -242,7 +216,7 @@ final class GeneralPane: Pane {
             Tap the same key again for the next page. Drop on empty space to cancel.
             """, secondary: true)
         steps.preferredMaxLayoutWidth = 400
-        stack.addArrangedSubview(row("How it works", steps))
+        stack.addArrangedSubview(row("Wheel", steps))
 
         let shelf = NSButton(title: "Show Shelf", target: self, action: #selector(showShelf))
         let rope = NSButton(title: "Show Clothesline", target: self, action: #selector(showClothesline))
@@ -250,11 +224,9 @@ final class GeneralPane: Pane {
     }
 
     override func refresh() {
-        enabled.state = Prefs.isEnabled ? .on : .off
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
     }
 
-    @objc private func toggleEnabled() { Prefs.isEnabled = enabled.state == .on }
 
     @objc private func toggleLogin() {
         do {
@@ -272,7 +244,6 @@ final class GeneralPane: Pane {
 // MARK: - Clothesline
 
 final class ClotheslinePane: Pane {
-    private let enabled = NSButton(checkboxWithTitle: "Lower the rope when the pointer rests on the menu bar", target: nil, action: nil)
     private let takeover = NSButton(checkboxWithTitle: "Hang new screenshots and screen recordings on the rope", target: nil, action: nil)
     private let copied = NSButton(checkboxWithTitle: "Also hang images you copy (e.g. ⌃ screenshots, Copy in Preview)", target: nil, action: nil)
 
@@ -281,11 +252,10 @@ final class ClotheslinePane: Pane {
 
     override func build() {
         stack.addArrangedSubview(label("A rope hidden under the menu bar. Screenshots hang on it instead of piling up on the desktop; take one down when you need it.", secondary: true))
-        for (box, action) in [(enabled, #selector(toggleEnabled)), (takeover, #selector(toggleTakeover)), (copied, #selector(toggleCopied))] {
+        for (box, action) in [(takeover, #selector(toggleTakeover)), (copied, #selector(toggleCopied))] {
             box.target = self
             box.action = action
         }
-        stack.addArrangedSubview(row("Rope", enabled))
         stack.addArrangedSubview(row("Screenshots", takeover))
         let note = label("Turns off the floating thumbnail and saves screenshots to the rope's folder. Your own settings come back when this is off or Swivel quits.", size: 11, secondary: true)
         note.preferredMaxLayoutWidth = 440
@@ -315,17 +285,15 @@ final class ClotheslinePane: Pane {
     }
 
     override func refresh() {
-        enabled.state = Prefs.clotheslineEnabled ? .on : .off
         takeover.state = Prefs.clotheslineTakeover ? .on : .off
         copied.state = Prefs.clotheslineHangCopied ? .on : .off
     }
 
-    @objc private func toggleEnabled() { Prefs.clotheslineEnabled = enabled.state == .on }
     @objc private func toggleCopied() { Prefs.clotheslineHangCopied = copied.state == .on }
 
     @objc private func toggleTakeover() {
         Prefs.clotheslineTakeover = takeover.state == .on
-        if Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: Clothesline.shared.folder) } else { ScreenshotTakeover.restore() }
+        if Prefs.clotheslineTakeover && Prefs.clotheslineEnabled { ScreenshotTakeover.enable(into: Clothesline.shared.folder) } else { ScreenshotTakeover.restore() }
     }
 
     @objc private func showRope() { Clothesline.shared.toggle() }
