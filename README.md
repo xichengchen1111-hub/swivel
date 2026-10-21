@@ -1,12 +1,14 @@
 # Swivel
 
-A zero-click, offline file converter for macOS. Drag any file, tap a key, and drop it on the wheel that appears under your cursor.
+A native, local file toolkit for macOS. Drag any file, tap a key, and drop it on the wheel that appears under your cursor.
 
 | Key while dragging | Wheel |
 | --- | --- |
 | ⇧ Shift | **Convert** formats |
 | ⌘ Command | File **tools**: editors for Crop, Compress, Edit (exposure, colour…), Add Background, Redact (finds faces and text on-device), Metadata and Annotate (arrows, boxes, text, numbered callouts); Collage for several images; Trim for video and audio; Merge for several videos or audio files; plus resize, rotate, mute, split… |
-| ⌃ Control | File **actions** (AirDrop, Float shelf, Copy, Move, Copy Path, Terminal) |
+| ⌃ Control | File **actions** (Batch Rename, AirDrop, Float shelf, Copy, Move, Copy Path, Terminal) |
+| ⌥ Option | **Apps**: configured applications, Codex and Claude Code drafts |
+| fn | **Codes**: QR library and saved codes |
 
 Tap the same key again to page through a wheel that has more than eight options. Drop on the centre to cancel. Results are saved next to the original — no new folders, even for multi-page PDFs or archives. Click the toast to reveal them in Finder.
 
@@ -22,11 +24,11 @@ Everything runs locally, using built-in macOS frameworks (Vision, ImageIO, AVFou
 
 ## The app window
 
-Swivel is a bundle of six tools, each switched on or off on its own — from the app window (open Swivel from Launchpad or Finder, or **Open Swivel…** in the ◎ menu) or straight from the ◎ menu. The four additions in version 1.1 start **off**, so each user can choose what to enable.
+Swivel is a bundle of ten tools, each switched on or off on its own — from the app window (open Swivel from Launchpad or Finder, or **Open Swivel…** in the ◎ menu) or straight from the ◎ menu. Optional tools start **off**, so each user can choose what to enable.
 
 The window works like PowerToys: features in a sidebar, each page starting with the feature's switch.
 
-- **Overview**: all six features with their switches.
+- **Overview**: all ten features with their switches.
 - **Wheel**: the drag-and-tap menu. Sections for **Shortcuts** (which key, ⇧ ⌘ ⌃ ⌥ fn, opens each menu), **Style** (Wheel, List, Bookshelf, Sticky Notes, Clothesline templates) and **Customize** (which options each menu shows per file type, and their order; drag a row by its grip to reorder). Bookshelf, Sticky Notes and Clothesline use quiet, nearly neutral card surfaces, fine borders, light shadows and system text, with matching dark appearances. The menu previews are live: move the pointer over one to try how it feels, and click an option to press it.
 - **Clothesline**: a rope under the menu bar. A new screenshot first waits as a card in the bottom-right corner, like the system thumbnail: drag it up (or click it) to hang it, drag it into an app or folder like any file, or leave it and it goes to your usual screenshot folder. The rope and prints move on a small physics model (spring drop, pendulum swing, breeze); move the pointer to the screen’s top edge (or press ⌃⌥T) to lower it immediately. Click to copy (the print confirms it with a “Copied” chip), double-click to open, hold or Force Click for Quick Look (it zooms out of the print), drag into an app for a copy or into a folder to take it down, drag to the Trash or click × to discard. Clicking the corner card flies it up to its peg. A rope shown with ⌃⌥T stays until you click elsewhere. The motion is deliberately calm: everything is well damped and settles within about a second. Images can also be hung from the Wheel's ⌃ Actions menu. Unattended screenshot cards slide away after 2.5 seconds; hovering or dragging pauses dismissal, and leaving the card gives you another second. The screenshot is kept in your usual screenshot folder.
 - **Template colors**: Wheel → Colors provides separate Bookshelf and Sticky Notes palettes. Choose Soft Neutrals, Misty Coast, Sage Garden, Warm Linen, Rose Clay or Lavender Haze, or customize four repeating colors with native color wells. The Bookshelf rail has its own color well. Live previews, per-template reset, automatic persistence and readable light/dark text are included.
@@ -36,6 +38,11 @@ The window works like PowerToys: features in a sidebar, each page starting with 
 - **File Shelf**: gather files and folders in a floating native list. Command-click or Shift-click to select several, then drag them out together. Space opens Quick Look. New files glide in and glow briefly; one already on the shelf is pointed out instead of added twice. Removing or clearing items only removes references (⌘Z brings them back); originals stay in place. The shelf floats without taking focus from the app you're working in. The shelf is temporary and clears when Swivel quits.
 - **Image Presets**: save a name, maximum long edge, JPG/PNG/HEIC/TIFF format, quality and metadata preference. Three built-in presets are included. Apply a preset to one or several images from Settings, the Wheel or Quick Actions. Results are written beside each original with unique names. Small images are not enlarged; JPG composites transparency onto white. Animated images use their first frame. Turning the feature off retains saved presets.
 - **Quick Actions**: press **⌃⇧Space** to search enabled tools without finding the menu-bar icon. Choose files or drop them onto the panel, search, use ↑/↓, and press Return; the chosen row blinks as it runs, like a menu. Esc dismisses the search panel. It appears instantly and doesn't take Swivel to the front. Settings offers **⌃⌥K** and **⌘⇧P** as alternatives and reports shortcut registration conflicts. It accepts explicitly supplied files rather than reading the selection in another app.
+- **Batch Rename**: combine a base name, find/replace, prefix, suffix and numbering. Review every old/new name and conflict before applying. Extensions are preserved; existing files are never replaced. Undo checks that the renamed files still belong to the operation and remains available while the window is open.
+- **PDF Pages**: select ranges such as `1,3-5`, reorder thumbnails, rotate or remove pages and export a selection or the whole arranged document. Results have unique names beside the original; source PDFs remain unchanged.
+- **QR & Barcodes**: read selected images locally, including multiple codes and rotated images. Review text before copying or confirming a web link. Explicitly save codes in **QR Library**, with names, collections, search, add/edit/delete and undo. The library stores decoded content locally and can regenerate a QR image. An original isometric tree view offers spring, summer and autumn appearances; click the tree to reveal the scannable code, or switch to QR directly. Copied/exported images always contain a plain QR code with its quiet zone.
+- **App Actions**: choose installed applications and optional extension filters. Open files through macOS, or open an app and prepare file references on the clipboard for an explicit paste. Built-in **Codex / Claude Code** actions use official deep links to open a new draft containing local file paths. They do not upload attachments or send messages. These rules affect Swivel only. Apps have individual switches as well as the feature switch.
+- **Shortcut wheel**: enable **Wheel → Shortcuts → Shortcut wheel**, then press **⌃⌥J** (alternatives: ⌃⌥Space / ⌃⌥W). Click an item or use arrows and Return; Space changes pages and Esc closes. It uses the selected wheel template. Batch Rename, PDF Pages, Scan QR, QR Library and Apps appear according to their switches. Apps open a submenu; QR Library opens its window directly; file tools ask you to select files. No Finder selection is read implicitly. Existing custom drag-key assignments are preserved when the two new wheels are added.
 - **Feel & Text** (also available directly in the ◎ menu): five presets — Original, Calm, Snappy, Playful and Quiet — plus independent speed (0.75–1.5×) and bounce controls for pop-up menus, the Clothesline and tools/settings. Try all five menu layouts in a live preview or replay a local motion sample. Choose Classic, Soft or Bright sounds, set their level relative to the system effects volume, mute selection sounds separately, or use gentler trackpad taps. Selection, page, confirm and completion buttons let you try feedback. Four text sizes (Small through Extra Large) and bold text update native windows and menu labels immediately; exported-image lettering is unchanged. Changes persist automatically, custom tuning is identified, and Restore tuning defaults resets this page. Presets preserve text choices and the existing sound/haptic on/off switches; macOS Reduce Motion and sound settings still take priority.
 - **General**: open at login, haptic feedback, sound effects (feature switches click like a light switch), language.
 
@@ -73,14 +80,28 @@ For testing without dragging: `Swivel --run <convert|tools|actions> "<item>" <fi
 .build/debug/Swivel --tool quick /path/to/image.png
 .build/debug/Swivel --tool presets
 .build/debug/Swivel --tool feel
+.build/debug/Swivel --tool rename /path/to/one.txt /path/to/two.txt
+.build/debug/Swivel --tool pdf /path/to/document.pdf
+.build/debug/Swivel --tool qr /path/to/code.png
+.build/debug/Swivel --tool library
+.build/debug/Swivel --tool apps
+.build/debug/Swivel --tool launcher
 ```
 
-`test.sh` runs 97 Swift Testing checks for image output safety, metadata and orientation, preset validation, shelf references, feature gating/search, OCR, hotkeys, interaction feel and settings persistence. It uses the macro plugin bundled with the selected Swift toolchain when available; no package dependencies are downloaded.
+`test.sh` runs 137 Swift Testing checks for image output safety, metadata and orientation, preset validation, shelf references, feature gating/search, OCR, hotkeys, interaction feel and settings persistence. Coverage includes rename conflicts, rollback/undo, PDF order/rotation and original preservation, QR decoding and library persistence, draft links, app routing, independent switches and wheel shortcuts. It uses the macro plugin bundled with the selected Swift toolchain when available; no package dependencies are downloaded.
 
-`--tool` is a UI preview mode that enables the four additions **in that executable's preferences domain**, registers the Quick Actions shortcut and skips the normal app delegate, screenshot takeover and background watchers. Use the unbundled debug executable or a separate validation bundle, not the installed production app. `--recognize` prints OCR results without changing the clipboard or feature preferences.
+`--tool` is a UI preview mode that enables the optional tools **in that executable's preferences domain**, registers the Quick Actions shortcut and skips the normal app delegate, screenshot takeover and background watchers. Use the unbundled debug executable or a separate validation bundle, not the installed production app. `--recognize` prints OCR results without changing the clipboard or feature preferences.
 
 Set `SWIVEL_PREVIEW_APPEARANCE=light` or `dark` with `--tool` to inspect the two appearances without changing macOS settings.
 
 Quit the running app normally before replacing an installed build, so screenshot settings can be restored. New output files never replace originals.
 
 `SWIVEL_TAB=10` opens Feel & Text in the normal app. `--tool feel` previews that page without screenshot watchers; use a separate validation bundle. `SWIVEL_TUNING_RENDERS=/path ./test.sh` exports light/dark tuning-page renders at every text size.
+
+`SWIVEL_QR_LIBRARY_DIR=/temporary/test-library` isolates the QR library in `--tool` previews. `SWIVEL_FILE_ACTIONS_RENDERS=/path ./test.sh` renders all three tree seasons and validates the plain QR faces with Vision. File results are regenerated from decoded content rather than copies of the original QR artwork. Tree interaction was inspired by [Tree.ICQR](https://tree.icqr.com/) and independently drawn with AppKit; no source or assets were copied.
+
+Draft-link references: [Codex commands](https://learn.chatgpt.com/docs/reference/commands) and [Claude Desktop links](https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link).
+
+Version 1.4.1 adds **Add Application…** directly to Wheel → Customize → App Actions, with a link to manage existing rules. Previewing a category now includes all configured extensions in that category (for example TXT alongside DOCX). The shortcut wheel defaults to **Control + Option + J**, checks enabled macOS shortcuts before reporting readiness, and reports a conflict for Control + Option + Space when it is assigned to input-source switching. Space alone is for paging an already open wheel. The QR library has an explicit empty-state New/Import flow; imports report empty and duplicate results, and new/imported codes clear stale search filters.
+
+Version 1.4.2 fixes screenshot takeover becoming inactive while its switch stayed on. Applications and Desktop copies now reuse a single running instance. Screenshot settings have a process owner, so a stale process cannot undo the current owner's takeover; the original settings survive recovery/restart. Reopening or waking the active app checks and repairs its enabled takeover. Quitting preserves a destination explicitly changed in the system screenshot toolbar. New screenshots first appear as a card: click it or drag it up to hang it; unattended cards still go to the original screenshot folder.

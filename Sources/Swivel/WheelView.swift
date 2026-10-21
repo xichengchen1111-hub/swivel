@@ -42,6 +42,62 @@ private enum Tune {
 /// is pressed in, and opening blooms the items out from the centre. Previews in Settings draw the settled state.
 final class WheelView: NSView {
     var onDrop: ((WheelItem, [URL]) -> Void)?
+    var onClick: ((WheelItem) -> Void)?
+    var onCancel: (() -> Void)?
+    var onNextPage: (() -> Void)?
+    var isClickable = false { didSet { setAccessibilityElement(isClickable); if isClickable { setAccessibilityRole(.group) }; updateTrackingAreas() } }
+    private var clickTracking: NSTrackingArea?
+    override var acceptsFirstResponder: Bool { isClickable }
+    override func accessibilityChildren() -> [Any]? {
+        guard isClickable else { return super.accessibilityChildren() }
+        let geometry = slots(settled: true)
+        var children: [Any] = items.enumerated().map { index, item in
+            let element = WheelAccessibilityButton()
+            element.setAccessibilityElement(true); element.setAccessibilityRole(.button); element.setAccessibilityLabel(item.displayTitle); element.setAccessibilityParent(self)
+            if geometry.indices.contains(index), let window { element.setAccessibilityFrame(window.convertToScreen(convert(geometry[index].path.bounds, to: nil))) }
+            element.press = { [weak self] in
+                guard let self, self.isClickable, self.items.indices.contains(index) else { return }
+                self.hovered = index; self.beginConfirm(index); Feedback.press(); self.onClick?(self.items[index])
+            }
+            return element
+        }
+        let cancel = WheelAccessibilityButton(); cancel.setAccessibilityElement(true); cancel.setAccessibilityRole(.button); cancel.setAccessibilityLabel(L("Cancel")); cancel.setAccessibilityParent(self)
+        cancel.press = { [weak self] in self?.onCancel?() }; children.append(cancel)
+        if pageCount > 1 {
+            let next = WheelAccessibilityButton(); next.setAccessibilityElement(true); next.setAccessibilityRole(.button); next.setAccessibilityLabel(L("Next Page")); next.setAccessibilityParent(self)
+            next.press = { [weak self] in self?.onNextPage?() }; children.append(next)
+        }
+        return children
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let clickTracking { removeTrackingArea(clickTracking); self.clickTracking = nil }
+        if isClickable {
+            let area = NSTrackingArea(rect: .zero, options: [.inVisibleRect, .activeAlways, .mouseMoved, .mouseEnteredAndExited], owner: self)
+            addTrackingArea(area); clickTracking = area
+        }
+    }
+    override func mouseMoved(with event: NSEvent) { if isClickable { track(convert(event.locationInWindow, from: nil)) } }
+    override func mouseExited(with event: NSEvent) { if isClickable { pointerLeft() } }
+    override func mouseDown(with event: NSEvent) {
+        guard isClickable else { return }
+        _ = track(convert(event.locationInWindow, from: nil))
+        guard let index = hovered, items.indices.contains(index) else { onCancel?(); return }
+        beginConfirm(index); Feedback.press(); onClick?(items[index])
+    }
+    override func keyDown(with event: NSEvent) {
+        guard isClickable else { return }
+        if event.keyCode == 53 { onCancel?(); return }
+        if event.keyCode == 49 { onNextPage?(); return }
+        if [123, 124, 125, 126].contains(event.keyCode), !items.isEmpty {
+            let backwards = event.keyCode == 123 || event.keyCode == 126
+            hovered = ((hovered ?? (backwards ? 0 : -1)) + (backwards ? -1 : 1) + items.count) % items.count
+            return
+        }
+        if event.keyCode == 36, let index = hovered, items.indices.contains(index) {
+            beginConfirm(index); Feedback.press(); onClick?(items[index])
+        }
+    }
     var onDragEndedWithoutDrop: (() -> Void)?
     var subtitle = ""
     var style: MenuStyle = .wheel { didSet { needsDisplay = true } }
@@ -712,7 +768,7 @@ final class WheelView: NSView {
         }
 
         drawHeadline(at: NSPoint(x: center.x, y: center.y + 7), maxWidth: hubRadius * 1.7)
-        drawText(cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply"),
+        drawText(isClickable ? L(hovered == nil ? "Esc to close" : "Click or Return") : cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply"),
                  at: NSPoint(x: center.x, y: center.y - 8),
                  font: AppTypography.font(ofSize: 8.5, weight: .medium), color: ink.withAlphaComponent(0.6),
                  maxWidth: hubRadius * 1.6)
@@ -742,7 +798,7 @@ final class WheelView: NSView {
     private func drawHeader(onGlass: Bool) {
         let rect = NSRect(x: 0, y: bounds.height - Self.headerHeight, width: bounds.width, height: Self.headerHeight)
         let title = headline(for: hovered)
-        let detail = cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply")
+        let detail = isClickable ? L(hovered == nil ? "Esc to close" : "Click or Return") : cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply")
         let attrs: [NSAttributedString.Key: Any] = [.font: AppTypography.font(ofSize: 13, weight: .bold)]
         // Sized for the widest title this page can show, so hovering never slides the header sideways.
         let titleWidth = max((title as NSString).size(withAttributes: attrs).width, headerTitleWidth)
@@ -792,7 +848,7 @@ final class WheelView: NSView {
             (p == page ? accent : ink.withAlphaComponent(0.3)).setFill()
             NSBezierPath(ovalIn: NSRect(x: x - size / 2, y: point.y - size / 2, width: size, height: size)).fill()
         }
-        let hint = L("%@ next", mode.key)
+        let hint = L("%@ next", isClickable ? L("Space") : mode.key)
         if hintBelow {
             drawText(hint, at: NSPoint(x: point.x, y: point.y - 10), font: AppTypography.font(ofSize: 7.5, weight: .semibold),
                      color: ink.withAlphaComponent(0.55), maxWidth: 80)
@@ -1184,4 +1240,10 @@ extension NSView {
         layer.removeAnimation(forKey: "pop")
         layer.add(anim, forKey: "shrink")
     }
+}
+
+@MainActor
+private final class WheelAccessibilityButton: NSAccessibilityElement {
+    var press: (() -> Void)?
+    override func accessibilityPerformPress() -> Bool { press?(); return true }
 }

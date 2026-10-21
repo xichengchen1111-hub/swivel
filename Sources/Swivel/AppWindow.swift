@@ -7,7 +7,7 @@ import ServiceManagement
 final class AppWindow: NSObject, NSWindowDelegate {
     static let shared = AppWindow()
 
-    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions, feel, colors }
+    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions, feel, colors, batchRename, pdfPages, qrCodes, appRouting }
 
     private var window: NSWindow?
     private var split: BundleSplit?
@@ -563,13 +563,17 @@ final class ClotheslinePane: Pane {
 
 final class ShortcutsPane: Pane {
     private var popups: [WheelMode: NSPopUpButton] = [:]
+    private let launchToggle = NSButton(checkboxWithTitle: L("Open a tool wheel without dragging"), target: nil, action: nil)
+    private let launchShortcut = NSPopUpButton()
+    private let launchStatus = ToolUI.note("")
+    private lazy var showLauncher = NSButton(title: L("Show Tool Wheel"), target: self, action: #selector(openLauncher))
 
-    init() { super.init(size: NSSize(width: 620, height: 360)) }
+    init() { super.init(size: NSSize(width: 760, height: 560)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func build() {
         stack.addArrangedSubview(label("Choose which key opens each menu. Start dragging first, then tap the key.", secondary: true))
-        for (mode, title) in [(WheelMode.convert, "Convert formats"), (.tools, "File tools"), (.actions, "File actions")] {
+        for (mode, title) in [(WheelMode.convert, "Convert formats"), (.tools, "File tools"), (.actions, "File actions"), (.apps, "App Actions"), (.codes, "QR Library")] {
             let popup = NSPopUpButton(frame: .zero, pullsDown: false)
             popup.addItems(withTitles: TriggerKey.allCases.map(\.title))
             popup.target = self
@@ -584,12 +588,26 @@ final class ShortcutsPane: Pane {
             “Press 🌐 key to” → “Do Nothing”.
             """, size: 11, secondary: true)))
         stack.addArrangedSubview(row("", NSButton(title: L("Restore Defaults"), target: self, action: #selector(reset))))
+        launchToggle.target = self; launchToggle.action = #selector(toggleLauncher)
+        launchShortcut.addItems(withTitles: WheelShortcut.allCases.map(\.title)); launchShortcut.target = self; launchShortcut.action = #selector(changeLauncherKey)
+        stack.addArrangedSubview(launchToggle)
+        stack.addArrangedSubview(row("Tool wheel shortcut", launchShortcut))
+        stack.addArrangedSubview(label("Hold Control and Option with the selected key to open the wheel. Space alone only changes pages in an open wheel.", size: 12, secondary: true))
+        stack.addArrangedSubview(launchStatus)
+        stack.addArrangedSubview(showLauncher)
+        stack.addArrangedSubview(label("Click an action, or use arrow keys and Return. Space changes pages; Esc closes. Only enabled tools appear.", size: 12, secondary: true))
+        NotificationCenter.default.addObserver(forName: ShortcutWheel.changed, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
     }
 
     override func refresh() {
         for (mode, popup) in popups {
             popup.selectItem(at: TriggerKey.allCases.firstIndex(of: Prefs.key(for: mode))!)
         }
+        launchToggle.state = Prefs.shortcutWheelEnabled ? .on : .off
+        launchShortcut.selectItem(at: WheelShortcut.allCases.firstIndex(of: Prefs.wheelShortcut) ?? 0)
+        launchShortcut.isEnabled = Prefs.shortcutWheelEnabled
+        showLauncher.isEnabled = Feature.wheel.isOn && Prefs.shortcutWheelEnabled
+        launchStatus.stringValue = !Prefs.shortcutWheelEnabled ? L("Tool wheel shortcut is off") : ShortcutWheel.shared.reservedBySystem ? L("This shortcut is used by macOS. Choose a different shortcut.") : ShortcutWheel.shared.available ? L("Shortcut is ready") : L("This shortcut is unavailable. Choose another shortcut or open the panel below.")
     }
 
     @objc private func changed(_ sender: NSPopUpButton) {
@@ -597,6 +615,9 @@ final class ShortcutsPane: Pane {
     }
 
     @objc private func reset() { Prefs.resetKeys() }
+    @objc private func toggleLauncher() { Prefs.shortcutWheelEnabled = launchToggle.state == .on }
+    @objc private func openLauncher() { ShortcutWheel.shared.show() }
+    @objc private func changeLauncherKey() { Prefs.wheelShortcut = WheelShortcut.allCases[launchShortcut.indexOfSelectedItem] }
 }
 
 // MARK: - Style
@@ -968,6 +989,10 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     private var dragged: Int?
     private var slot = DropSlot()
     private var previewKey: PreviewKey?
+    private var appEditor: AppTargetEditor?
+    private lazy var addAppButton = ToolUI.button("Add Application…", target: self, action: #selector(addApplication))
+    private lazy var manageAppsButton = ToolUI.button("Manage Applications…", target: self, action: #selector(manageApplications))
+    private lazy var libraryButton = ToolUI.button("Open QR Library…", target: self, action: #selector(openLibrary))
 
     /// What the preview shows; it is rebuilt only when this changes.
     private struct PreviewKey: Equatable {
@@ -985,7 +1010,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
 
     override func build() {
         stack.addArrangedSubview(label("Pick which options each menu shows and in what order. Untick to hide, drag to reorder.", secondary: true))
-        modePopup.addItems(withTitles: ["Convert formats", "File tools", "File actions"].map { L($0) })
+        modePopup.addItems(withTitles: ["Convert formats", "File tools", "File actions", "App Actions", "QR Library"].map { L($0) })
         kindPopup.addItems(withTitles: kinds.map(\.title))
         for (popup, i) in [(modePopup, 0), (kindPopup, 1)] {
             popup.target = self
@@ -1000,6 +1025,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
                                           NSTextField(labelWithString: L("File type:")), kindPopup, reset])
         pickers.spacing = 8
         stack.addArrangedSubview(pickers)
+        stack.addArrangedSubview(ToolUI.stack([addAppButton, manageAppsButton, libraryButton], vertical: false, spacing: 8))
 
         let column = NSTableColumn(identifier: .init("item"))
         column.title = "Option"
@@ -1049,6 +1075,10 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func load(crossfade: Bool = false) {
+        addAppButton.isHidden = mode != .apps; manageAppsButton.isHidden = mode != .apps
+        addAppButton.isEnabled = Feature.appRouting.isOn
+        libraryButton.isHidden = mode != .codes; libraryButton.isEnabled = Feature.qrCodes.isOn
+        kindPopup.isEnabled = mode != .codes
         let all = Catalog.allItems(mode: mode, kind: kind)
         let hidden = Prefs.hidden(mode, kind)
         let order = Prefs.order(mode, kind)
@@ -1086,6 +1116,16 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     @objc private func selectionChanged() { load(crossfade: true) }
+    @objc private func addApplication() {
+        guard Feature.appRouting.isOn, let window = view.window else { return }
+        appEditor = AppTargetEditor(nil) { [weak self] value in
+            var latest = Prefs.fileAppTargets; latest.append(value); Prefs.fileAppTargets = latest
+            self?.load(crossfade: true)
+        }
+        appEditor?.present(on: window)
+    }
+    @objc private func manageApplications() { AppWindow.shared.show(.appRouting) }
+    @objc private func openLibrary() { QRLibraryWindow().show() }
     @objc private func resetContents() { Prefs.resetContents(mode, kind) }
 
     @objc private func toggled(_ sender: NSButton) {

@@ -27,6 +27,8 @@ final class Clothesline: NSObject {
     private(set) var items: [URL] = []
     let panel = RopePanel()
     private var watches: [DispatchSourceFileSystemObject] = []
+    private var settingsObserver: NSObjectProtocol?
+    private(set) var isRunning = false
     private var hoverTimer: Timer?
     private var monitors: [Any] = []
     private var wasAtTopEdge = false
@@ -46,6 +48,8 @@ final class Clothesline: NSObject {
     static let mediaExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tiff", "gif", "webp", "mov", "mp4"]
 
     func start() {
+        guard !isRunning else { return }
+        isRunning = true
         reload()
         // Anything left waiting from last time goes where screenshots normally go.
         for url in mediaFiles(in: incoming) { IncomingCard.shared.putAway(url) }
@@ -53,11 +57,15 @@ final class Clothesline: NSObject {
         watch(incoming) { [weak self] in self?.checkIncoming() }
         hotKey = HotKey { [weak self] in self?.toggle() }
         // The pointer is only watched while the feature is on, wherever the setting gets changed.
-        NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.syncWatching() }
+        settingsObserver = NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncWatching(); self?.reconcileScreenshotTakeover() }
         }
         syncWatching()
-        if Prefs.clotheslineEnabled && Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: incoming) }
+        reconcileScreenshotTakeover()
+    }
+    func reconcileScreenshotTakeover() {
+        guard isRunning, Prefs.clotheslineEnabled, Prefs.clotheslineTakeover else { return }
+        ScreenshotTakeover.enable(into: incoming)
     }
 
     /// Turning the feature off puts the rope and any waiting card away, stops hanging copies and gives screenshots
@@ -77,7 +85,12 @@ final class Clothesline: NSObject {
     /// Called on quit so the user's own screenshot settings come back, and nothing stays behind in the hidden
     /// Incoming folder: a card still up, one queued behind a drag, or one that arrived a moment ago.
     func stop() {
+        guard isRunning else { return }
+        isRunning = false
         stopWatching()
+        watches.forEach { $0.cancel() }; watches.removeAll()
+        hotKey?.unregister(); hotKey = nil
+        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver); self.settingsObserver = nil }
         ScreenshotTakeover.restore()  // first, so a screenshot taken from here on goes straight to the usual folder
         putAwayWaiting(animated: false)
     }
@@ -1950,6 +1963,14 @@ final class IncomingView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+    override func isAccessibilityElement() -> Bool { card?.url != nil }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { L("Hang Screenshot") }
+    override func accessibilityHelp() -> String? { L("Click to hang this screenshot on the clothesline.") }
+    override func accessibilityPerformPress() -> Bool {
+        guard let card, card.url != nil else { return false }
+        card.hangNow(); return true
+    }
 
     func resetInteraction(hovered: Bool = false, afterDrag: Bool = false) {
         singleClick?.cancel()
