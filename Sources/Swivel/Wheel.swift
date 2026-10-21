@@ -276,7 +276,7 @@ final class WheelPanel: NSPanel {
         orderFrontRegardless()
         if !Motion.reduced { contentView?.popIn(from: 0.94) }
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.09
+            ctx.duration = 0.09 / Double(Prefs.interaction.menu.safeSpeed)
             ctx.timingFunction = Self.easeOut
             animator().alphaValue = 1
         }
@@ -290,8 +290,8 @@ final class WheelPanel: NSPanel {
         ignoresMouseEvents = true
         let token = generation
         // A confirmed drop stays up long enough for the file's icon to land in the chosen item (about 0.2 s).
-        let delay: TimeInterval = how == .confirm ? 0.16 : 0
-        let duration: TimeInterval = how == .confirm ? 0.14 : 0.12
+        let delay: TimeInterval = how == .confirm ? 0.16 / Double(Prefs.interaction.menu.safeSpeed) : 0
+        let duration: TimeInterval = (how == .confirm ? 0.14 : 0.12) / Double(Prefs.interaction.menu.safeSpeed)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, self.generation == token else { return }
             if !Motion.reduced { self.contentView?.shrinkAway(to: how == .confirm ? 0.97 : 0.93, duration: duration) }

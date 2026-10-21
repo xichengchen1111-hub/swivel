@@ -207,7 +207,7 @@ final class AnnotateCanvas: NSView {
     }
 
     private func advance(_ dt: CGFloat) -> Bool {
-        pop.step(dt)
+        pop.step(dt, tuning: Prefs.interaction.tools)
         if pop.isSettled { settlePop() }
         overlay.needsDisplay = true
         return popping != nil

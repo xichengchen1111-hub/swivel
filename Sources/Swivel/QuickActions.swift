@@ -82,7 +82,7 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
             NSAnimationContext.runAnimationGroup { $0.duration = 0; window.animator().alphaValue = 0 }
             ToolUI.present(window, focus: true)
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.08
+                ctx.duration = 0.08 / Double(Prefs.interaction.tools.safeSpeed)
                 window.animator().alphaValue = 1
             }
         } else {
@@ -345,7 +345,7 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         label.wantsLayer = true
         let fade = CATransition()
         fade.type = .fade
-        fade.duration = 0.15
+        fade.duration = 0.15 / Double(Prefs.interaction.tools.safeSpeed)
         label.layer?.add(fade, forKey: "text")
         label.stringValue = text
     }

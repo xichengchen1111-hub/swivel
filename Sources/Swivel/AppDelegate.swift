@@ -146,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(to: menu, "Haptic Feedback", #selector(toggleHaptics)).state = Prefs.haptics ? .on : .off
         add(to: menu, "Sound Effects", #selector(toggleSounds)).state = Prefs.soundEffects ? .on : .off
         menu.addItem(.separator())
+        add(to: menu, "Feel & Text…", #selector(openFeel))
         add(to: menu, "Open Swivel…", #selector(openWindow), key: ",")
         add(to: menu, "Open at Login", #selector(toggleLogin)).state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator())
@@ -193,6 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleSounds() { Prefs.soundEffects.toggle() }
 
     @objc private func openWindow() { AppWindow.shared.show(.overview) }
+    @objc private func openFeel() { AppWindow.shared.show(.feel) }
+
     @objc private func openStyle() { AppWindow.shared.show(.style) }
     @objc fileprivate func openCustomize() { AppWindow.shared.show(.customize) }
     @objc private func toggleRope() { Clothesline.shared.toggle() }

@@ -246,7 +246,7 @@ final class Shelf: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableVie
         guard !rows.isEmpty else { return }
         let reduced = Motion.reduced
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.18
+            ctx.duration = 0.18 / Double(Prefs.interaction.tools.safeSpeed)
             table.insertRows(at: rows, withAnimation: reduced ? .effectFade : [.slideDown, .effectFade])
         }
         updateEmpty()
@@ -255,7 +255,7 @@ final class Shelf: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableVie
 
     private func removeRows(_ rows: IndexSet) {
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
+            ctx.duration = 0.15 / Double(Prefs.interaction.tools.safeSpeed)
             table.removeRows(at: rows, withAnimation: .effectFade)
         }
         updateEmpty()
@@ -266,7 +266,7 @@ final class Shelf: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableVie
     private func highlight(_ rows: IndexSet) {
         guard let last = rows.last, last < table.numberOfRows else { return }
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = Motion.reduced ? 0 : 0.2
+            ctx.duration = Motion.reduced ? 0 : 0.2 / Double(Prefs.interaction.tools.safeSpeed)
             ctx.allowsImplicitAnimation = !Motion.reduced
             table.scrollRowToVisible(last)
         }
@@ -548,7 +548,7 @@ private final class ShelfRowView: NSTableRowView {
         let pulse = CAKeyframeAnimation(keyPath: "opacity")
         pulse.values = [0, 1, 1, 0]
         pulse.keyTimes = [0, 0.1, 0.35, 1]
-        pulse.duration = 0.9
+        pulse.duration = 0.9 / Double(Prefs.interaction.tools.safeSpeed)
         glow.add(pulse, forKey: "flash")
     }
 }

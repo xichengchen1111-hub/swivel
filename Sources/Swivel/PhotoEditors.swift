@@ -573,9 +573,9 @@ final class RedactCanvas: NSView {
     }
 
     private func advance(_ dt: CGFloat) -> Bool {
-        hoverAmount.step(dt)
-        pressAmount.step(dt)
-        reveal.step(dt)
+        hoverAmount.step(dt, tuning: Prefs.interaction.tools)
+        pressAmount.step(dt, tuning: Prefs.interaction.tools)
+        reveal.step(dt, tuning: Prefs.interaction.tools)
         overlay.needsDisplay = true
         return !(hoverAmount.isSettled && pressAmount.isSettled && reveal.isSettled)
     }

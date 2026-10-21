@@ -7,7 +7,7 @@ import ServiceManagement
 final class AppWindow: NSObject, NSWindowDelegate {
     static let shared = AppWindow()
 
-    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions }
+    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions, feel, colors }
 
     private var window: NSWindow?
     private var split: BundleSplit?
@@ -382,7 +382,7 @@ final class GeneralPane: Pane {
     private var loginPending = 0
     private nonisolated static let loginQueue = DispatchQueue(label: "local.swivel.login")
 
-    init() { super.init(size: NSSize(width: 620, height: 420)) }
+    init() { super.init(size: NSSize(width: 680, height: 560)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func build() {
@@ -411,6 +411,10 @@ final class GeneralPane: Pane {
         feedback.spacing = 6
         stack.addArrangedSubview(row("Feedback", feedback))
 
+        let tuning = NSButton(title: L("Feel & Text…"), target: self, action: #selector(openFeel))
+        tuning.bezelStyle = .push
+        stack.addArrangedSubview(row("Personalize", tuning))
+
         let languages = NSPopUpButton(frame: .zero, pullsDown: false)
         languages.addItems(withTitles: Language.allCases.map(\.title))
         languages.selectItem(at: Language.allCases.firstIndex(of: Language.chosen) ?? 0)
@@ -437,6 +441,8 @@ final class GeneralPane: Pane {
         haptics.state = Prefs.haptics ? .on : .off
         sounds.state = Prefs.soundEffects ? .on : .off
     }
+
+    @objc private func openFeel() { AppWindow.shared.show(.feel) }
 
     @objc private func toggleHaptics() {
         Prefs.haptics = haptics.state == .on
@@ -498,7 +504,7 @@ final class ClotheslinePane: Pane {
     private let takeover = NSButton(checkboxWithTitle: L("Hang new screenshots and screen recordings on the rope"), target: nil, action: nil)
     private let copied = NSButton(checkboxWithTitle: L("Also hang images you copy (e.g. ⌃ screenshots, Copy in Preview)"), target: nil, action: nil)
 
-    init() { super.init(size: NSSize(width: 680, height: 560)) }
+    init() { super.init(size: NSSize(width: 820, height: 1060)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func build() {
@@ -512,6 +518,8 @@ final class ClotheslinePane: Pane {
         note.preferredMaxLayoutWidth = 440
         stack.addArrangedSubview(row("", note))
         stack.addArrangedSubview(row("Clipboard", copied))
+
+        stack.addArrangedSubview(RopeColorsView())
 
         let gestures = NSGridView(views: [
             ["Click", "Copy the image"], ["Double-click", "Open in Preview (QuickTime for recordings)"],
@@ -722,9 +730,9 @@ final class TemplateCard: NSView {
     // MARK: Motion
 
     private func advance(_ dt: CGFloat) -> Bool {
-        hover.step(dt)
-        press.step(dt)
-        selection.step(dt)
+        hover.step(dt, tuning: Prefs.interaction.tools)
+        press.step(dt, tuning: Prefs.interaction.tools)
+        selection.step(dt, tuning: Prefs.interaction.tools)
         needsDisplay = true
         return !(hover.isSettled && press.isSettled && selection.isSettled)
     }

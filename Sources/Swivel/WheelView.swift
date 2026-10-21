@@ -99,6 +99,7 @@ final class WheelView: NSView {
     private weak var dragInfo: NSDraggingInfo?
     /// Widest header the current page can show, so the header doesn't shift sideways as items are hovered.
     private var headerTitleWidth: CGFloat = 0
+    private var prefsObserver: NSObjectProtocol?
     /// Releasing now would cancel: the pointer came back to the hub after visiting an item.
     private(set) var cancelArmed = false {
         didSet {
@@ -117,7 +118,12 @@ final class WheelView: NSView {
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         registerForDraggedTypes([.fileURL])
+        prefsObserver = NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.needsDisplay = true }
+        }
     }
+
+    deinit { if let prefsObserver { NotificationCenter.default.removeObserver(prefsObserver) } }
 
     required init?(coder: NSCoder) { fatalError() }
 
@@ -134,7 +140,7 @@ final class WheelView: NSView {
         let bloom = style == .clothesline ? (response: CGFloat(0.42), damping: CGFloat(0.62)) : Tune.bloom
         blooms = items.map { _ in Spring(1, response: bloom.response, damping: bloom.damping) }
         headerTitleWidth = ([mode.title, L("Cancel")] + items.map { "\(mode.title): \($0.displayTitle)" })
-            .map { ($0 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .bold)]).width }
+            .map { ($0 as NSString).size(withAttributes: [.font: AppTypography.font(ofSize: 13, weight: .bold)]).width }
             .max() ?? 0
         bloomClock = .infinity
         swap.snap(1)
@@ -215,12 +221,12 @@ final class WheelView: NSView {
     @discardableResult
     func advance(_ dt: CGFloat) -> Bool {
         if bloomClock.isFinite {
-            bloomClock += dt
+            bloomClock += dt * Prefs.interaction.menu.safeSpeed
             for i in blooms.indices where bloomClock >= CGFloat(i) * Tune.bloomStagger { blooms[i].target = 1 }
             if bloomClock >= CGFloat(blooms.count) * Tune.bloomStagger { bloomClock = .infinity }
         }
         if pressClock.isFinite {
-            pressClock += dt
+            pressClock += dt * Prefs.interaction.menu.safeSpeed
             if pressClock >= Tune.pressHold, press.target == 1 {
                 press.response = Tune.pressOut.response
                 press.damping = Tune.pressOut.damping
@@ -229,18 +235,18 @@ final class WheelView: NSView {
                 pressClock = .infinity
             }
         }
-        for i in pops.indices { pops[i].step(dt) }
-        for i in blooms.indices { blooms[i].step(dt) }
-        press.step(dt)
-        exit.step(dt)
-        turn.step(dt)
-        reveal.step(dt)
-        dial.step(dt)
-        dialAlpha.step(dt)
-        swap.step(dt)
-        row.step(dt)
-        rowAlpha.step(dt)
-        hubPress.step(dt)
+        for i in pops.indices { pops[i].step(dt, tuning: Prefs.interaction.menu) }
+        for i in blooms.indices { blooms[i].step(dt, tuning: Prefs.interaction.menu) }
+        press.step(dt, tuning: Prefs.interaction.menu)
+        exit.step(dt, tuning: Prefs.interaction.menu)
+        turn.step(dt, tuning: Prefs.interaction.menu)
+        reveal.step(dt, tuning: Prefs.interaction.menu)
+        dial.step(dt, tuning: Prefs.interaction.menu)
+        dialAlpha.step(dt, tuning: Prefs.interaction.menu)
+        swap.step(dt, tuning: Prefs.interaction.menu)
+        row.step(dt, tuning: Prefs.interaction.menu)
+        rowAlpha.step(dt, tuning: Prefs.interaction.menu)
+        hubPress.step(dt, tuning: Prefs.interaction.menu)
         needsDisplay = true
         return !isSettled
     }
@@ -473,7 +479,7 @@ final class WheelView: NSView {
             t.rotate(byDegrees: tilt)
             t.scale(scale)
             t.translate(x: -rect.midX, y: -rect.midY)
-            let path = NSBezierPath(rect: rect)
+            let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
             path.transform(using: t)
             return Slot(path: path, label: t.transform(NSPoint(x: rect.midX, y: rect.midY - 4)), angle: tilt,
                         maxWidth: side - 16, fontSize: 15, labelScale: scale,
@@ -708,7 +714,7 @@ final class WheelView: NSView {
         drawHeadline(at: NSPoint(x: center.x, y: center.y + 7), maxWidth: hubRadius * 1.7)
         drawText(cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply"),
                  at: NSPoint(x: center.x, y: center.y - 8),
-                 font: .systemFont(ofSize: 8.5, weight: .medium), color: ink.withAlphaComponent(0.6),
+                 font: AppTypography.font(ofSize: 8.5, weight: .medium), color: ink.withAlphaComponent(0.6),
                  maxWidth: hubRadius * 1.6)
         drawPageDots(at: NSPoint(x: center.x, y: center.y - 26), hintBelow: true)
         NSGraphicsContext.restoreGraphicsState()
@@ -716,7 +722,7 @@ final class WheelView: NSView {
 
     /// The wheel hub's title: crossfades with a small vertical slide when the hovered item changes.
     private func drawHeadline(at point: NSPoint, maxWidth: CGFloat) {
-        let font = NSFont.systemFont(ofSize: 12, weight: .bold)
+        let font = AppTypography.font(ofSize: 12, weight: .bold)
         let s = min(max(swap.value, 0), 1)
         let current = headline(for: hovered)
         // The old title leaves upwards in the first third; the new one rises in after it, so they never overlap.
@@ -737,10 +743,10 @@ final class WheelView: NSView {
         let rect = NSRect(x: 0, y: bounds.height - Self.headerHeight, width: bounds.width, height: Self.headerHeight)
         let title = headline(for: hovered)
         let detail = cancelArmed ? L("release to cancel") : hovered == nil ? subtitle : L("drop to apply")
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .bold)]
+        let attrs: [NSAttributedString.Key: Any] = [.font: AppTypography.font(ofSize: 13, weight: .bold)]
         // Sized for the widest title this page can show, so hovering never slides the header sideways.
         let titleWidth = max((title as NSString).size(withAttributes: attrs).width, headerTitleWidth)
-        let detailFont = NSFont.systemFont(ofSize: 11)
+        let detailFont = AppTypography.font(ofSize: 11)
         var detailWidth = min([subtitle, L("drop to apply"), L("release to cancel")]
             .map { ($0 as NSString).size(withAttributes: [.font: detailFont]).width }.max() ?? 0, 150)
         let dotsWidth: CGFloat = pageCount > 1 ? CGFloat(pageCount) * 7 + 44 : 0
@@ -761,7 +767,7 @@ final class WheelView: NSView {
         var x = capsule.minX + 13
         let shownTitle = (title as NSString).size(withAttributes: attrs).width
         drawText(title, at: NSPoint(x: x + min(shownTitle, titleWidth) / 2, y: capsule.midY - (Motion.reduced ? 0 : 3 * (1 - s))),
-                 font: .systemFont(ofSize: 13, weight: .bold),
+                 font: AppTypography.font(ofSize: 13, weight: .bold),
                  color: (hovered == nil ? ink : NSColor.controlAccentColor).withAlphaComponent(0.4 + 0.6 * s),
                  maxWidth: titleWidth, glow: false)
         x += min(shownTitle, titleWidth) + 8
@@ -788,10 +794,10 @@ final class WheelView: NSView {
         }
         let hint = L("%@ next", mode.key)
         if hintBelow {
-            drawText(hint, at: NSPoint(x: point.x, y: point.y - 10), font: .systemFont(ofSize: 7.5, weight: .semibold),
+            drawText(hint, at: NSPoint(x: point.x, y: point.y - 10), font: AppTypography.font(ofSize: 7.5, weight: .semibold),
                      color: ink.withAlphaComponent(0.55), maxWidth: 80)
         } else {
-            drawText(hint, at: NSPoint(x: dotsX + width + 22, y: point.y), font: .systemFont(ofSize: 9, weight: .semibold),
+            drawText(hint, at: NSPoint(x: dotsX + width + 22, y: point.y), font: AppTypography.font(ofSize: 9, weight: .semibold),
                      color: ink.withAlphaComponent(0.55), maxWidth: 50, glow: false)
         }
     }
@@ -830,7 +836,7 @@ final class WheelView: NSView {
             style.lineBreakMode = .byTruncatingTail
             let bloom = min(max(bloomValue(i) * 1.5, 0), 1)
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: slot.fontSize, weight: .medium),
+                .font: AppTypography.font(ofSize: slot.fontSize, weight: .medium),
                 .foregroundColor: ink.mix(.white, under).withAlphaComponent(bloom * (1 - exitValue(i)) * (i == hovered ? 1 : reveal.value)),
                 .paragraphStyle: style,
             ]
@@ -843,29 +849,22 @@ final class WheelView: NSView {
     }
 
     private func drawShelf() {
-        let palette: [NSColor] = [
-            NSColor(srgbRed: 0.55, green: 0.16, blue: 0.18, alpha: 1), NSColor(srgbRed: 0.15, green: 0.25, blue: 0.45, alpha: 1),
-            NSColor(srgbRed: 0.18, green: 0.38, blue: 0.27, alpha: 1), NSColor(srgbRed: 0.78, green: 0.58, blue: 0.2, alpha: 1),
-            NSColor(srgbRed: 0.16, green: 0.45, blue: 0.48, alpha: 1), NSColor(srgbRed: 0.42, green: 0.22, blue: 0.42, alpha: 1),
-            NSColor(srgbRed: 0.33, green: 0.36, blue: 0.4, alpha: 1), NSColor(srgbRed: 0.66, green: 0.3, blue: 0.16, alpha: 1),
-        ]
+        let theme = MenuAppearance(dark: isDark)
+        let palette = Prefs.templateColors[style == .shelf ? .shelf : .notes]
         drawHeader(onGlass: false)
 
-        // Wooden plank with brackets.
+        // A satin rail and inset brackets replace the varnished wood and gold bands.
         let plank = NSRect(x: 10, y: shelfTop - 16, width: bounds.width - 20, height: 16)
-        withShadow(blur: 10, alpha: 0.35) {
-            NSGradient(starting: NSColor(srgbRed: 0.72, green: 0.52, blue: 0.33, alpha: 1),
-                       ending: NSColor(srgbRed: 0.5, green: 0.33, blue: 0.19, alpha: 1))!
-                .draw(in: NSBezierPath(roundedRect: plank, xRadius: 3, yRadius: 3), angle: -90)
-        }
-        NSColor(srgbRed: 0.85, green: 0.68, blue: 0.48, alpha: 1).setFill()
-        NSRect(x: plank.minX + 2, y: plank.maxY - 2, width: plank.width - 4, height: 2).fill()
+        let rail = NSBezierPath(roundedRect: plank, xRadius: 5, yRadius: 5)
+        withShadow(blur: 7, alpha: 0.14) { palette.railColor(dark: isDark).setFill(); rail.fill() }
+        theme.edge.setStroke()
+        rail.lineWidth = 0.75
+        rail.stroke()
         for bx in [plank.minX + 22, plank.maxX - 34] {
-            NSColor(srgbRed: 0.35, green: 0.35, blue: 0.38, alpha: 1).setFill()
-            NSBezierPath(roundedRect: NSRect(x: bx, y: plank.minY - 12, width: 12, height: 14), xRadius: 2, yRadius: 2).fill()
+            theme.trim.setFill()
+            NSBezierPath(roundedRect: NSRect(x: bx, y: plank.minY - 10, width: 12, height: 12), xRadius: 3, yRadius: 3).fill()
         }
 
-        // Books rise out from behind the plank as the menu opens, so clip them to above its top.
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: NSRect(x: 0, y: shelfTop - 3, width: bounds.width, height: bounds.height)).addClip()
         for (i, slot) in slots().enumerated() {
@@ -873,32 +872,29 @@ final class WheelView: NSView {
             let p = min(max(popValue(i), 0), 1)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current?.cgContext.setAlpha(slot.alpha)
-            var color = palette[i % palette.count].mix(NSColor.controlAccentColor, tintValue(i))
-            if i == pressed, flash > 0 { color = color.mix(.white, 0.3 * flash) }
-            withShadow(blur: 4 + 6 * p, alpha: 0.35, offset: 1 + 2 * p) {
+            var color = palette.card(i, dark: isDark, selection: tintValue(i))
+            if i == pressed, flash > 0 { color = color.mix(theme.surface, 0.3 * flash) }
+            withShadow(blur: 3 + 4 * p, alpha: 0.15, offset: 1 + p) {
                 color.setFill()
                 slot.path.fill()
             }
+            theme.edge.mix(.controlAccentColor, 0.45 * tintValue(i)).setStroke()
+            slot.path.lineWidth = 0.75 + 0.5 * tintValue(i)
+            slot.path.stroke()
             let rect = slot.path.bounds
-            // Spine details: darker edges, two gilt bands.
-            NSGradient(colors: [NSColor.black.withAlphaComponent(0.25), .clear, .clear, NSColor.black.withAlphaComponent(0.3)])!
-                .draw(in: slot.path, angle: 0)
-            NSColor(srgbRed: 0.95, green: 0.82, blue: 0.5, alpha: 0.75 + 0.15 * p).setFill()
-            NSRect(x: rect.minX + 3, y: rect.maxY - 16, width: rect.width - 6, height: 2).fill()
-            NSRect(x: rect.minX + 3, y: rect.minY + 14, width: rect.width - 6, height: 2).fill()
-            drawLabel(items[i].displayTitle, slot, color: NSColor.white.withAlphaComponent(i == hovered ? 1 : reveal.value),
-                      glow: false, weight: .bold)
+            theme.edge.setFill()
+            NSRect(x: rect.minX + 5, y: rect.maxY - 16, width: rect.width - 10, height: 0.75).fill()
+            NSRect(x: rect.minX + 5, y: rect.minY + 14, width: rect.width - 10, height: 0.75).fill()
+            drawLabel(items[i].displayTitle, slot, color: palette.ink(i, dark: isDark, selection: tintValue(i)).withAlphaComponent(i == hovered ? 1 : reveal.value),
+                      glow: false, weight: .semibold)
             NSGraphicsContext.restoreGraphicsState()
         }
         NSGraphicsContext.restoreGraphicsState()
     }
 
     private func drawNotes() {
-        let colors: [NSColor] = [
-            NSColor(srgbRed: 1, green: 0.92, blue: 0.45, alpha: 1), NSColor(srgbRed: 1, green: 0.72, blue: 0.8, alpha: 1),
-            NSColor(srgbRed: 0.68, green: 0.93, blue: 0.7, alpha: 1), NSColor(srgbRed: 0.66, green: 0.85, blue: 1, alpha: 1),
-            NSColor(srgbRed: 1, green: 0.78, blue: 0.5, alpha: 1), NSColor(srgbRed: 0.85, green: 0.76, blue: 1, alpha: 1),
-        ]
+        let theme = MenuAppearance(dark: isDark)
+        let palette = Prefs.templateColors[style == .shelf ? .shelf : .notes]
         drawHeader(onGlass: false)
         let all = slots()
         for i in all.indices.sorted(by: { popValue($0) < popValue($1) }) {
@@ -907,84 +903,75 @@ final class WheelView: NSView {
             let p = min(max(popValue(i), 0), 1)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current?.cgContext.setAlpha(slot.alpha)
-            var color = colors[i % colors.count]
-            if i == pressed, flash > 0 { color = color.mix(.white, 0.35 * flash) }
-            withShadow(blur: 6 + 8 * p * (1 - pressValue(i)), alpha: 0.3, offset: 1 + 4 * p * (1 - pressValue(i))) {
+            var color = palette.card(i, dark: isDark, selection: tintValue(i))
+            if i == pressed, flash > 0 { color = color.mix(theme.surface, 0.3 * flash) }
+            withShadow(blur: 5 + 5 * p * (1 - pressValue(i)), alpha: 0.14, offset: 1 + 2 * p * (1 - pressValue(i))) {
                 color.setFill()
                 slot.path.fill()
             }
-            // Slightly darker bottom edge, like a curled note.
-            NSGradient(colors: [.clear, NSColor.black.withAlphaComponent(0.08)])!.draw(in: slot.path, angle: -90)
-            if p > 0.01 {
-                NSColor.controlAccentColor.withAlphaComponent(tintValue(i)).setStroke()
-                slot.path.lineWidth = 3
-                slot.path.stroke()
-            }
-            // A strip of tape across the top.
+            theme.edge.mix(.controlAccentColor, 0.45 * tintValue(i)).setStroke()
+            slot.path.lineWidth = 0.75 + 0.5 * tintValue(i)
+            slot.path.stroke()
+            // A small paper tab keeps the note metaphor without a large strip of tape.
             let box = slot.path.bounds
-            let tape = NSBezierPath(rect: NSRect(x: box.midX - 18, y: box.maxY - 12, width: 36, height: 14))
+            let tape = NSBezierPath(roundedRect: NSRect(x: box.midX - 13, y: box.maxY - 10, width: 26, height: 5),
+                                    xRadius: 2.5, yRadius: 2.5)
             var t = AffineTransform(translationByX: box.midX, byY: box.maxY - 5)
-            t.rotate(byDegrees: slot.angle - 4)
+            t.rotate(byDegrees: slot.angle)
             t.translate(x: -box.midX, y: -(box.maxY - 5))
             tape.transform(using: t)
-            NSColor(white: 1, alpha: 0.55).setFill()
+            theme.trim.withAlphaComponent(0.4).setFill()
             tape.fill()
-            let font = NSFont(name: "Noteworthy-Bold", size: slot.fontSize) ?? .systemFont(ofSize: slot.fontSize, weight: .semibold)
-            drawLabel(items[i].displayTitle, slot, color: NSColor(white: 0.15, alpha: i == hovered ? 1 : reveal.value),
-                      glow: false, font: font)
+            drawLabel(items[i].displayTitle, slot, color: palette.ink(i, dark: isDark, selection: tintValue(i)).withAlphaComponent(i == hovered ? 1 : reveal.value),
+                      glow: false, weight: .medium)
             NSGraphicsContext.restoreGraphicsState()
         }
     }
 
     private func drawClothesline() {
+        let theme = MenuAppearance(dark: isDark)
+        let colors = Prefs.clotheslineColors
         drawHeader(onGlass: false)
         let left: CGFloat = 22, right = bounds.width - 22
 
-        // Posts.
         for x in [left, right] {
-            withShadow(blur: 4, alpha: 0.3) {
-                NSColor(srgbRed: 0.55, green: 0.38, blue: 0.24, alpha: 1).setFill()
-                NSBezierPath(roundedRect: NSRect(x: x - 4, y: 6, width: 8, height: ropeY(x) - 6 + 8), xRadius: 3, yRadius: 3).fill()
+            withShadow(blur: 3, alpha: 0.14) {
+                theme.rail.setFill()
+                NSBezierPath(roundedRect: NSRect(x: x - 4, y: 6, width: 8, height: ropeY(x) - 6 + 8), xRadius: 4, yRadius: 4).fill()
             }
         }
-        // Rope.
         let rope = NSBezierPath()
         rope.move(to: NSPoint(x: left, y: ropeY(left)))
         for x in stride(from: left, through: right, by: 4) { rope.line(to: NSPoint(x: x, y: ropeY(x))) }
         rope.lineWidth = 2.5
         rope.lineCapStyle = .round
-        withShadow(blur: 3, alpha: 0.35) {
-            NSColor(srgbRed: 0.93, green: 0.9, blue: 0.84, alpha: 1).setStroke()
-            rope.stroke()
-        }
+        withShadow(blur: 2, alpha: 0.18) { colors.rope.color.setStroke(); rope.stroke() }
 
         for (i, slot) in slots().enumerated() {
             guard slot.alpha > 0.01 else { continue }
             let p = min(max(popValue(i), 0), 1)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current?.cgContext.setAlpha(slot.alpha)
-            var kraft = NSColor(srgbRed: 0.86, green: 0.74, blue: 0.56, alpha: 1).mix(NSColor.controlAccentColor, tintValue(i))
-            if i == pressed, flash > 0 { kraft = kraft.mix(.white, 0.3 * flash) }
-            withShadow(blur: 5 + 5 * p, alpha: 0.32, offset: 1 + 2 * p) {
-                kraft.setFill()
+            var card = theme.card(i, selection: tintValue(i))
+            if i == pressed, flash > 0 { card = card.mix(theme.surface, 0.3 * flash) }
+            withShadow(blur: 4 + 4 * p, alpha: 0.15, offset: 1 + p) {
+                card.setFill()
                 slot.path.fill()
             }
-            NSColor.black.withAlphaComponent(0.12).setStroke()
-            slot.path.lineWidth = 1
+            theme.edge.mix(.controlAccentColor, 0.45 * tintValue(i)).setStroke()
+            slot.path.lineWidth = 0.75 + 0.5 * tintValue(i)
             slot.path.stroke()
 
-            // Peg where the tag meets the rope.
             let x = slot.path.bounds.midX
             let pegTop = ropeY(x) + 7
-            withShadow(blur: 2, alpha: 0.35) {
-                NSColor(srgbRed: 0.76, green: 0.56, blue: 0.36, alpha: 1).setFill()
-                NSBezierPath(roundedRect: NSRect(x: x - 4, y: pegTop - 24, width: 8, height: 24), xRadius: 2, yRadius: 2).fill()
+            withShadow(blur: 2, alpha: 0.16) {
+                colors.peg.color.setFill()
+                NSBezierPath(roundedRect: NSRect(x: x - 4, y: pegTop - 24, width: 8, height: 24), xRadius: 3, yRadius: 3).fill()
             }
-            NSColor(white: 0.55, alpha: 1).setFill()
-            NSRect(x: x - 4, y: pegTop - 12, width: 8, height: 2).fill()
+            theme.edge.setFill()
+            NSRect(x: x - 4, y: pegTop - 12, width: 8, height: 1).fill()
             drawLabel(items[i].displayTitle, slot,
-                      color: NSColor(white: 0.18, alpha: 1).mix(.white, tintValue(i)).withAlphaComponent(i == hovered ? 1 : reveal.value),
-                      glow: false, weight: .bold)
+                      color: theme.ink.withAlphaComponent(i == hovered ? 1 : reveal.value), glow: false, weight: .medium)
             NSGraphicsContext.restoreGraphicsState()
         }
     }
@@ -1011,7 +998,7 @@ final class WheelView: NSView {
         t.rotate(byDegrees: slot.angle)
         if slot.labelScale != 1 { t.scale(by: slot.labelScale) }
         t.concat()
-        drawText(string, at: .zero, font: font ?? .systemFont(ofSize: slot.fontSize, weight: weight), color: color,
+        drawText(string, at: .zero, font: font ?? AppTypography.font(ofSize: slot.fontSize, weight: weight), color: color,
                  maxWidth: slot.maxWidth, glow: glow)
         NSGraphicsContext.restoreGraphicsState()
     }
@@ -1032,8 +1019,8 @@ final class WheelView: NSView {
         }
         var size = (string as NSString).size(withAttributes: attrs)
         if size.width > maxWidth, maxWidth > 0 {
-            // Shrink long labels to fit rather than truncating them.
-            let fitted = max(7, font.pointSize * maxWidth / size.width)
+            // Keep the selected reading size as a floor, then truncate only the longest labels.
+            let fitted = max(7 * Prefs.interaction.textSize.scale, font.pointSize * maxWidth / size.width)
             attrs[.font] = NSFont(descriptor: font.fontDescriptor, size: fitted) ?? font
             size = (string as NSString).size(withAttributes: attrs)
         }
@@ -1170,7 +1157,8 @@ extension NSView {
         layer.removeAnimation(forKey: "shrink")
         layer.transform = CATransform3DIdentity
         // Crisp, barely-there settle: a menu shouldn't wobble.
-        let anim = CASpringAnimation(perceptualDuration: 0.24, bounce: 0.1)
+        let anim = CASpringAnimation(perceptualDuration: 0.24 / Prefs.interaction.menu.safeSpeed,
+                                     bounce: 0.1 * Prefs.interaction.menu.safeBounce)
         anim.keyPath = "transform"
         anim.fromValue = scaled(scale)
         anim.toValue = CATransform3DIdentity

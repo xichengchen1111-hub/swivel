@@ -30,13 +30,13 @@ struct Spring {
         velocity = 0
     }
 
-    mutating func step(_ dt: CGFloat) {
+    mutating func step(_ dt: CGFloat, tuning: MotionTuning = MotionTuning()) {
         guard dt > 0, !isSettled else {
             if isSettled { value = target; velocity = 0 }
             return
         }
-        let w0 = 2 * .pi / max(response, 0.001)
-        let zeta = min(max(damping, 0.05), 1)
+        let w0 = 2 * .pi / max(response / tuning.safeSpeed, 0.001)
+        let zeta = min(max(tuning.damping(damping), 0.05), 1)
         let x0 = value - target, v0 = velocity
         let x: CGFloat, v: CGFloat
         if zeta < 0.999 {
@@ -169,7 +169,7 @@ enum Haptics {
     static func tick(_ pattern: NSHapticFeedbackManager.FeedbackPattern) {
         guard Prefs.haptics else { return }
         let now = CACurrentMediaTime()
-        guard now - last > 0.04 else { return }
+        guard now - last > (Prefs.interaction.gentleHaptics ? 0.08 : 0.04) else { return }
         last = now
         NSHapticFeedbackManager.defaultPerformer.perform(pattern, performanceTime: .now)
     }
@@ -179,7 +179,7 @@ enum Haptics {
         guard Prefs.haptics else { return }
         last = CACurrentMediaTime()
         if TrackpadActuator.isUsable {
-            TrackpadActuator.actuate(4)
+            TrackpadActuator.actuate(Prefs.interaction.gentleHaptics ? 1 : 4)
         } else {
             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
         }
@@ -305,57 +305,81 @@ enum Sounds {
     enum Effect: String, CaseIterable { case hover, page, press, done, switchOn, switchOff }
 
     private static var ids: [Effect: [SystemSoundID]] = [:]
+    private static var loaded: SoundConfiguration?
     private static var lastHover: CFTimeInterval = 0
     private static var variant = 0
     private static var preparing = false
-    /// A sound asked for before the sounds were ready (the first one after launch or after turning sounds on).
     private static var pending: (Effect, CFTimeInterval)?
 
+    private static var configuration: SoundConfiguration {
+        SoundConfiguration(style: Prefs.interaction.soundStyle, volume: Prefs.interaction.volume)
+    }
+
     static func play(_ effect: Effect) {
-        guard Prefs.soundEffects else { return }
+        guard Prefs.soundEffects, configuration.volume > 0,
+              effect != .hover || Prefs.interaction.hoverSound else { return }
         if effect == .hover {
             let now = CACurrentMediaTime()
             guard now - lastHover > 0.045 else { return }
             lastHover = now
         }
-        guard let choices = ids[effect], !choices.isEmpty else {
+        guard loaded == configuration, let choices = ids[effect], !choices.isEmpty else {
             pending = (effect, CACurrentMediaTime())
             prepare()
             return
         }
-        // Repeated ticks vary a little in pitch and level, so a sweep doesn't sound mechanical.
         variant = (variant + 1 + Int.random(in: 0...1)) % choices.count
         AudioServicesPlaySystemSound(choices[effect == .hover ? variant : 0])
     }
 
-    /// For diagnostics.
     static var registeredCount: Int { ids.values.reduce(0) { $0 + $1.count } }
 
-    /// Writes and registers the sounds off the main thread (once).
+    /// Only the newest configuration may become active. Quieting or disabling sounds while a background
+    /// synthesis is in progress must not replay a queued sound at the old volume.
     static func prepare() {
-        guard Prefs.soundEffects, ids.isEmpty, !preparing else { return }
+        let requested = configuration
+        guard Prefs.soundEffects, requested.volume > 0, loaded != requested, !preparing else { return }
         preparing = true
         DispatchQueue.global(qos: .userInitiated).async {
-            let made = SoundSynth.register()
+            let made = SoundSynth.register(configuration: requested)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    ids = made
                     preparing = false
-                    // Play what was asked for meanwhile, unless it's now too late to belong to its moment.
-                    if let (effect, at) = pending, CACurrentMediaTime() - at < 0.4 { play(effect) }
+                    guard Prefs.soundEffects, requested == configuration else {
+                        for id in made.values.flatMap({ $0 }) { AudioServicesDisposeSystemSoundID(id) }
+                        prepare()
+                        return
+                    }
+                    for id in ids.values.flatMap({ $0 }) { AudioServicesDisposeSystemSoundID(id) }
+                    ids = made
+                    loaded = requested
+                    let queued = pending
                     pending = nil
+                    if let (effect, at) = queued, CACurrentMediaTime() - at < 0.4 { play(effect) }
                 }
             }
         }
     }
+
 }
 
 /// Builds the interface sounds as 48 kHz 16-bit WAV files. Levels follow Apple's own UI sounds: a hover tick peaks
 /// near −24 dBFS (it repeats), a press near −13 dBFS.
+struct SoundConfiguration: Equatable, Sendable {
+    let style: SoundStyle
+    let level: Int
+    var volume: Double { Double(level) / 100 }
+    init(style: SoundStyle = .classic, volume: Double = 1) {
+        self.style = style
+        level = Int(((volume.isFinite ? min(max(volume, 0), 1) : 1) * 100).rounded())
+    }
+    var cacheKey: String { "\(style.rawValue)-\(level)" }
+}
+
 enum SoundSynth {
-    static func register() -> [Sounds.Effect: [SystemSoundID]] {
+    static func register(configuration: SoundConfiguration = SoundConfiguration()) -> [Sounds.Effect: [SystemSoundID]] {
         let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("local.swivel.app/sounds-v2", isDirectory: true)
+            .appendingPathComponent("local.swivel.app/sounds-v3/\(configuration.cacheKey)", isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var result: [Sounds.Effect: [SystemSoundID]] = [:]
         for effect in Sounds.Effect.allCases {
@@ -364,7 +388,7 @@ enum SoundSynth {
             for (n, v) in variants.enumerated() {
                 let url = folder.appendingPathComponent("\(effect.rawValue)-\(n).wav")
                 if !FileManager.default.fileExists(atPath: url.path) {
-                    try? wav(samples(effect, pitch: v.pitch, gain: v.gain)).write(to: url)
+                    try? wav(samples(effect, pitch: v.pitch, gain: v.gain, configuration: configuration)).write(to: url)
                 }
                 var id: SystemSoundID = 0
                 if AudioServicesCreateSystemSoundID(url as CFURL, &id) == noErr { result[effect, default: []].append(id) }
@@ -375,7 +399,10 @@ enum SoundSynth {
 
     private static let rate = 48_000.0
 
-    static func samples(_ effect: Sounds.Effect, pitch: Double, gain: Double) -> [Float] {
+    static func samples(_ effect: Sounds.Effect, pitch: Double, gain: Double,
+                        configuration: SoundConfiguration = SoundConfiguration()) -> [Float] {
+        let pitch = pitch * configuration.style.pitch
+        let gain = gain * configuration.volume * configuration.style.gain
         let length: Double, peak: Double
         switch effect {
         case .hover: (length, peak) = (0.025, 0.063)    // −24 dBFS
@@ -404,7 +431,7 @@ enum SoundSynth {
             case .press:
                 // A keycap bottoming out: a sharp click over a short, falling low body.
                 let f = 210 - 80 * min(t / 0.05, 1)
-                out[i] = 0.75 * exp(-t / 0.022) * sin(2 * .pi * f * t) + 0.3 * ping(t, 1150, 0.006)
+                out[i] = 0.75 * exp(-t / 0.022) * sin(2 * .pi * f * pitch * t) + 0.3 * ping(t, 1150, 0.006)
                     + 0.3 * hiss() * exp(-t / 0.001)
             case .done:
                 // A soft two-note chime (C6 then G6) with a quick attack.

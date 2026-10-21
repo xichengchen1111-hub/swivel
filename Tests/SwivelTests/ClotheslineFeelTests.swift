@@ -180,6 +180,52 @@ struct ClotheslineFeelTests {
     /// The print layers, in rope order (the rope's own shape layer comes first).
     private func printLayers(_ view: RopeView) -> [CALayer] { Array(view.layer!.sublayers!.dropFirst()) }
 
+    @Test func testReadyDropTurnsRopeBlueThenRestoresTheChosenColor() throws {
+        let old = Prefs.clotheslineColors
+        defer { Prefs.clotheslineColors = old }
+        var colors = old
+        colors.rope = RopeColorPreset.sage.rgb!
+        Prefs.clotheslineColors = colors
+        for reduced in [false, true] {
+            let view = rope(reduced: reduced)
+            view.drop(fromHidden: true)
+            run(view, for: 0.5)
+            let cord = try #require(view.layer?.sublayers?.first as? CAShapeLayer)
+            var frames: [(String, CGImage)] = []
+            if Self.framesFolder != nil, let image = snapshot(view.layer!, size: view.bounds.size, flipped: true) { frames.append(("idle", image)) }
+            view.setReceivingHighlight(Self.fixtures[0])
+            run(view, for: 0.5)
+            let ready = try #require(cord.strokeColor.flatMap(NSColor.init(cgColor:))).usingColorSpace(.sRGB)!
+            let blue = NSColor.systemBlue.usingColorSpace(.sRGB)!
+            #expect(abs(ready.redComponent - blue.redComponent) < 0.005)
+            #expect(abs(ready.blueComponent - blue.blueComponent) < 0.005)
+            #expect(cord.lineWidth > 4.9)
+            #expect(cord.shadowOpacity > 0.39)
+            #expect(Prefs.clotheslineColors == colors)
+            if Self.framesFolder != nil, let image = snapshot(view.layer!, size: view.bounds.size, flipped: true) { frames.append(("release to hang", image)) }
+            view.setReceivingHighlight(nil)
+            run(view, for: 0.5)
+            #expect(cord.strokeColor == colors.rope.color.cgColor)
+            #expect(abs(cord.lineWidth - 2.6) < 0.01)
+            #expect(cord.shadowOpacity < 0.19)
+            if let folder = Self.framesFolder, let image = snapshot(view.layer!, size: view.bounds.size, flipped: true) {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                frames.append(("restored", image))
+                strip(frames, to: folder.appendingPathComponent("rope-ready-\(reduced ? "reduced" : "normal").png"))
+            }
+        }
+    }
+
+    @Test func testReadyDropRequiresSupportedMediaAndAPermittedOperation() {
+        #expect(RopeDropFeedback.operation(offered: [.copy, .move], acceptsMedia: true) == .move)
+        #expect(RopeDropFeedback.operation(offered: .copy, acceptsMedia: true) == .copy)
+        #expect(RopeDropFeedback.operation(offered: .generic, acceptsMedia: true) == .generic)
+        for offered: NSDragOperation in [[], .delete, .link] {
+            #expect(RopeDropFeedback.operation(offered: offered, acceptsMedia: true).isEmpty)
+        }
+        #expect(RopeDropFeedback.operation(offered: [.copy, .move], acceptsMedia: false).isEmpty)
+    }
+
     @Test func testHiddenRopeStaysHiddenUntilLowered() {
         let view = rope()
         run(view, for: 1)
