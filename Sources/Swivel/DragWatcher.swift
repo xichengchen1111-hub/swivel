@@ -128,7 +128,7 @@ final class DragWatcher {
             active = true
             activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical],
                                                              reason: "File drag in progress")
-            log.info("file drag started: \(found.map(\.lastPathComponent), privacy: .public)")
+            log.info("file drag started: \(found.count) files \(found.map(\.lastPathComponent), privacy: .private)")
             Feedback.prepare()
             // Keys already held when the button went down don't count; one tapped since then (and still held) does.
             let early = earlyTaps.intersection(flags)

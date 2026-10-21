@@ -4,7 +4,10 @@ MainActor.assumeIsolated {
     let app = NSApplication.shared
     AppTypography.install()
     let delegate = AppDelegate()
-    let args = CommandLine.arguments
+    // The developer modes below (--tool, --run, --recognize…) are for unbundled builds and validation bundles. The
+    // installed app ignores them, so another process can't use them to act with Swivel's file access or to switch
+    // features on in the real preferences.
+    let args = Bundle.main.bundleIdentifier == "local.swivel.app" ? Array(CommandLine.arguments.prefix(1)) : CommandLine.arguments
 
     // Isolated preview: no screenshot takeover or background watchers. Uses the executable's defaults domain.
     if args.count >= 3, args[1] == "--tool" {

@@ -46,14 +46,18 @@ enum FileKind: String, CaseIterable {
 
     static func of(_ url: URL) -> FileKind {
         let ext = url.pathExtension.lowercased()
-        if ["md", "markdown", "rtfd", "webarchive"].contains(ext) { return .document }
+        if ["md", "markdown", "rtfd"].contains(ext) { return .document }
         if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { return .folder }
+        // Disk images conform to "archive" but can't be unpacked with tar; macOS opens them itself.
+        if ext == "dmg" || ext == "sparseimage" || ext == "sparsebundle" { return .other }
+        // RAR and 7-Zip have no system type unless an app declares one; old-style RAR parts are .r00, .r01…
+        if Archives.extractableExtensions.contains(ext) || ext.wholeMatch(of: #/r\d\d/#) != nil { return .archive }
         guard let type = UTType(filenameExtension: ext) else { return .other }
         if type.conforms(to: .pdf) { return .pdf }
         if type.conforms(to: .image) { return .image }
         if type.conforms(to: .movie) { return .video }
         if type.conforms(to: .audio) { return .audio }
-        if type.conforms(to: .archive) || ["zip", "tar", "tgz", "gz"].contains(ext) { return .archive }
+        if type.conforms(to: .archive) { return .archive }
         if Docs.readableExtensions.contains(ext) { return .document }
         return .other
     }
@@ -190,7 +194,16 @@ enum Catalog {
                     .filter { !sourceExt.contains($0.ext) }
                     .map { format in each(format.name, urls) { try await Docs.convert($0, to: format) } }
             case .archive:
-                return [each("Extract", urls, Archives.extract)]
+                return [WheelItem(title: "Extract") { urls in
+                    // Dropping every part of a multi-part RAR extracts it once.
+                    var seen: Set<URL> = [], outputs: [URL] = []
+                    for url in urls {
+                        let first = (try? Archives.volumes(of: url).first) ?? url
+                        guard seen.insert(first.standardizedFileURL).inserted else { continue }
+                        outputs += try await Archives.extract(url)
+                    }
+                    return saved(outputs)
+                }]
             case .folder, .other:
                 return Archives.compressItems
             }
@@ -203,6 +216,7 @@ enum Catalog {
                     each("Compress", urls) { try await CompressEditor(source: $0).present() },
                     each("Edit", urls) { try await AdjustEditor(source: $0).present() },
                     each("Add BG", urls) { try await BackgroundEditor(source: $0).present() },
+                    each("Remove BG", urls) { try await Cutout.removeBackground($0) },
                     each("Redact", urls) { try await RedactEditor(source: $0).present() },
                     each("Metadata", urls) { try await MetadataEditor(source: $0).present() },
                     each("Annotate", urls) { try await AnnotateEditor(source: $0).present() },
@@ -232,7 +246,10 @@ enum Catalog {
                 return list
             case .video:
                 var list = [each("Trim", urls) { try await TrimEditor(source: $0).present() }]
-                    + Video.toolItems.map { option in each(option.title, urls, option.run) }
+                    + Video.toolItems.map { option in
+                        option.title == "Compress" ? WheelItem(title: "Compress") { try await Video.compress($0) }
+                            : each(option.title, urls, option.run)
+                    }
                 if multi { list.insert(WheelItem(title: "Merge") { saved([try await Video.merge($0, audioOnly: false)]) }, at: 0) }
                 return list
             case .audio:
@@ -374,8 +391,7 @@ enum Paths {
     }
 
     static func unique(_ url: URL) -> URL {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return url }
+        guard taken(url) else { return url }
         let dir = url.deletingLastPathComponent()
         let ext = url.pathExtension
         let base = url.deletingPathExtension().lastPathComponent
@@ -383,34 +399,159 @@ enum Paths {
         while true {
             var candidate = dir.appendingPathComponent("\(base) \(n)")
             if !ext.isEmpty { candidate.appendPathExtension(ext) }
-            if !fm.fileExists(atPath: candidate.path) { return candidate }
+            if !taken(candidate) { return candidate }
             n += 1
+        }
+    }
+
+    /// Anything at the path counts, a symlink included. `fileExists` follows links, so a dangling one planted under
+    /// the predicted output name (for example inside a downloaded archive) would look free and be written through.
+    static func taken(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0
+    }
+}
+
+/// Hidden working folders and files (extraction staging, encodes in progress) to clean up if Swivel quits first.
+enum TemporaryItems {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var items: Set<URL> = []
+    static func register(_ url: URL) { lock.lock(); items.insert(url); lock.unlock() }
+    static func unregister(_ url: URL) { lock.lock(); items.remove(url); lock.unlock() }
+    /// At quit: stops running tools first, so nothing writes into a folder while it's removed.
+    static func removeAll() {
+        Shell.stopAll()
+        lock.lock(); let all = items; items = []; lock.unlock()
+        for url in all {
+            Archives.makeAccessible(url)
+            try? FileManager.default.removeItem(at: url)
         }
     }
 }
 
 enum Shell {
+    /// Stops every running tool (Swivel is quitting): children would otherwise keep writing after it's gone.
+    static func stopAll() { ShellRun.stopAll() }
+
     /// Runs a command-line tool and throws its stderr on failure.
-    static func run(_ tool: String, _ args: [String], in directory: URL? = nil) async throws {
+    ///
+    /// The tool reads `input` files in order (or an empty stdin), so it never waits on a terminal. Its stderr is
+    /// drained while it runs: a tool that writes more than a pipe's 64 KB would otherwise block forever. `watch` is
+    /// asked twice a second; returning a message stops the tool and throws that message. Cancelling the task stops it.
+    static func run(_ tool: String, _ args: [String], in directory: URL? = nil, input: [URL] = [],
+                    watch: (@Sendable () -> String?)? = nil) async throws {
+        let run = ShellRun(tool: tool, args: args, directory: directory, input: input, watch: watch)
+        try await withTaskCancellationHandler {
+            try await run.start()
+        } onCancel: {
+            run.stop(L("Cancelled"))
+        }
+    }
+}
+
+/// One tool run for `Shell.run`; its state is shared with Foundation's callback threads behind a lock.
+private final class ShellRun: @unchecked Sendable {
+    private let process = Process()
+    private let tool: String
+    private let input: [URL]
+    private let watch: (@Sendable () -> String?)?
+    private let lock = NSLock()
+    private var errorTail = Data()
+    private var stopReason: String?
+    private var timer: DispatchSourceTimer?
+    private static let keptErrorBytes = 16_384
+
+    init(tool: String, args: [String], directory: URL?, input: [URL], watch: (@Sendable () -> String?)?) {
+        self.tool = tool
+        self.input = input
+        self.watch = watch
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = args
+        if let directory { process.currentDirectoryURL = directory }
+    }
+
+    private static let registry = NSLock()
+    nonisolated(unsafe) private static var running: [ObjectIdentifier: ShellRun] = [:]
+    static func stopAll() {
+        let all = registry.withLock { Array(running.values) }
+        for run in all { run.stop(L("Cancelled")) }
+    }
+    private static func track(_ run: ShellRun, _ active: Bool) {
+        registry.withLock { running[ObjectIdentifier(run)] = active ? run : nil }
+    }
+
+    func start() async throws {
+        Self.track(self, true)
+        defer { Self.track(self, false) }
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: tool)
-            process.arguments = args
-            if let directory { process.currentDirectoryURL = directory }
             let errors = Pipe()
             process.standardError = errors
             process.standardOutput = FileHandle.nullDevice
-            process.terminationHandler = { p in
-                let data = errors.fileHandleForReading.readDataToEndOfFile()
-                if p.terminationStatus == 0 {
-                    cont.resume()
-                } else {
-                    let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let name = URL(fileURLWithPath: tool).lastPathComponent
-                    cont.resume(throwing: ToolError(text.isEmpty ? "\(name) failed" : "\(name): \(text)"))
+            let feed = input.isEmpty ? nil : Pipe()
+            process.standardInput = feed ?? FileHandle.nullDevice
+            errors.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                let data = handle.availableData
+                if data.isEmpty { handle.readabilityHandler = nil } else { self?.keep(data) }
+            }
+            process.terminationHandler = { [self] p in
+                errors.fileHandleForReading.readabilityHandler = nil
+                keep(errors.fileHandleForReading.readDataToEndOfFile())
+                lock.lock()
+                timer?.cancel()
+                let reason = stopReason, text = String(decoding: errorTail, as: UTF8.self)
+                lock.unlock()
+                if let reason { return cont.resume(throwing: ToolError(reason)) }
+                if p.terminationStatus == 0 { return cont.resume() }
+                let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let name = URL(fileURLWithPath: tool).lastPathComponent
+                cont.resume(throwing: ToolError(message.isEmpty ? "\(name) failed" : "\(name): \(message)"))
+            }
+            do { try process.run() } catch {
+                errors.fileHandleForReading.readabilityHandler = nil
+                return cont.resume(throwing: error)
+            }
+            lock.lock(); let stoppedEarly = stopReason != nil; lock.unlock()
+            if stoppedEarly { process.terminate() }
+            if let feed { send(input, to: feed.fileHandleForWriting) }
+            if let watch {
+                let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+                timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
+                timer.setEventHandler { [weak self] in if let message = watch() { self?.stop(message) } }
+                lock.lock(); self.timer = timer; lock.unlock()
+                timer.resume()
+            }
+        }
+    }
+
+    /// Stops the tool; its run then throws `reason` (the first reason given wins).
+    func stop(_ reason: String) {
+        lock.lock()
+        if stopReason == nil { stopReason = reason }
+        lock.unlock()
+        if process.isRunning { process.terminate() }
+    }
+
+    private func keep(_ data: Data) {
+        guard !data.isEmpty else { return }
+        lock.lock()
+        errorTail.append(data)
+        if errorTail.count > Self.keptErrorBytes { errorTail = errorTail.suffix(Self.keptErrorBytes) }
+        lock.unlock()
+    }
+
+    /// Streams the files into the tool's stdin on a background thread. A tool that exits early just ends the copy:
+    /// the write end ignores SIGPIPE, so the write fails instead of killing Swivel.
+    private func send(_ files: [URL], to handle: FileHandle) {
+        _ = fcntl(handle.fileDescriptor, F_SETNOSIGPIPE, 1)
+        Thread.detachNewThread {
+            defer { try? handle.close() }
+            for file in files {
+                guard let reader = try? FileHandle(forReadingFrom: file) else { return }
+                defer { try? reader.close() }
+                while let chunk = try? reader.read(upToCount: 1 << 20), !chunk.isEmpty {
+                    do { try handle.write(contentsOf: chunk) } catch { return }
                 }
             }
-            do { try process.run() } catch { cont.resume(throwing: error) }
         }
     }
 }

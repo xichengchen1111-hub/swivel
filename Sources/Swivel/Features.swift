@@ -3,7 +3,7 @@ import AppKit
 /// The tools in the Swivel bundle. Each one can be switched on or off on its own.
 enum Feature: String, CaseIterable {
     case wheel, clothesline, textCapture, shelf, imagePresets, quickActions
-    case batchRename, pdfPages, qrCodes, appRouting
+    case batchRename, pdfPages, qrCodes, appRouting, keepAwake
 
     var title: String {
         switch self {
@@ -17,6 +17,7 @@ enum Feature: String, CaseIterable {
         case .pdfPages: L("PDF Pages")
         case .qrCodes: L("QR & Barcodes")
         case .appRouting: L("App Actions")
+        case .keepAwake: L("Keep Awake")
         }
     }
 
@@ -32,6 +33,7 @@ enum Feature: String, CaseIterable {
         case .pdfPages: "doc.on.doc"
         case .qrCodes: "qrcode.viewfinder"
         case .appRouting: "arrow.up.forward.app"
+        case .keepAwake: "cup.and.saucer"
         }
     }
 
@@ -47,6 +49,7 @@ enum Feature: String, CaseIterable {
         case .pdfPages: L("Pick, reorder, rotate and export PDF pages without changing the originals.")
         case .qrCodes: L("Read QR codes and barcodes from selected images, entirely on your Mac.")
         case .appRouting: L("Open files in your chosen apps, or prepare a Codex or Claude Code draft.")
+        case .keepAwake: L("Stop your Mac from going to sleep for a while: during a long copy, a download or a presentation.")
         }
     }
 
@@ -69,6 +72,7 @@ enum Feature: String, CaseIterable {
                     case .shelf: Shelf.shared.hide()
                     case .textCapture: TextCaptureWindow.closeAll()
                     case .quickActions: QuickActions.shared.hide()
+                    case .keepAwake: KeepAwake.shared.stop()
                     default: break
                     }
                 }

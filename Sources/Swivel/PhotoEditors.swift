@@ -1,6 +1,7 @@
 import AppKit
 import CoreImage
 import ImageIO
+import UniformTypeIdentifiers
 import Vision
 
 private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
@@ -399,7 +400,7 @@ final class RedactEditor: Editor {
 
     // MARK: Rendering
 
-    private nonisolated static func render(_ image: CGImage, rects normalized: [CGRect], style: Int) -> CGImage? {
+    nonisolated static func render(_ image: CGImage, rects normalized: [CGRect], style: Int) -> CGImage? {
         let w = CGFloat(image.width), h = CGFloat(image.height)
         let rects = normalized.map { CGRect(x: $0.minX * w, y: $0.minY * h, width: $0.width * w, height: $0.height * h) }
         guard !rects.isEmpty else { return image }
@@ -414,24 +415,27 @@ final class RedactEditor: Editor {
             return ctx.makeImage()
         }
 
+        // Each box gets an effect sized to the box, not to the photo: a large heading or a close-up face would
+        // otherwise stay readable through a blur or mosaic tuned for small text. Solid black is the only style that
+        // removes the content entirely.
         let original = CIImage(cgImage: image)
-        let effect: CIImage
-        if style == 0 {
-            effect = original.clampedToExtent().applyingGaussianBlur(sigma: max(w, h) * 0.02).cropped(to: original.extent)
-        } else {
-            guard let pixellate = CIFilter(name: "CIPixellate") else { return nil }
-            pixellate.setValue(original.clampedToExtent(), forKey: kCIInputImageKey)
-            pixellate.setValue(max(w, h) / 70, forKey: kCIInputScaleKey)
-            guard let output = pixellate.outputImage else { return nil }
-            effect = output.cropped(to: original.extent)
+        var output = original
+        for rect in rects {
+            let shortSide = min(rect.width, rect.height)
+            let effect: CIImage
+            if style == 0 {
+                let sigma = max(max(w, h) * 0.02, shortSide / 3)
+                effect = original.clampedToExtent().applyingGaussianBlur(sigma: sigma)
+            } else {
+                guard let pixellate = CIFilter(name: "CIPixellate") else { return nil }
+                pixellate.setValue(original.clampedToExtent(), forKey: kCIInputImageKey)
+                pixellate.setValue(max(max(w, h) / 70, shortSide / 2.5), forKey: kCIInputScaleKey)
+                pixellate.setValue(CIVector(x: rect.minX, y: rect.minY), forKey: kCIInputCenterKey)
+                guard let mosaic = pixellate.outputImage else { return nil }
+                effect = mosaic
+            }
+            output = effect.cropped(to: rect).composited(over: output)
         }
-        var mask = CIImage(color: .black).cropped(to: original.extent)
-        for rect in rects { mask = CIImage(color: .white).cropped(to: rect).composited(over: mask) }
-        guard let blend = CIFilter(name: "CIBlendWithMask") else { return nil }
-        blend.setValue(effect, forKey: kCIInputImageKey)
-        blend.setValue(original, forKey: kCIInputBackgroundImageKey)
-        blend.setValue(mask, forKey: kCIInputMaskImageKey)
-        guard let output = blend.outputImage else { return nil }
         return ciContext.createCGImage(output, from: original.extent)
     }
 
@@ -706,9 +710,11 @@ final class RedactCanvas: NSView {
     }
 }
 
-/// Shows camera, date and location tags and removes the chosen groups without re-encoding where possible.
+/// Shows camera, date and location tags and removes the chosen groups. JPEG keeps its pixels untouched; other formats
+/// are re-encoded, because a lossless copy keeps raw blocks (PNG text chunks, TIFF IPTC) that still hold the tags.
+/// Every result is read back and checked before it is saved.
 final class MetadataEditor: Editor {
-    private struct Removal: Sendable {
+    struct Removal: Sendable {
         var location: Bool
         var camera: Bool
         var date: Bool
@@ -785,16 +791,24 @@ final class MetadataEditor: Editor {
         for box in [camera, date, author, everything] { box?.state = .off }
     }
 
-    private nonisolated static func shouldRemove(_ name: String, _ removal: Removal) -> Bool {
+    private nonisolated static let cameraTags: Set<String> = [
+        "Make", "Model", "LensModel", "LensMake", "LensSpecification", "BodySerialNumber", "SerialNumber",
+        "LensSerialNumber", "LensID", "LensInfo", "Lens", "ImageUniqueID", "FNumber", "ExposureTime", "ISOSpeedRatings",
+        "PhotographicSensitivity", "FocalLength", "FocalLenIn35mmFilm", "Flash", "ExposureProgram", "MeteringMode",
+        "WhiteBalance", "ApertureValue", "ShutterSpeedValue", "ExposureBiasValue", "BrightnessValue", "Software",
+        "HostComputer", "CreatorTool"]
+    private nonisolated static let authorTags: Set<String> = [
+        "Artist", "Copyright", "creator", "Byline", "rights", "CameraOwnerName", "OwnerName", "Credit",
+        "CreatorContactInfo", "AuthorsPosition", "CaptionWriter"]
+    /// Places written as text by IPTC and XMP (photoshop:City, Iptc4xmpCore:Location, Iptc4xmpExt:LocationShown…).
+    private nonisolated static let placeTags: Set<String> = [
+        "City", "State", "Country", "CountryCode", "CountryName", "ProvinceState", "Location", "Sublocation",
+        "SubLocation", "LocationCreated", "LocationShown", "IIM2-026", "IIM2-027"]
+
+    nonisolated static func shouldRemove(_ name: String, _ removal: Removal) -> Bool {
         if name == "Orientation" { return false }  // keeps photos upright
         if removal.everything { return true }
-        let cameraTags: Set<String> = ["Make", "Model", "LensModel", "LensMake", "LensSpecification", "BodySerialNumber",
-                                       "SerialNumber", "LensSerialNumber", "FNumber", "ExposureTime", "ISOSpeedRatings",
-                                       "PhotographicSensitivity", "FocalLength", "FocalLenIn35mmFilm", "Flash",
-                                       "ExposureProgram", "MeteringMode", "WhiteBalance", "ApertureValue",
-                                       "ShutterSpeedValue", "ExposureBiasValue", "BrightnessValue", "Software", "HostComputer"]
-        let authorTags: Set<String> = ["Artist", "Copyright", "creator", "Byline", "rights", "CameraOwnerName"]
-        if removal.location && name.hasPrefix("GPS") { return true }
+        if removal.location && (name.hasPrefix("GPS") || placeTags.contains(name)) { return true }
         if removal.camera && cameraTags.contains(name) { return true }
         if removal.date && (name.contains("Date") || name.hasPrefix("OffsetTime") || name.hasPrefix("SubsecTime")) { return true }
         if removal.author && authorTags.contains(name) { return true }
@@ -806,36 +820,71 @@ final class MetadataEditor: Editor {
                               author: author.state == .on, everything: everything.state == .on)
         let source = self.source
         return try await Images.detached {
-            guard let src = CGImageSourceCreateWithURL(source as CFURL, nil), let type = CGImageSourceGetType(src) else {
-                throw ToolError("Couldn't read \(source.lastPathComponent)")
-            }
-            let metadata = CGImageSourceCopyMetadataAtIndex(src, 0, nil).flatMap { CGImageMetadataCreateMutableCopy($0) }
-                ?? CGImageMetadataCreateMutable()
-            var doomed: [String] = []
-            CGImageMetadataEnumerateTagsUsingBlock(metadata, nil, [kCGImageMetadataEnumerateRecursively: true] as CFDictionary) { path, tag in
-                let name = CGImageMetadataTagCopyName(tag) as String? ?? ""
-                if Self.shouldRemove(name, removal) { doomed.append(path as String) }
-                return true
-            }
-            for path in doomed { CGImageMetadataRemoveTagWithPath(metadata, nil, path as CFString) }
-
+            let data = try Self.cleaned(source, removal)
             let out = Paths.output(for: source, ext: source.pathExtension, suffix: " clean")
-            guard let dest = CGImageDestinationCreateWithURL(out as CFURL, type, 1, nil) else { throw ToolError("Can't write this format") }
-            let options: [CFString: Any] = [
-                kCGImageDestinationMetadata: metadata,
-                kCGImageDestinationMergeMetadata: false,
-                kCGImageMetadataShouldExcludeGPS: removal.location || removal.everything,
-            ]
-            var error: Unmanaged<CFError>?
-            if !CGImageDestinationCopyImageSource(dest, src, options as CFDictionary, &error) {
-                // Formats that can't be copied losslessly get re-encoded without the removed tags.
-                try? FileManager.default.removeItem(at: out)
-                guard let dest = CGImageDestinationCreateWithURL(out as CFURL, type, 1, nil) else { throw ToolError("Can't write this format") }
-                CGImageDestinationAddImageAndMetadata(dest, try Images.load(source), metadata,
-                                                      [kCGImageDestinationLossyCompressionQuality: 0.95] as CFDictionary)
-                guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save") }
-            }
+            try data.write(to: out, options: .withoutOverwriting)
             return [out]
         }
+    }
+
+    /// The file's bytes without the chosen metadata groups.
+    nonisolated static func cleaned(_ source: URL, _ removal: Removal) throws -> Data {
+        guard let src = CGImageSourceCreateWithURL(source as CFURL, nil), let type = CGImageSourceGetType(src) else {
+            throw ToolError("Couldn't read \(source.lastPathComponent)")
+        }
+        let metadata = CGImageSourceCopyMetadataAtIndex(src, 0, nil).flatMap { CGImageMetadataCreateMutableCopy($0) }
+            ?? CGImageMetadataCreateMutable()
+        var doomed: [String] = []
+        CGImageMetadataEnumerateTagsUsingBlock(metadata, nil, [kCGImageMetadataEnumerateRecursively: true] as CFDictionary) { path, tag in
+            if shouldRemove(CGImageMetadataTagCopyName(tag) as String? ?? "", removal) { doomed.append(path as String) }
+            return true
+        }
+        for path in doomed { CGImageMetadataRemoveTagWithPath(metadata, nil, path as CFString) }
+
+        if type as String == UTType.jpeg.identifier {
+            let data = NSMutableData()
+            if let dest = CGImageDestinationCreateWithData(data, type, 1, nil) {
+                let options: [CFString: Any] = [
+                    kCGImageDestinationMetadata: metadata,
+                    kCGImageDestinationMergeMetadata: false,
+                    kCGImageMetadataShouldExcludeGPS: removal.location || removal.everything,
+                ]
+                if CGImageDestinationCopyImageSource(dest, src, options as CFDictionary, nil), isClean(data as Data, removal) {
+                    return data as Data
+                }
+            }
+        }
+        // Re-encode the upright pixels with only the kept tags. Orientation is already applied, so it becomes 1.
+        let image = try Images.load(source)
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, type, 1, nil) else { throw ToolError("Can't write this format") }
+        let quality = [kCGImageDestinationLossyCompressionQuality: 0.95] as CFDictionary
+        if removal.everything {
+            CGImageDestinationAddImage(dest, image, quality)
+        } else {
+            CGImageMetadataSetValueMatchingImageProperty(metadata, kCGImagePropertyTIFFDictionary, kCGImagePropertyTIFFOrientation, 1 as CFNumber)
+            CGImageDestinationAddImageAndMetadata(dest, image, metadata, quality)
+        }
+        guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save") }
+        guard isClean(data as Data, removal) else { throw ToolError(L("Couldn't remove all of the selected metadata from this file.")) }
+        return data as Data
+    }
+
+    /// Reads the result back: none of the chosen groups may remain, in XMP, IPTC, EXIF, GPS or maker notes.
+    nonisolated static func isClean(_ data: Data, _ removal: Removal) -> Bool {
+        guard let src = CGImageSourceCreateWithData(data as CFData, nil) else { return false }
+        // "Everything" is checked group by group: encoders add harmless technical tags (colour space, resolution).
+        let check = removal.everything ? Removal(location: true, camera: true, date: true, author: true, everything: false) : removal
+        var clean = true
+        if let metadata = CGImageSourceCopyMetadataAtIndex(src, 0, nil) {
+            CGImageMetadataEnumerateTagsUsingBlock(metadata, nil, [kCGImageMetadataEnumerateRecursively: true] as CFDictionary) { _, tag in
+                if shouldRemove(CGImageMetadataTagCopyName(tag) as String? ?? "", check) { clean = false }
+                return clean
+            }
+        }
+        let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] ?? [:]
+        if check.location, let gps = props[kCGImagePropertyGPSDictionary] as? [CFString: Any], !gps.isEmpty { clean = false }
+        if check.camera, props.keys.contains(where: { ($0 as String).hasPrefix("{Maker") }) { clean = false }
+        return clean
     }
 }

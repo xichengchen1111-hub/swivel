@@ -66,6 +66,29 @@ enum Prefs {
     static let changed = Notification.Name("SwivelPrefsChanged")
     private static let defaults = UserDefaults.standard
 
+    static let compressTargets = [0, 100_000, 200_000, 500_000, 1_000_000, 2_000_000, 5_000_000]
+    static let videoCompressTargets = [0, 8_000_000, 10_000_000, 25_000_000, 50_000_000, 100_000_000]
+    static var compressTargetBytes: Int {
+        get { let value = defaults.integer(forKey: "compress.targetBytes"); return compressTargets.contains(value) ? value : 0 }
+        set { defaults.set(newValue, forKey: "compress.targetBytes"); post() }
+    }
+    static var videoCompressTarget: Int {
+        get { let value = defaults.integer(forKey: "videoCompress.target"); return videoCompressTargets.contains(value) ? value : 0 }
+        set { defaults.set(newValue, forKey: "videoCompress.target"); post() }
+    }
+
+    /// Keep Awake also keeps the display on (otherwise only the Mac itself stays awake).
+    static var keepAwakeDisplay: Bool {
+        get { defaults.object(forKey: "keepAwake.display") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "keepAwake.display"); post() }
+    }
+
+    /// Which language model Quick Actions may ask (the key itself is in the keychain).
+    static var assistant: Assistant.Settings {
+        get { defaults.data(forKey: "assistant.v1").flatMap { try? JSONDecoder().decode(Assistant.Settings.self, from: $0) } ?? .standard }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "assistant.v1"); post() }
+    }
+
     private static func post() { NotificationCenter.default.post(name: changed, object: nil) }
 
     private static var interactionCache: InteractionSettings = {

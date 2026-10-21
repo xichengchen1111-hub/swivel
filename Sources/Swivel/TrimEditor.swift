@@ -33,7 +33,7 @@ final class TrimEditor: Editor {
     /// window, so the menu that opened it doesn't put up a busy toast meanwhile. (Still `async throws`, as callers
     /// await it.)
     init(source: URL) async throws {
-        asset = AVURLAsset(url: source)
+        asset = Video.openAsset(source)
         isAudio = FileKind.of(source) == .audio
         player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
         playerView.player = player
@@ -149,18 +149,21 @@ final class TrimEditor: Editor {
         player.pause()
         let range = CMTimeRange(start: CMTime(seconds: start.doubleValue, preferredTimescale: 600),
                                 end: CMTime(seconds: end.doubleValue, preferredTimescale: 600))
-        let asset = AVURLAsset(url: source)
+        let asset = try await Video.safeAsset(source)
         let ext = source.pathExtension.lowercased()
         let (preset, type, outExt): (String, AVFileType, String)
         if isAudio {
             (preset, type, outExt) = (AVAssetExportPresetAppleM4A, .m4a, "m4a")
-        } else if ext == "mp4" || ext == "m4v" {
-            (preset, type, outExt) = (AVAssetExportPresetPassthrough, ext == "mp4" ? .mp4 : .m4v, ext)
         } else {
-            (preset, type, outExt) = (AVAssetExportPresetPassthrough, .mov, "mov")
+            // Re-encoded rather than passed through: a passthrough cut starts at the previous keyframe and only hides
+            // the frames before the start point behind an edit list, so "trimmed" footage would still be in the file.
+            (preset, type, outExt) = (AVAssetExportPresetHighestQuality, ext == "mp4" ? .mp4 : ext == "m4v" ? .m4v : .mov,
+                                      ext == "mp4" || ext == "m4v" ? ext : "mov")
         }
         guard let session = AVAssetExportSession(asset: asset, presetName: preset) else { throw ToolError("Can't trim this file") }
         session.timeRange = range
+        // A video composition makes the export decode and re-encode even when the codec and size already match.
+        if !isAudio { session.videoComposition = try await AVVideoComposition.videoComposition(withPropertiesOf: asset) }
         let out = Paths.output(for: source, ext: outExt, suffix: " trimmed")
         try await session.export(to: out, as: type)
         return [out]
@@ -168,6 +171,21 @@ final class TrimEditor: Editor {
 }
 
 extension Video {
+    /// Media that refers to other files (QuickTime reference movies, external data references) is never followed:
+    /// converting a crafted movie could otherwise copy another local file's audio or video into the result.
+    static func openAsset(_ url: URL) -> AVURLAsset {
+        AVURLAsset(url: url, options: [AVURLAssetReferenceRestrictionsKey: AVAssetReferenceRestrictions.forbidAll.rawValue])
+    }
+
+    /// `openAsset`, plus a check that every track's media is inside the file itself.
+    static func safeAsset(_ url: URL) async throws -> AVURLAsset {
+        let asset = openAsset(url)
+        for track in try await asset.load(.tracks) where try await !track.load(.isSelfContained) {
+            throw ToolError(L("This movie uses media from other files. Only self-contained files can be converted."))
+        }
+        return asset
+    }
+
     /// Joins videos (or audio files) end to end in the order they were selected.
     static func merge(_ urls: [URL], audioOnly: Bool) async throws -> URL {
         let composition = AVMutableComposition()
@@ -175,7 +193,7 @@ extension Video {
         var audioTrack: AVMutableCompositionTrack?  // created on first use; an empty track makes export fail
         var cursor = CMTime.zero
         for url in urls {
-            let asset = AVURLAsset(url: url)
+            let asset = try await safeAsset(url)
             let duration = try await asset.load(.duration)
             let range = CMTimeRange(start: .zero, duration: duration)
             if let videoTrack, let source = try await asset.loadTracks(withMediaType: .video).first {

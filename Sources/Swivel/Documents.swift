@@ -9,8 +9,9 @@ struct DocFormat {
 }
 
 enum Docs {
+    // Web archives are not read: importing one loads its subresources, including remote URLs and local files.
     static let readableExtensions: Set<String> = ["docx", "doc", "rtf", "rtfd", "odt", "txt", "text", "html", "htm",
-                                                  "md", "markdown", "webarchive"]
+                                                  "md", "markdown"]
 
     static let formats: [DocFormat] = [
         DocFormat(name: "DOCX", ext: "docx", type: .officeOpenXML),
@@ -45,7 +46,42 @@ enum Docs {
             let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
             return NSAttributedString(try AttributedString(markdown: source, options: options))
         }
-        return try NSAttributedString(url: url, options: [:], documentAttributes: nil)
+        if ext == "rtfd" {
+            // A package's attachments can be symlinks to any file, which the export would embed. Drop them first.
+            let package = try FileWrapper(url: url, options: .immediate)
+            removeSymlinks(in: package)
+            guard let text = NSAttributedString(rtfdFileWrapper: package, documentAttributes: nil) else {
+                throw ToolError("Couldn't read \(url.lastPathComponent)")
+            }
+            return text
+        }
+        // The type always comes from the extension. Left to sniff the content, AppKit would read a web archive
+        // renamed to .doc or .odt with WebKit, fetching its remote and local resources into the output.
+        let types: [String: NSAttributedString.DocumentType] = [
+            "doc": .docFormat, "docx": .officeOpenXML, "odt": .openDocument, "rtf": .rtf,
+            "txt": .plain, "text": .plain, "html": .html, "htm": .html,
+        ]
+        guard let type = types[ext] else { throw ToolError("Can't read \(url.lastPathComponent)") }
+        let text = try NSAttributedString(url: url, options: [.documentType: type], documentAttributes: nil)
+        // Images and frames in HTML are references to other files or the web: keep the text, never the fetched content.
+        return type == .html ? withoutAttachments(text) : text
+    }
+
+    private static func removeSymlinks(in wrapper: FileWrapper) {
+        for child in (wrapper.fileWrappers ?? [:]).values {
+            if child.isSymbolicLink { wrapper.removeFileWrapper(child) }
+            else if child.isDirectory { removeSymlinks(in: child) }
+        }
+    }
+
+    private static func withoutAttachments(_ text: NSAttributedString) -> NSAttributedString {
+        let copy = NSMutableAttributedString(attributedString: text)
+        var ranges: [NSRange] = []
+        copy.enumerateAttribute(.attachment, in: NSRange(location: 0, length: copy.length)) { value, range, _ in
+            if value != nil { ranges.append(range) }
+        }
+        for range in ranges.reversed() { copy.deleteCharacters(in: range) }
+        return copy
     }
 
     @MainActor
@@ -54,7 +90,7 @@ enum Docs {
         var attrs: [NSAttributedString.DocumentAttributeKey: Any] = [.documentType: type]
         if type == .plain || type == .html { attrs[.characterEncoding] = String.Encoding.utf8.rawValue }
         let data = try text.data(from: NSRange(location: 0, length: text.length), documentAttributes: attrs)
-        try data.write(to: out)
+        try data.write(to: out, options: .withoutOverwriting)
     }
 
     /// Lays the text out on US Letter pages and prints it to a PDF file.
@@ -144,12 +180,18 @@ enum PDFs {
         }
     }
 
+    /// Bitmaps from PDF pages stay within this budget; a crafted page box can't trap or claim gigabytes.
+    static let maxRenderPixels = 150_000_000.0, maxRenderSide = 16_384.0
+
     static func render(_ page: PDFPage, dpi: CGFloat) throws -> CGImage {
         let box = page.bounds(for: .mediaBox)
         let rotated = page.rotation % 180 != 0
-        let scale = dpi / 72
-        let width = Int((rotated ? box.height : box.width) * scale)
-        let height = Int((rotated ? box.width : box.height) * scale)
+        let w = Double(rotated ? box.height : box.width), h = Double(rotated ? box.width : box.height)
+        guard w.isFinite, h.isFinite, w > 0, h > 0 else { throw ToolError("Page too large") }
+        // Very large pages render at a lower resolution rather than not at all.
+        let scale = min(Double(dpi) / 72, maxRenderSide / max(w, h), (maxRenderPixels / (w * h)).squareRoot())
+        guard let width = Int(exactly: (w * scale).rounded(.down)), let height = Int(exactly: (h * scale).rounded(.down)),
+              width >= 1, height >= 1 else { throw ToolError("Page too large") }
         guard let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                   bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
@@ -157,7 +199,7 @@ enum PDFs {
         }
         ctx.setFillColor(CGColor(gray: 1, alpha: 1))
         ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        ctx.scaleBy(x: scale, y: scale)
+        ctx.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
         page.draw(with: .mediaBox, to: ctx)
         guard let image = ctx.makeImage() else { throw ToolError("Couldn't render page") }
         return image
@@ -172,15 +214,14 @@ enum PDFs {
             }
         }
         let out = Paths.unique(urls[0].deletingLastPathComponent().appendingPathComponent("Merged.pdf"))
-        guard merged.write(to: out) else { throw ToolError("Couldn't write PDF") }
+        try save(merged, to: out)
         return out
     }
 
     private static func compress(_ url: URL) throws -> [URL] {
         let doc = try open(url)
         let out = Paths.output(for: url, ext: "pdf", suffix: " compressed")
-        let options: [PDFDocumentWriteOption: Any] = [.saveImagesAsJPEGOption: true, .optimizeImagesForScreenOption: true]
-        guard doc.write(to: out, withOptions: options) else { throw ToolError("Couldn't write PDF") }
+        try save(doc, to: out, options: [.saveImagesAsJPEGOption: true, .optimizeImagesForScreenOption: true])
         return [out]
     }
 
@@ -193,7 +234,7 @@ enum PDFs {
             let single = PDFDocument()
             single.insert(page, at: 0)
             let out = Paths.output(for: url, ext: "pdf", suffix: " \(i + 1)")
-            single.write(to: out)
+            try save(single, to: out)
             outputs.append(out)
         }
         return outputs
@@ -203,8 +244,15 @@ enum PDFs {
         let doc = try open(url)
         for i in 0..<doc.pageCount { doc.page(at: i).map { $0.rotation = ($0.rotation + 90) % 360 } }
         let out = Paths.output(for: url, ext: "pdf", suffix: " rotated")
-        guard doc.write(to: out) else { throw ToolError("Couldn't write PDF") }
+        try save(doc, to: out)
         return [out]
+    }
+
+    /// Writes a new PDF file and never through anything already at `url` (`PDFDocument.write` follows symlinks).
+    static func save(_ doc: PDFDocument, to url: URL, options: [PDFDocumentWriteOption: Any] = [:]) throws {
+        let keyed = Dictionary(uniqueKeysWithValues: options.map { (AnyHashable($0.key.rawValue), $0.value) })
+        guard let data = doc.dataRepresentation(options: keyed) else { throw ToolError("Couldn't write PDF") }
+        try data.write(to: url, options: .withoutOverwriting)
     }
 }
 
@@ -223,44 +271,189 @@ enum Archives {
         return Paths.unique(dir.appendingPathComponent("\(name).\(ext)"))
     }
 
+    /// Several files are archived by name from their folder, so they must share it (a name from another folder
+    /// would be left out, or pick up a different file of the same name).
+    private static func checkOneFolder(_ urls: [URL]) throws {
+        guard Set(urls.map { $0.deletingLastPathComponent().standardizedFileURL }).count == 1 else {
+            throw ToolError(L("Choose files from one folder to archive them together."))
+        }
+    }
+
     static func zip(_ urls: [URL]) async throws -> URL {
+        try checkOneFolder(urls)
         let out = archiveURL(for: urls, ext: "zip")
         if urls.count == 1 {
             try await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", urls[0].path, out.path])
         } else {
-            try await Shell.run("/usr/bin/zip", ["-r", "-q", "-y", out.path] + urls.map(\.lastPathComponent),
+            // "--" ends the options, so a file named like one ("-T") is archived instead of changing what zip does.
+            try await Shell.run("/usr/bin/zip", ["-r", "-q", "-y", out.path, "--"] + urls.map(\.lastPathComponent),
                                 in: urls[0].deletingLastPathComponent())
         }
         return out
     }
 
     static func tar(_ urls: [URL]) async throws -> URL {
+        try checkOneFolder(urls)
         let out = archiveURL(for: urls, ext: "tar.gz")
-        try await Shell.run("/usr/bin/tar", ["-czf", out.path, "-C", urls[0].deletingLastPathComponent().path]
+        try await Shell.run("/usr/bin/tar", ["-czf", out.path, "-C", urls[0].deletingLastPathComponent().path, "--"]
                             + urls.map(\.lastPathComponent))
         return out
     }
 
+    /// Extensions the system's bsdtar (libarchive) can unpack, beyond what ditto does for ZIP.
+    static let extractableExtensions: Set<String> = ["zip", "tar", "tgz", "gz", "rar", "7z", "xz", "txz", "bz2", "tbz",
+                                                     "tbz2", "lzma", "lz", "lzh", "lha", "cab", "iso", "xar", "cpio", "jar"]
+
+    /// Free space Extract leaves on the volume; it stops before an archive (or a decompression bomb) fills the disk.
+    static let reservedBytes: Int64 = 1_000_000_000
+
     static func extract(_ url: URL) async throws -> [URL] {
         let fm = FileManager.default
         let parent = url.deletingLastPathComponent()
+        let parts = try volumes(of: url)
+        // A pipe or device named like an archive would block the read forever.
+        guard isRegularFile(url) else { throw ToolError("Can't read \(url.lastPathComponent)") }
+        let folder = parent.path
+        guard freeSpace(folder) > reservedBytes else { throw ToolError(L("Not enough free disk space to extract.")) }
         let staging = parent.appendingPathComponent(".swivel-\(UUID().uuidString)")
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: staging) }
-        if url.pathExtension.lowercased() == "zip" {
-            try await Shell.run("/usr/bin/ditto", ["-x", "-k", url.path, staging.path])
-        } else {
-            try await Shell.run("/usr/bin/tar", ["-xf", url.path, "-C", staging.path])
+        TemporaryItems.register(staging)
+        defer { makeAccessible(staging); try? fm.removeItem(at: staging); TemporaryItems.unregister(staging) }
+        let watch: @Sendable () -> String? = {
+            freeSpace(folder) < reservedBytes ? L("Stopped: extracting would fill the disk.") : nil
+        }
+        do {
+            if parts.count > 1 {
+                // A multi-part RAR reads as one stream; the first part alone would extract zero-filled files.
+                try await Shell.run("/usr/bin/tar", ["-xf", "-", "--no-mac-metadata", "--passphrase", noPassphrase, "-C", staging.path],
+                                    input: parts, watch: watch)
+            } else if url.pathExtension.lowercased() == "zip" {
+                try await Shell.run("/usr/bin/ditto", ["-x", "-k", url.path, staging.path], watch: watch)
+            } else {
+                // No AppleDouble metadata from the archive: it could replace the quarantine flag or lock its xattrs.
+                try await Shell.run("/usr/bin/tar", ["-xf", url.path, "--no-mac-metadata", "--passphrase", noPassphrase,
+                                                     "-C", staging.path], watch: watch)
+            }
+        } catch {
+            let message = error.localizedDescription
+            if message.contains("passphrase") || message.contains("encrypt") || message.contains("Encrypt") {
+                throw ToolError(L("This archive is password-protected. Swivel can't open encrypted archives yet."))
+            }
+            throw error
         }
 
-        // A single top-level item lands next to the archive; anything else gets a folder named after it.
+        // Folders without owner access (mode 000, 300…) could neither be checked, flagged, moved nor cleaned up.
+        makeAccessible(staging)
         let contents = try fm.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent != "__MACOSX" }
+        try quarantine(contents, like: url)
         // Everything lands next to the archive, without an extra wrapping folder.
         return try contents.map { item in
             let out = Paths.unique(parent.appendingPathComponent(item.lastPathComponent))
             try fm.moveItem(at: item, to: out)
             return out
+        }
+    }
+
+    /// A made-up passphrase: without one, bsdtar asks for it about ten thousand times on stderr.
+    private static let noPassphrase = "swivel-no-passphrase"
+
+    /// Asked fresh every time (a URL's resource values are cached, so they would never change during an extract).
+    private static func freeSpace(_ folder: String) -> Int64 {
+        var info = statfs()
+        guard statfs(folder, &info) == 0 else { return .max }
+        return Int64(info.f_bavail) * Int64(info.f_bsize)
+    }
+
+    static func isRegularFile(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
+    }
+
+    /// Gives the owner full access to every folder under `root` (never following links), so it can be walked.
+    static func makeAccessible(_ root: URL) {
+        var queue = [root.path]
+        while let path = queue.popLast() {
+            var info = stat()
+            guard lstat(path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR else { continue }
+            if info.st_mode & 0o700 != 0o700 { chmod(path, (info.st_mode & 0o7777) | 0o700) }
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? [] {
+                queue.append((path as NSString).appendingPathComponent(name))
+            }
+        }
+    }
+
+    /// The parts of a multi-part RAR in order (name.part1.rar, name.part2.rar… or name.rar, name.r00, name.r01…),
+    /// whichever part was dropped; otherwise just the file.
+    static func volumes(of url: URL) throws -> [URL] {
+        let fm = FileManager.default
+        let dir = url.deletingLastPathComponent(), name = url.lastPathComponent
+        let lower = name.lowercased()
+        if let match = lower.firstMatch(of: #/^(.*)\.part(\d+)\.rar$/#) {
+            let stem = String(name.prefix(match.1.count)), width = match.2.count
+            var parts: [URL] = []
+            for n in 1... {
+                let part = dir.appendingPathComponent("\(stem).part\(String(format: "%0\(width)d", n)).rar")
+                guard fm.fileExists(atPath: part.path) else { break }
+                guard isRegularFile(part) else { throw ToolError("Can't read \(part.lastPathComponent)") }
+                parts.append(part)
+            }
+            let highest = (try? fm.contentsOfDirectory(atPath: dir.path))?.compactMap { file -> Int? in
+                guard let m = file.lowercased().firstMatch(of: #/^(.*)\.part(\d+)\.rar$/#), m.1 == match.1 else { return nil }
+                return Int(m.2)
+            }.max() ?? parts.count
+            guard parts.count == highest, !parts.isEmpty else {
+                throw ToolError(L("Part %d of this archive is missing.", parts.count + 1))
+            }
+            return parts
+        }
+        let isOldStyle = lower.hasSuffix(".rar") || lower.firstMatch(of: #/\.r\d\d$/#) != nil
+        guard isOldStyle else { return [url] }
+        let stem = String(name.dropLast(4))
+        let first = dir.appendingPathComponent(stem + ".rar")
+        var parts = [first]
+        for n in 0..<1000 {
+            let part = dir.appendingPathComponent(stem + String(format: ".r%02d", n))
+            guard fm.fileExists(atPath: part.path) else { break }
+            guard isRegularFile(part) else { throw ToolError("Can't read \(part.lastPathComponent)") }
+            parts.append(part)
+        }
+        guard fm.fileExists(atPath: first.path) else { throw ToolError(L("Part %d of this archive is missing.", 1)) }
+        guard isRegularFile(first) else { throw ToolError("Can't read \(first.lastPathComponent)") }
+        return parts
+    }
+
+    /// Extracted files keep the archive's "downloaded from the internet" flag, as Archive Utility does, so Gatekeeper
+    /// still checks an app inside a downloaded archive. Fails closed: nothing is moved out unless every item got it.
+    static func quarantine(_ items: [URL], like archive: URL) throws {
+        let name = "com.apple.quarantine"
+        let size = getxattr(archive.path, name, nil, 0, 0, 0)
+        guard size > 0 else { return }
+        var value = [UInt8](repeating: 0, count: size)
+        guard getxattr(archive.path, name, &value, size, 0, 0) == size else { return }
+        let failed = ToolError(L("Couldn't mark the extracted files as downloaded."))
+        var paths: [String] = [], walkFailed = false
+        for item in items {
+            paths.append(item.path)
+            let walk = FileManager.default.enumerator(at: item, includingPropertiesForKeys: nil, options: []) { _, _ in
+                walkFailed = true
+                return false
+            }
+            while let child = walk?.nextObject() as? URL { paths.append(child.path) }
+        }
+        guard !walkFailed else { throw failed }
+        for path in paths {
+            var info = stat()
+            guard lstat(path, &info) == 0 else { throw failed }
+            if info.st_mode & S_IFMT == S_IFLNK { continue }
+            if getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW) > 0 { continue }  // tar already set it
+            if setxattr(path, name, value, size, 0, XATTR_NOFOLLOW) == 0 { continue }
+            // Read-only items (0444 files, 0555 folders) need the owner's write bit for a moment.
+            let mode = info.st_mode & 0o7777
+            guard chmod(path, mode | 0o200) == 0 else { throw failed }
+            let set = setxattr(path, name, value, size, 0, XATTR_NOFOLLOW)
+            chmod(path, mode)
+            guard set == 0 else { throw failed }
         }
     }
 }

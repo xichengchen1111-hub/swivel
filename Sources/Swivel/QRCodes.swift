@@ -87,7 +87,11 @@ final class QRCodesWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDel
     func tableViewSelectionDidChange(_ notification: Notification) { updateButtons() }
     @objc private func copyCode() {
         guard Feature.qrCodes.isOn, !isBusy, let selected else { return }
-        pasteboard.clearContents(); pasteboard.setString(selected.value, forType: .string); Feedback.press()
+        pasteboard.clearContents(); pasteboard.setString(selected.value, forType: .string)
+        // Wi-Fi passwords and one-time-password secrets: ask clipboard managers not to keep a history copy.
+        let secret = ["WIFI:", "otpauth:", "otpauth-migration:"].contains { selected.value.lowercased().hasPrefix($0.lowercased()) }
+        if secret { pasteboard.setString("", forType: .init("org.nspasteboard.ConcealedType")) }
+        Feedback.press()
         status.stringValue = L("Copied")
     }
     @objc private func saveCode() {

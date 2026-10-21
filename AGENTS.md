@@ -1,13 +1,14 @@
 # Swivel — notes for coding agents
 
-Swivel is a native macOS menu-bar app (Swift, AppKit, no third-party dependencies) that bundles ten tools, each switched on or off on its own:
+Swivel is a native macOS menu-bar app (Swift, AppKit, no third-party dependencies) that bundles eleven tools, each switched on or off on its own:
 
 - **Wheel** — start dragging a file in Finder, tap a modifier key, and a menu pops up under the pointer. Drop the file on an option to convert it, open an editor (crop, compress, adjust, background, redact, metadata, annotate, collage, trim), or act on it (AirDrop, copy, move, copy path, Terminal, shelf, hang on the clothesline). Five menu templates: Wheel, List, Bookshelf, Sticky Notes, Clothesline.
 - **Clothesline** — a rope under the menu bar. New screenshots first wait as a card in the bottom-right corner (like the system thumbnail); drag the card up or click it to hang it. Moving the pointer to the screen’s top edge immediately lowers the rope. Prints can be clicked (copy), double-clicked (open), held (Quick Look) or dragged away. The rope and prints are animated with a small physics model.
 - **Text Capture** — local Vision OCR from a selected image, with editable text and explicit copy.
 - **File Shelf** — a session-only list of file references with multiple selection and dragging out together.
 - **Image Presets** — saved image size, format, quality and metadata recipes; outputs beside originals.
-- **Quick Actions** — searchable keyboard panel for enabled tools and explicitly supplied files.
+- **Quick Actions** — searchable keyboard panel for enabled tools and explicitly supplied files. Optional **assistant**: with the user's own API key (Claude or any OpenAI-compatible service, incl. local Ollama) a model picks one offered action for a typed request; the user runs it with Return.
+- **Keep Awake** — power assertion for 30 min – 5 h or until turned off, from the ◎ menu, its page or Quick Actions.
 
 Optional tools are opt-in and default off. Each can be used independently of Wheel.
 
@@ -26,6 +27,7 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 
 ## Testing without a real drag
 
+- Developer modes below work only in unbundled builds (`.build/debug/Swivel`) and validation bundles with another bundle ID; the installed `local.swivel.app` ignores all command-line modes (security fix in 1.5.0).
 - `Swivel --run <convert|tools|actions|apps|codes> "<item title>" <file>...` — runs one menu item headlessly and prints `OK`/`FAIL`. A wrong title lists the available ones.
 - `Swivel --demo <convert|tools|actions|apps|codes> <file> [script] [style]` — shows a menu at the pointer (for screenshots and recordings). The script is one hover index (`2`) or steps run every 0.35 s: `0,1,2,n,1,p1` (`n` next page, `pN` drop on item N without running it). The style applies to this run only.
 - `Swivel --frames <wheel|list|shelf|notes|clothesline> <out dir> [light|dark]` — renders the menu's animations offscreen, 60 frames a second, to PNGs: open, a slow arc, a fast flick, back to the hub (cancel), a page turn and a drop. Prints mean and slowest draw time; `SWIVEL_FRAMES_SCALE=2` renders at Retina size, `SWIVEL_FRAMES_LOG=1` lists slow frames.
@@ -59,10 +61,14 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 | Personal tuning | `InteractionSettings.swift` (bounded, persisted per-area motion, sound styles, typography), `FeelPane.swift` (Feel & Text settings, safe previews); `AppTypography` scales native controls idempotently, skips field editors and system file/color/font panels, never exported annotation fonts |
 | Menu appearance / rope colours | `MenuAppearance.swift` (neutral light/dark surfaces, opaque sRGB persistence, rope/peg presets and independent four-colour template palettes), `RopeColorsPane.swift` (rope/peg selectors), `TemplateColorsPane.swift` (Wheel → Colors with per-template presets, wells and preview); `Prefs.clotheslineColors` updates existing print pegs and the resting rope immediately as well as the menu template |
 | Misc UI | `Toast.swift`, `Localization.swift` |
+| Background removal | `Cutout.swift` (Vision foreground instance mask → transparent PNG) |
+| Assistant (opt-in network) | `Assistant.swift` — request building/parsing for Anthropic Messages and OpenAI-compatible chat completions, `Keychain`; Quick Actions integration in `QuickActions.swift`, settings in `AdditionalPanes.swift` (`QuickActionsPane`) |
+| Keep Awake | `KeepAwake.swift` (IOPMAssertion, timer, `KeepAwakePane`); menu in `AppDelegate.swift` |
 | Automated checks | `Tests/SwivelTests/` — `NativeToolsTests`, `FeelTests` (springs, wheel hit-testing, sounds, strings table), `ClotheslineFeelTests`, `ToolsFeelTests`, `EditorsFeelTests` (snapping, detents), `SettingsFeelTests`; run with `test.sh` |
 
 ## Rules of the house
 
+- **Security rules (2026-10 review).** Output paths come from `Paths.output`/`Paths.unique`, which treat any directory entry (dangling symlinks too) as taken; write new files exclusively (`Data.write(options: .withoutOverwriting)`, `PDFs.save`). Subprocesses go through `Shell.run` (empty stdin, stderr drained, optional watchdog, cancellable) and pass `--` before file operands. Open media with `Video.openAsset`/`Video.safeAsset` (no reference movies). Extraction keeps the archive's quarantine flag (fail closed), uses `--no-mac-metadata`, and stops near a full disk. Draft links escape invisible characters. The only network access is the opt-in assistant: user-supplied key in the keychain, stored per provider *and host* (a changed address finds no key), HTTPS (http only for localhost), no redirects, and it never sends file names, paths or contents (saved QR codes, named after images, are excluded from the offered actions). Document imports always pass an explicit `.documentType` (never let AppKit sniff: a renamed web archive would load remote/local resources). Extraction checks free space with `statfs`, makes staging folders accessible, flags read-only items too, and quitting stops tools and removes staging/temp files (`TemporaryItems`). Keep the hardened runtime in `build.sh` and add no entitlements that weaken it. `Tests/SwivelTests/SecurityTests.swift` covers these.
 - **No third-party dependencies.** Use system frameworks and the CLI tools that ship with macOS (`afconvert`, `ditto`, `tar`, `zip`).
 - **Outputs go next to the original file.** Never create a new folder for results (multi-page outputs are `name 1.png`, `name 2.png`…). Never overwrite: use `Paths.output` / `Paths.unique`.
 - **Text:** wrap every user-facing string in `L("English")` and add the 简体中文 / 繁體中文 / 日本語 translations to `Strings.table`. Menu item titles stay English internally — they are the IDs saved in Customize — and are translated only when drawn. Saved preset action IDs are `preset.<stable id>`; resolve their display titles through `Catalog.displayTitle` / `WheelItem.displayTitle`, so renaming does not lose menu customization.
@@ -75,6 +81,14 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 - **Licensing:** Tendedero (github.com/alejandrobujan/tendedero) inspired the clothesline; its code is MIT but its name and icon are not licensed — don't use them. Don't copy code from GPL projects into this MIT-style codebase. When borrowing an idea, reimplement it.
 - Don't edit sibling projects (`../atelier-focus`, `../clipline`); other sessions own them.
 - Commit messages end with a `Co-Authored-By` line for the agent that wrote the change. Push to `origin main` (private repo `xichengchen1111-hub/swivel`) when the owner asks.
+
+### Version 1.5.0 (build 16): security review fixes, four file tools, assistant (2026-10-21)
+- Research: `reports/Swivel 高搜索需求功能.md` (+ notes in `research_notes/`) ranked high-demand features and the "computer assistant / agent" direction. The owner chose: Remove BG, target-size compression, RAR/7z, Keep Awake; then MCP server and a "Mac doctor" (owner is open to embedding an existing project there — check its licence and update the no-dependency rule before doing so).
+- Security review: two audits + 22 adversarial verifiers. Fixed: symlink-following output writers (HIGH; reproduced by an archive that plants `note.txt -> ~/.zshenv`), Shell.run stderr/stdin deadlock (bsdtar passphrase loop), unbounded extraction, zip option injection, quarantine lost on tar extraction, incomplete metadata removal for PNG/TIFF/HEIC and IPTC/XMP places, webarchive/HTML resource loading, RTFD symlink attachments, huge PDF MediaBox trap, pixel-flood decode, QuickTime reference movies, Trim passthrough leaving earlier frames, Redact strength on large text, invisible Unicode and `+` in draft links, public logging of dragged file names, distributed reopen notification spam, concealed clipboard for Wi-Fi/OTP QR copies, copied-image cards saved to Desktop unattended. No hardened runtime + developer modes in the installed app → hardened runtime and bundle-ID gate. Not changed: PDF Crop keeps cropped text in the content stream (it isn't a redaction tool).
+- Codex (OpenAI CLI) implemented Remove BG and target-size compression in a separate worktree; reviewed, merged and fixed here (its sandbox couldn't run Vision/HEIC/H.264; one test fixture released an AVAsset early).
+- A second review of the new code found a renamed-webarchive bypass, a free-space check that never updated (cached URL values), QR code names reaching the assistant, key/endpoint binding and redirects, quarantine gaps for unreadable or read-only items, Quick Actions Return races, keychain reads while typing, PDF Crop's write, Keep Awake's uptime timer and multi-folder ZIPs; all fixed and covered by tests.
+- Verified: 177 Swift Testing checks pass (a bsdtar-made 7z extracts through the app's Extract); release build signed `adhoc,runtime`; a validation-bundle copy loads the private trackpad actuator under the hardened runtime and ignores `DYLD_INSERT_LIBRARIES` (the unhardened debug build does not). Settings renders for Keep Awake and the assistant in four languages fit their pages.
+- Not verified: a live model call (needs the owner's key — enter it in Quick Actions → Assistant, then Test); native clicking of the new UI; real Finder drags onto Remove BG / Compress / Extract; real RAR files in the app (the research pass extracted hand-made RAR4/RAR5 samples with the system bsdtar; the tests here cover multi-part naming, not RAR decompression itself); the Keychain prompt after each ad-hoc rebuild (expected: macOS asks once to allow access). Not installed to /Applications or the Desktop and not committed.
 
 ### Version 1.4.3 (build 15): 3D QR scenes and screenshot drag paths (2026-10-21)
 - Installed to /Applications and ~/Desktop after a normal quit (screenshot settings verified restored); previous apps and both defaults domains backed up in ignored build/previous-1.4.2-before-1.4.3/. Not committed or pushed yet.

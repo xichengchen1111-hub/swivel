@@ -60,7 +60,7 @@ enum Images {
             doc.insert(page, at: doc.pageCount)
         }
         let out = Paths.output(for: urls[0], ext: "pdf")
-        guard doc.write(to: out) else { throw ToolError("Couldn't write PDF") }
+        try PDFs.save(doc, to: out)
         return [out]
     }
 
@@ -70,6 +70,9 @@ enum Images {
         try await Task.detached(priority: .userInitiated, operation: work).value
     }
 
+    /// Full-size decodes above this many pixels are refused (about 300 MP, 1.2 GB of RGBA).
+    static let maxDecodePixels = 300_000_000.0
+
     /// Decodes the image upright (EXIF orientation applied), optionally capped in size.
     static func load(_ url: URL, maxPixels: Int? = nil) throws -> CGImage {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
@@ -78,6 +81,10 @@ enum Images {
         let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
         let width = props[kCGImagePropertyPixelWidth] as? Int ?? 4096
         let height = props[kCGImagePropertyPixelHeight] as? Int ?? 4096
+        // A full-size decode of a crafted "pixel flood" file would claim many gigabytes.
+        if maxPixels == nil, Double(width) * Double(height) > maxDecodePixels {
+            throw ToolError("\(url.lastPathComponent) is too large to open (\(width) × \(height) px)")
+        }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
@@ -100,6 +107,58 @@ enum Images {
         CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't encode image") }
         return data as Data
+    }
+
+    /// Highest fitting quality at each resolution; never returns an oversized result.
+    static func fitting(_ image: CGImage, type: UTType, maxBytes: Int) throws
+        -> (data: Data, quality: Double, longEdge: Int) {
+        let originalEdge = max(image.width, image.height)
+        let floor = min(320, originalEdge)
+        let lossy = type == .jpeg || type == .heic
+        var edge = originalEdge
+        var smallest = Int.max
+        while true {
+            try Task.checkCancellation()
+            let scaled = edge == originalEdge ? image : try resized(image, longEdge: edge)
+            if lossy {
+                let lowData = try encode(scaled, type: type, quality: 0.05)
+                smallest = min(smallest, lowData.count)
+                if lowData.count <= maxBytes {
+                    let highData = try encode(scaled, type: type, quality: 0.95)
+                    if highData.count <= maxBytes { return (highData, 0.95, edge) }
+                    var low = 0.05, high = 0.95, best = lowData
+                    for _ in 0..<7 {
+                        try Task.checkCancellation()
+                        let mid = (low + high) / 2
+                        let data = try encode(scaled, type: type, quality: mid)
+                        if data.count <= maxBytes { low = mid; best = data } else { high = mid }
+                    }
+                    return (best, low, edge)
+                }
+            } else {
+                let data = try encode(scaled, type: type, quality: 1)
+                smallest = min(smallest, data.count)
+                if data.count <= maxBytes { return (data, 1, edge) }
+            }
+            if edge == floor { break }
+            edge = max(floor, Int(Double(edge) * 0.85))
+        }
+        throw ToolError(L("Target size cannot be reached. Smallest size: %@.", byteString(smallest)))
+    }
+
+    static func resized(_ image: CGImage, longEdge: Int) throws -> CGImage {
+        let scale = Double(longEdge) / Double(max(image.width, image.height))
+        let width = max(1, Int((Double(image.width) * scale).rounded()))
+        let height = max(1, Int((Double(image.height) * scale).rounded()))
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            throw ToolError(L("Couldn't encode image"))
+        }
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let result = context.makeImage() else { throw ToolError(L("Couldn't encode image")) }
+        return result
     }
 
     static func write(_ image: CGImage, to url: URL, type: UTType, quality: Double) throws {

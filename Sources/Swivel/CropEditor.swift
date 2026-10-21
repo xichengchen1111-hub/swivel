@@ -700,7 +700,7 @@ final class CropEditor: Editor {
                     page.setBounds(box, for: .mediaBox)
                 }
                 let out = Paths.output(for: source, ext: "pdf", suffix: " cropped")
-                guard doc.write(to: out) else { throw ToolError("Couldn't write PDF") }
+                try PDFs.save(doc, to: out)
                 return [out]
             }
         }
@@ -740,12 +740,14 @@ final class CompressEditor: Editor {
         var quality: Double
         var maxPixels: Int
         var format: Int
+        var targetBytes: Int
     }
 
     private struct Estimate: Sendable {
         var settings: Settings
         var data: Data
         var preview: CGImage?
+        var error: String? = nil
     }
 
     private let preview = ImagePreview()
@@ -759,6 +761,7 @@ final class CompressEditor: Editor {
     private var qualityLabel: NSTextField!
     private var maxSize: NSPopUpButton!
     private var format: NSPopUpButton!
+    private var target: NSPopUpButton!
     private let estimate = NSTextField(labelWithString: L(""))
     private var calculating: DispatchWorkItem?
     private lazy var estimator = LiveRender<Estimate?> { [weak self] in self?.show($0) }
@@ -781,9 +784,15 @@ final class CompressEditor: Editor {
         addRow("Quality", quality, qualityLabel)
         maxSize = popup(sizes.map { $0 == 0 ? L("Original size") : L("Max %d px", $0) })
         addRow("Dimensions", maxSize)
+        target = popup([L("Off"), L("100 KB"), L("200 KB"), L("500 KB"), L("1 MB"), L("2 MB"), L("5 MB")])
+        target.selectItem(at: Prefs.compressTargets.firstIndex(of: Prefs.compressTargetBytes) ?? 0)
+        addRow("Target size", target)
         format = popup(formats.map(\.0))
         addRow("Format", format)
         estimate.font = .systemFont(ofSize: 13, weight: .semibold)
+        estimate.lineBreakMode = .byWordWrapping
+        estimate.maximumNumberOfLines = 3
+        estimate.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         addRow("Result", estimate)
     }
 
@@ -795,12 +804,14 @@ final class CompressEditor: Editor {
     }
 
     private var settings: Settings {
-        Settings(quality: quality.doubleValue, maxPixels: sizes[maxSize.indexOfSelectedItem], format: format.indexOfSelectedItem)
+        Settings(quality: quality.doubleValue, maxPixels: sizes[maxSize.indexOfSelectedItem], format: format.indexOfSelectedItem, targetBytes: Prefs.compressTargets[target.indexOfSelectedItem])
     }
 
     override func update() {
-        qualityLabel.stringValue = "\(Int((quality.doubleValue * 100).rounded()))%"
         let settings = self.settings, type = formats[settings.format].1, decoded = self.decoded, source = self.source
+        qualityLabel.stringValue = settings.targetBytes == 0 ? "\(Int((quality.doubleValue * 100).rounded()))%" : L("Auto")
+        quality.isEnabled = settings.targetBytes == 0
+        if Prefs.compressTargetBytes != settings.targetBytes { Prefs.compressTargetBytes = settings.targetBytes }
         // Keep the last result visible, dimmed, while the new one is worked out; only a slow encode says so in words.
         estimate.textColor = .tertiaryLabelColor
         calculating?.cancel()
@@ -810,9 +821,15 @@ final class CompressEditor: Editor {
         // The source is looked up when the job runs, not now: a request queued behind the first (full-size) decode
         // then reuses that decode instead of starting another.
         estimator.request {
-            guard let image = try? decoded.image(source, maxPixels: settings.maxPixels),
-                  let data = try? Images.encode(image, type: type, quality: settings.quality) else { return nil }
-            return Estimate(settings: settings, data: data, preview: CompressEditor.decode(data, maxPixels: 1400))
+            do {
+                let image = try decoded.image(source, maxPixels: settings.maxPixels)
+                let data = try settings.targetBytes == 0
+                    ? Images.encode(image, type: type, quality: settings.quality)
+                    : Images.fitting(image, type: type, maxBytes: settings.targetBytes).data
+                return Estimate(settings: settings, data: data, preview: CompressEditor.decode(data, maxPixels: 1400))
+            } catch {
+                return Estimate(settings: settings, data: Data(), preview: nil, error: error.localizedDescription)
+            }
         }
     }
 
@@ -831,10 +848,19 @@ final class CompressEditor: Editor {
         latest = result
         let current = result.settings == settings
         if current { calculating?.cancel() }
+        if let error = result.error {
+            estimate.stringValue = error
+            estimate.textColor = current ? .systemRed : .tertiaryLabelColor
+            return
+        }
         let bytes = result.data.count
         let change = originalBytes > 0 ? Int((1 - Double(bytes) / Double(originalBytes)) * 100) : 0
         estimate.stringValue = "\(byteString(originalBytes)) → \(byteString(bytes))" + (change > 0 ? "  (−\(change)%)" : "  (+\(-change)%)")
         estimate.textColor = !current ? .tertiaryLabelColor : change > 0 ? .systemGreen : .systemRed
+        if result.settings.targetBytes > 0 {
+            estimate.stringValue = L("%@ — under target %@", byteString(bytes), byteString(result.settings.targetBytes))
+            estimate.textColor = current ? .systemGreen : .tertiaryLabelColor
+        }
         if let image = result.preview { preview.image = image }
     }
 
@@ -842,6 +868,7 @@ final class CompressEditor: Editor {
         quality.doubleValue = 0.7
         maxSize.selectItem(at: 0)
         format.selectItem(at: 0)
+        target.selectItem(at: 0)
     }
 
     override func didClose() {
@@ -852,13 +879,18 @@ final class CompressEditor: Editor {
     override func apply() async throws -> [URL] {
         let settings = self.settings, (_, type, ext) = formats[settings.format], source = self.source
         // The estimate already encoded exactly this; write those bytes rather than encode again.
-        let ready = latest?.settings == settings ? latest?.data : nil
+        let ready = latest?.settings == settings && latest?.error == nil ? latest?.data : nil
         let decoded = self.decoded
         return try await Images.detached {
-            let data = try ready ?? Images.encode(try decoded.image(source, maxPixels: settings.maxPixels),
-                                                  type: type, quality: settings.quality)
+            let data: Data
+            if let ready { data = ready }
+            else {
+                let image = try decoded.image(source, maxPixels: settings.maxPixels)
+                data = try settings.targetBytes == 0 ? Images.encode(image, type: type, quality: settings.quality)
+                    : Images.fitting(image, type: type, maxBytes: settings.targetBytes).data
+            }
             let out = Paths.output(for: source, ext: ext, suffix: " compressed")
-            try data.write(to: out)
+            try data.write(to: out, options: .withoutOverwriting)
             return [out]
         }
     }

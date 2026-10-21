@@ -49,6 +49,14 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
     private var runs = 0
     /// The run whose busy toast ("Title…") is up, so only that run takes it down.
     private var busyToastRun: Int?
+    /// The assistant's pick for a request: shown first, run only when the user presses Return on it.
+    private var suggestion: (query: String, files: [URL], id: String, message: String)?
+    private var asking: Task<Void, Never>?
+    /// When the assistant's pick appeared: a Return typed in the same instant was meant for the old first row.
+    private var suggestedAt = Date.distantPast
+    /// Numbers each question; an answer to an older, cancelled one changes nothing.
+    private var askRun = 0
+    static let askID = "assistant.ask"
 
     func syncSettings() {
         if !Feature.quickActions.isOn {
@@ -94,6 +102,7 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
 
     /// Closes at once: exits are faster than entrances.
     func hide() {
+        asking?.cancel(); asking = nil
         generation += 1
         confirming = false
         if let window, window.isVisible {
@@ -205,6 +214,19 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
                 Clothesline.shared.show(force: true); return nil
             })
         }
+        if Feature.keepAwake.isOn {
+            if KeepAwake.shared.isActive {
+                list.append(QuickCommand(id: "keepAwake.stop", title: L("Stop Keeping Awake"), detail: KeepAwake.shared.status ?? "",
+                                         symbol: "cup.and.saucer.fill") { KeepAwake.shared.stop(); return ActionResult(message: L("Your Mac sleeps as usual.")) })
+            }
+            for (index, duration) in KeepAwake.durations.enumerated() {
+                list.append(QuickCommand(id: "keepAwake.\(index)", title: L("Keep Awake — %@", KeepAwake.title(for: duration)),
+                                         detail: Feature.keepAwake.title, symbol: Feature.keepAwake.symbol) {
+                    KeepAwake.shared.start(for: duration)
+                    return ActionResult(message: KeepAwake.shared.status ?? "")
+                })
+            }
+        }
         if Feature.qrCodes.isOn {
             list.append(QuickCommand(id: "qrLibrary", title: L("QR Library"), detail: L("Saved codes and trees"), symbol: "tree") {
                 QRLibraryWindow().show(); return nil
@@ -252,11 +274,63 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         chosenFiles.isEmpty ? L("Choose files or drop them here") : chosenFiles.count == 1 ? chosenFiles[0].lastPathComponent : L("%d files", chosenFiles.count)
     }
     private func filter() {
-        commands = Self.matching(allCommands, query: search.stringValue)
+        let query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        commands = Self.matching(allCommands, query: query)
+        if !query.isEmpty, Assistant.isReady {
+            if let suggestion, suggestion.query == query, suggestion.files == chosenFiles,
+               let picked = allCommands.first(where: { $0.id == suggestion.id }) {
+                commands.removeAll { $0.id == picked.id }
+                let detail = suggestion.message.isEmpty ? L("Suggested by the assistant") : suggestion.message
+                commands.insert(QuickCommand(id: picked.id, title: picked.title, detail: detail, symbol: "sparkles", run: picked.run), at: 0)
+            } else {
+                let host = (try? Assistant.endpoint(Prefs.assistant))?.host() ?? ""
+                let ask = QuickCommand(id: Self.askID, title: L("Ask the assistant: “%@”", String(query.prefix(80))),
+                                       detail: L("Sends this request and the action names to %@ — not your files", host),
+                                       symbol: "sparkles") { nil }
+                if commands.isEmpty { commands = [ask] } else { commands.append(ask) }
+            }
+        }
         table.reloadData()
         if !commands.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
-        runButton?.isEnabled = !commands.isEmpty
-        hint.stringValue = commands.isEmpty ? L("No matching actions. Try another search.") : L("↑ ↓ to select · Return to run · Esc to close")
+        runButton?.isEnabled = !commands.isEmpty && asking == nil
+        hint.stringValue = asking != nil ? L("Asking the assistant…")
+            : commands.isEmpty ? L("No matching actions. Try another search.") : L("↑ ↓ to select · Return to run · Esc to close")
+    }
+
+    /// What the assistant may choose from. Saved QR codes are left out: they are named after the images they came
+    /// from, and file names stay on this Mac.
+    static func assistantChoices(_ commands: [QuickCommand]) -> [Assistant.Choice] {
+        commands.filter { $0.id != askID && !$0.id.contains(".qr.") }
+            .map { Assistant.Choice(id: $0.id, title: $0.title, group: $0.detail) }
+    }
+
+    /// Asks the model which enabled action fits; the answer becomes the first row, and nothing runs until Return.
+    private func ask(_ query: String) {
+        let files = chosenFiles
+        let choices = Self.assistantChoices(allCommands)
+        let token = generation
+        askRun += 1
+        let ticket = askRun
+        asking = Task { @MainActor [weak self] in
+            let result: Result<Assistant.Suggestion, Error>
+            do { result = .success(try await Assistant.suggest(query, choices: choices, files: files)) }
+            catch { result = .failure(error) }
+            guard let self, ticket == askRun, !Task.isCancelled else { return }
+            asking = nil
+            guard generation == token, search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
+            switch result {
+            case .success(let pick) where pick.actionID != nil:
+                suggestion = (query, files, pick.actionID!, pick.message)
+                suggestedAt = Date()
+                Feedback.hover()
+                filter()
+            case .success(let pick):
+                filter(); hint.stringValue = pick.message
+            case .failure(let error):
+                filter(); hint.stringValue = error.localizedDescription
+            }
+        }
+        filter()
     }
     /// The panel stays up behind its own picker (that runs at the modal-panel level, above this floating panel): the
     /// files are for it. Afterwards it takes the keyboard back, so typing goes on into the search field.
@@ -277,8 +351,15 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
             ToolUI.refuse(search)
             return
         }
+        // While the assistant thinks, Return does nothing: the rows are about to change under it.
+        guard asking == nil else { ToolUI.refuse(search); return }
         let row = table.selectedRow
         let command = commands[row]
+        if row == 0, command.symbol == "sparkles", Date().timeIntervalSince(suggestedAt) < 0.4 { return }
+        if command.id == Self.askID {
+            ask(search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+            return
+        }
         // Re-resolve against enabled features, so a stale panel cannot run a disabled action.
         guard Self.makeCommands(files: chosenFiles).contains(where: { $0.id == command.id }) else { rebuild(); return }
         confirm(row)
@@ -378,7 +459,12 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         cell.configure(commands[row])
         return cell
     }
-    func controlTextDidChange(_ obj: Notification) { if !confirming { filter() } }
+    func controlTextDidChange(_ obj: Notification) {
+        guard !confirming else { return }
+        // A new request replaces the question still on its way.
+        asking?.cancel(); asking = nil
+        filter()
+    }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.moveDown(_:)) || commandSelector == #selector(NSResponder.moveUp(_:)) {
             guard !commands.isEmpty, !confirming else { return true }

@@ -9,5 +9,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Swivel "$APP/Contents/MacOS/Swivel"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/Swivel.icns "$APP/Contents/Resources/Swivel.icns"
-codesign --force --sign - "$APP" >/dev/null
+# Hardened runtime: no DYLD_* injection or unsigned libraries in the shipped app. Don't add entitlements that
+# re-enable either (allow-dyld-environment-variables, disable-library-validation).
+codesign --force --options runtime --sign - "$APP" >/dev/null
 echo "Built $APP"

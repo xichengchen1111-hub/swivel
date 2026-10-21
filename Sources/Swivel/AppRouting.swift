@@ -40,11 +40,39 @@ struct FileAppTarget: Codable, Equatable, Identifiable, Sendable {
 enum AssistantDraft {
     static func referenceText(_ urls: [URL]) -> String {
         // JSON strings keep quotes, newlines and unusual names unambiguous. File content is never read here.
-        let paths = urls.map { url -> String in
-            let bytes = try? JSONEncoder().encode(url.path)
-            return bytes.flatMap { String(data: $0, encoding: .utf8) } ?? url.path
+        L("Selected local files:") + "\n" + urls.map { "- " + visibleJSONString($0.path) }.joined(separator: "\n")
+    }
+
+    /// A JSON string literal that decodes to exactly `text`, with every character a reviewer couldn't see written as
+    /// a `\u` escape: controls, format characters (bidi overrides, zero-width, tag characters), variation selectors,
+    /// private-use and unassigned code points. A file name can't hide instructions in a draft this way.
+    static func visibleJSONString(_ text: String) -> String {
+        var out = "\""
+        for scalar in text.unicodeScalars {
+            switch scalar {
+            case "\"": out += "\\\""
+            case "\\": out += "\\\\"
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            default:
+                guard isHidden(scalar) else { out.unicodeScalars.append(scalar); continue }
+                for unit in String(scalar).utf16 { out += String(format: "\\u%04X", unit) }
+            }
         }
-        return L("Selected local files:") + "\n" + paths.map { "- " + $0 }.joined(separator: "\n")
+        return out + "\""
+    }
+
+    private static func isHidden(_ scalar: Unicode.Scalar) -> Bool {
+        let p = scalar.properties
+        switch p.generalCategory {
+        case .control, .format, .privateUse, .unassigned, .lineSeparator, .paragraphSeparator, .surrogate: return true
+        case .spaceSeparator: return scalar != " "  // no-break, ideographic and other spaces look like gaps
+        default:
+            // Letters that render as nothing: Braille blank, Hangul fillers, musical null notehead.
+            let blanks: Set<UInt32> = [0x2800, 0x115F, 0x1160, 0x3164, 0xFFA0, 0x1D159]
+            return blanks.contains(scalar.value) || p.isDefaultIgnorableCodePoint || p.isVariationSelector || p.isNoncharacterCodePoint
+        }
     }
     static func url(for delivery: FileAppTarget.Delivery, files: [URL]) throws -> URL {
         guard !files.isEmpty, files.allSatisfy(\.isFileURL), [.codexDraft, .claudeCodeDraft].contains(delivery) else {
@@ -64,6 +92,9 @@ enum AssistantDraft {
         if directories.count == 1, let directory = directories.first {
             components.queryItems?.append(URLQueryItem(name: delivery == .codexDraft ? "path" : "folder", value: directory.path))
         }
+        // URLComponents leaves "+" alone, but both apps decode queries as forms, where "+" means a space: a folder
+        // such as "C++ notes" would otherwise arrive as "C   notes".
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         guard let url = components.url else { throw ToolError(L("Could not prepare the draft.")) }
         return url
     }

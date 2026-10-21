@@ -210,7 +210,15 @@ final class QuickActionsPane: Pane {
     private let shortcuts = NSPopUpButton(frame: .zero, pullsDown: false)
     private let availability = ToolUI.note("")
     private var open: NSButton!
-    init() { super.init(size: NSSize(width: 760, height: 360)) }
+    private let provider = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let address = NSTextField()
+    private let model = NSTextField()
+    private let key = NSSecureTextField()
+    private let keyStatus = ToolUI.note("")
+    private let testStatus = ToolUI.note("")
+    private var testButton: NSButton!
+    private var removeButton: NSButton!
+    init() { super.init(size: NSSize(width: 760, height: 720)) }
     required init?(coder: NSCoder) { fatalError() }
     override func build() {
         stack.addArrangedSubview(label("A shortcut to everything", size: 17, weight: .semibold))
@@ -223,6 +231,30 @@ final class QuickActionsPane: Pane {
         open = ToolUI.button("Show Quick Actions", target: self, action: #selector(showPanel))
         stack.addArrangedSubview(open)
         stack.addArrangedSubview(label("If another app uses the same shortcut, choose a different one. You can always reopen Swivel from Finder or Spotlight to reach Settings.", size: 12, secondary: true))
+
+        let separator = NSBox(); separator.boxType = .separator
+        stack.addArrangedSubview(separator)
+        separator.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+        stack.addArrangedSubview(label("Assistant (optional)", size: 15, weight: .semibold))
+        stack.addArrangedSubview(label("Type what you want done, such as “make these photos smaller than 1 MB”, and a language model picks the action. It only suggests: the action runs when you press Return. Swivel sends your request, the names of the available actions and the kinds of chosen files, never file names, paths or contents. You pay the service for its use with your own key.", secondary: true))
+        provider.addItems(withTitles: Assistant.Provider.allCases.map(\.title))
+        provider.target = self; provider.action = #selector(providerChanged)
+        stack.addArrangedSubview(row("Service", provider))
+        for (field, placeholder) in [(address, "https://api.anthropic.com"), (model, "claude-opus-5-5"), (key, L("Paste your API key"))] {
+            field.placeholderString = placeholder
+            field.widthAnchor.constraint(equalToConstant: 380).isActive = true
+            field.target = self; field.action = #selector(saveSettings)
+        }
+        stack.addArrangedSubview(row("Address", address))
+        stack.addArrangedSubview(row("Model", model))
+        removeButton = ToolUI.button("Remove Key", target: self, action: #selector(removeKey))
+        stack.addArrangedSubview(row("API key", key, ToolUI.button("Save", target: self, action: #selector(saveSettings)), removeButton))
+        keyStatus.preferredMaxLayoutWidth = 560
+        stack.addArrangedSubview(row("", keyStatus))
+        testButton = ToolUI.button("Test", target: self, action: #selector(test))
+        testStatus.preferredMaxLayoutWidth = 480
+        stack.addArrangedSubview(row("", testButton, testStatus))
+        stack.addArrangedSubview(label("For DeepSeek use https://api.deepseek.com, for Qwen https://dashscope.aliyuncs.com/compatible-mode/v1, for Ollama on this Mac http://localhost:11434/v1 (no key needed). Keys are kept in your login keychain.", size: 12, secondary: true))
         NotificationCenter.default.addObserver(forName: QuickActions.shortcutChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
@@ -232,7 +264,66 @@ final class QuickActionsPane: Pane {
         open?.isEnabled = Feature.quickActions.isOn
         availability.stringValue = !Feature.quickActions.isOn ? L("Turn this feature on above to get started.") : QuickActions.shared.shortcutAvailable ? L("Shortcut is ready") : L("This shortcut is unavailable. Choose another shortcut or open the panel below.")
         availability.textColor = QuickActions.shared.shortcutAvailable ? .secondaryLabelColor : .systemOrange
+        let settings = Prefs.assistant
+        provider.selectItem(at: Assistant.Provider.allCases.firstIndex(of: settings.provider) ?? 0)
+        // Don't overwrite what the user is typing.
+        if address.currentEditor() == nil { address.stringValue = settings.baseURL }
+        if model.currentEditor() == nil { model.stringValue = settings.model }
+        model.placeholderString = settings.provider == .anthropic ? "claude-opus-5-5" : L("for example deepseek-chat, qwen-plus, llama3.2")
+        let saved = Assistant.account(settings).map(Keychain.exists) ?? false
+        keyStatus.stringValue = saved ? L("A key is saved in your keychain.")
+            : Assistant.isLocal(settings.baseURL) ? L("A server on this Mac needs no key.") : L("No key saved: the assistant is off.")
+        removeButton?.isEnabled = saved
+        testButton?.isEnabled = Assistant.isReady
     }
     @objc private func shortcutChanged() { Prefs.quickShortcut = QuickShortcut.allCases[shortcuts.indexOfSelectedItem] }
     @objc private func showPanel() { QuickActions.shared.show() }
+    @objc private func providerChanged() {
+        let chosen = Assistant.Provider.allCases[provider.indexOfSelectedItem]
+        guard chosen != Prefs.assistant.provider else { return }
+        // A new service starts from its own address; its key (if any) is kept separately.
+        Prefs.assistant = Assistant.Settings(provider: chosen, baseURL: chosen.defaultBaseURL, model: chosen.defaultModel)
+        address.stringValue = chosen.defaultBaseURL; model.stringValue = chosen.defaultModel
+        testStatus.stringValue = ""
+    }
+    @objc private func saveSettings() {
+        var settings = Prefs.assistant
+        settings.baseURL = address.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.model = model.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            _ = try Assistant.endpoint(settings)
+            let typed = key.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !typed.isEmpty, let account = Assistant.account(settings) { try Keychain.save(typed, account: account) }
+            key.stringValue = ""
+            Prefs.assistant = settings
+            testStatus.stringValue = ""
+        } catch {
+            testStatus.stringValue = error.localizedDescription
+            testStatus.textColor = .systemOrange
+        }
+    }
+    @objc private func removeKey() {
+        if let account = Assistant.account(Prefs.assistant) { Keychain.delete(account) }
+        refresh()
+    }
+    @objc private func test() {
+        saveSettings()
+        testStatus.textColor = .secondaryLabelColor
+        testStatus.stringValue = L("Asking the assistant…")
+        testButton.isEnabled = false
+        let choices = [Assistant.Choice(id: "tools.Make PDF", title: "Make PDF", group: "Tools"),
+                       Assistant.Choice(id: "convert.JPG", title: "JPG", group: "Convert")]
+        let sample = [URL(fileURLWithPath: "/sample/a.png"), URL(fileURLWithPath: "/sample/b.png")]
+        Task { @MainActor [weak self] in
+            do {
+                let pick = try await Assistant.suggest("Put these two pictures into one PDF", choices: choices, files: sample)
+                self?.testStatus.textColor = pick.actionID == "tools.Make PDF" ? .systemGreen : .systemOrange
+                self?.testStatus.stringValue = pick.actionID == "tools.Make PDF" ? L("Working: the model chose Make PDF.") : L("Connected, but the model chose differently: %@", pick.message)
+            } catch {
+                self?.testStatus.textColor = .systemOrange
+                self?.testStatus.stringValue = error.localizedDescription
+            }
+            self?.refresh()
+        }
+    }
 }
