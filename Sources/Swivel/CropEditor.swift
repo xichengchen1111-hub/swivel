@@ -377,13 +377,13 @@ final class CropView: NSView {
     }
 
     private func advance(_ dt: CGFloat) -> Bool {
-        for i in 0..<4 { shown[i].step(dt) }
-        for key in growth.keys { growth[key]?.step(dt) }
-        press.step(dt)
-        grid.step(dt)
-        guideX.step(dt)
-        guideY.step(dt)
-        pill.step(dt)
+        for i in 0..<4 { shown[i].step(dt, tuning: Prefs.interaction.tools) }
+        for key in growth.keys { growth[key]?.step(dt, tuning: Prefs.interaction.tools) }
+        press.step(dt, tuning: Prefs.interaction.tools)
+        grid.step(dt, tuning: Prefs.interaction.tools)
+        guideX.step(dt, tuning: Prefs.interaction.tools)
+        guideY.step(dt, tuning: Prefs.interaction.tools)
+        pill.step(dt, tuning: Prefs.interaction.tools)
         overlay.needsDisplay = true
         return !(shown.allSatisfy(\.isSettled) && growth.values.allSatisfy(\.isSettled)
                  && [press, grid, guideX, guideY, pill].allSatisfy(\.isSettled))

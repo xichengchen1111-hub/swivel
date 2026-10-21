@@ -421,6 +421,10 @@ enum RopeTuning {
         let k: CGFloat
         let c: CGFloat
         var dampingRatio: CGFloat { c / (2 * k.squareRoot()) }
+        func tuned(_ tuning: MotionTuning) -> Self {
+            let stiffness = k * tuning.safeSpeed * tuning.safeSpeed
+            return Self(k: stiffness, c: 2 * stiffness.squareRoot() * tuning.damping(dampingRatio))
+        }
     }
 
     static let fall = Oscillator(k: 260, c: 24)        // the whole rope lowering and lifting (ζ ≈ 0.74)
@@ -603,6 +607,7 @@ final class RopeView: NSView, NSDraggingSource {
         let layer = CALayer()
         let ring = CALayer()
         let close = CALayer()
+        let peg = CALayer()
         let chip = CALayer()           // "Copied"
         var size: CGSize
         var image: CGImage?
@@ -668,7 +673,8 @@ final class RopeView: NSView, NSDraggingSource {
 
     private static let ropeTop: CGFloat = 18
     private static let restSag: CGFloat = 16
-    private static let ropeColor = NSColor(srgbRed: 0.9, green: 0.86, blue: 0.78, alpha: 1)
+    private static var ropeColor: NSColor { Prefs.clotheslineColors.rope.color }
+    private var colorsObserver: NSObjectProtocol?
     private static let tilts: [CGFloat] = [0.018, -0.015, 0.012, -0.02, 0.015, -0.012]
 
     override init(frame: NSRect) {
@@ -680,11 +686,25 @@ final class RopeView: NSView, NSDraggingSource {
         ropeLayer.strokeColor = Self.ropeColor.cgColor
         ropeLayer.lineWidth = 2.6
         ropeLayer.lineCap = .round
-        ropeLayer.shadowOpacity = 0.35
+        ropeLayer.shadowOpacity = 0.18
         ropeLayer.shadowRadius = 2
         ropeLayer.shadowOffset = CGSize(width: 0, height: 2)
         root.addSublayer(ropeLayer)
         registerForDraggedTypes([.fileURL])
+        colorsObserver = NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshColors() }
+        }
+    }
+
+    deinit { if let colorsObserver { NotificationCenter.default.removeObserver(colorsObserver) } }
+
+    private func refreshColors() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for print in prints { print.peg.backgroundColor = Prefs.clotheslineColors.peg.color.cgColor }
+        CATransaction.commit()
+        drawnRope = [] // colour changes must redraw a resting rope too
+        render(reduced: isMotionReduced)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -779,12 +799,12 @@ final class RopeView: NSView, NSDraggingSource {
         layer.shadowOffset = CGSize(width: 0, height: 4)
         layer.shadowPath = CGPath(rect: layer.bounds, transform: nil)
 
-        // Wooden peg gripping the rope and the top edge of the print.
-        let peg = CALayer()
+        // Neutral peg; shares its saved colour with the menu template.
+        let peg = print.peg
         peg.frame = CGRect(x: size.width / 2 - 5, y: -14, width: 10, height: 28)
-        peg.backgroundColor = NSColor(srgbRed: 0.8, green: 0.6, blue: 0.38, alpha: 1).cgColor
+        peg.backgroundColor = Prefs.clotheslineColors.peg.color.cgColor
         peg.cornerRadius = 2.5
-        peg.shadowOpacity = 0.4
+        peg.shadowOpacity = 0.18
         peg.shadowRadius = 1.5
         peg.shadowOffset = CGSize(width: 0, height: 1)
         peg.shadowPath = CGPath(roundedRect: peg.bounds, cornerWidth: 2.5, cornerHeight: 2.5, transform: nil)
@@ -984,7 +1004,7 @@ final class RopeView: NSView, NSDraggingSource {
             breeze.snap(0)
         } else {
             breeze.target = clock < calmAt ? 1 : 0
-            breeze.step(dt)
+            breeze.step(dt, tuning: Prefs.interaction.clothesline)
         }
         accumulator = min(accumulator + dt, RopeTuning.step * CGFloat(RopeTuning.maxSteps))
         while accumulator >= RopeTuning.step {
@@ -992,18 +1012,18 @@ final class RopeView: NSView, NSDraggingSource {
             accumulator -= RopeTuning.step
         }
         for print in prints {
-            print.slot.step(dt)
-            print.lift.step(dt)
-            print.hover.step(dt)
-            print.press.step(dt)
-            print.opacity.step(dt)
-            print.flash.step(dt)
-            print.closePress.step(dt)
+            print.slot.step(dt, tuning: Prefs.interaction.clothesline)
+            print.lift.step(dt, tuning: Prefs.interaction.clothesline)
+            print.hover.step(dt, tuning: Prefs.interaction.clothesline)
+            print.press.step(dt, tuning: Prefs.interaction.clothesline)
+            print.opacity.step(dt, tuning: Prefs.interaction.clothesline)
+            print.flash.step(dt, tuning: Prefs.interaction.clothesline)
+            print.closePress.step(dt, tuning: Prefs.interaction.clothesline)
             // A hand-off that never comes (the flight was cut short) mustn't leave a hole in the rope.
             if let since = print.awaitingSince, clock - since > 1.2 { reveal(print) }
         }
-        fade.step(dt)
-        highlight.step(dt)
+        fade.step(dt, tuning: Prefs.interaction.clothesline)
+        highlight.step(dt, tuning: Prefs.interaction.clothesline)
         render(reduced: reduced)
         updateMouseCatching()
 
@@ -1026,8 +1046,8 @@ final class RopeView: NSView, NSDraggingSource {
         clock += Double(h)
         // Whole rope: a spring that overshoots a little and settles; the cord lags behind its acceleration, so it
         // dips once in the middle when the rope stops.
-        let a = RopeTuning.advance(&offset, &offsetV, toward: offsetTarget, RopeTuning.fall, h: h)
-        RopeTuning.advance(&sag, &sagV, toward: 0, RopeTuning.sag, force: -RopeTuning.sagCoupling * a, h: h)
+        let a = RopeTuning.advance(&offset, &offsetV, toward: offsetTarget, RopeTuning.fall.tuned(Prefs.interaction.clothesline), h: h)
+        RopeTuning.advance(&sag, &sagV, toward: 0, RopeTuning.sag.tuned(Prefs.interaction.clothesline), force: -RopeTuning.sagCoupling * a, h: h)
         let t = CGFloat(clock)
         for print in prints {
             if let at = print.kickAt, clock >= at { print.angleV += print.kick; print.kickAt = nil }
@@ -1039,9 +1059,9 @@ final class RopeView: NSView, NSDraggingSource {
             } else {
                 // Pendulum on its peg, pulled toward its resting tilt (straight when hovered), plus a breeze.
                 let wind = breeze.value * (0.07 * sin(1.1 * t + print.phase) + 0.03 * sin(2.7 * t + print.phase * 1.7))
-                RopeTuning.advance(&print.angle, &print.angleV, toward: rest, RopeTuning.swing, force: wind, h: h)
+                RopeTuning.advance(&print.angle, &print.angleV, toward: rest, RopeTuning.swing.tuned(Prefs.interaction.clothesline), force: wind, h: h)
             }
-            RopeTuning.advance(&print.drop, &print.dropV, toward: 0, RopeTuning.arrive, h: h)
+            RopeTuning.advance(&print.drop, &print.dropV, toward: 0, RopeTuning.arrive.tuned(Prefs.interaction.clothesline), h: h)
         }
     }
 
@@ -1073,14 +1093,20 @@ final class RopeView: NSView, NSDraggingSource {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // The cord (and its shadow) is rebuilt only when it has moved or changed colour, not for every print's hover.
-        let shape = [bounds.width, offset, sag, highlight.value]
-        if shape.count != drawnRope.count || zip(shape, drawnRope).contains(where: { abs($0 - $1) > 0.005 }) {
+        let ready = highlight.isSettled ? highlight.target : min(max(highlight.value, 0), 1)
+        let shape = [bounds.width, offset, sag, ready]
+        let reachedFeedbackTarget = highlight.isSettled && drawnRope.last != ready
+        if shape.count != drawnRope.count || reachedFeedbackTarget || zip(shape, drawnRope).contains(where: { abs($0 - $1) > 0.005 }) {
             drawnRope = shape
             let path = RopeTuning.ropePath(width: bounds.width, y: Self.ropeTop + offset, sag: Self.restSag + sag)
-            let width = 2.6 + 0.8 * highlight.value
+            let width = 2.6 + 2.4 * ready
             ropeLayer.path = path
             ropeLayer.lineWidth = width
-            ropeLayer.strokeColor = Self.ropeColor.mix(.controlAccentColor, highlight.value).cgColor
+            // Blue means this drag can be released here, regardless of the chosen idle rope colour.
+            ropeLayer.strokeColor = Self.ropeColor.mix(.systemBlue, ready).cgColor
+            ropeLayer.shadowColor = NSColor.black.mix(.systemBlue, ready).cgColor
+            ropeLayer.shadowOpacity = Float(0.18 + 0.22 * ready)
+            ropeLayer.shadowRadius = 2 + 3 * ready
             // An explicit shadow path spares Core Animation an offscreen pass over the rope.
             ropeLayer.shadowPath = path.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 10)
         }
@@ -1187,12 +1213,12 @@ final class RopeView: NSView, NSDraggingSource {
     }
 
     private static func chipImage(_ text: String) -> CGImage? {
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white]
+        let attrs: [NSAttributedString.Key: Any] = [.font: AppTypography.font(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white]
         let textSize = (text as NSString).size(withAttributes: attrs)
         let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .bold).applying(.init(paletteColors: [.white]))
         let mark = NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)?.withSymbolConfiguration(config)
         let markWidth = mark.map { $0.size.width + 4 } ?? 0
-        let size = NSSize(width: (textSize.width + markWidth + 20).rounded(.up), height: 20)
+        let size = NSSize(width: (textSize.width + markWidth + 20).rounded(.up), height: 20 * Prefs.interaction.textSize.scale)
         return renderImage(size, scale: 2) { _ in
             NSColor.black.withAlphaComponent(0.7).setFill()
             NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
@@ -1553,14 +1579,14 @@ final class RopeView: NSView, NSDraggingSource {
 
     private func operation(_ info: NSDraggingInfo) -> NSDragOperation {
         let urls = acceptable(info)
-        setReceivingHighlight(urls.first)
-        guard !urls.isEmpty else { return [] }
-        return info.draggingSourceOperationMask.contains(.move) ? .move : .copy
+        let operation = RopeDropFeedback.operation(offered: info.draggingSourceOperationMask, acceptsMedia: !urls.isEmpty)
+        setReceivingHighlight(operation.isEmpty ? nil : urls.first)
+        return operation
     }
 
     /// Crossing onto the rope engages it: the cord lights up and dips, the trackpad gives a detent, and room opens
     /// at the front where the print will hang. Leaving undoes it.
-    private func setReceivingHighlight(_ incoming: URL?) {
+    func setReceivingHighlight(_ incoming: URL?) {
         let on = incoming != nil
         guard on != receivingHighlight else { return }
         receivingHighlight = on
@@ -1586,15 +1612,15 @@ final class RopeView: NSView, NSDraggingSource {
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard !acceptable(sender).isEmpty else { return false }
+        guard !operation(sender).isEmpty else { return false }
         // Let the system slide the drag image into its slot at the front of the rope (see performDragOperation).
         sender.animatesToDestination = !isMotionReduced
         return true
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard !operation(sender).isEmpty else { return false }
         let urls = acceptable(sender)
-        guard !urls.isEmpty else { return false }
         if sender.animatesToDestination {
             var x = RopeTuning.firstSlot
             sender.enumerateDraggingItems(options: [], for: self, classes: [NSURL.self],
@@ -1614,6 +1640,17 @@ final class RopeView: NSView, NSDraggingSource {
         DispatchQueue.main.async { Clothesline.shared.receive(urls, arrival: .inPlace, thumbnails: thumbs) }
         wake()
         return true
+    }
+}
+
+/// Readiness is based on the operation the source actually permits, not just its file extension.
+enum RopeDropFeedback {
+    static func operation(offered: NSDragOperation, acceptsMedia: Bool) -> NSDragOperation {
+        guard acceptsMedia else { return [] }
+        if offered.contains(.move) { return .move }
+        if offered.contains(.copy) { return .copy }
+        if offered.contains(.generic) { return .generic }
+        return []
     }
 }
 
@@ -1938,10 +1975,10 @@ final class IncomingView: NSView {
     private var photoSize: NSSize { NSSize(width: thumbSize.width + 8, height: thumbSize.height + 8) }
 
     private static var hint: String { "↑  " + L("Drag up to hang") }
-    private static let hintAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                                                                        .foregroundColor: NSColor.white]
+    private static var hintAttributes: [NSAttributedString.Key: Any] { [.font: AppTypography.font(ofSize: 11, weight: .semibold),
+                                                                        .foregroundColor: NSColor.white] }
     private var capsuleSize: NSSize {
-        NSSize(width: ((Self.hint as NSString).size(withAttributes: Self.hintAttributes).width + 20).rounded(.up), height: 20)
+        NSSize(width: ((Self.hint as NSString).size(withAttributes: Self.hintAttributes).width + 20).rounded(.up), height: 20 * Prefs.interaction.textSize.scale)
     }
 
     private var contentSize: NSSize {
@@ -2122,16 +2159,16 @@ final class IncomingView: NSView {
     @discardableResult
     func advance(_ dt: CGFloat) -> Bool {
         if var progress = exitProgress {
-            progress = min(progress + dt / Self.exitDuration, 1)
+            progress = min(progress + dt * Prefs.interaction.clothesline.safeSpeed / Self.exitDuration, 1)
             exitProgress = progress
             slide.snap(exitFrom.mix(offscreen, RopeTuning.ease(progress, 0.4, 0, 1, 1)))
         } else {
-            slide.step(dt)
+            slide.step(dt, tuning: Prefs.interaction.clothesline)
         }
-        alpha.step(dt)
-        hover.step(dt)
-        press.step(dt)
-        ready.step(dt)
+        alpha.step(dt, tuning: Prefs.interaction.clothesline)
+        hover.step(dt, tuning: Prefs.interaction.clothesline)
+        press.step(dt, tuning: Prefs.interaction.clothesline)
+        ready.step(dt, tuning: Prefs.interaction.clothesline)
         render()
         let gone = exitProgress.map { $0 >= 1 } ?? (alpha.target == 0 && alpha.value < 0.02)
         if gone {
@@ -2328,7 +2365,7 @@ final class CardFlight {
             land()
             return false
         }
-        elapsed += dt
+        elapsed += dt * Prefs.interaction.clothesline.safeSpeed
         let t = min(elapsed / Self.duration, 1)
         let e = RopeTuning.ease(t, 0.3, 0, 0.2, 1)
         let scale = CGFloat(1).mix(goal.rect.width / max(from.width, 1), e)

@@ -89,7 +89,7 @@ enum ToolUI {
     static func fadeIn(_ view: NSView, from alpha: CGFloat = 0, duration: TimeInterval = 0.15) {
         view.alphaValue = alpha
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = duration
+            ctx.duration = duration / Double(Prefs.interaction.tools.safeSpeed)
             view.animator().alphaValue = 1
         }
     }
@@ -103,7 +103,7 @@ enum ToolUI {
         guard let layer = view.layer else { return }
         let shake = CAKeyframeAnimation(keyPath: "transform.translation.x")
         shake.values = [0, -6, 5, -3, 2, 0]
-        shake.duration = 0.28
+        shake.duration = 0.28 / Double(Prefs.interaction.tools.safeSpeed)
         shake.timingFunction = CAMediaTimingFunction(name: .easeOut)
         layer.add(shake, forKey: "refuse")
     }
@@ -200,7 +200,7 @@ final class DropRing: NSView {
     func setShown(_ shown: Bool) {
         needsDisplay = true
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = shown ? 0.12 : 0.1
+            ctx.duration = (shown ? 0.12 : 0.1) / Double(Prefs.interaction.tools.safeSpeed)
             animator().alphaValue = shown ? 1 : 0
         }
     }

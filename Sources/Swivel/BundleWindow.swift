@@ -3,7 +3,7 @@ import AppKit
 /// Sidebar of pages on the left (Overview, each feature, General), the selected page on the right.
 @MainActor
 final class BundleSplit: NSSplitViewController {
-    enum Page: Int, CaseIterable { case overview, wheel, clothesline, textCapture, shelf, imagePresets, quickActions, general }
+    enum Page: Int, CaseIterable { case overview, wheel, clothesline, textCapture, shelf, imagePresets, quickActions, general, feel }
 
     private let sidebar = SidebarList()
     private let detail = NSViewController()
@@ -16,6 +16,7 @@ final class BundleSplit: NSSplitViewController {
         .imagePresets: FeaturePage(.imagePresets, content: ImagePresetsPane()),
         .quickActions: FeaturePage(.quickActions, content: QuickActionsPane()),
         .general: GeneralPane(),
+        .feel: FeelPane(),
     ]
     private var current: NSViewController?
 
@@ -37,12 +38,13 @@ final class BundleSplit: NSSplitViewController {
         switch tab {
         case .overview: showPage(.overview)
         case .general: showPage(.general)
+        case .feel: showPage(.feel)
         case .clothesline: showPage(.clothesline)
         case .textCapture: showPage(.textCapture)
         case .shelf: showPage(.shelf)
         case .imagePresets: showPage(.imagePresets)
         case .quickActions: showPage(.quickActions)
-        case .shortcuts, .style, .customize:
+        case .shortcuts, .style, .customize, .colors:
             showPage(.wheel)
             (pages[.wheel] as? WheelPage)?.select(tab)
         }
@@ -107,6 +109,7 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         case .imagePresets: Feature.imagePresets.title
         case .quickActions: Feature.quickActions.title
         case .general: L("General")
+        case .feel: L("Feel & Text")
         }
     }
 
@@ -120,6 +123,7 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         case .imagePresets: Feature.imagePresets.symbol
         case .quickActions: Feature.quickActions.symbol
         case .general: "gearshape"
+        case .feel: "slider.horizontal.3"
         }
     }
 
@@ -408,7 +412,7 @@ final class FeaturePage: NSViewController {
 /// The Wheel's page: switch, then Shortcuts / Style / Customize.
 final class WheelPage: NSViewController {
     private let sections: [(String, NSViewController)] = [("Shortcuts", ShortcutsPane()), ("Style", StylePane()),
-                                                           ("Customize", CustomizePane())]
+                                                           ("Customize", CustomizePane()), ("Colors", TemplateColorsPane())]
     private let picker = NSSegmentedControl()
     private let holder = NSView()
     private var heightConstraint: NSLayoutConstraint?
@@ -449,6 +453,7 @@ final class WheelPage: NSViewController {
         let index = switch tab {
         case .style: 1
         case .customize: 2
+        case .colors: 3
         default: 0
         }
         picker.selectedSegment = index

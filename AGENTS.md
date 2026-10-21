@@ -33,7 +33,7 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 - `Swivel --edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>...` — opens one editor directly.
 - `Swivel --recognize <image>` — prints OCR text without touching clipboard or screenshot settings.
 - `Swivel --tool <text|shelf|quick|presets> [file]...` — isolated UI preview; skips the app delegate and background watchers, but registers the Quick Actions shortcut. Enables the four new tools in the executable's defaults domain, so use an unbundled binary or a separate validation bundle. `SWIVEL_PREVIEW_APPEARANCE=light|dark` changes only the preview's appearance.
-- `SWIVEL_TAB=<0-9>` opens a settings page (general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions); `SWIVEL_SHOW_ROPE=1` lowers the rope at launch.
+- `SWIVEL_TAB=<0-11>` opens a settings page (general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions, feel, colors); `SWIVEL_SHOW_ROPE=1` lowers the rope at launch.
 - Note: `.build/release/Swivel` run directly has no bundle ID, so it reads a different defaults domain than the installed app (`local.swivel.app`).
 - A process launched from the terminal can't take focus while the user is in another app; capture its window with `screencapture -l <windowID>`.
 
@@ -56,6 +56,8 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 | Quick Actions | `QuickActions.swift` — search panel, file input, configurable Carbon shortcut |
 | New settings and shared UI | `AdditionalPanes.swift`, `ToolUI.swift` |
 | Feel: springs, frame driver, haptics, sounds | `Feel.swift` — `Spring` (response/damping, solved analytically, retargetable), `FrameDriver` (display link), `Motion.reduced`, `Feedback` (the moments that get feedback), `Haptics`, `TrackpadActuator` (private MultitouchSupport, loaded with dlopen), `Sounds` (synthesised once into Caches, played as system sounds) |
+| Personal tuning | `InteractionSettings.swift` (bounded, persisted per-area motion, sound styles, typography), `FeelPane.swift` (Feel & Text settings, safe previews); `AppTypography` scales native controls idempotently, skips field editors and system file/color/font panels, never exported annotation fonts |
+| Menu appearance / rope colours | `MenuAppearance.swift` (neutral light/dark surfaces, opaque sRGB persistence, rope/peg presets and independent four-colour template palettes), `RopeColorsPane.swift` (rope/peg selectors), `TemplateColorsPane.swift` (Wheel → Colors with per-template presets, wells and preview); `Prefs.clotheslineColors` updates existing print pegs and the resting rope immediately as well as the menu template |
 | Misc UI | `Toast.swift`, `Localization.swift` |
 | Automated checks | `Tests/SwivelTests/` — `NativeToolsTests`, `FeelTests` (springs, wheel hit-testing, sounds, strings table), `ClotheslineFeelTests`, `ToolsFeelTests`, `EditorsFeelTests` (snapping, detents), `SettingsFeelTests`; run with `test.sh` |
 
@@ -80,6 +82,27 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 - Editors' Apply buttons were never clicked end to end (windows were only opened and screenshotted).
 - Clothesline: dragging the corner card up to the rope, persistence of hung prints, and whether the calmer swing feels right.
 - The original feature switches and language picker were checked by screenshot, not clicked.
+
+### Versions 1.3.2–1.3.3 template palettes and drop readiness (2026-10-21)
+
+- Wheel → Colors (`SWIVEL_TAB=11`, isolated `--tool colors`) edits independent Bookshelf / Sticky Notes palettes: Soft Neutrals, Misty Coast, Sage Garden, Warm Linen, Rose Clay, Lavender Haze, four custom repeating colours, and a separate shelf rail colour. Per-template reset and automatic persistence (`templates.colors.v1`) preserve the other template, active style, rope colours and feel settings. Dark variants and automatic text contrast cover custom near-black and bright colours. Changing the rail alone preserves the book colours.
+- A supported incoming media drag makes the real rope system blue, 5 pt wide with a light blue halo; leaving/cancelling restores the chosen idle colour. The same cue remains under Reduce Motion. Source-operation filtering prevents a false ready cue for unsupported drags. Terminal colour frames are rendered exactly so the cache threshold cannot leave a residual blue tint.
+- Verified 97 Swift Testing checks, including palette separation/persistence/reset, native custom-panel opening, 4-language large-text layout, minimum 4.5:1 label contrast, supported-drop filtering, and blue/restore behaviour with normal and reduced motion. Rendered all six palettes on both templates in light/dark plus rope readiness and motion filmstrips. Native preview UI selected Sage Bookshelf / Lavender Notes and kept both after restart.
+- Final signed release is 1.3.3. 1.3.2 was installed briefly during the task, then the requested blue drop cue was added. Backups of 1.3.1 and 1.3.2 apps/preferences are in ignored `build/previous-1.3.1-before-1.3.2/` and `build/previous-1.3.2-before-1.3.3/`. Applications and Desktop now have matching signed 1.3.3 binaries, the existing preferences/screenshot behavior are preserved, and only Applications is running on Wheel → Colors. The owner subsequently requested synchronization to origin/main. Physical cross-app screenshot-card dragging still needs a person; do not present the simulated readiness checks as a real Finder drag.
+
+### Version 1.3.1 quiet templates and rope colours (2026-10-21)
+
+- Bookshelf, Sticky Notes and Clothesline menus now use almost-neutral light/dark card surfaces, fine selection borders, gentler shadows and system text. Wood, gold bands, saturated paper and handwritten lettering were replaced with satin grey, small paper tabs and quiet typography. Existing motion and hit-target dimensions are retained (notes gain rounded corners).
+- Clothesline settings offer independent rope and peg colours: Silver, Graphite, Sand, Sage, Mist Blue, Dusty Rose, or a native custom colour well. Choices persist in `clothesline.colors.v1`, update existing prints and a resting rope, and apply to the menu template too. Reset affects only these colours. `--tool style` and `--tool clothesline` are isolated settings previews.
+- Verified 92 Swift Testing checks; all three templates rendered at Retina scale in light/dark (opening, hover, page, confirmation); native UI preset selection and independent rope/peg changes; preview restart retained Sage rope and Sand pegs. A new test verifies saved colour data, custom opacity sanitization, immediate layer updates on an existing print, reset, and large-text settings layout.
+- Signed release 1.3.1 installed to Applications and Desktop after normal quit and screenshot-restoration check. Previous apps/preferences are in ignored `build/previous-1.3.0-before-1.3.1/`. Both installed binaries match the release, previous feature/feel/language/style/preset settings and screenshot behavior are preserved. Only Applications is running, on the Clothesline colour settings page. No push requested.
+
+### Version 1.3.0 personal tuning (2026-10-21)
+
+- Pulled origin/main (already current at `28a7fc7`) and reviewed the 1.2.0 feel/review fixes before adding Feel & Text. Five presets, independent menu/rope/tools speed and bounce, three sound styles with relative level and optional selection sounds, gentle haptics, four text sizes and bold text. Preferences persist in `interaction.v1`; presets preserve text choices and the legacy channel switches.
+- Verified: 90 Swift Testing checks, release build and signatures; tuning-page renders in English / Simplified Chinese / Traditional Chinese / Japanese at all four text sizes in light and dark; real native UI selection of Quiet, Extra Large, a custom per-area speed and local replay; restart preserved the preview settings. Tests use the isolated executable/defaults domain; preview bundle `local.swivel.tuning-preview` skips screenshot watchers.
+- Normally quit old installed, desktop and stale demo instances, verified screenshot settings restored, backed up apps/preferences under ignored `build/previous-1.2.0-before-1.3.0/`, and installed signed 1.3.0 to Applications and Desktop. Both binaries match the release build. Only the Applications copy is running, on Feel & Text. Existing feature/language/feedback/image-preset preferences and screenshot behavior match the pre-update snapshot. The Desktop File Provider can re-add empty FinderInfo metadata; removing it lets the strict bundle check pass. The desktop executable itself verifies independently and matches the release build.
+- Physical trackpad intensity, subjective sound comfort and the older hands-on checks below remain for a person. No remote push was requested.
 
 ### Version 1.2.0 feel overhaul (2026-10-21)
 

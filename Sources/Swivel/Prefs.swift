@@ -53,8 +53,8 @@ enum MenuStyle: String, CaseIterable {
         switch self {
         case .wheel: L("A ring of keycaps around the cursor.")
         case .list: L("A tidy column, like a context menu.")
-        case .shelf: L("Book spines standing on a wooden shelf.")
-        case .notes: L("Colourful sticky notes pinned in a grid.")
+        case .shelf: L("Quiet book spines on a satin shelf.")
+        case .notes: L("Soft paper cards arranged in a grid.")
         case .clothesline: L("Tags pegged on a rope, swaying gently.")
         }
     }
@@ -67,6 +67,57 @@ enum Prefs {
     private static let defaults = UserDefaults.standard
 
     private static func post() { NotificationCenter.default.post(name: changed, object: nil) }
+
+    private static var interactionCache: InteractionSettings = {
+        guard let data = defaults.data(forKey: "interaction.v1"),
+              let value = try? JSONDecoder().decode(InteractionSettings.self, from: data) else { return InteractionSettings() }
+        return value.sanitized
+    }()
+
+    static var interaction: InteractionSettings {
+        get { interactionCache }
+        set {
+            let value = newValue.sanitized
+            guard value != interactionCache, let data = try? JSONEncoder().encode(value) else { return }
+            interactionCache = value
+            defaults.set(data, forKey: "interaction.v1")
+            post()
+        }
+    }
+
+    private static var clotheslineColorsCache: ClotheslineColors = {
+        guard let data = defaults.data(forKey: "clothesline.colors.v1"),
+              let value = try? JSONDecoder().decode(ClotheslineColors.self, from: data) else { return ClotheslineColors() }
+        return value.sanitized
+    }()
+
+    static var clotheslineColors: ClotheslineColors {
+        get { clotheslineColorsCache }
+        set {
+            let value = newValue.sanitized
+            guard value != clotheslineColorsCache, let data = try? JSONEncoder().encode(value) else { return }
+            clotheslineColorsCache = value
+            defaults.set(data, forKey: "clothesline.colors.v1")
+            post()
+        }
+    }
+
+    private static var templateColorsCache: TemplateColors = {
+        guard let data = defaults.data(forKey: "templates.colors.v1"),
+              let value = try? JSONDecoder().decode(TemplateColors.self, from: data) else { return TemplateColors() }
+        return value.sanitized
+    }()
+
+    static var templateColors: TemplateColors {
+        get { templateColorsCache }
+        set {
+            let value = newValue.sanitized
+            guard value != templateColorsCache, let data = try? JSONEncoder().encode(value) else { return }
+            templateColorsCache = value
+            defaults.set(data, forKey: "templates.colors.v1")
+            post()
+        }
+    }
 
     /// Additional tools are opt-in. Disabling them retains their settings.
     static func featureEnabled(_ feature: Feature) -> Bool {

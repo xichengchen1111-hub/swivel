@@ -2,6 +2,7 @@ import AppKit
 
 MainActor.assumeIsolated {
     let app = NSApplication.shared
+    AppTypography.install()
     let delegate = AppDelegate()
     let args = CommandLine.arguments
 
@@ -24,6 +25,10 @@ MainActor.assumeIsolated {
         case "shelf": Shelf.shared.add(args.dropFirst(3).map { URL(fileURLWithPath: $0) })
         case "quick": QuickActions.shared.show(files: args.dropFirst(3).map { URL(fileURLWithPath: $0) })
         case "presets": AppWindow.shared.show(.imagePresets)
+        case "feel": AppWindow.shared.show(.feel)
+        case "clothesline": AppWindow.shared.show(.clothesline)
+        case "style": AppWindow.shared.show(.style)
+        case "colors": AppWindow.shared.show(.colors)
         default: AppWindow.shared.show()
         }
         app.run()
