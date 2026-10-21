@@ -24,7 +24,7 @@ abstract class Pane : StackPanel
     }
 }
 
-/// The Wheel's page: title, the switch, then Shortcuts / Style / Customize.
+/// The Wheel's page: title, the switch, then Shortcuts / Style / Customize / Colors.
 sealed class WheelPage : StackPanel
 {
     readonly SelectorBar picker;
@@ -33,11 +33,11 @@ sealed class WheelPage : StackPanel
 
     public WheelPage()
     {
-        sections = [new ShortcutsPane(), new StylePane(), new CustomizePane()];
+        sections = [new ShortcutsPane(), new StylePane(), new CustomizePane(), new TemplateColorsPane()];
         Children.Add(Ui.Title(Feature.Wheel.Title()));
         var header = new FeatureHeader(Feature.Wheel) { Margin = new Thickness(0, 20, 0, 0) };
         Children.Add(header);
-        picker = new SelectorBar([L("Shortcuts"), L("Style"), L("Customize")]) { Margin = new Thickness(-12, 16, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+        picker = new SelectorBar([L("Shortcuts"), L("Style"), L("Customize"), L("Colors")]) { Margin = new Thickness(-12, 16, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
         picker.SelectionChanged += Show;
         Children.Add(picker);
         Children.Add(holder);
@@ -51,10 +51,17 @@ sealed class WheelPage : StackPanel
     {
         AppTab.Style => 1,
         AppTab.Customize => 2,
+        AppTab.Colors => 3,
         _ => 0,
     });
 
-    void Show(int index) => holder.Child = sections[index];
+    void Show(int index)
+    {
+        holder.Child = sections[index];
+        // A section shown for the first time since the text settings changed: its buttons catch up (labels do so
+        // on their own as they load).
+        Dispatcher.Later(() => TextStyle.ApplyTree(sections[index]));
+    }
 }
 
 // MARK: - Shortcuts
@@ -180,7 +187,8 @@ sealed class TemplateCard : Grid
     {
         MenuStyle = style;
         Width = CardWidth;
-        Height = CardHeight;
+        // At least the Mac's height; larger text (Feel & Text) lets the blurb grow instead of clipping it.
+        MinHeight = CardHeight;
         Focusable = true;
         Background = Brushes.Transparent;
         SetResourceReference(FocusVisualStyleProperty, "DefaultControlFocusVisualStyle");
@@ -651,11 +659,12 @@ sealed class ArrangeList : Canvas
     bool Step(double dt)
     {
         bool moving = false;
+        var tuning = Prefs.Interaction.Tools;
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
-            if (i != dragging) row.Y.Step(dt);
-            row.Lift.Step(dt);
+            if (i != dragging) row.Y.Step(dt, tuning);
+            row.Lift.Step(dt, tuning);
             moving |= (i != dragging && !row.Y.IsSettled) || !row.Lift.IsSettled;
         }
         if (dragging != null) moving |= AutoScroll(dt);

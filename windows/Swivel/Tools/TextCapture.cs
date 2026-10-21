@@ -284,6 +284,7 @@ sealed class TextCaptureWindow
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
             AllowDrop = true,
         };
+        AppTypography.Apply(Window);
         UpdateTitle();
 
         ToolUI.AutomationName(preview, L("Source image"));
@@ -297,7 +298,7 @@ sealed class TextCaptureWindow
             Child = preview,
         };
 
-        Text.FontSize = 15;
+        ToolUI.Scaled(Text, 15);
         Text.AcceptsReturn = true;
         Text.AcceptsTab = false;
         Text.TextWrapping = TextWrapping.Wrap;

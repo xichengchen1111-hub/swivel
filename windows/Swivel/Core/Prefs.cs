@@ -68,8 +68,8 @@ static class MenuStyles
     {
         MenuStyle.Wheel => L("A ring of keycaps around the cursor."),
         MenuStyle.List => L("A tidy column, like a context menu."),
-        MenuStyle.Shelf => L("Book spines standing on a wooden shelf."),
-        MenuStyle.Notes => L("Colourful sticky notes pinned in a grid."),
+        MenuStyle.Shelf => L("Quiet book spines on a satin shelf."),
+        MenuStyle.Notes => L("Soft paper cards arranged in a grid."),
         _ => L("Tags pegged on a rope, swaying gently."),
     };
 }
@@ -143,6 +143,9 @@ static class Prefs
     public static void Reload()
     {
         lock (gate) store = null;
+        interactionCache = null;
+        clotheslineColorsCache = null;
+        templateColorsCache = null;
     }
 
     static void Save(bool notify = true)
@@ -190,6 +193,51 @@ static class Prefs
     }
 
     static bool Bool(string key, bool fallback) => Has(key) ? Get<bool>(key) : fallback;
+
+    // MARK: Personal tuning and colours (1.3)
+
+    static InteractionSettings? interactionCache;
+    static ClotheslineColors? clotheslineColorsCache;
+    static TemplateColors? templateColorsCache;
+
+    /// Feel & Text: per-area motion, sound style and level, text size and weight (`interaction.v1`).
+    public static InteractionSettings Interaction
+    {
+        get => interactionCache ??= (Get<InteractionSettings>("interaction.v1") ?? new()).Sanitized;
+        set
+        {
+            var sanitized = value.Sanitized;
+            if (sanitized == Interaction) return;
+            interactionCache = sanitized;
+            Set("interaction.v1", sanitized);
+        }
+    }
+
+    /// Rope and peg colours (`clothesline.colors.v1`); also used by the Clothesline menu template.
+    public static ClotheslineColors ClotheslineColors
+    {
+        get => clotheslineColorsCache ??= (Get<ClotheslineColors>("clothesline.colors.v1") ?? new()).Sanitized;
+        set
+        {
+            var sanitized = value.Sanitized;
+            if (sanitized == ClotheslineColors) return;
+            clotheslineColorsCache = sanitized;
+            Set("clothesline.colors.v1", sanitized);
+        }
+    }
+
+    /// Bookshelf and Sticky Notes palettes (`templates.colors.v1`).
+    public static TemplateColors TemplateColors
+    {
+        get => templateColorsCache ??= (Get<TemplateColors>("templates.colors.v1") ?? new()).Sanitized;
+        set
+        {
+            var sanitized = value.Sanitized;
+            if (sanitized == TemplateColors) return;
+            templateColorsCache = sanitized;
+            Set("templates.colors.v1", sanitized);
+        }
+    }
 
     // MARK: Features
 

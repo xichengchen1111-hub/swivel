@@ -68,7 +68,7 @@ static class AppHost
         }
         else
         {
-            // SWIVEL_TAB=<0-9> opens a specific page (for testing).
+            // SWIVEL_TAB=<0-11> opens a specific page (for testing).
             AppTab? tab = int.TryParse(Environment.GetEnvironmentVariable("SWIVEL_TAB"), out var n) && Enum.IsDefined(typeof(AppTab), n)
                 ? (AppTab)n : null;
             AppWindow.Shared.Show(tab);
@@ -188,6 +188,7 @@ static class AppHost
         menu.Items.Add(new Forms.ToolStripSeparator());
         Add(menu, L("Sound Effects"), () => Prefs.SoundEffects = !Prefs.SoundEffects).Checked = Prefs.SoundEffects;
         menu.Items.Add(new Forms.ToolStripSeparator());
+        Add(menu, L("Feel & Text…"), () => AppWindow.Shared.Show(AppTab.Feel));
         Add(menu, L("Open Swivel…"), () => AppWindow.Shared.Show(AppTab.Overview));
         Add(menu, L("Open at Login"), () =>
         {

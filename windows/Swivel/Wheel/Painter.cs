@@ -210,16 +210,17 @@ sealed class Painter
     }
 
     /// Draws one line centred on `centre` (y-up), rotated by `angle` degrees (counter-clockwise, like AppKit) and
-    /// scaled. Long text shrinks to fit `maxWidth` (not below 7 pt), then loses its middle.
+    /// scaled. Long text shrinks to fit `maxWidth` (not below `minSize`: 7 pt, scaled by the menu's text size), then
+    /// loses its middle.
     public void Text(DrawingContext context, string text, Point centre, FontFamily family, FontWeight weight, double size,
-                     Color color, double maxWidth, double angle = 0, double scale = 1)
+                     Color color, double maxWidth, double angle = 0, double scale = 1, double minSize = 7)
     {
         if (color.A < 3 || string.IsNullOrEmpty(text)) return;
         var formatted = Format(text, family, weight, size);
         double width = formatted.WidthIncludingTrailingWhitespace;
         if (maxWidth > 0 && width > maxWidth)
         {
-            double fitted = Math.Max(7, size * maxWidth / width);
+            double fitted = Math.Max(Math.Min(minSize, size), size * maxWidth / width);
             formatted = Format(text, family, weight, fitted);
             width = formatted.WidthIncludingTrailingWhitespace;
             if (width > maxWidth + 0.5)

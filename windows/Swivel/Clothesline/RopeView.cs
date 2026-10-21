@@ -49,8 +49,10 @@ sealed class RopeView : FrameworkElement
     static readonly double HiddenOffset = -(PanelHeight + 30);
     public const double RopeTop = 18;
     const double RestSag = 16;
-    static readonly Color RopeColor = Color.FromRgb(230, 219, 199);           // sRGB 0.9, 0.86, 0.78
-    static readonly Color PegColor = Color.FromRgb(204, 153, 97);              // 0.8, 0.6, 0.38
+    // Rope and peg share their saved colours with the Clothesline menu template (1.3.3); both default to Silver.
+    ClotheslineColors Palette => colorsOverride ?? Prefs.ClotheslineColors;
+    Color RopeColor => Palette.Rope.Color;
+    Color PegColor => Palette.Peg.Color;
     static readonly Color Green = Color.FromRgb(52, 199, 89);
     static readonly double[] Tilts = [0.018, -0.015, 0.012, -0.02, 0.015, -0.012];
     static readonly Random random = new();
@@ -81,6 +83,7 @@ sealed class RopeView : FrameworkElement
         public readonly double Phase = random.NextDouble() * 2 * Math.PI;
         public bool OnTop;
         public double DrawnClose = -1;
+        public Color PegColor;
 
         // Visuals: Root carries the print's transform and opacity; the rest are its parts.
         public readonly ContainerVisual Root = new();
@@ -129,6 +132,16 @@ sealed class RopeView : FrameworkElement
     Spring breeze = new(0, RopeTuning.BreezeFade, 1);   // the wind's strength, 0…1
     double calmAt;                        // when the breeze starts to die down
     double[] drawnRope = [];              // what the rope's path was last built from
+    readonly DropShadowEffect ropeShadow = new() { Color = Colors.Black, Opacity = 0.18, BlurRadius = 4, ShadowDepth = 2, Direction = 270, RenderingBias = RenderingBias.Performance };
+    ClotheslineColors? drawnColors;       // what the cord and pegs were last drawn in
+    ClotheslineColors? colorsOverride;
+
+    /// For frame renders: colours to draw instead of the saved ones (so a render never writes the settings file).
+    public ClotheslineColors? ColorsOverride
+    {
+        get => colorsOverride;
+        set { colorsOverride = value; ColorsMayHaveChanged(); }
+    }
     double insertGap;                     // room held open at the front for a drop
     Action? onLifted;
     string? hovered;
@@ -168,7 +181,9 @@ sealed class RopeView : FrameworkElement
     public RopeView(double width = 800)
     {
         children = new VisualCollection(this) { backdrop, ropeVisual };
-        ropeVisual.Effect = new DropShadowEffect { Color = Colors.Black, Opacity = 0.35, BlurRadius = 4, ShadowDepth = 2, Direction = 270, RenderingBias = RenderingBias.Performance };
+        ropeVisual.Effect = ropeShadow;
+        drawnColors = Palette;
+        ListenForColors(this);
         driver.OnFrame = dt => Advance(dt);
         this.width = width;
         Width = width;
@@ -177,6 +192,35 @@ sealed class RopeView : FrameworkElement
         Focusable = false;
         ToolTipService.SetInitialShowDelay(this, 700);
         Unloaded += (_, _) => driver.Stop();
+    }
+
+    /// Colour changes in Settings reach a rope that is already down (and its pegs) at once. The handler holds the
+    /// view weakly, so views made by tests and frame renders can still go away.
+    static void ListenForColors(RopeView view)
+    {
+        var weak = new WeakReference<RopeView>(view);
+        Action? handler = null;
+        handler = () =>
+        {
+            if (weak.TryGetTarget(out var target)) target.ColorsMayHaveChanged();
+            else Prefs.Changed -= handler;
+        };
+        Prefs.Changed += handler;
+    }
+
+    void ColorsMayHaveChanged()
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            if (!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(ColorsMayHaveChanged));
+            return;
+        }
+        var colors = Palette;
+        if (colors == drawnColors) return;
+        drawnColors = colors;
+        foreach (var print in prints) DrawPeg(print);
+        drawnRope = [];   // colour changes must redraw a resting rope too
+        Render(IsMotionReduced);
     }
 
     protected override int VisualChildrenCount => children.Count;
@@ -346,14 +390,7 @@ sealed class RopeView : FrameworkElement
         using (var dc = print.Pad.RenderOpen())
             dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)), null, new Rect(-4, -14, size.Width + 8, size.Height + 28));
         using (var dc = print.Body.RenderOpen()) DrawPicture(dc, print.Thumb, size, print.Movie);
-        // Wooden peg gripping the rope and the top edge of the print.
-        using (var dc = print.Peg.RenderOpen())
-        {
-            var peg = new Rect(size.Width / 2 - 5, -14, 10, 28);
-            dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(70, 0, 0, 0)), null, new Rect(peg.X - 0.5, peg.Y + 1, peg.Width + 1, peg.Height + 0.5), 3, 3);
-            dc.DrawRoundedRectangle(new SolidColorBrush(PegColor), null, peg, 2.5, 2.5);
-            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(158, 158, 158)), null, new Rect(peg.X, peg.Y + 12, 10, 2));
-        }
+        DrawPeg(print);
         // Ring and × fade with the hover spring instead of snapping on and off.
         using (var dc = print.Ring.RenderOpen())
             dc.DrawRoundedRectangle(null, new Pen(print.RingBrush, 2), new Rect(-1, -1, size.Width + 2, size.Height + 2), 4, 4);
@@ -362,6 +399,19 @@ sealed class RopeView : FrameworkElement
         print.CloseScale.CenterY = close.Y + close.Height / 2;
         print.DrawnClose = -1;
         DrawClose(print, 0);
+    }
+
+    /// Neutral peg gripping the rope and the top edge of the print, in the saved peg colour.
+    void DrawPeg(Print print)
+    {
+        var color = PegColor;
+        print.PegColor = color;
+        using var dc = print.Peg.RenderOpen();
+        var peg = new Rect(print.Size.Width / 2 - 5, -14, 10, 28);
+        // A soft contact shadow (the Mac's peg shadow went from 0.4 to 0.18 in 1.3.3; alpha 70 → 32 here).
+        dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(32, 0, 0, 0)), null, new Rect(peg.X - 0.5, peg.Y + 1, peg.Width + 1, peg.Height + 0.5), 3, 3);
+        dc.DrawRoundedRectangle(new SolidColorBrush(color), null, peg, 2.5, 2.5);
+        dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(158, 158, 158)), null, new Rect(peg.X, peg.Y + 12, 10, 2));
     }
 
     /// The white-bordered picture (also used for the drag image, the preview's zoom and the card's flight).
@@ -565,7 +615,7 @@ sealed class RopeView : FrameworkElement
         else
         {
             breeze.Target = clock < calmAt ? 1 : 0;
-            breeze.Step(dt);
+            breeze.Step(dt, RopeTuning.Tuning);
         }
         accumulator = Math.Min(accumulator + dt, RopeTuning.Step * RopeTuning.MaxSteps);
         while (accumulator >= RopeTuning.Step)
@@ -574,20 +624,21 @@ sealed class RopeView : FrameworkElement
             accumulator -= RopeTuning.Step;
         }
         animClock += dt;
+        var tuning = RopeTuning.Tuning;
         foreach (var print in prints)
         {
-            print.Slot.Step(dt);
-            print.Lift.Step(dt);
-            print.Hover.Step(dt);
-            print.Press.Step(dt);
-            print.Opacity.Step(dt);
-            print.Flash.Step(dt);
-            print.ClosePress.Step(dt);
+            print.Slot.Step(dt, tuning);
+            print.Lift.Step(dt, tuning);
+            print.Hover.Step(dt, tuning);
+            print.Press.Step(dt, tuning);
+            print.Opacity.Step(dt, tuning);
+            print.Flash.Step(dt, tuning);
+            print.ClosePress.Step(dt, tuning);
             // A hand-off that never comes (the flight was cut short) mustn't leave a hole in the rope.
             if (print.AwaitingSince is { } since && clock - since > 1.2) Reveal(print);
         }
-        fade.Step(dt);
-        highlight.Step(dt);
+        fade.Step(dt, tuning);
+        highlight.Step(dt, tuning);
         Render(reduced);
         AnimateLeaving();
         UpdateMouseCatching();
@@ -613,8 +664,11 @@ sealed class RopeView : FrameworkElement
         clock += h;
         // Whole rope: a spring that overshoots a little and settles; the cord lags behind its acceleration, so it
         // dips once in the middle when the rope stops.
-        double a = RopeTuning.Advance(ref offset, ref offsetV, offsetTarget, RopeTuning.Fall, h: h);
-        RopeTuning.Advance(ref sag, ref sagV, 0, RopeTuning.Sag, force: -RopeTuning.SagCoupling * a, h: h);
+        var tuning = RopeTuning.Tuning;
+        double a = RopeTuning.Advance(ref offset, ref offsetV, offsetTarget, RopeTuning.Fall.Tuned(tuning), h: h);
+        RopeTuning.Advance(ref sag, ref sagV, 0, RopeTuning.Sag.Tuned(tuning), force: -RopeTuning.SagCoupling * a, h: h);
+        var swing = RopeTuning.Swing.Tuned(tuning);
+        var arrive = RopeTuning.Arrive.Tuned(tuning);
         double t = clock;
         foreach (var print in prints)
         {
@@ -630,9 +684,9 @@ sealed class RopeView : FrameworkElement
             {
                 // Pendulum on its peg, pulled toward its resting tilt (straight when hovered), plus a breeze.
                 double wind = breeze.Value * (0.07 * Math.Sin(1.1 * t + print.Phase) + 0.03 * Math.Sin(2.7 * t + print.Phase * 1.7));
-                RopeTuning.Advance(ref print.Angle, ref print.AngleV, rest, RopeTuning.Swing, force: wind, h: h);
+                RopeTuning.Advance(ref print.Angle, ref print.AngleV, rest, swing, force: wind, h: h);
             }
-            RopeTuning.Advance(ref print.Drop, ref print.DropV, 0, RopeTuning.Arrive, h: h);
+            RopeTuning.Advance(ref print.Drop, ref print.DropV, 0, arrive, h: h);
         }
     }
 
@@ -695,19 +749,29 @@ sealed class RopeView : FrameworkElement
 
     void Render(bool reduced)
     {
-        // The cord is rebuilt only when it has moved or changed colour, not for every print's hover.
-        double[] shape = [width, offset, sag, highlight.Value];
-        if (shape.Length != drawnRope.Length || shape.Zip(drawnRope).Any(p => Math.Abs(p.First - p.Second) > 0.005))
+        // The cord is rebuilt only when it has moved or changed colour, not for every print's hover. Once the
+        // highlight has settled its target is drawn exactly, so leaving the rope leaves no trace of blue behind.
+        double ready = highlight.IsSettled ? highlight.Target : Math.Clamp(highlight.Value, 0, 1);
+        double[] shape = [width, offset, sag, ready];
+        bool reachedFeedbackTarget = highlight.IsSettled && drawnRope.Length == shape.Length && drawnRope[^1] != ready;
+        if (shape.Length != drawnRope.Length || reachedFeedbackTarget || shape.Zip(drawnRope).Any(p => Math.Abs(p.First - p.Second) > 0.005))
         {
             drawnRope = shape;
             var path = RopeTuning.RopePath(width, RopeTop + offset, RestSag + sag);
-            double lineWidth = 2.6 + 0.8 * highlight.Value;
-            var pen = new Pen(new SolidColorBrush(Mix.Lerp(RopeColor, Accent, highlight.Value)), lineWidth)
+            // Blue, wider and with a light blue halo means this drag can be released here, whatever the idle colour.
+            double lineWidth = 2.6 + 2.4 * ready;
+            var color = Mix.Lerp(RopeColor, RopeDropFeedback.ReadyBlue, ready);
+            var pen = new Pen(new SolidColorBrush(color), lineWidth)
             {
                 StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round,
             };
-            using var dc = ropeVisual.RenderOpen();
-            dc.DrawGeometry(null, pen, path);
+            using (var dc = ropeVisual.RenderOpen()) dc.DrawGeometry(null, pen, path);
+            DrawnRopeColor = color;
+            DrawnRopeWidth = lineWidth;
+            // The Mac's shadow radius 2 + 3 * ready (a WPF blur radius is about twice a Core Animation one).
+            ropeShadow.Color = Mix.Lerp(Colors.Black, RopeDropFeedback.ReadyBlue, ready);
+            ropeShadow.Opacity = 0.18 + 0.22 * ready;
+            ropeShadow.BlurRadius = 2 * (2 + 3 * ready);
         }
         bool restack = false;
         foreach (var print in prints)
@@ -826,13 +890,13 @@ sealed class RopeView : FrameworkElement
         double pixelsPerDip = 1;
         try { pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip; } catch (Exception) { }
         var label = new FormattedText(text, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
-            11, Brushes.White, pixelsPerDip);
+            new Typeface(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, AppTypography.Weight(FontWeights.SemiBold), FontStretches.Normal),
+            AppTypography.Size(11), Brushes.White, pixelsPerDip);
         var mark = new FormattedText("", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             new Typeface(new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
             10, Brushes.White, pixelsPerDip);
         double markWidth = mark.Width + 4;
-        var size = new Size(Math.Ceiling(label.Width + markWidth + 20), 20);
+        var size = new Size(Math.Ceiling(label.Width + markWidth + 20), 20 * AppTypography.Scale);
         var origin = new Point(print.Size.Width / 2 - size.Width / 2, print.Size.Height - size.Height / 2);
         using var dc = print.Chip.RenderOpen();
         dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(179, 0, 0, 0)), null, new Rect(origin, size), 10, 10);
@@ -1264,14 +1328,15 @@ sealed class RopeView : FrameworkElement
     DragDropEffects Operation(DragEventArgs e)
     {
         var paths = acceptedPaths;
-        SetReceivingHighlight(paths.FirstOrDefault());
-        // Always a copy toward the rope: Explorer deletes the source after a move.
-        return paths.Count == 0 ? DragDropEffects.None : DragDropEffects.Copy;
+        // Always a copy toward the rope (Explorer deletes the source after a move), and only when the source allows it.
+        var operation = RopeDropFeedback.Operation(e.AllowedEffects, paths.Count > 0);
+        SetReceivingHighlight(operation == DragDropEffects.None ? null : paths.FirstOrDefault());
+        return operation;
     }
 
-    /// Crossing onto the rope engages it: the cord lights up and dips, and room opens at the front where the print
-    /// will hang. Leaving undoes it.
-    void SetReceivingHighlight(string? incoming)
+    /// Crossing onto the rope engages it: the cord turns blue and dips, and room opens at the front where the print
+    /// will hang. Leaving undoes it. Internal for tests and frame renders.
+    internal void SetReceivingHighlight(string? incoming)
     {
         bool on = incoming != null;
         if (on == receivingHighlight) return;
@@ -1320,8 +1385,9 @@ sealed class RopeView : FrameworkElement
         base.OnDrop(e);
         e.Handled = true;
         var paths = acceptedPaths.Count > 0 ? acceptedPaths : Acceptable(e.Data);
-        dropImage.Drop(e.Data, paths.Count > 0 ? 1 : 0);
-        if (paths.Count == 0) { SetReceivingHighlight(null); e.Effects = DragDropEffects.None; return; }
+        bool ready = RopeDropFeedback.Operation(e.AllowedEffects, paths.Count > 0) != DragDropEffects.None;
+        dropImage.Drop(e.Data, ready ? 1 : 0);
+        if (!ready) { SetReceivingHighlight(null); e.Effects = DragDropEffects.None; return; }
         e.Effects = DragDropEffects.Copy;
         // The highlight goes; the gap stays open for the print that's about to hang there.
         receivingHighlight = false;
@@ -1350,4 +1416,9 @@ sealed class RopeView : FrameworkElement
     /// A point in print i's own (unrotated) coordinates, in view coordinates.
     internal Point PrintPoint(int i, Point local) => MatrixOf(prints[i]).Transform(local);
     internal double ChipOpacity(int i) => prints[i].Chip.Opacity;
+    internal Color PegColorAt(int i) => prints[i].PegColor;
+    internal Color DrawnRopeColor { get; private set; }
+    internal double DrawnRopeWidth { get; private set; }
+    internal Color RopeShadowColor => ropeShadow.Color;
+    internal double RopeShadowOpacity => ropeShadow.Opacity;
 }

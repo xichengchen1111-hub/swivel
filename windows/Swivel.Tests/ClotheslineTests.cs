@@ -652,6 +652,129 @@ public sealed class ClotheslineTests
         panel.Close();
     });
 
+    // MARK: 1.3.3 colours, the ready cue and Feel & Text tuning
+
+    static bool Near(Color a, Color b, int tolerance = 1) =>
+        Math.Abs(a.R - b.R) <= tolerance && Math.Abs(a.G - b.G) <= tolerance && Math.Abs(a.B - b.B) <= tolerance;
+
+    [TestMethod]
+    public void ReadyDropTurnsRopeBlueThenRestoresTheChosenColor() => Sta(() =>
+    {
+        var colors = new ClotheslineColors { Rope = RopeColorPreset.Sage.Rgb()!, Peg = RopeColorPreset.Silver.Rgb()! };
+        Prefs.ClotheslineColors = colors;
+        foreach (bool reduced in new[] { false, true })
+        {
+            var view = Rope(reduced: reduced);
+            view.Lower(fromHidden: true);
+            Run(view, 0.5);
+            Assert.AreEqual(colors.Rope.Color, view.DrawnRopeColor, "idle rope in the chosen colour");
+            view.SetReceivingHighlight(Fixtures[0]);
+            Run(view, 0.5);
+            Assert.IsTrue(Near(view.DrawnRopeColor, RopeDropFeedback.ReadyBlue), $"ready rope is {view.DrawnRopeColor} (reduced: {reduced})");
+            Assert.IsGreaterThan(4.9, view.DrawnRopeWidth);
+            Assert.IsGreaterThan(0.39, view.RopeShadowOpacity);
+            Assert.IsTrue(Near(view.RopeShadowColor, RopeDropFeedback.ReadyBlue), "a light blue halo");
+            Assert.AreEqual(colors, Prefs.ClotheslineColors, "the cue never touches the saved colours");
+            view.SetReceivingHighlight(null);
+            Run(view, 0.5);
+            // Exactly the chosen colour again: no residual tint from the last frames of the fade.
+            Assert.AreEqual(colors.Rope.Color, view.DrawnRopeColor, $"reduced: {reduced}");
+            Assert.IsLessThan(0.01, Math.Abs(view.DrawnRopeWidth - 2.6));
+            Assert.IsLessThan(0.19, view.RopeShadowOpacity);
+            Assert.AreEqual(Colors.Black, view.RopeShadowColor);
+        }
+    });
+
+    [TestMethod]
+    public void ReadyDropRequiresSupportedMediaAndAPermittedOperation()
+    {
+        // Always a copy toward the rope: Explorer would delete the source after a move.
+        Assert.AreEqual(DragDropEffects.Copy, RopeDropFeedback.Operation(DragDropEffects.Copy | DragDropEffects.Move, acceptsMedia: true));
+        Assert.AreEqual(DragDropEffects.Copy, RopeDropFeedback.Operation(DragDropEffects.Copy, acceptsMedia: true));
+        Assert.AreEqual(DragDropEffects.Copy, RopeDropFeedback.Operation(DragDropEffects.All, acceptsMedia: true));
+        foreach (var offered in new[] { DragDropEffects.None, DragDropEffects.Link, DragDropEffects.Move, DragDropEffects.Scroll })
+            Assert.AreEqual(DragDropEffects.None, RopeDropFeedback.Operation(offered, acceptsMedia: true), offered.ToString());
+        Assert.AreEqual(DragDropEffects.None, RopeDropFeedback.Operation(DragDropEffects.Copy | DragDropEffects.Move, acceptsMedia: false));
+    }
+
+    [TestMethod]
+    public void ColorChangesReachExistingPrintsAndARestingRopeAtOnce() => Sta(() =>
+    {
+        var view = Rope();
+        view.Lower(fromHidden: true);
+        Run(view, 1.5);
+        var silver = RopeColorPreset.Silver.Rgb()!.Color;
+        Assert.AreEqual(silver, view.DrawnRopeColor);
+        for (int i = 0; i < view.PrintCount; i++) Assert.AreEqual(silver, view.PegColorAt(i));
+        var chosen = new ClotheslineColors { Rope = RopeColorPreset.Rose.Rgb()!, Peg = RopeColorPreset.Graphite.Rgb()! };
+        Prefs.ClotheslineColors = chosen;
+        // No frame stepped: Prefs.Changed redraws the cord and every peg.
+        Assert.AreEqual(chosen.Rope.Color, view.DrawnRopeColor);
+        for (int i = 0; i < view.PrintCount; i++) Assert.AreEqual(chosen.Peg.Color, view.PegColorAt(i), $"peg {i}");
+        view.SetItems([Fixtures[3], .. Fixtures.Take(3)]);
+        Assert.AreEqual(chosen.Peg.Color, view.PegColorAt(0), "a new print gets the chosen peg");
+        // Other settings changing leave the colours alone.
+        Prefs.Interaction = Prefs.Interaction with { TextSize = TextSize.Large };
+        Assert.AreEqual(chosen.Rope.Color, view.DrawnRopeColor);
+    });
+
+    [TestMethod]
+    public void EveryRopePresetAndSliderExtremeIsDampedAndSettles()
+    {
+        MotionTuning[] tunes =
+        [
+            new() { Speed = 0.75, Bounce = 0 }, new() { Speed = 0.75, Bounce = 1 },
+            new() { Speed = 1.5, Bounce = 0 }, new() { Speed = 1.5, Bounce = 1 },
+            .. FeelChoices.Presets.Select(p => new InteractionSettings().Applying(p).Clothesline),
+        ];
+        foreach (var tuning in tunes)
+        {
+            foreach (var original in new[] { RopeTuning.Fall, RopeTuning.Sag, RopeTuning.Swing, RopeTuning.Arrive })
+            {
+                var o = original.Tuned(tuning);
+                Assert.IsTrue(o.DampingRatio >= original.DampingRatio - 1e-9 && o.DampingRatio <= 1.00001, $"ζ {o.DampingRatio} for {tuning}");
+                double x = -1, v = 0;
+                for (int i = 0; i < 960; i++)
+                {
+                    RopeTuning.Advance(ref x, ref v, 0, o);
+                    Assert.IsTrue(double.IsFinite(x) && double.IsFinite(v) && Math.Abs(x) <= 1.1);
+                }
+                Assert.IsTrue(Math.Abs(x) < 0.001 && Math.Abs(v) < 0.01, $"not settled: {x}, {v} for {tuning}");
+            }
+        }
+        // The defaults keep the 1.2 rope exactly.
+        var same = RopeTuning.Fall.Tuned(new MotionTuning());
+        Assert.IsTrue(Math.Abs(same.K - RopeTuning.Fall.K) < 1e-9 && Math.Abs(same.C - RopeTuning.Fall.C) < 1e-9, same.ToString());
+    }
+
+    [TestMethod]
+    public void BounceCanOnlyReduceTheRopesOvershoot()
+    {
+        double Overshoot(MotionTuning t) => Simulate(RopeTuning.Fall.Tuned(t), -RopeView.PanelHeight, 0).Max();
+        double original = Overshoot(new MotionTuning());
+        Assert.IsLessThanOrEqualTo(original + 1e-9, Overshoot(new MotionTuning { Bounce = 0.5 }));
+        Assert.IsLessThan(0.05, Overshoot(new MotionTuning { Bounce = 0 }), "calm: no overshoot at all");
+        Assert.IsLessThan(6, Overshoot(new MotionTuning { Speed = 1.5, Bounce = 1 }));
+    }
+
+    [TestMethod]
+    public void ClotheslineSpeedMovesTheRopeAndOnlyTheRope() => Sta(() =>
+    {
+        double LoweredAfter(double seconds)
+        {
+            var view = Rope();
+            view.Lower(fromHidden: true);
+            Run(view, seconds);
+            return view.RopeY(450);
+        }
+        double normal = LoweredAfter(0.12);
+        Prefs.Interaction = Prefs.Interaction.With(FeelArea.Menu, new MotionTuning { Speed = 1.5 });
+        Assert.AreEqual(normal, LoweredAfter(0.12), 1e-9, "the menu's speed must not move the rope");
+        Prefs.Interaction = Prefs.Interaction.With(FeelArea.Clothesline, new MotionTuning { Speed = 1.5 });
+        Assert.IsGreaterThan(normal + 1, LoweredAfter(0.12), "a faster clothesline lowers sooner");
+        Assert.AreEqual(1, Prefs.Interaction.Tools.Speed);
+    });
+
     // MARK: Filmstrips for review (only with SWIVEL_ROPE_FRAMES set)
 
     [TestMethod]
@@ -660,7 +783,7 @@ public sealed class ClotheslineTests
         var folder = Environment.GetEnvironmentVariable("SWIVEL_ROPE_FRAMES");
         if (string.IsNullOrEmpty(folder)) return;   // nothing to review
         Sta(() => Assert.AreEqual(0, ClotheslineFrames.Render(folder)));
-        foreach (var name in new[] { "rope-1-drop.png", "rope-2-hover-press-copy.png", "rope-3-arrive.png", "rope-4-lift.png", "rope-5-discard.png", "rope-chip.png", "card.png" })
+        foreach (var name in new[] { "rope-1-drop.png", "rope-2-hover-press-copy.png", "rope-3-arrive.png", "rope-4-lift.png", "rope-5-discard.png", "rope-chip.png", "rope-ready-normal.png", "rope-ready-reduced.png", "card.png" })
             Assert.IsTrue(File.Exists(Path.Combine(folder, name)), name);
     }
 }

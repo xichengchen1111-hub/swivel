@@ -463,8 +463,9 @@ sealed class PrintPreview : Window
 
     bool Advance(double dt)
     {
-        progress.Step(dt);
-        alpha.Step(dt);
+        // Windows-only preview window (the Mac uses Quick Look); it moves with the clothesline's Feel & Text tuning.
+        progress.Step(dt, RopeTuning.Tuning);
+        alpha.Step(dt, RopeTuning.Tuning);
         Render();
         if (closing && alpha.Value < 0.02)
         {

@@ -261,8 +261,9 @@ sealed partial class WheelWindow : Window
         // A closing menu no longer catches the drag.
         Native.SetClickThrough(this, true);
         int token = Generation;
-        // A confirmed drop stays up long enough for the press to land (about 0.2 s).
-        double delay = how == Dismissal.Confirm ? 0.16 : 0;
+        // A confirmed drop stays up long enough for the press to land (about 0.2 s), sooner in a faster tuned menu.
+        // The fade itself is sped up by stepping its springs with the menu's tuning.
+        double delay = how == Dismissal.Confirm ? 0.16 / View.Tuning.SafeSpeed : 0;
         double duration = how == Dismissal.Confirm ? 0.14 : 0.12;
         void Fade()
         {
@@ -302,8 +303,11 @@ sealed partial class WheelWindow : Window
 
     bool Advance(double dt)
     {
-        alpha.Step(dt);
-        scale.Step(dt);
+        // The Mac's pop-in (0.24 s, bounce 0.1) and fades are divided by the menu's speed and its bounce scaled; the
+        // springs here get the same from the menu tuning.
+        var tuning = View.Tuning;
+        alpha.Step(dt, tuning);
+        scale.Step(dt, tuning);
         ApplyChrome();
         if (fading && alpha.Value < 0.01)
         {

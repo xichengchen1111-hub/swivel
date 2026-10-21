@@ -562,6 +562,355 @@ public sealed class SettingsTests
         }
     }
 
+    // MARK: Feel & Text, colours (1.3.3)
+
+    /// Draws the current page at its full height (not just the part the window shows) and saves a PNG.
+    static void RenderPage(SettingsWindow window, string name)
+    {
+        var page = window.View.CurrentPage!;
+        double pw = page.ActualWidth, ph = page.ActualHeight;
+        Assert.IsTrue(pw > 300 && ph > 200, $"{name}: {pw}×{ph}");
+        int w = (int)Math.Ceiling(pw) + 80, h = (int)Math.Ceiling(ph) + 60;
+        var root = (FrameworkElement)window.Content;
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var area = new Rect(0, 0, w, h);
+            dc.DrawRectangle(root.TryFindResource("ApplicationBackgroundBrush") as Brush ?? Brushes.White, null, area);
+            if (root.TryFindResource("LayerFillColorDefaultBrush") is Brush layer) dc.DrawRectangle(layer, null, area);
+            // A visual brush draws the page where it sits in its parent (after the host's padding).
+            var offset = VisualTreeHelper.GetOffset(page);
+            var brush = new VisualBrush(page)
+            {
+                Viewbox = new Rect(offset.X, offset.Y, pw, ph),
+                ViewboxUnits = BrushMappingMode.Absolute,
+                Stretch = Stretch.Fill,
+            };
+            dc.DrawRectangle(brush, null, new Rect(40, 30, pw, ph));
+        }
+        var bitmap = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        var folder = Environment.GetEnvironmentVariable("SWIVEL_TEST_PNG_DIR") is { Length: > 0 } dir ? dir : TestSetup.NewFolder("settings-png");
+        Directory.CreateDirectory(folder);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using (var file = File.Create(Path.Combine(folder, name + ".png"))) encoder.Save(file);
+        var pixels = new byte[w * h * 4];
+        bitmap.CopyPixels(pixels, w * 4, 0);
+        AssertDrawn(pixels, name);
+    }
+
+    [STATestMethod]
+    public void FeelAndColorsTabsOpenTheirPages()
+    {
+        var window = Open(AppTab.Feel);
+        try
+        {
+            Assert.AreEqual(SettingsView.Page.Feel, window.View.Current);
+            Assert.AreEqual("Swivel — Feel & Text", window.Title);
+            Assert.AreEqual("Feel & Text", window.View.SidebarLabel(SettingsView.Page.Feel));
+            window.Select(AppTab.Colors);
+            Assert.AreEqual(SettingsView.Page.Wheel, window.View.Current);
+            Assert.AreEqual(3, Current<WheelPage>(window).SelectedSection);
+            Assert.IsInstanceOfType<TemplateColorsPane>(Current<WheelPage>(window).Section(3));
+            window.Select(AppTab.Customize);
+            Assert.AreEqual(2, Current<WheelPage>(window).SelectedSection);
+
+            // General links to the page, as the Mac's "Feel & Text…" button does.
+            window.Select(AppTab.General);
+            Pump(0.1);
+            var link = Descendants<SettingsCard>(Current<GeneralPage>(window)).Single(c => c.TitleBlock?.Text == "Feel & Text");
+            link.Invoke();
+            Assert.AreEqual(SettingsView.Page.Feel, window.View.Current);
+            // (AppWindow.Show(tab) is Select(tab) on the shared window; it isn't opened here because that window is
+            // on screen.)
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void FeelPresetsWriteTuningAndShowCustomOnceChanged()
+    {
+        var window = Open(AppTab.Feel);
+        try
+        {
+            var page = Current<FeelPage>(window);
+            Assert.AreEqual("Original", page.PresetPicker.SelectedItem as string);
+            page.PresetPicker.SelectedIndex = 1 + Array.IndexOf(FeelChoices.Presets, FeelPreset.Calm);
+            Assert.AreEqual(new InteractionSettings().Applying(FeelPreset.Calm), Prefs.Interaction);
+            Pump(0.2);
+            Assert.AreEqual("Calm", page.PresetPicker.SelectedItem as string);
+            Assert.AreEqual(0, page.Bounce.Value, 0.001);
+            Assert.AreEqual(SoundStyle.Soft, FeelChoices.SoundStyles[page.SoundStylePicker.SelectedIndex]);
+            Assert.AreEqual(0.5, page.Volume.Value, 0.001);
+
+            // One area at a time: the Clothesline's speed alone changes, and the preset becomes Custom.
+            page.AreaPicker.SelectedIndex = Array.IndexOf(FeelChoices.Areas, FeelArea.Clothesline);
+            Pump(0.1);
+            Assert.AreEqual(Visibility.Collapsed, page.StylePicker.Visibility); // the layout choice is for the menu trial
+            if (!Motion.Reduced) Assert.IsTrue(page.MotionSample.IsMoving, "choosing an area replays its sample");
+            page.Speed.Value = 1.25;
+            Assert.AreEqual(1.25, Prefs.Interaction.Clothesline.Speed, 1e-9);
+            Assert.AreEqual(0, Prefs.Interaction.Clothesline.Bounce, 1e-9);
+            Assert.AreEqual(1, Prefs.Interaction.Menu.Speed, 1e-9);
+            Assert.AreEqual(1, Prefs.Interaction.Tools.Speed, 1e-9);
+            Pump(0.2);
+            Assert.IsNull(Prefs.Interaction.MatchingPreset);
+            Assert.AreEqual(0, page.PresetPicker.SelectedIndex);
+            Assert.AreEqual("Custom", page.PresetPicker.SelectedItem as string);
+            Assert.AreEqual("1.25×", page.SpeedValue.Text);
+
+            // The sliders show the chosen area's own values, and write only that area.
+            page.AreaPicker.SelectedIndex = Array.IndexOf(FeelChoices.Areas, FeelArea.Tools);
+            Pump(0.1);
+            Assert.AreEqual(1, page.Speed.Value, 0.001);
+            page.Bounce.Value = 0.4;
+            Assert.AreEqual(0.4, Prefs.Interaction.Tools.Bounce, 1e-9);
+            Assert.AreEqual(0, Prefs.Interaction.Menu.Bounce, 1e-9);
+            Assert.AreEqual(1.25, Prefs.Interaction.Clothesline.Speed, 1e-9);
+            page.AreaPicker.SelectedIndex = Array.IndexOf(FeelChoices.Areas, FeelArea.Menu);
+            Pump(0.1);
+            Assert.AreEqual(Visibility.Visible, page.StylePicker.Visibility);
+            Assert.IsNotNull(page.MenuTrial.Preview);
+
+            // Picking "Custom" itself changes nothing; picking a preset again replaces every area.
+            var before = Prefs.Interaction;
+            page.PresetPicker.SelectedIndex = 0;
+            Assert.AreEqual(before, Prefs.Interaction);
+            page.PresetPicker.SelectedIndex = 1 + Array.IndexOf(FeelChoices.Presets, FeelPreset.Snappy);
+            foreach (var area in FeelChoices.Areas) Assert.AreEqual(1.5, Prefs.Interaction[area].Speed, 1e-9);
+
+            // Sound: style, level and the selection-sound switch; style and level follow the sound switch.
+            page.SoundStylePicker.SelectedIndex = Array.IndexOf(FeelChoices.SoundStyles, SoundStyle.Bright);
+            page.Volume.Value = 0.3;
+            page.HoverSound.Flip();
+            Assert.AreEqual(SoundStyle.Bright, Prefs.Interaction.SoundStyle);
+            Assert.AreEqual(0.3, Prefs.Interaction.Volume, 1e-9);
+            Assert.IsFalse(Prefs.Interaction.HoverSound);
+            Pump(0.2);
+            Assert.IsFalse(page.SoundStylePicker.IsEnabled);
+            Prefs.SoundEffects = true;
+            Pump(0.2);
+            Assert.IsTrue(page.Sounds.IsOn);
+            Assert.IsTrue(page.SoundStylePicker.IsEnabled && page.Volume.IsEnabled);
+            page.Sounds.Flip();
+            Assert.IsFalse(Prefs.SoundEffects);
+            Assert.HasCount(4, page.Trials);
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void TextSizeAndBoldApplyToTheWindowAtOnce()
+    {
+        var window = Open(AppTab.Feel);
+        try
+        {
+            var page = Current<FeelPage>(window);
+            Assert.AreEqual(AppTypography.BaseSize, window.FontSize, 0.01);
+            Assert.AreEqual(15, page.Sample.FontSize, 0.01);
+            page.TextSizePicker.SelectedIndex = Array.IndexOf(FeelChoices.TextSizes, TextSize.ExtraLarge);
+            Assert.AreEqual(TextSize.ExtraLarge, Prefs.Interaction.TextSize);
+            Pump(0.3);
+            Assert.AreEqual(14 * 1.3, window.FontSize, 0.01);
+            Assert.AreEqual(15 * 1.3, page.Sample.FontSize, 0.01);
+            Assert.AreEqual(14 * 1.3, page.Trials[0].FontSize, 0.01);
+
+            page.Bold.Flip();
+            Assert.IsTrue(Prefs.Interaction.BoldText);
+            Pump(0.3);
+            Assert.AreEqual(FontWeights.SemiBold, page.Sample.FontWeight);
+            Assert.AreEqual(FontWeights.SemiBold, page.Trials[0].FontWeight);
+            Assert.AreEqual(FontWeights.SemiBold, window.FontWeight);
+
+            // Pages built or shown later follow too.
+            window.Select(AppTab.General);
+            Pump(0.3);
+            var title = Descendants<TextBlock>(Current<GeneralPage>(window)).First(t => t.Text == "General");
+            Assert.AreEqual(28 * 1.3, title.FontSize, 0.01);
+            Assert.IsTrue(Descendants<Button>(Current<GeneralPage>(window)).All(b => b.FontWeight == FontWeights.SemiBold));
+
+            // Presets keep the text settings.
+            Prefs.Interaction = Prefs.Interaction.Applying(FeelPreset.Playful);
+            Assert.AreEqual(TextSize.ExtraLarge, Prefs.Interaction.TextSize);
+            Assert.IsTrue(Prefs.Interaction.BoldText);
+
+            // Restore tuning defaults resets Feel & Text only: colours stay.
+            Prefs.ClotheslineColors = Prefs.ClotheslineColors with { Rope = RopeColorPreset.Sage.Rgb()! };
+            Prefs.TemplateColors = Prefs.TemplateColors.With(ColorTemplate.Shelf, TemplateColorPreset.Mist.Palette()!);
+            window.Select(AppTab.Feel);
+            Pump(0.2);
+            page.Reset();
+            Pump(0.3);
+            Assert.AreEqual(new InteractionSettings(), Prefs.Interaction);
+            Assert.AreEqual(AppTypography.BaseSize, window.FontSize, 0.01);
+            Assert.AreEqual(FontWeights.Normal, page.Sample.FontWeight);
+            Assert.AreEqual(RopeColorPreset.Sage.Rgb(), Prefs.ClotheslineColors.Rope);
+            Assert.AreEqual(TemplateColorPreset.Mist.Palette(), Prefs.TemplateColors.Shelf);
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void RopeAndPegColorsAreChosenSeparately()
+    {
+        var window = Open(AppTab.Clothesline);
+        var chooser = ColorChooser.Chooser;
+        static int Index(RopeColorPreset preset) => Array.IndexOf(RopeColorPresets.All, preset);
+        try
+        {
+            var ropes = ((ClotheslinePane)Current<FeaturePage>(window).Content).Ropes;
+            Assert.AreEqual(Index(RopeColorPreset.Silver), ropes.Rope.SelectedIndex);
+            Assert.AreEqual(Index(RopeColorPreset.Silver), ropes.Peg.SelectedIndex);
+            var before = ropes.Preview.Preview;
+            ropes.Rope.SelectedIndex = Index(RopeColorPreset.Sage);
+            Assert.AreEqual(RopeColorPreset.Sage.Rgb(), Prefs.ClotheslineColors.Rope);
+            Assert.AreEqual(RopeColorPreset.Silver.Rgb(), Prefs.ClotheslineColors.Peg);
+            Pump(0.3);
+            Assert.AreNotSame(before, ropes.Preview.Preview, "the template preview follows the colours");
+
+            // A custom peg colour from the picker.
+            var blue = Color.FromRgb(0x33, 0x66, 0x99);
+            ColorChooser.Chooser = (_, _) => blue;
+            ropes.PegWell.Choose();
+            Assert.AreEqual(new RGBColor(blue), Prefs.ClotheslineColors.Peg);
+            Pump(0.2);
+            Assert.AreEqual(Index(RopeColorPreset.Custom), ropes.Peg.SelectedIndex);
+            Assert.AreEqual(Index(RopeColorPreset.Sage), ropes.Rope.SelectedIndex);
+            Assert.AreEqual(blue, ropes.PegWell.Color);
+
+            // "Custom" in the list opens the picker; cancelling it keeps the stored colour.
+            ColorChooser.Chooser = (_, _) => null;
+            ropes.Rope.SelectedIndex = Index(RopeColorPreset.Custom);
+            Pump(0.3);
+            Assert.AreEqual(Index(RopeColorPreset.Sage), ropes.Rope.SelectedIndex);
+            Assert.AreEqual(RopeColorPreset.Sage.Rgb(), Prefs.ClotheslineColors.Rope);
+
+            // Reset rope colors resets the rope only, not the template palettes or Feel & Text.
+            Prefs.TemplateColors = Prefs.TemplateColors.With(ColorTemplate.Notes, TemplateColorPreset.Rose.Palette()!);
+            Prefs.Interaction = Prefs.Interaction.Applying(FeelPreset.Quiet);
+            ropes.Reset();
+            Assert.AreEqual(new ClotheslineColors(), Prefs.ClotheslineColors);
+            Assert.AreEqual(TemplateColorPreset.Rose.Palette(), Prefs.TemplateColors.Notes);
+            Assert.AreEqual(FeelPreset.Quiet, Prefs.Interaction.MatchingPreset);
+            Pump(0.2);
+            Assert.AreEqual(Index(RopeColorPreset.Silver), ropes.Peg.SelectedIndex);
+        }
+        finally
+        {
+            ColorChooser.Chooser = chooser;
+            window.Close();
+        }
+    }
+
+    [STATestMethod]
+    public void TemplatePalettesAreSavedPerTemplate()
+    {
+        var window = Open(AppTab.Colors);
+        var chooser = ColorChooser.Chooser;
+        static int Index(TemplateColorPreset preset) => Array.IndexOf(TemplateColorPresets.All, preset);
+        try
+        {
+            var pane = (TemplateColorsPane)Current<WheelPage>(window).Section(3);
+            Assert.AreEqual(ColorTemplate.Shelf, pane.Area);
+            Assert.AreEqual(Visibility.Visible, pane.RailRow.Visibility);
+            Assert.AreEqual(Index(TemplateColorPreset.Native), pane.PalettePicker.SelectedIndex);
+            var before = pane.Preview.Preview;
+            pane.PalettePicker.SelectedIndex = Index(TemplateColorPreset.Mist);
+            Assert.AreEqual(TemplateColorPreset.Mist.Palette(), Prefs.TemplateColors.Shelf);
+            Assert.AreEqual(TemplatePalette.Native, Prefs.TemplateColors.Notes);
+            Assert.AreEqual(MenuStyle.Wheel, Prefs.Style, "choosing colours doesn't change the menu's template");
+            Pump(0.3);
+            Assert.AreNotSame(before, pane.Preview.Preview);
+
+            // Sticky Notes keeps its own palette and has no shelf colour.
+            pane.TemplatePicker.SelectedIndex = Array.IndexOf(ColorTemplates.All, ColorTemplate.Notes);
+            Pump(0.2);
+            Assert.AreEqual(ColorTemplate.Notes, pane.Area);
+            Assert.AreEqual(Index(TemplateColorPreset.Native), pane.PalettePicker.SelectedIndex);
+            Assert.AreEqual(Visibility.Collapsed, pane.RailRow.Visibility);
+
+            // A custom second colour: the palette becomes Custom, the other colours stay.
+            var ink = Color.FromRgb(0x20, 0x40, 0x60);
+            ColorChooser.Chooser = (_, _) => ink;
+            pane.Wells[1].Choose();
+            Assert.AreEqual(new RGBColor(ink), Prefs.TemplateColors.Notes.Colors[1]);
+            Assert.AreEqual(TemplatePalette.Native.Colors[0], Prefs.TemplateColors.Notes.Colors[0]);
+            Assert.AreEqual(TemplateColorPreset.Mist.Palette(), Prefs.TemplateColors.Shelf);
+            Pump(0.2);
+            Assert.AreEqual(Index(TemplateColorPreset.Custom), pane.PalettePicker.SelectedIndex);
+
+            // Reset this palette: Sticky Notes only; the shelf and the rope keep theirs.
+            Prefs.ClotheslineColors = Prefs.ClotheslineColors with { Rope = RopeColorPreset.Rose.Rgb()! };
+            pane.Reset();
+            Assert.AreEqual(TemplatePalette.Native, Prefs.TemplateColors.Notes);
+            Assert.AreEqual(TemplateColorPreset.Mist.Palette(), Prefs.TemplateColors.Shelf);
+            Assert.AreEqual(RopeColorPreset.Rose.Rgb(), Prefs.ClotheslineColors.Rope);
+
+            // Bookshelf's shelf colour is its own well.
+            pane.TemplatePicker.SelectedIndex = Array.IndexOf(ColorTemplates.All, ColorTemplate.Shelf);
+            Pump(0.2);
+            Assert.AreEqual(Index(TemplateColorPreset.Mist), pane.PalettePicker.SelectedIndex);
+            pane.Wells[4].Choose();
+            Assert.AreEqual(new RGBColor(ink), Prefs.TemplateColors.Shelf.Rail);
+            CollectionAssert.AreEqual(TemplateColorPreset.Mist.Palette()!.Colors.ToList(), Prefs.TemplateColors.Shelf.Colors.ToList());
+        }
+        finally
+        {
+            ColorChooser.Chooser = chooser;
+            window.Close();
+        }
+    }
+
+    [STATestMethod]
+    public void NewPagesRenderInLightAndDark()
+    {
+        var window = Open(AppTab.Feel);
+        try
+        {
+            foreach (var theme in new[] { ThemeMode.Light, ThemeMode.Dark })
+            {
+                window.ThemeMode = theme;
+                foreach (var tab in new[] { AppTab.Feel, AppTab.Clothesline, AppTab.Colors })
+                {
+                    window.Select(AppTab.Overview);
+                    window.Select(tab);
+                    Pump(0.8);
+                    RenderPage(window, $"page-{tab}-{(theme == ThemeMode.Dark ? "dark" : "light")}");
+                }
+            }
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void EveryPageRendersAtTheLargestBoldTextInEnglishAndChinese()
+    {
+        Prefs.Interaction = Prefs.Interaction with { TextSize = TextSize.ExtraLarge, BoldText = true };
+        try
+        {
+            foreach (var language in new[] { "en", "zh-Hans" })
+            {
+                Prefs.LanguageId = language;
+                var window = Open();
+                try
+                {
+                    Assert.AreEqual(14 * 1.3, window.FontSize, 0.01);
+                    foreach (var tab in Enum.GetValues<AppTab>())
+                    {
+                        window.Select(tab);
+                        Pump(0.6);
+                        RenderPage(window, $"xl-{language}-{(int)tab}-{tab}");
+                    }
+                    // The whole window too, for the sidebar's rows.
+                    AssertDrawn(Render(window, $"xl-{language}-window"), $"xl-{language}-window");
+                }
+                finally { window.Close(); }
+            }
+        }
+        finally { Prefs.LanguageId = "en"; }
+    }
+
     [STATestMethod]
     public void SoundEffectsSwitchWritesPrefs()
     {

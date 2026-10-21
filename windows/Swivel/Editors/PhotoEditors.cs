@@ -193,7 +193,7 @@ sealed class AdjustEditor : Editor
         {
             var control = Slider(spec.Min, spec.Max, spec.Neutral);
             // The value beside each slider greys out at neutral: with the detent, that's how you find it again.
-            var label = new TextBlock { Width = 56, TextAlignment = TextAlignment.Right, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+            var label = ToolUI.Scaled(new TextBlock { MinWidth = 56, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center }, 11);
             adjustments.Add(new Adjustment(control, label, spec.Neutral, spec.Describe));
             AddRow(spec.Name, control, label);
         }
@@ -1060,9 +1060,9 @@ sealed class RedactCanvas : PictureCanvas
 
     bool Advance(double dt)
     {
-        hoverAmount.Step(dt);
-        pressAmount.Step(dt);
-        reveal.Step(dt);
+        hoverAmount.Step(dt, ToolUI.Tuning);
+        pressAmount.Step(dt, ToolUI.Tuning);
+        reveal.Step(dt, ToolUI.Tuning);
         RedrawOverlay();
         return !(hoverAmount.IsSettled && pressAmount.IsSettled && reveal.IsSettled);
     }

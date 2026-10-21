@@ -70,6 +70,9 @@ abstract class Editor
         };
         try { Window.Icon = BitmapFrame.Create(new Uri("pack://application:,,,/Swivel;component/Swivel.ico")); }
         catch (Exception) { /* No pack resources (tests): the default icon. */ }
+        // Feel & Text's text size and bold text for the editor's controls. Lettering drawn into an exported image
+        // (Annotate) keeps its own size, as on the Mac.
+        AppTypography.Apply(Window);
         UpdateTitle();
 
         resetButton = new Button { Content = L("Reset"), MinWidth = 80, IsEnabled = false };
@@ -155,7 +158,7 @@ abstract class Editor
 
         fadeDriver.OnFrame = dt =>
         {
-            canvasFade.Step(dt);
+            canvasFade.Step(dt, ToolUI.Tuning);
             canvas.Opacity = Math.Clamp(canvasFade.Value, 0, 1);
             return !canvasFade.IsSettled;
         };
@@ -998,7 +1001,7 @@ sealed class ImagePreview : Grid
         }
         driver.OnFrame = dt =>
         {
-            fade.Step(dt);
+            fade.Step(dt, ToolUI.Tuning);
             front.Opacity = Math.Clamp(fade.Value, 0, 1);
             if (fade.IsSettled) back.Source = null;
             return !fade.IsSettled;
@@ -1386,8 +1389,9 @@ static class EditorDialog
             MinWidth = 320,
             MaxWidth = 480,
         };
+        AppTypography.Apply(dialog);
         var panel = new StackPanel { Margin = new Thickness(24, 20, 24, 20) };
-        panel.Children.Add(new TextBlock { Text = message, FontSize = 15, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(ToolUI.Scaled(new TextBlock { Text = message, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap }, 15));
         if (!string.IsNullOrEmpty(detail))
         {
             var text = new TextBlock { Text = detail, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };

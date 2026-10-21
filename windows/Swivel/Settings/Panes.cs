@@ -134,6 +134,12 @@ sealed class GeneralPage : Pane
         };
         Add(new SettingsCard("", L("Sound effects"), L("Short sounds when a menu opens, an option is chosen or a task finishes."), sounds));
 
+        // The Mac's "Personalize: Feel & Text…" row; on Windows a card that opens the page, like Settings' links.
+        Add(Ui.Section(L("Personalize")));
+        Add(new SettingsCard(SettingsView.Glyph(SettingsView.Page.Feel), L("Feel & Text"),
+            L("Too bouncy, too slow or too noisy? Make Swivel comfortable for you. Changes are saved as you go."),
+            onClick: () => (Window.GetWindow(this) as SettingsWindow)?.Select(AppTab.Feel)));
+
         Add(Ui.Section(L("Language")));
         foreach (var language in Languages.All) languages.Items.Add(language.Title());
         languages.SelectionChanged += (_, _) =>
@@ -218,6 +224,9 @@ sealed class ClotheslinePane : Pane
         copied.Toggled += on => Prefs.ClotheslineHangCopied = on;
         Add(new SettingsCard("", L("Hang Copied Images"), L("Also hang images you copy (for example with Win + Shift + S, or Copy in Photos)."), copied));
 
+        Ropes = new RopeColorsSection();
+        Add(Ropes);
+
         Add(Ui.Section(L("Gestures")));
         var gestures = new Grid();
         gestures.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -253,6 +262,8 @@ sealed class ClotheslinePane : Pane
         Add(buttons);
         Refresh();
     }
+
+    internal RopeColorsSection Ropes { get; }
 
     /// Where screenshots are saved (and copied images are put away), as the Mac app opens the rope's folder.
     static string Folder() => Clothesline.Shared.ScreenshotsFolder;
@@ -544,8 +555,9 @@ sealed class ImagePresetsPane : Pane
         var driver = new FrameDriver();
         driver.OnFrame = dt =>
         {
-            opacity.Step(dt);
-            slide.Step(dt);
+            var tuning = Prefs.Interaction.Tools;
+            opacity.Step(dt, tuning);
+            slide.Step(dt, tuning);
             item.Opacity = Math.Clamp(opacity.Value, 0, 1);
             shift.Y = slide.Value;
             bool moving = !opacity.IsSettled || !slide.IsSettled;

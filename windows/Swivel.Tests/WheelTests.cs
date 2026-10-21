@@ -1,5 +1,8 @@
 using System.Text;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Swivel;
 
 namespace Swivel.Tests;
@@ -13,8 +16,23 @@ public sealed class WheelTests
     public void Reset()
     {
         TestSetup.ResetPrefs();
-        // Tests never make a sound.
+        // Tests never make a sound: the audio device stays closed even when sounds are switched on.
+        Sounds.DeviceDisabled = true;
+        Sounds.ResetForTests();
         Prefs.SoundEffects = false;
+    }
+
+    /// Runs the dispatcher (background synthesis completions, queued redraws) until `done` or a timeout.
+    static void PumpUntil(Func<bool> done, double seconds = 10)
+    {
+        var until = DateTime.UtcNow.AddSeconds(seconds);
+        while (!done() && DateTime.UtcNow < until)
+        {
+            var frame = new DispatcherFrame();
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background, () => frame.Continue = false);
+            Dispatcher.PushFrame(frame);
+            Thread.Sleep(5);
+        }
     }
 
     // MARK: Springs
@@ -457,6 +475,103 @@ public sealed class WheelTests
         Assert.AreEqual(0, Sounds.RegisteredCount);
     }
 
+    [TestMethod]
+    public void SoundStylesRespectVolumeAndNeverClip()
+    {
+        foreach (var style in FeelChoices.SoundStyles)
+        {
+            foreach (var effect in Enum.GetValues<SoundEffect>())
+            {
+                var samples = SoundSynth.Samples(effect, 1, 1, new SoundConfiguration(style, 0.25));
+                double peak = samples.Max(s => Math.Abs(s));
+                Assert.IsTrue(peak > 0 && peak <= 0.23 * 0.25 * style.Gain() + 1e-6, $"{style} {effect} peak {peak}");
+                Assert.IsLessThan(0.001, Math.Abs(samples[^1]), $"{style} {effect} clicks at the end");
+                Assert.IsTrue(SoundSynth.Samples(effect, 1, 1, new SoundConfiguration(style, 0)).All(s => s == 0), $"{style} {effect} muted");
+            }
+        }
+        // Soft is lower, bright is higher: count the zero crossings of the done chime (no noise in it).
+        static int crossings(SoundStyle style)
+        {
+            var s = SoundSynth.Samples(SoundEffect.Done, 1, 1, new SoundConfiguration(style, 1));
+            return Enumerable.Range(1, s.Length - 1).Count(i => Math.Sign(s[i - 1]) != Math.Sign(s[i]));
+        }
+        Assert.IsTrue(crossings(SoundStyle.Soft) < crossings(SoundStyle.Classic) && crossings(SoundStyle.Classic) < crossings(SoundStyle.Bright));
+        // Damaged volumes can't break the sounds; the level is whole percent.
+        Assert.AreEqual(1, new SoundConfiguration(volume: double.NegativeInfinity).Volume);
+        Assert.AreEqual(1, new SoundConfiguration(volume: 9).Volume);
+        Assert.AreEqual(0, new SoundConfiguration(volume: -9).Volume);
+        Assert.AreEqual(new SoundConfiguration(SoundStyle.Soft, 0.5), new SoundConfiguration(SoundStyle.Soft, 0.501));
+        Assert.AreNotEqual(new SoundConfiguration(SoundStyle.Soft, 0.5), new SoundConfiguration(SoundStyle.Soft, 1));
+        Assert.AreNotEqual(new SoundConfiguration(SoundStyle.Soft, 0.5), new SoundConfiguration(SoundStyle.Bright, 0.5));
+    }
+
+    [STATestMethod]
+    public void ChangingTheSoundStyleOrVolumeRebuildsTheSounds()
+    {
+        Prefs.SoundEffects = true;
+        Prefs.Interaction = new InteractionSettings { SoundStyle = SoundStyle.Soft, Volume = 0.5 };
+        Feedback.Prepare();
+        PumpUntil(() => Sounds.Loaded == Sounds.Configuration);
+        Assert.AreEqual(new SoundConfiguration(SoundStyle.Soft, 0.5), Sounds.Loaded);
+        Assert.AreEqual(3 + 5, Sounds.RegisteredCount);
+        Feedback.Press();
+        Assert.AreEqual(1, Sounds.PlayedCount);
+
+        // A new volume: the next sound waits for the rebuilt set, then plays at the new level.
+        Prefs.Interaction = Prefs.Interaction with { Volume = 0.3 };
+        Feedback.Press();
+        Assert.AreEqual(1, Sounds.PlayedCount, "nothing plays at the old level");
+        PumpUntil(() => Sounds.PlayedCount == 2);
+        Assert.AreEqual(new SoundConfiguration(SoundStyle.Soft, 0.3), Sounds.Loaded);
+        Assert.AreEqual(2, Sounds.PlayedCount);
+
+        // A new style too.
+        Prefs.Interaction = Prefs.Interaction with { SoundStyle = SoundStyle.Bright };
+        Feedback.Done();
+        PumpUntil(() => Sounds.Loaded == Sounds.Configuration);
+        Assert.AreEqual(SoundStyle.Bright, Sounds.Loaded?.Style);
+        Assert.AreEqual(3 + 5, Sounds.RegisteredCount, "the old set was released, not added to");
+
+        // Zero volume and the master switch are silent and build nothing.
+        Prefs.Interaction = Prefs.Interaction with { Volume = 0 };
+        int played = Sounds.PlayedCount;
+        Feedback.Press();
+        PumpUntil(() => false, 0.1);
+        Assert.AreEqual(played, Sounds.PlayedCount);
+        Assert.AreEqual(SoundStyle.Bright, Sounds.Loaded?.Style);
+        Prefs.Interaction = Prefs.Interaction with { Volume = 1 };
+        Prefs.SoundEffects = false;
+        Feedback.Press();
+        PumpUntil(() => false, 0.1);
+        Assert.AreEqual(played, Sounds.PlayedCount);
+    }
+
+    [STATestMethod]
+    public void HoverSoundSwitchMutesOnlyTheHoverTicks()
+    {
+        Prefs.SoundEffects = true;
+        Prefs.Interaction = new InteractionSettings { HoverSound = false };
+        Feedback.Prepare();
+        PumpUntil(() => Sounds.Loaded == Sounds.Configuration);
+        Assert.IsFalse(Sounds.Wants(SoundEffect.Hover));
+        Feedback.Hover();
+        Assert.AreEqual(0, Sounds.PlayedCount);
+        Feedback.Page();
+        Feedback.Press();
+        Feedback.Toggle(true);
+        Assert.AreEqual(3, Sounds.PlayedCount);
+        Prefs.Interaction = Prefs.Interaction with { HoverSound = true };
+        Feedback.Hover();
+        Assert.AreEqual(4, Sounds.PlayedCount);
+        // A live menu's hover goes through the same switch.
+        Prefs.Interaction = Prefs.Interaction with { HoverSound = false };
+        var view = Menu(MenuStyle.Wheel);
+        view.IsLive = true;
+        view.Track(Polar(view, 90, 90));
+        Assert.AreEqual(0, view.Hovered);
+        Assert.AreEqual(4, Sounds.PlayedCount);
+    }
+
     // MARK: Toast
 
     [TestMethod]
@@ -549,6 +664,194 @@ public sealed class WheelTests
             Assert.AreEqual(1, host.Preview.Hovered);
         }
         finally { window.Close(); }
+    }
+
+    // MARK: Feel & Text tuning
+
+    /// Frames (60 fps) a confirmed press takes to settle completely.
+    static int FramesToSettle(WheelView view)
+    {
+        view.Track(Polar(view, 90, 90));
+        view.Advance(1);
+        view.BeginConfirm(0);
+        int frames = 0;
+        while (!view.IsSettled && frames < 600) { view.Advance(1.0 / 60); frames++; }
+        return frames;
+    }
+
+    static int FramesToBloom()
+    {
+        var view = Menu(MenuStyle.Shelf);
+        view.BeginOpen();
+        int frames = 0;
+        while (!view.IsSettled && frames < 600) { view.Advance(1.0 / 60); frames++; }
+        return frames;
+    }
+
+    [STATestMethod]
+    public void MenuSpringsFollowTheMenuTuning()
+    {
+        if (Motion.Reduced) Assert.Inconclusive("Animation effects are off on this PC: menus keep the 1.2 timing.");
+        int original = FramesToSettle(Menu(MenuStyle.Wheel));
+        int originalBloom = FramesToBloom();
+        Prefs.Interaction = new InteractionSettings().With(FeelArea.Menu, new MotionTuning { Speed = 1.5, Bounce = 0 });
+        Assert.AreEqual(1.5, Menu(MenuStyle.Wheel).Tuning.Speed);
+        int fast = FramesToSettle(Menu(MenuStyle.Wheel));
+        Assert.IsLessThan(original * 0.8, fast, $"{fast} frames tuned vs {original}");
+        // The opening bloom is on the tuned clock too.
+        Assert.IsLessThan(originalBloom * 0.8, FramesToBloom());
+        // Other areas' tuning doesn't touch the menu.
+        Prefs.Interaction = new InteractionSettings().With(FeelArea.Clothesline, new MotionTuning { Speed = 1.5 })
+            .With(FeelArea.Tools, new MotionTuning { Speed = 1.5 });
+        Assert.AreEqual(original, FramesToSettle(Menu(MenuStyle.Wheel)));
+    }
+
+    [STATestMethod]
+    public void PreviewsCanTryATuningBeforeItIsSaved()
+    {
+        if (Motion.Reduced) Assert.Inconclusive("Animation effects are off on this PC: menus keep the 1.2 timing.");
+        var tuning = new MotionTuning { Speed = 1.5, Bounce = 0.2 };
+        var host = (PreviewHost)MenuPreview.Create(MenuStyle.Wheel, ["JPG", "PNG", "HEIC"], WheelMode.Convert, 1, tuning: tuning);
+        Assert.AreEqual(tuning, host.Tuning);
+        Assert.AreEqual(tuning, host.Preview.Tuning);
+        Assert.AreEqual(MotionTuning.Default, Prefs.Interaction.Menu, "nothing is saved");
+        // Back to following the saved tuning, live.
+        host.Tuning = null;
+        Prefs.Interaction = new InteractionSettings().With(FeelArea.Menu, new MotionTuning { Speed = 0.75 });
+        Assert.AreEqual(0.75, host.Preview.Tuning.Speed);
+        // Replaying off screen does nothing (no frame driver, no sound).
+        host.Replay();
+        Assert.AreEqual(1, host.Preview.Hovered);
+        Assert.IsTrue(host.Preview.IsSettled);
+    }
+
+    // MARK: Template colours
+
+    static Color Read(WheelView view, Point at)
+    {
+        var bitmap = new RenderTargetBitmap((int)view.ViewSize.Width, (int)view.ViewSize.Height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(view);
+        var px = new byte[4];
+        bitmap.CopyPixels(new Int32Rect((int)at.X, (int)at.Y, 1, 1), px, 4, 0);
+        return Color.FromArgb(px[3], px[2], px[1], px[0]);
+    }
+
+    static Color Pixel(WheelView view, Point at)
+    {
+        var size = view.ViewSize;
+        view.Measure(size);
+        view.Arrange(new Rect(size));
+        view.Redraw();
+        return Read(view, at);
+    }
+
+    static void AssertClose(Color expected, Color actual, string what, int tolerance = 4)
+    {
+        Assert.AreEqual(255, actual.A, $"{what}: not opaque ({actual})");
+        Assert.IsTrue(Math.Abs(expected.R - actual.R) <= tolerance && Math.Abs(expected.G - actual.G) <= tolerance
+            && Math.Abs(expected.B - actual.B) <= tolerance, $"{what}: expected {expected}, drew {actual}");
+    }
+
+    static WheelView StillMenu(MenuStyle style, bool dark)
+    {
+        var view = new WheelView { ViewSize = WheelView.MenuSize(style, 8), MenuStyle = style, ManualClock = true, DarkOverride = dark };
+        view.Configure(Items(8), WheelMode.Convert, 0, 1);
+        view.Settle();
+        return view;
+    }
+
+    /// A point low on the first book, clear of its label and bands (WPF coordinates).
+    static Point FirstBook(WheelView view)
+    {
+        double total = new double[] { 40, 34, 44, 37, 42, 35, 39, 43 }.Sum(w => w + 5) - 5;
+        return new Point((view.ViewSize.Width - total) / 2 + 20, view.ViewSize.Height - (30 + 8));
+    }
+
+    /// A point below the first note's label (WPF coordinates).
+    static Point FirstNote(WheelView view)
+    {
+        double originX = (view.ViewSize.Width - 4 * 108) / 2 + 7, top = view.ViewSize.Height - WheelView.HeaderHeight - 10;
+        return new Point(originX + 47, view.ViewSize.Height - (top - 108 + 7 + 47 - 30));
+    }
+
+    [STATestMethod]
+    public void ShelfAndNotesDrawTheirOwnPalettes()
+    {
+        var notes = new TemplatePalette([new(0.15, 0.22, 0.35), new(0.25, 0.4, 0.38), new(0.93, 0.85, 0.85), new(0.88, 0.85, 0.93)], new(0.5, 0.5, 0.5));
+        Prefs.TemplateColors = new TemplateColors().With(ColorTemplate.Shelf, TemplateColorPreset.Sage.Palette()!).With(ColorTemplate.Notes, notes);
+        foreach (bool dark in new[] { false, true })
+        {
+            var shelf = StillMenu(MenuStyle.Shelf, dark);
+            AssertClose(Prefs.TemplateColors.Shelf.Card(0, dark), Pixel(shelf, FirstBook(shelf)), $"book, dark {dark}");
+            var board = StillMenu(MenuStyle.Notes, dark);
+            AssertClose(notes.Card(0, dark), Pixel(board, FirstNote(board)), $"note, dark {dark}");
+        }
+        // The native palette is the quiet neutral surface.
+        Prefs.TemplateColors = new TemplateColors();
+        var plain = StillMenu(MenuStyle.Shelf, false);
+        AssertClose(new MenuAppearance(false).Card(0, 0), Pixel(plain, FirstBook(plain)), "native book");
+        // Dark custom notes get light text, light ones dark text.
+        Assert.AreEqual(Colors.White, notes.Ink(0, false));
+        Assert.AreNotEqual(Colors.White, notes.Ink(2, false));
+    }
+
+    [STATestMethod]
+    public void ClotheslineTemplateUsesTheRopeColours()
+    {
+        Prefs.ClotheslineColors = new ClotheslineColors { Rope = RopeColorPreset.Rose.Rgb()!, Peg = RopeColorPreset.Graphite.Rgb()! };
+        var view = StillMenu(MenuStyle.Clothesline, false);
+        double w = view.ViewSize.Width, h = view.ViewSize.Height, x = 30;
+        double t = (x - 22) / (w - 44);
+        double ropeY = h - WheelView.HeaderHeight - 18 - 64 * t * (1 - t);
+        AssertClose(RopeColorPreset.Rose.Rgb()!.Color, Pixel(view, new Point(x, Math.Floor(h - ropeY))), "rope", 8);
+        // The peg of the first tag, above the rope.
+        double tagX = (w - 8 * 82) / 2 + 41;
+        double tagT = (tagX - 22) / (w - 44);
+        double pegTop = h - WheelView.HeaderHeight - 18 - 64 * tagT * (1 - tagT) + 7;
+        AssertClose(RopeColorPreset.Graphite.Rgb()!.Color, Pixel(view, new Point(tagX, h - (pegTop - 4))), "peg", 8);
+    }
+
+    [STATestMethod]
+    public void MenusOnScreenRedrawWhenColoursChange()
+    {
+        var view = StillMenu(MenuStyle.Shelf, false);
+        view.ManualClock = false;   // redraws itself, like a real menu
+        // At the window's origin, so a bitmap of the view reads its own coordinates.
+        view.HorizontalAlignment = HorizontalAlignment.Left;
+        view.VerticalAlignment = VerticalAlignment.Top;
+        var window = new Window
+        {
+            Width = 500, Height = 300, WindowStyle = WindowStyle.None, ShowInTaskbar = false, ShowActivated = false,
+            Left = -20000, Top = -20000, Content = view,
+        };
+        try
+        {
+            window.Show();
+            PumpUntil(() => false, 0.2);
+            var rose = TemplateColorPreset.Rose.Palette()!;
+            Prefs.TemplateColors = new TemplateColors().With(ColorTemplate.Shelf, rose);
+            PumpUntil(() => false, 0.2);
+            // What is drawn now, without asking for a redraw.
+            AssertClose(rose.Card(0, false), Read(view, FirstBook(view)), "redrawn book");
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void MenuTextFollowsTheTextSize()
+    {
+        Prefs.Interaction = new InteractionSettings { TextSize = TextSize.ExtraLarge, BoldText = true };
+        Assert.AreEqual(13 * 1.3, AppTypography.Size(13), 1e-9);
+        Assert.AreEqual(FontWeights.SemiBold, AppTypography.Weight(FontWeights.Medium));
+        Assert.AreEqual(FontWeights.Bold, AppTypography.Weight(FontWeights.Bold));
+        // Every template still draws at the largest size (labels shrink to fit, then lose their middle).
+        foreach (var style in MenuStyles.All)
+        {
+            var view = StillMenu(style, false);
+            view.Hovered = 2;
+            view.Settle();
+            Pixel(view, new Point(1, 1));
+        }
     }
 
     // MARK: Frames

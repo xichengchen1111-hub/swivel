@@ -18,8 +18,44 @@ static class ClotheslineFrames
         Directory.CreateDirectory(dir);
         var fixtures = Fixtures(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "swivel-rope-frames"));
         RenderRope(dir, fixtures);
+        RenderReady(dir, fixtures, reduced: false);
+        RenderReady(dir, fixtures, reduced: true);
         RenderCard(dir, fixtures[0]);
         return 0;
+    }
+
+    /// The 1.3.3 colours and "release to hang" cue: the default Silver rope, then custom rope and peg colours applied
+    /// to a resting rope, a supported drag turning the cord blue, and leaving it restoring the chosen colour exactly.
+    /// rope-ready-normal.png and rope-ready-reduced.png.
+    static void RenderReady(string dir, List<string> fixtures, bool reduced)
+    {
+        var view = new RopeView(900) { ReducedMotionOverride = reduced, RendersOffscreen = true, ColorsOverride = new ClotheslineColors() };
+        view.SetItems(fixtures.Take(3).ToList());
+        view.Lower(fromHidden: true);
+        for (int i = 0; i < 180; i++) view.Advance(1.0 / 120);
+        var size = new Size(900, RopeView.PanelHeight);
+        var frames = new List<(string, BitmapSource)> { ("idle, default Silver", Snapshot(view, size)) };
+        view.ColorsOverride = new ClotheslineColors { Rope = RopeColorPreset.Sage.Rgb()!, Peg = RopeColorPreset.Graphite.Rgb()! };
+        frames.Add(("idle, rope Sage + peg Graphite (no frame stepped)", Snapshot(view, size)));
+        void Capture(string name, double every, double seconds)
+        {
+            double next = 0, elapsed = 0;
+            while (elapsed <= seconds + 1e-6)
+            {
+                if (elapsed >= next - 1e-6)
+                {
+                    frames.Add(($"{name} {elapsed:F2}", Snapshot(view, size)));
+                    next += every;
+                }
+                view.Advance(1.0 / 120);
+                elapsed += 1.0 / 120;
+            }
+        }
+        view.SetReceivingHighlight(fixtures[3]);
+        Capture("release to hang", 0.1, 0.5);
+        view.SetReceivingHighlight(null);
+        Capture("restored", 0.1, 0.5);
+        Strip(frames, System.IO.Path.Combine(dir, $"rope-ready-{(reduced ? "reduced" : "normal")}.png"));
     }
 
     /// Four pictures of different shapes, each a colour with a darker top band (as the Mac tests draw them).

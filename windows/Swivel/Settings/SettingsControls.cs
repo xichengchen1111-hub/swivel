@@ -39,11 +39,11 @@ static class Ui
         var block = new TextBlock
         {
             Text = text,
-            FontSize = size,
-            FontWeight = weight ?? FontWeights.Normal,
             TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
             TextTrimming = wrap ? TextTrimming.None : TextTrimming.CharacterEllipsis,
         };
+        // Sizes are written at the standard text size; Feel & Text's size and bold text scale them (TextStyle).
+        TextStyle.Track(block, size, weight ?? FontWeights.Normal);
         SetTone(block, tone);
         return block;
     }
@@ -152,7 +152,7 @@ static class Ui
         var driver = new FrameDriver();
         driver.OnFrame = dt =>
         {
-            spring.Step(dt);
+            spring.Step(dt, Prefs.Interaction.Tools);
             shift.X = spring.Value;
             return !spring.IsSettled;
         };
@@ -172,6 +172,63 @@ static class Ui
             action();
         };
         timer.Start();
+    }
+}
+
+/// Feel & Text's text size and bold text for the settings window (the Mac's AppTypography, which rescales each
+/// control's font in place). Fluent controls inherit the window's FontSize, which `AppTypography.Apply` sets; labels
+/// made by `Ui.Text` keep their own design size (12, 14, 28…) and are scaled from it here, when they appear and
+/// whenever the setting changes. Fluent's button and check box styles fix their weight, so bold text is set on them
+/// directly. Icons keep their size.
+static class TextStyle
+{
+    static readonly DependencyProperty BaseSizeProperty = DependencyProperty.RegisterAttached(
+        "BaseSize", typeof(double), typeof(TextStyle), new PropertyMetadata(double.NaN));
+
+    static readonly DependencyProperty BaseWeightProperty = DependencyProperty.RegisterAttached(
+        "BaseWeight", typeof(FontWeight), typeof(TextStyle), new PropertyMetadata(FontWeights.Normal));
+
+    /// The size and weight `block` is designed at; it follows the text settings from now on.
+    public static void Track(TextBlock block, double size, FontWeight weight)
+    {
+        bool fresh = double.IsNaN((double)block.GetValue(BaseSizeProperty));
+        block.SetValue(BaseSizeProperty, size);
+        block.SetValue(BaseWeightProperty, weight);
+        Apply(block);
+        if (fresh) block.Loaded += (_, _) => Apply(block);
+    }
+
+    /// Changes a tracked label's design weight (a selected row turning semibold).
+    public static void SetWeight(TextBlock block, FontWeight weight)
+    {
+        block.SetValue(BaseWeightProperty, weight);
+        if (double.IsNaN((double)block.GetValue(BaseSizeProperty))) block.FontWeight = AppTypography.Weight(weight);
+        else Apply(block);
+    }
+
+    /// The design size of a tracked label, if it is one.
+    public static double? BaseSize(TextBlock block) =>
+        block.GetValue(BaseSizeProperty) is double size && !double.IsNaN(size) ? size : null;
+
+    static void Apply(TextBlock block)
+    {
+        if (BaseSize(block) is not { } size) return;
+        double scaled = AppTypography.Size(size);
+        if (block.FontSize != scaled) block.FontSize = scaled;
+        var weight = AppTypography.Weight((FontWeight)block.GetValue(BaseWeightProperty));
+        if (block.FontWeight != weight) block.FontWeight = weight;
+    }
+
+    /// Brings everything under `root` that is on screen up to date (pages that appear later catch up on Loaded).
+    public static void ApplyTree(DependencyObject root)
+    {
+        switch (root)
+        {
+            case TextBlock block: Apply(block); break;
+            case ToggleSwitch toggle: toggle.InvalidateMeasure(); toggle.InvalidateVisual(); break;
+            case ButtonBase button: button.FontWeight = AppTypography.Weight(FontWeights.Normal); break;
+        }
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++) ApplyTree(VisualTreeHelper.GetChild(root, i));
     }
 }
 
@@ -233,6 +290,8 @@ static class ThemeWatch
 
 /// A few springs that animate one element, stepped on a FrameDriver while it is on screen. Off screen, or with
 /// animation effects turned off, every spring jumps to its target. Retargeting mid-flight carries the velocity over.
+/// They step with the "Tools & settings" speed and bounce from Feel & Text, read every frame so a change applies at
+/// once.
 sealed class SpringGroup
 {
     readonly Spring[] springs;
@@ -248,9 +307,10 @@ sealed class SpringGroup
         driver.OnFrame = dt =>
         {
             bool moving = false;
+            var tuning = Prefs.Interaction.Tools;
             for (int i = 0; i < this.springs.Length; i++)
             {
-                this.springs[i].Step(dt);
+                this.springs[i].Step(dt, tuning);
                 moving |= !this.springs[i].IsSettled;
             }
             this.apply();
@@ -390,7 +450,7 @@ sealed class ToggleSwitch : ToggleButton
     }
 
     FormattedText StateText(bool on) => new(L(on ? "On" : "Off"), CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-        new Typeface(FontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), 14,
+        new Typeface(FontFamily, FontStyles.Normal, AppTypography.Weight(FontWeights.Normal), FontStretches.Normal), AppTypography.Size(14),
         Ui.Brush(Ui.Color(this, IsEnabled ? "TextFillColorPrimaryBrush" : "TextFillColorDisabledBrush", Colors.Black)),
         VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
@@ -790,12 +850,13 @@ sealed class PreviewFrame : WallpaperBackdrop
 
     bool Step(double dt)
     {
-        incoming.Step(dt);
+        var tuning = Prefs.Interaction.Tools;
+        incoming.Step(dt, tuning);
         if (current?.Parent is FrameworkElement box) box.Opacity = incoming.Value;
         for (int i = fading.Count - 1; i >= 0; i--)
         {
             var (view, fade) = fading[i];
-            fade.Step(dt);
+            fade.Step(dt, tuning);
             view.Opacity = Math.Max(fade.Value, 0);
             if (fade.IsSettled)
             {
@@ -879,7 +940,7 @@ sealed class SelectorBar : Grid
         Selected = index;
         for (int i = 0; i < labels.Count; i++)
         {
-            labels[i].FontWeight = i == index ? FontWeights.SemiBold : FontWeights.Normal;
+            TextStyle.SetWeight(labels[i], i == index ? FontWeights.SemiBold : FontWeights.Normal);
             Ui.SetTone(labels[i], i == index ? Tone.Primary : Tone.Secondary);
         }
         Retarget(animated: placed);

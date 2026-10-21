@@ -30,6 +30,8 @@ Windows equivalents:
 | AirDrop | Share (Nearby Sharing, Mail, Phone Link…) |
 | Vision OCR / face detection | Windows.Media.Ocr / Windows.Media.FaceAnalysis (on-device) |
 | Force Touch haptics | Not available on Windows (no public API); sounds are kept |
+| Feel & Text (1.3) | Same page (tray › Feel & Text…): presets, per-area speed and bounce, sound style and level, text size and bold; "gentle haptics" is omitted |
+| Wheel › Colors, rope colours (1.3) | Same Bookshelf / Sticky Notes palettes and rope / peg colours, stored in the same `templates.colors.v1` / `clothesline.colors.v1` keys |
 
 ### Formats
 
@@ -55,7 +57,7 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 cd windows
 ./build.ps1                 # → build\Swivel\Swivel.exe (needs the .NET 10 Desktop Runtime)
 ./build.ps1 -SelfContained  # one Swivel.exe that runs without installing .NET
-./test.ps1                  # 196 MSTest checks
+./test.ps1                  # 225 MSTest checks
 ```
 
 Run `build\Swivel\Swivel.exe`. The first launch opens Settings and asks whether to hang new screenshots. Turn on
@@ -68,14 +70,14 @@ For testing without dragging (same as the Mac app):
 Swivel.exe --run <convert|tools|actions> "<item>" <file>...
 Swivel.exe --edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>...
 Swivel.exe --recognize <image>
-Swivel.exe --tool <text|shelf|quick|presets> [file]...
+Swivel.exe --tool <text|shelf|quick|presets|feel|clothesline|style|colors> [file]...
 Swivel.exe --demo <convert|tools|actions> <file> [script] [style]
 Swivel.exe --frames <wheel|list|shelf|notes|clothesline> <out dir> [light|dark]
 Swivel.exe --rope-frames <out dir>
 Swivel.exe --feedback <check|play>
 ```
 
-`SWIVEL_SETTINGS=<file>` uses a separate settings file, `SWIVEL_TAB=<0-9>` opens a settings page,
+`SWIVEL_SETTINGS=<file>` uses a separate settings file, `SWIVEL_TAB=<0-11>` opens a settings page,
 `SWIVEL_SCREENSHOTS=<folder>` watches another folder instead of Screenshots, `SWIVEL_SHOW_ROPE=1` lowers the rope at
 launch. Code layout and house rules for contributors are in [AGENTS.md](AGENTS.md).
 
@@ -83,7 +85,7 @@ launch. Code layout and house rules for contributors are in [AGENTS.md](AGENTS.m
 
 Checked automatically on Windows 11 (200 % display scaling):
 
-- `./test.ps1`: 196 tests pass — converters (every image format round trip, EXIF orientation, alpha, GIF encoder,
+- `./test.ps1`: 225 tests pass — converters (every image format round trip, EXIF orientation, alpha, GIF encoder,
   PDF structure, all audio containers, generated MP4 through every video option, archives incl. zip-slip),
   documents and the PDF engine (read/write combinations, CJK text → PDF → text, xref streams, encrypted files,
   merge/split/rotate/compress/crop), wheel hit-testing for all five templates, the drag tap state machine and sound

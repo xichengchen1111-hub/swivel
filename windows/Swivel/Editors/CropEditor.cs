@@ -403,13 +403,14 @@ sealed class CropView : PictureCanvas
 
     bool Advance(double dt)
     {
-        for (int i = 0; i < 4; i++) shown[i].Step(dt);
-        foreach (var key in CropHandles.All) { var s = growth[key]; s.Step(dt); growth[key] = s; }
-        press.Step(dt);
-        grid.Step(dt);
-        guideX.Step(dt);
-        guideY.Step(dt);
-        pill.Step(dt);
+        var tuning = ToolUI.Tuning;
+        for (int i = 0; i < 4; i++) shown[i].Step(dt, tuning);
+        foreach (var key in CropHandles.All) { var s = growth[key]; s.Step(dt, tuning); growth[key] = s; }
+        press.Step(dt, tuning);
+        grid.Step(dt, tuning);
+        guideX.Step(dt, tuning);
+        guideY.Step(dt, tuning);
+        pill.Step(dt, tuning);
         RedrawOverlay();
         return !(shown.All(s => s.IsSettled) && growth.Values.All(s => s.IsSettled)
                  && press.IsSettled && grid.IsSettled && guideX.IsSettled && guideY.IsSettled && pill.IsSettled);
@@ -858,7 +859,7 @@ sealed class CompressEditor : Editor
     readonly DetentSlider quality;
     readonly TextBlock qualityLabel;
     readonly ComboBox maxSize, format;
-    readonly TextBlock estimate = new() { FontWeight = FontWeights.SemiBold, FontSize = 13, VerticalAlignment = VerticalAlignment.Center };
+    readonly TextBlock estimate = ToolUI.Scaled(new TextBlock { FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center }, 13);
     readonly DispatcherTimer calculating;
     readonly LiveRender<Estimate?> estimator;
 

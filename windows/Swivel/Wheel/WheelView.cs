@@ -133,8 +133,15 @@ sealed class WheelView : FrameworkElement
     Point? openPoint;
     /// Where the pointer is (y-up view coordinates), for the light that follows it across a raised sector.
     Point? pointer;
-    /// Widest header the current page can show, so the header doesn't shift sideways as items are hovered.
-    double headerTitleWidth;
+    /// Every header title the current page can show; the header is sized for the widest, so it doesn't shift sideways
+    /// as items are hovered. Measured when drawn, at the current text size.
+    List<string> headerTitles = [];
+
+    /// The user's Feel & Text motion for pop-up menus (1.3), used by every spring and clock of the menu.
+    /// `TuningOverride` lets the Feel & Text page preview a tuning before it is saved. Under reduced motion the
+    /// tuned 1.2 timing stays, since nothing travels anyway.
+    public MotionTuning? TuningOverride { get; set; }
+    public MotionTuning Tuning => Motion.Reduced ? MotionTuning.Default : TuningOverride ?? Prefs.Interaction[FeelArea.Menu];
 
     bool cancelArmed;
     /// Releasing now would cancel: the pointer came back to the hub after visiting an item.
@@ -171,9 +178,21 @@ sealed class WheelView : FrameworkElement
         Width = viewSize.Width;
         Height = viewSize.Height;
         SnapsToDevicePixels = false;
-        Unloaded += (_, _) => driver.Stop();
-        Loaded += (_, _) => Invalidate();
+        Unloaded += (_, _) =>
+        {
+            driver.Stop();
+            Prefs.Changed -= PrefsChanged;
+        };
+        Loaded += (_, _) =>
+        {
+            // Palettes, rope colours and text size apply to a menu already on screen (and to the Settings previews).
+            Prefs.Changed -= PrefsChanged;
+            Prefs.Changed += PrefsChanged;
+            Invalidate();
+        };
     }
+
+    void PrefsChanged() => Dispatcher.BeginInvoke(Invalidate);
 
     protected override int VisualChildrenCount => visuals.Count;
     protected override Visual GetVisualChild(int index) => visuals[index];
@@ -197,8 +216,7 @@ sealed class WheelView : FrameworkElement
         // Tags on the rope swing in as they appear (gently: still well damped); everything else settles without overshoot.
         var bloom = style == MenuStyle.Clothesline ? (Response: 0.42, Damping: 0.62) : Tune.Bloom;
         blooms = items.Select(_ => new Spring(1, bloom.Response, bloom.Damping)).ToArray();
-        headerTitleWidth = new[] { mode.Title(), L("Cancel") }.Concat(items.Select(i => $"{mode.Title()}: {i.DisplayTitle}"))
-            .Select(t => painter.Width(t, Look.UI, FontWeights.Bold, 13)).DefaultIfEmpty(0).Max();
+        headerTitles = [.. new[] { mode.Title(), L("Cancel") }.Concat(items.Select(i => $"{mode.Title()}: {i.DisplayTitle}"))];
         bloomClock = double.PositiveInfinity;
         swap.Snap(1);
         rowAlpha.Snap(0);
@@ -290,16 +308,18 @@ sealed class WheelView : FrameworkElement
     /// Advances every spring by `dt` seconds. Returns true while anything is still moving.
     public bool Advance(double dt)
     {
+        var tuning = Tuning;
         if (!double.IsInfinity(bloomClock))
         {
-            bloomClock += dt;
+            // The stagger and the press hold run on the tuned clock too, so a faster menu is faster throughout.
+            bloomClock += dt * tuning.SafeSpeed;
             for (int i = 0; i < blooms.Length; i++)
                 if (bloomClock >= i * Tune.BloomStagger) blooms[i].Target = 1;
             if (bloomClock >= blooms.Length * Tune.BloomStagger) bloomClock = double.PositiveInfinity;
         }
         if (!double.IsInfinity(pressClock))
         {
-            pressClock += dt;
+            pressClock += dt * tuning.SafeSpeed;
             if (pressClock >= Tune.PressHold && press.Target == 1)
             {
                 press.Response = Tune.PressOut.Response;
@@ -309,18 +329,18 @@ sealed class WheelView : FrameworkElement
                 pressClock = double.PositiveInfinity;
             }
         }
-        for (int i = 0; i < pops.Length; i++) pops[i].Step(dt);
-        for (int i = 0; i < blooms.Length; i++) blooms[i].Step(dt);
-        press.Step(dt);
-        exit.Step(dt);
-        turn.Step(dt);
-        reveal.Step(dt);
-        dial.Step(dt);
-        dialAlpha.Step(dt);
-        swap.Step(dt);
-        row.Step(dt);
-        rowAlpha.Step(dt);
-        hubPress.Step(dt);
+        for (int i = 0; i < pops.Length; i++) pops[i].Step(dt, tuning);
+        for (int i = 0; i < blooms.Length; i++) blooms[i].Step(dt, tuning);
+        press.Step(dt, tuning);
+        exit.Step(dt, tuning);
+        turn.Step(dt, tuning);
+        reveal.Step(dt, tuning);
+        dial.Step(dt, tuning);
+        dialAlpha.Step(dt, tuning);
+        swap.Step(dt, tuning);
+        row.Step(dt, tuning);
+        rowAlpha.Step(dt, tuning);
+        hubPress.Step(dt, tuning);
         dirty = true;
         return !IsSettled;
     }
@@ -385,8 +405,18 @@ sealed class WheelView : FrameworkElement
         previousHeadline = Headline(old);
         swap.Snap(0);
         swap.Target = 1;
-        if (IsLive && hovered != null && pressed == null) Feedback.Hover();
+        if (IsLive && hovered != null && pressed == null && !quietHover) Feedback.Hover();
         Kick();
+    }
+
+    bool quietHover;
+
+    /// Shows an item hovered, animated but without the hover's sound (a preview's resting picture).
+    public void ShowHover(int? index)
+    {
+        quietHover = true;
+        try { Hovered = index is { } i && i >= 0 && i < items.Count ? i : null; }
+        finally { quietHover = false; }
     }
 
     /// The angle equivalent to `angle` (mod 360) closest to `reference`, so the dial turns the short way.
@@ -629,7 +659,7 @@ sealed class WheelView : FrameworkElement
             m.Scale(scale, scale);
             m.Rotate(tilt);
             m.Translate(mid.X, mid.Y);
-            var path = new RectangleGeometry(rect) { Transform = new MatrixTransform(m) };
+            var path = new RectangleGeometry(rect, 8, 8) { Transform = new MatrixTransform(m) };
             result.Add(new Slot
             {
                 Path = Frozen(path), Label = m.Transform(new Point(mid.X, mid.Y - 4)), Angle = tilt,
@@ -992,20 +1022,22 @@ sealed class WheelView : FrameworkElement
         var rect = new Rect(0, viewSize.Height - HeaderHeight, viewSize.Width, HeaderHeight);
         var title = Headline(hovered);
         var detail = cancelArmed ? L("release to cancel") : hovered == null ? Subtitle : L("drop to apply");
+        FontWeight bold = Fw(FontWeights.Bold), regular = Fw(FontWeights.Normal), semibold = Fw(Semibold);
+        double titleSize = Fs(13), detailSize = Fs(11), hintSize = Fs(9);
         // Sized for the widest title this page can show, so hovering never slides the header sideways.
-        double shownTitle = painter.Width(title, Look.UI, FontWeights.Bold, 13);
-        double titleWidth = Math.Max(shownTitle, headerTitleWidth);
+        double shownTitle = painter.Width(title, Look.UI, bold, titleSize);
+        double titleWidth = Math.Max(shownTitle, headerTitles.Select(t => painter.Width(t, Look.UI, bold, titleSize)).DefaultIfEmpty(0).Max());
         double detailWidth = Math.Min(new[] { Subtitle, L("drop to apply"), L("release to cancel") }
-            .Max(t => painter.Width(t, Look.UI, FontWeights.Normal, 11)), 150);
+            .Max(t => painter.Width(t, Look.UI, regular, detailSize)), 150);
         // Windows key names are words ("Shift next"), not symbols, so the dots' room follows the hint's width.
         // In a narrow menu the hint shortens to the key's name, so the detail text keeps its room.
         headerHint = PageHint;
-        double hintWidth = pageCount > 1 ? Math.Min(painter.Width(headerHint, Look.UI, Semibold, 9), 64) : 0;
+        double hintWidth = pageCount > 1 ? Math.Min(painter.Width(headerHint, Look.UI, semibold, hintSize), 64) : 0;
         double dotsWidth = pageCount > 1 ? (pageCount - 1) * 7 + 4 + 10 + hintWidth + 8 : 0;
         if (pageCount > 1 && titleWidth + Math.Min(detailWidth, 80) + dotsWidth + 34 > viewSize.Width - 8)
         {
             headerHint = mode.KeySymbol();
-            hintWidth = Math.Min(painter.Width(headerHint, Look.UI, Semibold, 9), 64);
+            hintWidth = Math.Min(painter.Width(headerHint, Look.UI, semibold, hintSize), 64);
             dotsWidth = (pageCount - 1) * 7 + 4 + 10 + hintWidth + 8;
         }
         double capsuleWidth = Math.Min(titleWidth + detailWidth + dotsWidth + 34, viewSize.Width - 8);
@@ -1025,14 +1057,14 @@ sealed class WheelView : FrameworkElement
         double x = capsule.X + 13;
         double titleShown = Math.Min(shownTitle, titleWidth);
         var dc = painter.Plain;
-        painter.Text(dc, title, new Point(x + titleShown / 2, midY - (Motion.Reduced ? 0 : 3 * (1 - sw))), Look.UI, FontWeights.Bold, 13,
-            (hovered == null ? Ink : AccentInk).WithAlpha(0.4 + 0.6 * sw), titleWidth);
+        painter.Text(dc, title, new Point(x + titleShown / 2, midY - (Motion.Reduced ? 0 : 3 * (1 - sw))), Look.UI, bold, titleSize,
+            (hovered == null ? Ink : AccentInk).WithAlpha(0.4 + 0.6 * sw), titleWidth, minSize: MinText);
         x += titleShown + 8;
-        double shownDetail = Math.Min(painter.Width(detail, Look.UI, FontWeights.Normal, 11), detailWidth);
+        double shownDetail = Math.Min(painter.Width(detail, Look.UI, regular, detailSize), detailWidth);
         if (detailWidth > 4)
-            painter.Text(dc, detail, new Point(x + shownDetail / 2, midY), Look.UI, FontWeights.Normal, 11, Ink.WithAlpha(0.55), detailWidth);
+            painter.Text(dc, detail, new Point(x + shownDetail / 2, midY), Look.UI, regular, detailSize, Ink.WithAlpha(0.55), detailWidth, minSize: MinText);
         if (pageCount > 1)
-            DrawHeaderDots(dc, capsule.Right - 13 - hintWidth - 8 - (pageCount - 1) * 7, midY, hintWidth);
+            DrawHeaderDots(dc, capsule.Right - 13 - hintWidth - 8 - (pageCount - 1) * 7, midY, hintWidth, semibold, hintSize);
         painter.Restore();
     }
 
@@ -1040,15 +1072,15 @@ sealed class WheelView : FrameworkElement
 
     double DotSize(int p) => p == page && !Motion.Reduced ? 4 * (1 + 0.5 * (1 - Math.Clamp(reveal.Value, 0, 1))) : 4;
 
-    void DrawHeaderDots(System.Windows.Media.DrawingContext dc, double dotsX, double y, double hintWidth)
+    void DrawHeaderDots(System.Windows.Media.DrawingContext dc, double dotsX, double y, double hintWidth, FontWeight weight, double size)
     {
         for (int p = 0; p < pageCount; p++)
         {
-            double size = DotSize(p);
-            dc.DrawEllipse(Look.Brush(p == page ? AccentColour : Ink.WithAlpha(0.3)), null, new Point(dotsX + p * 7, y), size / 2, size / 2);
+            double dot = DotSize(p);
+            dc.DrawEllipse(Look.Brush(p == page ? AccentColour : Ink.WithAlpha(0.3)), null, new Point(dotsX + p * 7, y), dot / 2, dot / 2);
         }
         double hintX = dotsX + (pageCount - 1) * 7 + 10;
-        painter.Text(dc, headerHint, new Point(hintX + hintWidth / 2, y), Look.UI, Semibold, 9, Ink.WithAlpha(0.55), hintWidth);
+        painter.Text(dc, headerHint, new Point(hintX + hintWidth / 2, y), Look.UI, weight, size, Ink.WithAlpha(0.55), hintWidth, minSize: MinText);
     }
 
     string headerHint = "";
@@ -1104,28 +1136,36 @@ sealed class WheelView : FrameworkElement
             double bloom = Math.Clamp(BloomValue(i) * 1.5, 0, 1);
             var color = Ink.Mix(Colors.White, under).WithAlpha(bloom * (1 - ExitValue(i)) * (i == hovered ? 1 : reveal.Value));
             double nudge = Motion.Reduced ? 0 : 3 * Math.Clamp(PopValue(i), 0, 1) - 8 * (1 - bloom);
-            painter.TextLeft(dc, items[i].DisplayTitle, slot.Label.X + nudge, slot.Label.Y, Look.UI, FontWeights.Medium, slot.FontSize, color, slot.MaxWidth);
+            painter.TextLeft(dc, items[i].DisplayTitle, slot.Label.X + nudge, slot.Label.Y, Look.UI, Fw(FontWeights.Medium), Fs(slot.FontSize), color, slot.MaxWidth);
         }
     }
 
-    static readonly Color[] ShelfPalette =
-    [
-        Look.Rgb(0.55, 0.16, 0.18), Look.Rgb(0.15, 0.25, 0.45), Look.Rgb(0.18, 0.38, 0.27), Look.Rgb(0.78, 0.58, 0.2),
-        Look.Rgb(0.16, 0.45, 0.48), Look.Rgb(0.42, 0.22, 0.42), Look.Rgb(0.33, 0.36, 0.4), Look.Rgb(0.66, 0.3, 0.16),
-    ];
+    // MARK: Quiet templates (1.3.3)
+    //
+    // Bookshelf, Sticky Notes and Clothesline draw near-neutral opaque cards (MenuAppearance) with fine edges and
+    // gentle shadows, in the system font. Bookshelf and Sticky Notes take their card and rail colours from the user's
+    // template palette; the Clothesline template's rope and pegs follow the real clothesline's colours. Only a small
+    // selection tint uses the accent colour.
+
+    /// A fine card edge that takes on some of the accent as the item is selected.
+    static Pen CardEdge(MenuAppearance theme, double tint) =>
+        Painter.Pen(theme.Edge.Mix(MenuAppearance.Accent, 0.45 * tint), 0.75 + 0.5 * tint);
 
     void DrawShelf()
     {
+        bool dark = IsDark;
+        var theme = new MenuAppearance(dark);
+        var palette = Prefs.TemplateColors[ColorTemplate.Shelf];
         DrawHeader(onGlass: false);
 
-        // Wooden plank with brackets.
+        // A satin rail and inset brackets replace the varnished wood and gold bands.
         var plank = new Rect(10, ShelfTop - 16, Math.Max(viewSize.Width - 20, 0), 16);
-        using (var s = painter.Shadow(10, 0.35))
-            s.Context.DrawRoundedRectangle(Painter.Gradient(plank, -90, Look.Rgb(0.72, 0.52, 0.33), Look.Rgb(0.5, 0.33, 0.19)), null, plank, 3, 3);
+        using (var s = painter.Shadow(7, 0.14))
+            s.Context.DrawRoundedRectangle(Look.Brush(palette.RailColor(dark)), null, plank, 5, 5);
         var dc = painter.Plain;
-        dc.DrawRectangle(Look.Brush(Look.Rgb(0.85, 0.68, 0.48)), null, new Rect(plank.X + 2, plank.Bottom - 2, Math.Max(plank.Width - 4, 0), 2));
+        dc.DrawRoundedRectangle(null, Painter.Pen(theme.Edge, 0.75), plank, 5, 5);
         foreach (double bx in new[] { plank.X + 22, plank.Right - 34 })
-            dc.DrawRoundedRectangle(Look.Brush(Look.Rgb(0.35, 0.35, 0.38)), null, new Rect(bx, plank.Y - 12, 12, 14), 2, 2);
+            dc.DrawRoundedRectangle(Look.Brush(theme.Trim), null, new Rect(bx, plank.Y - 10, 12, 12), 3, 3);
 
         // Books rise out from behind the plank as the menu opens, so clip them to above its top.
         painter.Save();
@@ -1135,78 +1175,74 @@ sealed class WheelView : FrameworkElement
         {
             var slot = slots[i];
             if (slot.Alpha <= 0.01) continue;
-            double p = Math.Clamp(PopValue(i), 0, 1);
+            double p = Math.Clamp(PopValue(i), 0, 1), tint = TintValue(i);
             painter.Save();
             painter.SetAlpha(slot.Alpha);
-            var color = ShelfPalette[i % ShelfPalette.Length].Mix(Look.Accent, TintValue(i));
-            if (i == pressed && Flash > 0) color = color.Mix(Colors.White, 0.3 * Flash);
-            using (var s = painter.Shadow(4 + 6 * p, 0.35, 1 + 2 * p))
+            var color = palette.Card(i, dark, tint);
+            if (i == pressed && Flash > 0) color = color.Mix(theme.Surface, 0.3 * Flash);
+            using (var s = painter.Shadow(3 + 4 * p, 0.15, 1 + p))
                 s.Context.DrawGeometry(Look.Brush(color), null, slot.Path);
-            var rect = slot.Path.Bounds;
             var book = painter.Plain;
-            // Spine details: darker edges, two gilt bands.
-            book.DrawGeometry(Painter.Gradient(rect, 0, Colors.Black.WithAlpha(0.25), Colors.Black.WithAlpha(0), Colors.Black.WithAlpha(0), Colors.Black.WithAlpha(0.3)), null, slot.Path);
-            var gilt = Look.Brush(Look.Rgb(0.95, 0.82, 0.5, 0.75 + 0.15 * p));
-            book.DrawRectangle(gilt, null, new Rect(rect.X + 3, rect.Bottom - 16, Math.Max(rect.Width - 6, 0), 2));
-            book.DrawRectangle(gilt, null, new Rect(rect.X + 3, rect.Y + 14, Math.Max(rect.Width - 6, 0), 2));
-            DrawLabel(items[i].DisplayTitle, slot, Colors.White.WithAlpha(i == hovered ? 1 : reveal.Value), glow: false, weight: FontWeights.Bold);
+            book.DrawGeometry(null, CardEdge(theme, tint), slot.Path);
+            // Two hairline bands where the gilt used to be.
+            var rect = slot.Path.Bounds;
+            var band = Look.Brush(theme.Edge);
+            book.DrawRectangle(band, null, new Rect(rect.X + 5, rect.Bottom - 16, Math.Max(rect.Width - 10, 0), 0.75));
+            book.DrawRectangle(band, null, new Rect(rect.X + 5, rect.Y + 14, Math.Max(rect.Width - 10, 0), 0.75));
+            DrawLabel(items[i].DisplayTitle, slot, palette.Ink(i, dark, tint).WithAlpha(i == hovered ? 1 : reveal.Value),
+                glow: false, weight: Semibold);
             painter.Restore();
         }
         painter.Restore();
     }
 
-    static readonly Color[] NoteColours =
-    [
-        Look.Rgb(1, 0.92, 0.45), Look.Rgb(1, 0.72, 0.8), Look.Rgb(0.68, 0.93, 0.7),
-        Look.Rgb(0.66, 0.85, 1), Look.Rgb(1, 0.78, 0.5), Look.Rgb(0.85, 0.76, 1),
-    ];
-
     void DrawNotes()
     {
+        bool dark = IsDark;
+        var theme = new MenuAppearance(dark);
+        var palette = Prefs.TemplateColors[ColorTemplate.Notes];
         DrawHeader(onGlass: false);
         var all = Slots();
         foreach (int i in Enumerable.Range(0, all.Count).OrderBy(PopValue))
         {
             var slot = all[i];
             if (slot.Alpha <= 0.01) continue;
-            double p = Math.Clamp(PopValue(i), 0, 1);
+            double p = Math.Clamp(PopValue(i), 0, 1), tint = TintValue(i), lifted = p * (1 - PressValue(i));
             painter.Save();
             painter.SetAlpha(slot.Alpha);
-            var color = NoteColours[i % NoteColours.Length];
-            if (i == pressed && Flash > 0) color = color.Mix(Colors.White, 0.35 * Flash);
-            using (var s = painter.Shadow(6 + 8 * p * (1 - PressValue(i)), 0.3, 1 + 4 * p * (1 - PressValue(i))))
+            var color = palette.Card(i, dark, tint);
+            if (i == pressed && Flash > 0) color = color.Mix(theme.Surface, 0.3 * Flash);
+            using (var s = painter.Shadow(5 + 5 * lifted, 0.14, 1 + 2 * lifted))
                 s.Context.DrawGeometry(Look.Brush(color), null, slot.Path);
             var dc = painter.Plain;
+            dc.DrawGeometry(null, CardEdge(theme, tint), slot.Path);
+            // A small paper tab keeps the note metaphor without a large strip of tape.
             var box = slot.Path.Bounds;
-            // Slightly darker bottom edge, like a curled note.
-            dc.DrawGeometry(Painter.Gradient(box, -90, Colors.Black.WithAlpha(0), Colors.Black.WithAlpha(0.08)), null, slot.Path);
-            if (p > 0.01) dc.DrawGeometry(null, Painter.Pen(Look.Accent.WithAlpha(TintValue(i)), 3), slot.Path);
-            // A strip of tape across the top.
-            var tape = new RectangleGeometry(new Rect(box.X + box.Width / 2 - 18, box.Bottom - 12, 36, 14));
+            var tab = new RectangleGeometry(new Rect(box.X + box.Width / 2 - 13, box.Bottom - 10, 26, 5), 2.5, 2.5);
             var m = Matrix.Identity;
-            m.RotateAt(slot.Angle - 4, box.X + box.Width / 2, box.Bottom - 5);
-            tape.Transform = new MatrixTransform(m);
-            tape.Freeze();
-            dc.DrawGeometry(Look.Brush(Look.Gray(1, 0.55)), null, tape);
-            DrawLabel(items[i].DisplayTitle, slot, Look.Gray(0.15, i == hovered ? 1 : reveal.Value), glow: false,
-                weight: FontWeights.Bold, family: Look.Hand, sizeScale: 0.86);
+            m.RotateAt(slot.Angle, box.X + box.Width / 2, box.Bottom - 5);
+            tab.Transform = new MatrixTransform(m);
+            tab.Freeze();
+            dc.DrawGeometry(Look.Brush(theme.Trim.WithAlpha(0.4)), null, tab);
+            DrawLabel(items[i].DisplayTitle, slot, palette.Ink(i, dark, tint).WithAlpha(i == hovered ? 1 : reveal.Value),
+                glow: false, weight: FontWeights.Medium);
             painter.Restore();
         }
     }
 
     void DrawClothesline()
     {
+        bool dark = IsDark;
+        var theme = new MenuAppearance(dark);
+        var colors = Prefs.ClotheslineColors;
         DrawHeader(onGlass: false);
         double left = 22, right = viewSize.Width - 22;
 
-        // Posts.
         foreach (double x in new[] { left, right })
         {
-            using var s = painter.Shadow(4, 0.3);
-            s.Context.DrawRoundedRectangle(Look.Brush(Look.Rgb(0.55, 0.38, 0.24)), null,
-                new Rect(x - 4, 6, 8, Math.Max(RopeY(x) - 6 + 8, 0)), 3, 3);
+            using var s = painter.Shadow(3, 0.14);
+            s.Context.DrawRoundedRectangle(Look.Brush(theme.Rail), null, new Rect(x - 4, 6, 8, Math.Max(RopeY(x) - 6 + 8, 0)), 4, 4);
         }
-        // Rope.
         var rope = new StreamGeometry();
         using (var g = rope.Open())
         {
@@ -1214,41 +1250,50 @@ sealed class WheelView : FrameworkElement
             for (double x = left; x <= right + 0.001; x += 4) g.LineTo(new Point(x, RopeY(x)), true, true);
         }
         rope.Freeze();
-        using (var s = painter.Shadow(3, 0.35))
-            s.Context.DrawGeometry(null, Painter.Pen(Look.Rgb(0.93, 0.9, 0.84), 2.5, round: true), rope);
+        using (var s = painter.Shadow(2, 0.18))
+            s.Context.DrawGeometry(null, Painter.Pen(colors.Rope.Color, 2.5, round: true), rope);
 
         var slots = Slots();
+        var peg = Look.Brush(colors.Peg.Color);
+        var hinge = Look.Brush(theme.Edge);
         for (int i = 0; i < slots.Count; i++)
         {
             var slot = slots[i];
             if (slot.Alpha <= 0.01) continue;
-            double p = Math.Clamp(PopValue(i), 0, 1);
+            double p = Math.Clamp(PopValue(i), 0, 1), tint = TintValue(i);
             painter.Save();
             painter.SetAlpha(slot.Alpha);
-            var kraft = Look.Rgb(0.86, 0.74, 0.56).Mix(Look.Accent, TintValue(i));
-            if (i == pressed && Flash > 0) kraft = kraft.Mix(Colors.White, 0.3 * Flash);
-            using (var s = painter.Shadow(5 + 5 * p, 0.32, 1 + 2 * p))
-                s.Context.DrawGeometry(Look.Brush(kraft), null, slot.Path);
-            painter.Plain.DrawGeometry(null, Painter.Pen(Colors.Black.WithAlpha(0.12), 1), slot.Path);
+            var card = theme.Card(i, tint);
+            if (i == pressed && Flash > 0) card = card.Mix(theme.Surface, 0.3 * Flash);
+            using (var s = painter.Shadow(4 + 4 * p, 0.15, 1 + p))
+                s.Context.DrawGeometry(Look.Brush(card), null, slot.Path);
+            painter.Plain.DrawGeometry(null, CardEdge(theme, tint), slot.Path);
             // Peg where the tag meets the rope.
             var bounds = slot.Path.Bounds;
             double x = bounds.X + bounds.Width / 2;
             double pegTop = RopeY(x) + 7;
-            using (var s = painter.Shadow(2, 0.35))
-                s.Context.DrawRoundedRectangle(Look.Brush(Look.Rgb(0.76, 0.56, 0.36)), null, new Rect(x - 4, pegTop - 24, 8, 24), 2, 2);
-            painter.Plain.DrawRectangle(Look.Brush(Look.Gray(0.55)), null, new Rect(x - 4, pegTop - 12, 8, 2));
-            DrawLabel(items[i].DisplayTitle, slot,
-                Look.Gray(0.18).Mix(Colors.White, TintValue(i)).WithAlpha(i == hovered ? 1 : reveal.Value), glow: false, weight: FontWeights.Bold);
+            using (var s = painter.Shadow(2, 0.16))
+                s.Context.DrawRoundedRectangle(peg, null, new Rect(x - 4, pegTop - 24, 8, 24), 3, 3);
+            painter.Plain.DrawRectangle(hinge, null, new Rect(x - 4, pegTop - 12, 8, 1));
+            DrawLabel(items[i].DisplayTitle, slot, theme.Ink.WithAlpha(i == hovered ? 1 : reveal.Value), glow: false,
+                weight: FontWeights.Medium);
             painter.Restore();
         }
     }
 
+    // Menu text follows Feel & Text's size and bold text (the Mac's AppTypography.font). Sizes here are the Mac's
+    // points at standard size; `Fs`/`Fw` apply the user's choice.
+    static double Fs(double size) => AppTypography.Size(size);
+    static FontWeight Fw(FontWeight weight) => AppTypography.Weight(weight);
+    /// Long labels shrink to fit, but never below the chosen reading size's floor; past that they lose their middle.
+    static double MinText => Fs(7);
+
     /// Draws a slot's label at its centre, rotated by the slot's angle.
-    void DrawLabel(string text, Slot slot, Color color, bool glow, FontWeight? weight = null, FontFamily? family = null, double sizeScale = 1)
+    void DrawLabel(string text, Slot slot, Color color, bool glow, FontWeight? weight = null)
     {
         var dc = glow ? painter.Glow(labelGlow) : painter.Plain;
-        painter.Text(dc, text, slot.Label, family ?? Look.UI, weight ?? Semibold, slot.FontSize * sizeScale, color, slot.MaxWidth,
-            slot.Angle, slot.LabelScale);
+        painter.Text(dc, text, slot.Label, Look.UI, Fw(weight ?? Semibold), Fs(slot.FontSize), color, slot.MaxWidth,
+            slot.Angle, slot.LabelScale, MinText);
     }
 
     /// Centred text; glows by default, like the Mac's drawText.
@@ -1256,6 +1301,6 @@ sealed class WheelView : FrameworkElement
     {
         if (color.A < 3) return;
         var dc = glow ? painter.Glow(labelGlow) : painter.Plain;
-        painter.Text(dc, text, at, Look.UI, weight, size, color, maxWidth);
+        painter.Text(dc, text, at, Look.UI, Fw(weight), Fs(size), color, maxWidth, minSize: MinText);
     }
 }

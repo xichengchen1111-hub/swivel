@@ -266,7 +266,7 @@ sealed class AnnotateCanvas : PictureCanvas
 
     bool Advance(double dt)
     {
-        pop.Step(dt);
+        pop.Step(dt, ToolUI.Tuning);
         popScale.ScaleX = popScale.ScaleY = pop.Value;
         if (pop.IsSettled) SettlePop();
         return popping != null;

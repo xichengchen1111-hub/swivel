@@ -746,4 +746,38 @@ public sealed class ToolTests
         StringAssert.Contains(filter, "*.heic");
         Assert.AreEqual(4, filter.Split('|').Length, "Images|patterns|All files|*.*");
     }
+
+    // MARK: Feel & Text (1.3)
+
+    [TestMethod]
+    public void ToolPanelsFollowTheToolsAreaAndTextSize() => Sta(() =>
+    {
+        Prefs.Interaction = Prefs.Interaction.With(FeelArea.Tools, new MotionTuning { Speed = 1.5, Bounce = 0 }) with { TextSize = TextSize.Large };
+        Assert.AreEqual(1.5, ToolUI.Tuning.Speed);
+        Assert.AreEqual(1, Prefs.Interaction.Clothesline.Speed, "areas stay independent");
+        // Text with a size of its own scales too; the panel's root carries the inherited size.
+        Assert.AreEqual(12 * 1.15, ToolUI.Note("x").FontSize, 1e-9);
+        var panel = new ToolPanel();
+        try
+        {
+            Assert.AreEqual(AppTypography.BaseSize * 1.15, panel.FontSize, 1e-9);
+            Prefs.Interaction = Prefs.Interaction with { TextSize = TextSize.Standard };
+            Pump(50);
+            Assert.AreEqual(AppTypography.BaseSize, panel.FontSize, 1e-9);
+        }
+        finally { panel.Close(); }
+        // A tool spring stepped with a faster, calm tuning gets there sooner and never overshoots.
+        Prefs.Interaction = Prefs.Interaction.With(FeelArea.Tools, new MotionTuning { Speed = 1.5, Bounce = 0 });
+        var original = new Spring(0, response: 0.32, damping: 0.8) { Target = 1 };
+        var tuned = original;
+        double peak = 0;
+        for (int i = 0; i < 120; i++)
+        {
+            original.Step(1.0 / 120);
+            tuned.Step(1.0 / 120, ToolUI.Tuning);
+            peak = Math.Max(peak, tuned.Value);
+            if (i == 10) Assert.IsGreaterThan(original.Value, tuned.Value);
+        }
+        Assert.IsLessThanOrEqualTo(1 + 1e-9, peak);
+    });
 }

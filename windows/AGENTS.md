@@ -24,8 +24,8 @@ Several agents may build at once: always pass your own `--artifacts-path` (a fol
 
 Command-line test modes (same as the Mac app): `--run <convert|tools|actions> "<item>" <file>…`,
 `--edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>…`, `--recognize <image>`,
-`--tool <text|shelf|quick|presets> [file]…`, `--demo`, `--frames`, `--feedback <check|play>`. `SWIVEL_SETTINGS=<file>`
-points the app at a separate settings file; `SWIVEL_TAB=<0-9>` opens a settings page. Do not start the app without
+`--tool <text|shelf|quick|presets|feel|clothesline|style|colors> [file]…`, `--demo`, `--frames`, `--feedback <check|play>`. `SWIVEL_SETTINGS=<file>`
+points the app at a separate settings file; `SWIVEL_TAB=<0-11>` opens a settings page. Do not start the app without
 arguments while testing: that starts the tray icon, the drag watcher and global hotkeys on the owner's desktop.
 
 ## Code map (`windows/Swivel`)

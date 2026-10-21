@@ -596,7 +596,7 @@ sealed class ShelfCell : Grid
     readonly Image icon = new() { Width = 30, Height = 30, Stretch = Stretch.Uniform };
     readonly TextBlock glyph;
     readonly TextBlock title = new() { TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Bottom };
-    readonly TextBlock folder = new() { FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Top };
+    readonly TextBlock folder = ToolUI.Scaled(new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Top }, 11);
     readonly Border glow = new() { CornerRadius = new CornerRadius(6), Opacity = 0, Margin = new Thickness(-4, -1, -4, -1), IsHitTestVisible = false };
     readonly TranslateTransform shift = new();
     readonly FrameDriver driver = new();
@@ -608,7 +608,7 @@ sealed class ShelfCell : Grid
     public ShelfCell(string path)
     {
         Path = path;
-        Height = 44;
+        MinHeight = 44;   // grows with larger text instead of clipping it
         RenderTransform = shift;
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
         ColumnDefinitions.Add(new ColumnDefinition());
@@ -705,8 +705,8 @@ sealed class ShelfCell : Grid
 
     bool Frame(double dt)
     {
-        slide.Step(dt);
-        fade.Step(dt);
+        slide.Step(dt, ToolUI.Tuning);
+        fade.Step(dt, ToolUI.Tuning);
         shift.Y = slide.Value;
         Opacity = Math.Clamp(fade.Value, 0, 1);
         if (glowAge >= 0)
@@ -718,7 +718,7 @@ sealed class ShelfCell : Grid
                 glowLevel.Target = 0;
                 glowLevel.Response = 0.55;
             }
-            glowLevel.Step(dt);
+            glowLevel.Step(dt, ToolUI.Tuning);
             glow.Opacity = Math.Clamp(glowLevel.Value, 0, 1);
             if (glowLevel.Target == 0 && glowLevel.IsSettled) { glowAge = -1; glow.Opacity = 0; }
         }
@@ -759,6 +759,7 @@ sealed class ShelfPreview : Window
         MinHeight = 240;
         ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        AppTypography.Apply(this);
         counter.VerticalAlignment = VerticalAlignment.Center;
         var open = ToolUI.Button(L("Open"), () => { if (Current is { } path) FileActions.Open(path); });
         var reveal = ToolUI.Button(L("Show in File Explorer"), () => { if (Current is { } path) FileActions.Reveal([path]); });
@@ -833,12 +834,12 @@ sealed class ShelfPreview : Window
             {
                 var text = await Task.Run(() => ReadStart(path));
                 if (token != generation) return;
-                body.Content = new TextBox
+                body.Content = ToolUI.Scaled(new TextBox
                 {
                     Text = text, IsReadOnly = true, TextWrapping = TextWrapping.NoWrap, FontFamily = new FontFamily("Cascadia Mono, Consolas"),
-                    FontSize = 12.5, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                     VerticalContentAlignment = VerticalAlignment.Top,
-                };
+                }, 12.5);
             }
             catch (Exception) { if (token == generation) body.Content = Fallback(path); }
         }

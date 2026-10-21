@@ -387,10 +387,11 @@ sealed class IncomingView : FrameworkElement
     static string Hint => "↑  " + L("Drag up to hang");
 
     FormattedText HintText(double pixelsPerDip) => new(Hint, System.Globalization.CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-        new Typeface(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
-        11, Brushes.White, pixelsPerDip);
+        new Typeface(new FontFamily("Segoe UI Variable Text, Segoe UI"), FontStyles.Normal, AppTypography.Weight(FontWeights.SemiBold), FontStretches.Normal),
+        AppTypography.Size(11), Brushes.White, pixelsPerDip);
 
-    Size CapsuleSize => new(Math.Ceiling(HintText(1).Width + 20), 20);
+    // Text size scales the capsule's height as on the Mac; the photo keeps its place above it.
+    Size CapsuleSize => new(Math.Ceiling(HintText(1).Width + 20), 20 * AppTypography.Scale);
 
     Size ContentSize => new(Math.Max(Math.Max(PhotoSize.Width, CapsuleSize.Width), 154), PhotoBottom + PhotoSize.Height);
 
@@ -576,15 +577,15 @@ sealed class IncomingView : FrameworkElement
         clock += dt;
         if (exitProgress is { } progress)
         {
-            progress = Math.Min(progress + dt / ExitDuration, 1);
+            progress = Math.Min(progress + dt * RopeTuning.Tuning.SafeSpeed / ExitDuration, 1);
             exitProgress = progress;
             slide.Snap(Mix.Lerp(exitFrom, Offscreen, RopeTuning.Ease(progress, 0.4, 0, 1, 1)));
         }
-        else slide.Step(dt);
-        alpha.Step(dt);
-        hover.Step(dt);
-        press.Step(dt);
-        ready.Step(dt);
+        else slide.Step(dt, RopeTuning.Tuning);
+        alpha.Step(dt, RopeTuning.Tuning);
+        hover.Step(dt, RopeTuning.Tuning);
+        press.Step(dt, RopeTuning.Tuning);
+        ready.Step(dt, RopeTuning.Tuning);
         Render();
         bool ghosting = AnimateGhost();
         bool gone = exitProgress is { } p ? p >= 1 : alpha.Target == 0 && alpha.Value < 0.02;
@@ -820,7 +821,7 @@ sealed class CardFlight
             Land();
             return false;
         }
-        elapsed += dt;
+        elapsed += dt * RopeTuning.Tuning.SafeSpeed;
         double t = Math.Min(elapsed / Duration, 1);
         double e = RopeTuning.Ease(t, 0.3, 0, 0.2, 1);
         double size = Mix.Lerp(1, goal.Rect.Width / Math.Max(from.Width, 1), e);

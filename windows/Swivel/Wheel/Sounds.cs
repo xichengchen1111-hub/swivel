@@ -6,8 +6,9 @@ namespace Swivel;
 
 enum SoundEffect { Hover, Page, Press, Done, SwitchOn, SwitchOff }
 
-/// Short interface sounds, synthesised once in memory (no bundled audio) and played through a few always-ready
-/// waveOut streams, so a tick starts within a frame and overlapping sounds mix.
+/// Short interface sounds, synthesised in memory (no bundled audio) for the chosen sound style and volume — again
+/// whenever either changes — and played through a few always-ready waveOut streams, so a tick starts within a frame
+/// and overlapping sounds mix.
 ///
 /// The Mac app plays them as system sounds (the alert device and volume). Windows has no low-latency equivalent for
 /// app-made sounds: they go to the default output device under Swivel's own volume slider in the Volume Mixer.
@@ -15,25 +16,45 @@ static partial class Sounds
 {
     static readonly Dictionary<SoundEffect, IntPtr[]> buffers = [];
     static readonly Dictionary<SoundEffect, int[]> lengths = [];
+    /// The style and level the ready buffers were made with (null: none yet).
+    static SoundConfiguration? loaded;
     static double lastHover = double.NegativeInfinity;
     static int variant;
     static bool preparing;
-    /// A sound asked for before the sounds were ready (the first one after launch or after turning sounds on).
+    /// A sound asked for before the sounds were ready (the first one after launch, after turning sounds on, or after
+    /// the style or volume changed).
     static (SoundEffect Effect, double At)? pending;
     static readonly Random random = new();
 
     static double Now => Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
 
+    /// The Feel & Text sound style and volume (1.3). Prefs.SoundEffects stays the master switch.
+    public static SoundConfiguration Configuration => new(Prefs.Interaction.SoundStyle, Prefs.Interaction.Volume);
+
+    /// The configuration of the buffers that are ready, for diagnostics and tests.
+    public static SoundConfiguration? Loaded => loaded;
+
+    /// Whether `effect` should sound at all: sounds on, not at zero volume, and hover ticks only while "hover sound"
+    /// is on (it mutes only the selection ticks; page turns, presses and switches still play).
+    public static bool Wants(SoundEffect effect) =>
+        Prefs.SoundEffects && Configuration.Volume > 0 && (effect != SoundEffect.Hover || Prefs.Interaction.HoverSound);
+
+    /// Tests: how many sounds were sent to the output (whether or not a device took them).
+    internal static int PlayedCount { get; private set; }
+
+    /// Tests: build the sounds but never open the audio device.
+    internal static bool DeviceDisabled { get; set; }
+
     public static void Play(SoundEffect effect)
     {
-        if (!Prefs.SoundEffects) return;
+        if (!Wants(effect)) return;
         if (effect == SoundEffect.Hover)
         {
             double now = Now;
             if (now - lastHover <= 0.045) return;
             lastHover = now;
         }
-        if (!buffers.TryGetValue(effect, out var choices) || choices.Length == 0)
+        if (loaded != Configuration || !buffers.TryGetValue(effect, out var choices) || choices.Length == 0)
         {
             pending = (effect, Now);
             Prepare();
@@ -42,6 +63,7 @@ static partial class Sounds
         // Repeated ticks vary a little in pitch and level, so a sweep doesn't sound mechanical.
         variant = (variant + 1 + random.Next(2)) % choices.Length;
         int index = effect == SoundEffect.Hover ? variant : 0;
+        PlayedCount++;
         WaveOut.Play(choices[index], lengths[effect][index]);
     }
 
@@ -51,11 +73,14 @@ static partial class Sounds
     /// Whether the output stream could be opened (for `--feedback check`).
     public static bool DeviceReady => WaveOut.Open();
 
-    /// Builds the sounds off the UI thread (once) and opens the output streams, so the first tick is on time.
+    /// Builds the sounds for the current style and volume off the UI thread and opens the output streams, so the
+    /// first tick is on time. Only the newest configuration may become active: quieting or turning off sounds while
+    /// a synthesis is running must not play a queued sound at the old level.
     public static void Prepare()
     {
-        if (!Prefs.SoundEffects) return;
-        if (buffers.Count > 0)
+        var requested = Configuration;
+        if (!Prefs.SoundEffects || requested.Volume <= 0) return;
+        if (loaded == requested && buffers.Count > 0)
         {
             WaveOut.Open();
             return;
@@ -65,36 +90,75 @@ static partial class Sounds
         var dispatcher = Dispatcher.CurrentDispatcher;
         Task.Run(() =>
         {
-            var made = new Dictionary<SoundEffect, (IntPtr[], int[])>();
-            foreach (var effect in Enum.GetValues<SoundEffect>())
-            {
-                var variants = SoundSynth.Variants(effect);
-                var ptrs = new IntPtr[variants.Length];
-                var lens = new int[variants.Length];
-                for (int n = 0; n < variants.Length; n++)
-                {
-                    var pcm = SoundSynth.Pcm16(SoundSynth.Samples(effect, variants[n].Pitch, variants[n].Gain));
-                    // Lives for the whole run: waveOut reads it while playing, and the sounds are tiny.
-                    ptrs[n] = Marshal.AllocHGlobal(pcm.Length);
-                    Marshal.Copy(pcm, 0, ptrs[n], pcm.Length);
-                    lens[n] = pcm.Length;
-                }
-                made[effect] = (ptrs, lens);
-            }
+            var made = Synthesize(requested);
             dispatcher.BeginInvoke(() =>
             {
+                preparing = false;
+                if (!Prefs.SoundEffects || requested != Configuration)
+                {
+                    Free(made.Values.SelectMany(m => m.Buffers));
+                    Prepare();
+                    return;
+                }
+                // The streams may still be reading the old buffers: stop them before the memory goes.
+                if (buffers.Count > 0)
+                {
+                    WaveOut.Close();
+                    Free(buffers.Values.SelectMany(b => b));
+                }
                 foreach (var (effect, (ptrs, lens)) in made)
                 {
                     buffers[effect] = ptrs;
                     lengths[effect] = lens;
                 }
-                preparing = false;
+                loaded = requested;
                 WaveOut.Open();
                 // Play what was asked for meanwhile, unless it's now too late to belong to its moment.
-                if (pending is { } p && Now - p.At < 0.4) Play(p.Effect);
+                var queued = pending;
                 pending = null;
+                if (queued is { } p && Now - p.At < 0.4) Play(p.Effect);
             });
         });
+    }
+
+    static Dictionary<SoundEffect, (IntPtr[] Buffers, int[] Lengths)> Synthesize(SoundConfiguration configuration)
+    {
+        var made = new Dictionary<SoundEffect, (IntPtr[], int[])>();
+        foreach (var effect in Enum.GetValues<SoundEffect>())
+        {
+            var variants = SoundSynth.Variants(effect);
+            var ptrs = new IntPtr[variants.Length];
+            var lens = new int[variants.Length];
+            for (int n = 0; n < variants.Length; n++)
+            {
+                var pcm = SoundSynth.Pcm16(SoundSynth.Samples(effect, variants[n].Pitch, variants[n].Gain, configuration));
+                // Lives until the configuration changes: waveOut reads it while playing, and the sounds are tiny.
+                ptrs[n] = Marshal.AllocHGlobal(pcm.Length);
+                Marshal.Copy(pcm, 0, ptrs[n], pcm.Length);
+                lens[n] = pcm.Length;
+            }
+            made[effect] = (ptrs, lens);
+        }
+        return made;
+    }
+
+    static void Free(IEnumerable<IntPtr> memory)
+    {
+        foreach (var ptr in memory.ToList()) Marshal.FreeHGlobal(ptr);
+    }
+
+    /// Tests: drops the ready sounds so the next test starts from nothing.
+    internal static void ResetForTests()
+    {
+        WaveOut.Close();
+        Free(buffers.Values.SelectMany(b => b));
+        buffers.Clear();
+        lengths.Clear();
+        loaded = null;
+        pending = null;
+        preparing = false;
+        PlayedCount = 0;
+        lastHover = double.NegativeInfinity;
     }
 
     /// A few waveOut streams on the default device, opened on demand and closed again after a while of silence (an
@@ -151,6 +215,7 @@ static partial class Sounds
         /// Opens the streams if they aren't. False when there is no output device.
         public static bool Open()
         {
+            if (DeviceDisabled) return false;
             if (handles[0] != IntPtr.Zero) { KeepAlive(); return true; }
             var format = new WAVEFORMATEX
             {
@@ -214,7 +279,7 @@ static partial class Sounds
             idle.Start();
         }
 
-        static void Close()
+        public static void Close()
         {
             for (int i = 0; i < Streams; i++)
             {
@@ -230,6 +295,24 @@ static partial class Sounds
     }
 }
 
+/// The Feel & Text sound style and volume the sounds are synthesised for. The level is kept in whole percent, so
+/// a slider that moves by a hair doesn't rebuild the sounds. The Mac plays them at this level relative to the alert
+/// volume; on Windows the samples are simply scaled by it (Swivel's own slider in the Volume Mixer still applies).
+readonly record struct SoundConfiguration
+{
+    public SoundStyle Style { get; }
+    public int Level { get; }
+    public double Volume => Level / 100.0;
+
+    public SoundConfiguration(SoundStyle style = SoundStyle.Classic, double volume = 1)
+    {
+        Style = style;
+        Level = (int)Math.Round((double.IsFinite(volume) ? Math.Clamp(volume, 0, 1) : 1) * 100);
+    }
+
+    public SoundConfiguration() : this(SoundStyle.Classic, 1) { }
+}
+
 /// Builds the interface sounds as 48 kHz 16-bit mono PCM. Levels follow Apple's own UI sounds: a hover tick peaks
 /// near −24 dBFS (it repeats), a press near −13 dBFS. The same synthesis as the Mac app's SoundSynth.
 static class SoundSynth
@@ -240,8 +323,12 @@ static class SoundSynth
         ? [(1, 1), (0.97, 0.88), (1.03, 0.94)]
         : [(1, 1)];
 
-    public static float[] Samples(SoundEffect effect, double pitch, double gain)
+    /// `configuration` shifts the pitch and level for the sound style and scales by the volume (default: classic, full).
+    public static float[] Samples(SoundEffect effect, double pitch, double gain, SoundConfiguration? configuration = null)
     {
+        var config = configuration ?? new SoundConfiguration();
+        pitch *= config.Style.Pitch();
+        gain *= config.Volume * config.Style.Gain();
         var (length, peak) = effect switch
         {
             SoundEffect.Hover => (0.025, 0.063),  // −24 dBFS
@@ -273,7 +360,7 @@ static class SoundSynth
                 {
                     // A keycap bottoming out: a sharp click over a short, falling low body.
                     double f = 210 - 80 * Math.Min(t / 0.05, 1);
-                    output[i] = 0.75 * Math.Exp(-t / 0.022) * Math.Sin(2 * Math.PI * f * t) + 0.3 * Ping(t, 1150, 0.006)
+                    output[i] = 0.75 * Math.Exp(-t / 0.022) * Math.Sin(2 * Math.PI * f * pitch * t) + 0.3 * Ping(t, 1150, 0.006)
                         + 0.3 * Hiss() * Math.Exp(-t / 0.001);
                     break;
                 }

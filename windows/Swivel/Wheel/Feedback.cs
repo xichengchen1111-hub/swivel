@@ -5,7 +5,9 @@ namespace Swivel;
 ///
 /// The Mac app pairs each moment with a trackpad haptic. Windows has no public API for trackpad or mouse haptics, so
 /// the moments that are haptic-only on the Mac (a hover onto the cancel hub, a refusal, an editor snap) stay silent
-/// here, and the others play their sound.
+/// here, and the others play their sound. For the same reason Feel & Text's "gentle trackpad taps" (1.3: softer,
+/// sparser haptics) has nothing to change on Windows; the setting is only kept in the shared settings file. The
+/// sound style, volume and hover-sound switch apply in `Sounds`.
 static class Feedback
 {
     /// The pointer moved onto a different menu item (or back onto the hub, where releasing cancels: haptic only).

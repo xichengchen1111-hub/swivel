@@ -8,7 +8,7 @@ using System.Windows.Threading;
 namespace Swivel;
 
 /// Pages of the settings window. The numbers match the Mac app's SWIVEL_TAB values.
-enum AppTab { General = 0, Shortcuts = 1, Style = 2, Customize = 3, Clothesline = 4, Overview = 5, TextCapture = 6, Shelf = 7, ImagePresets = 8, QuickActions = 9 }
+enum AppTab { General = 0, Shortcuts = 1, Style = 2, Customize = 3, Clothesline = 4, Overview = 5, TextCapture = 6, Shelf = 7, ImagePresets = 8, QuickActions = 9, Feel = 10, Colors = 11 }
 
 /// The app's main window, laid out like PowerToys Settings: features in a sidebar, each with its own switch and
 /// settings (AppWindow.swift / BundleWindow.swift). While it is open Swivel shows on the taskbar.
@@ -107,6 +107,27 @@ sealed class SettingsWindow : Window
         };
         Closing += (_, _) => SaveBounds();
         Activated += (_, _) => View.RefreshCurrent();
+        WatchTextSettings();
+    }
+
+    /// Feel & Text's text size and bold text apply at once: the window's own font (which the standard controls
+    /// inherit) through AppTypography, and the window's labels through TextStyle. Only a change to those two
+    /// settings walks the window, not every slider step.
+    void WatchTextSettings()
+    {
+        AppTypography.Apply(this);
+        (TextSize, bool)? applied = null;
+        void update()
+        {
+            var settings = Prefs.Interaction;
+            if (applied == (settings.TextSize, settings.BoldText)) return;
+            applied = (settings.TextSize, settings.BoldText);
+            TextStyle.ApplyTree(this);
+        }
+        void changed() => Dispatcher.BeginInvoke(update);
+        Loaded += (_, _) => update();
+        Prefs.Changed += changed;
+        Closed += (_, _) => Prefs.Changed -= changed;
     }
 
     public void Select(AppTab tab) => View.Select(tab);
@@ -159,7 +180,7 @@ sealed class SettingsWindow : Window
 /// Sidebar of pages on the left (Overview, each feature, General), the selected page on the right (BundleSplit).
 sealed class SettingsView : Grid
 {
-    internal enum Page { Overview, Wheel, Clothesline, TextCapture, Shelf, ImagePresets, QuickActions, General }
+    internal enum Page { Overview, Wheel, Clothesline, TextCapture, Shelf, ImagePresets, QuickActions, General, Feel }
 
     readonly SettingsWindow? owner;
     readonly Sidebar sidebar;
@@ -196,6 +217,7 @@ sealed class SettingsView : Grid
         Page.Shelf => Feature.Shelf.Title(),
         Page.ImagePresets => Feature.ImagePresets.Title(),
         Page.QuickActions => Feature.QuickActions.Title(),
+        Page.Feel => L("Feel & Text"),
         _ => L("General"),
     };
 
@@ -208,6 +230,7 @@ sealed class SettingsView : Grid
         Page.Shelf => Feature.Shelf.Glyph(),
         Page.ImagePresets => Feature.ImagePresets.Glyph(),
         Page.QuickActions => Feature.QuickActions.Glyph(),
+        Page.Feel => "", // Personalize (the Mac's slider.horizontal.3 is Image Presets' glyph here)
         _ => "", // Settings
     };
 
@@ -233,6 +256,7 @@ sealed class SettingsView : Grid
             case AppTab.Shelf: ShowPage(Page.Shelf); break;
             case AppTab.ImagePresets: ShowPage(Page.ImagePresets); break;
             case AppTab.QuickActions: ShowPage(Page.QuickActions); break;
+            case AppTab.Feel: ShowPage(Page.Feel); break;
             default:
                 ShowPage(Page.Wheel);
                 ((WheelPage)pages[Page.Wheel]).Select(tab);
@@ -253,6 +277,7 @@ sealed class SettingsView : Grid
             Page.Shelf => new FeaturePage(Swivel.Feature.Shelf, new ShelfPane()),
             Page.ImagePresets => new FeaturePage(Swivel.Feature.ImagePresets, new ImagePresetsPane()),
             Page.QuickActions => new FeaturePage(Swivel.Feature.QuickActions, new QuickActionsPane()),
+            Page.Feel => new FeelPage(),
             _ => new GeneralPage(),
         };
         pages[page] = made;
@@ -318,6 +343,8 @@ sealed class PageHost : Border
         if (page.Parent is Border old && old != holder) old.Child = null;
         holder.Child = page;
         scroll.ScrollToTop();
+        // Labels catch up with the text settings as they load; buttons need a pass once their templates exist.
+        Dispatcher.Later(() => TextStyle.ApplyTree(page));
         if (Motion.Reduced || !IsLoaded) return;
         motion[0].Snap(24);
         motion[1].Snap(0);
@@ -480,7 +507,7 @@ sealed class NavItem : Border
     public void SetSelected(bool on)
     {
         IsSelected = on;
-        Label.FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal;
+        TextStyle.SetWeight(Label, on ? FontWeights.SemiBold : FontWeights.Normal);
         motion[1].Target = on ? 1 : 0;
         motion.Kick();
     }

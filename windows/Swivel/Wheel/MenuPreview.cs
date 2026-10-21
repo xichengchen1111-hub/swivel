@@ -12,9 +12,14 @@ static class MenuPreview
     /// soft desktop-like backdrop. Interactive previews follow the pointer like the real menu while they are on screen,
     /// press an item on click (with the drop's sound) and then open again; nothing runs. `wallpaper: false` leaves the
     /// background clear for a caller that draws its own.
+    ///
+    /// The preview moves with the saved pop-up menu tuning (`Prefs.Interaction.Menu`, read live) unless `tuning` is
+    /// given: the Feel & Text page passes the tuning being edited, and can change it later through
+    /// `PreviewHost.Tuning` and show it with `PreviewHost.Replay()`. Palettes and text size are read live and redraw
+    /// on `Prefs.Changed`.
     public static FrameworkElement Create(MenuStyle style, IReadOnlyList<string> titles, WheelMode mode, int? hovered = null,
-                                          bool interactive = true, bool wallpaper = true) =>
-        new PreviewHost(Draw(style, titles, mode, hovered)) { IsInteractive = interactive, DrawsWallpaper = wallpaper };
+                                          bool interactive = true, bool wallpaper = true, MotionTuning? tuning = null) =>
+        new PreviewHost(Draw(style, titles, mode, hovered)) { IsInteractive = interactive, DrawsWallpaper = wallpaper, Tuning = tuning };
 
     /// The menu itself at its natural size, settled (the Mac's `menuPreview`).
     internal static WheelView Draw(MenuStyle style, IReadOnlyList<string> titles, WheelMode mode, int? hovered = null)
@@ -56,6 +61,32 @@ sealed class PreviewHost : FrameworkElement
     public const double ReopenDelay = 0.6;
 
     public bool DrawsWallpaper { get; set; } = true;
+
+    /// The motion the preview uses instead of the saved menu tuning (null: follow `Prefs.Interaction.Menu`). Takes
+    /// effect from the next frame; call `Replay` to show it from the start.
+    public MotionTuning? Tuning
+    {
+        get => Preview.TuningOverride;
+        set => Preview.TuningOverride = value;
+    }
+
+    /// Opens the menu again from the start, so a changed tuning can be seen. Silent, and does nothing off screen;
+    /// the resting hover comes back after the bloom.
+    public void Replay()
+    {
+        if (Live is not { } preview) return;
+        trial++;
+        pressedThisClick = false;
+        preview.BeginOpen();
+        if (IsMouseOver) Follow(Mouse.GetPosition(this));
+        else
+        {
+            preview.PointerLeft();
+            // Showing the resting hover is a picture, not a hover by the user: no tick, no visit.
+            preview.ShowHover(restingHover);
+            preview.ResetVisit();
+        }
+    }
 
     public bool IsInteractive
     {
@@ -219,7 +250,7 @@ sealed class PreviewHost : FrameworkElement
         Preview.BeginConfirm(index);
         Feedback.Press();
         int current = ++trial;
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(ReopenDelay) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(ReopenDelay / Preview.Tuning.SafeSpeed) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();

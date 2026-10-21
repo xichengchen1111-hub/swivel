@@ -174,13 +174,13 @@ sealed class QuickActions
             AllowDrop = true,
         };
 
-        search = new TextBox { FontSize = 16, Padding = new Thickness(34, 8, 8, 8), VerticalContentAlignment = VerticalAlignment.Center };
+        search = ToolUI.Scaled(new TextBox { Padding = new Thickness(34, 8, 8, 8), VerticalContentAlignment = VerticalAlignment.Center }, 16);
         ToolUI.AutomationName(search, L("Search actions…"));
-        placeholder = new TextBlock
+        placeholder = ToolUI.Scaled(new TextBlock
         {
-            Text = L("Search actions…"), FontSize = 16, Opacity = 0.5, IsHitTestVisible = false,
+            Text = L("Search actions…"), Opacity = 0.5, IsHitTestVisible = false,
             VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(36, 0, 0, 0),
-        };
+        }, 16);
         var magnifier = ToolUI.Glyph("", 15);
         magnifier.IsHitTestVisible = false;
         magnifier.Opacity = 0.6;
@@ -587,15 +587,15 @@ sealed class QuickRow : Border
     public QuickRow(QuickCommand command)
     {
         Command = command;
-        Height = 48;
+        MinHeight = 48;   // grows with larger text instead of clipping it
         CornerRadius = new CornerRadius(6);
         Padding = new Thickness(10, 0, 10, 0);
         Margin = new Thickness(0, 0, 0, 2);
         Background = Brushes.Transparent;
         glyph = ToolUI.Glyph(command.Glyph, 18);
         glyph.Width = 28;
-        title = new TextBlock { Text = command.Title, FontSize = 14, TextTrimming = TextTrimming.CharacterEllipsis };
-        detail = new TextBlock { Text = command.Detail, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis };
+        title = ToolUI.Scaled(new TextBlock { Text = command.Title, TextTrimming = TextTrimming.CharacterEllipsis }, 14);
+        detail = ToolUI.Scaled(new TextBlock { Text = command.Detail, TextTrimming = TextTrimming.CharacterEllipsis }, 12);
         var labels = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0) };
         labels.Children.Add(title);
         labels.Children.Add(detail);

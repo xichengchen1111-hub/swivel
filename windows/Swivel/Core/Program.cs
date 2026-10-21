@@ -148,6 +148,10 @@ static partial class Program
                 case "shelf": Shelf.Shared.Add(files); break;
                 case "quick": QuickActions.Shared.Show(files); break;
                 case "presets": AppWindow.Shared.Show(AppTab.ImagePresets); break;
+                case "feel": AppWindow.Shared.Show(AppTab.Feel); break;
+                case "clothesline": AppWindow.Shared.Show(AppTab.Clothesline); break;
+                case "style": AppWindow.Shared.Show(AppTab.Style); break;
+                case "colors": AppWindow.Shared.Show(AppTab.Colors); break;
                 default: AppWindow.Shared.Show(); break;
             }
         };

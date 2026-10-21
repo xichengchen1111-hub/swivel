@@ -12,9 +12,6 @@ static class Look
     /// Segoe Fluent Icons (Windows 11), falling back to Segoe MDL2 Assets (Windows 10).
     public static readonly FontFamily Icons = new("Segoe Fluent Icons, Segoe MDL2 Assets");
 
-    /// Handwriting for the sticky notes (the Mac uses Noteworthy). Segoe Print ships with Windows.
-    public static readonly FontFamily Hand = new("Segoe Print, Ink Free, Segoe UI");
-
     /// The system accent colour (Settings › Personalisation › Colours).
     public static Color Accent
     {

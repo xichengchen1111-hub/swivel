@@ -39,5 +39,13 @@ static partial class Strings
             ["搜索已开启的工具，选择文件后按回车。也可以直接从文件资源管理器拖入文件。", "搜尋已開啟的工具，選擇檔案後按 Enter。也可以直接從檔案總管拖入檔案。", "有効なツールを検索し、ファイルを選んで Enter。エクスプローラーからのドロップも受け付けます。"]),
         ("If another app uses the same shortcut, choose a different one. You can always reopen Swivel from the Start menu or the notification area to reach Settings.",
             ["如果与其他应用的快捷键冲突，请换一个。始终可以从开始菜单或通知区域重新打开 Swivel 进入设置。", "如果與其他應用程式的快速鍵衝突，請換一個。隨時可從開始功能表或通知區域重新開啟 Swivel 進入設定。", "他のアプリと重なる場合は別のキーを選んでください。スタート メニューや通知領域から Swivel を開き直せば設定に戻れます。"]),
+        // Feel & Text (1.3.3): the Mac's "Sound & touch" without haptics, and the notes that name macOS.
+        ("Sound", ["声音", "聲音", "サウンド"]),
+        ("Animation effects in Windows always take priority. Try the menu above, or click the sample to replay.",
+            ["始终遵循 Windows 的“动画效果”设置。可直接试用上方菜单，或点击示例重播。", "一律遵循 Windows 的「動畫效果」設定。可直接試用上方選單，或點擊範例重播。",
+             "Windows の「アニメーション効果」の設定を優先します。上のメニューを試すか、サンプルをクリックして再生できます。"]),
+        ("Sound level is relative to Swivel's volume in the Windows volume mixer. Muting Windows or turning off Sound effects silences Swivel.",
+            ["响度基于 Windows 音量合成器中 Swivel 的音量。Windows 静音或关闭音效后，Swivel 不会发声。", "響度基於 Windows 音量混合程式中 Swivel 的音量。Windows 靜音或關閉音效後，Swivel 不會發聲。",
+             "音量は Windows の音量ミキサーでの Swivel の音量に対する割合です。Windows をミュートするか効果音をオフにすると、Swivel は鳴りません。"]),
     ];
 }

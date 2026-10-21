@@ -100,8 +100,10 @@ static class WheelFrames
             while (next < script.Length && script[next].At <= t + 0.0001) { script[next].Run(); next++; }
             if (pointer(t) is { } p && t < 1.8) view.Track(p);
             view.Advance(1 / fps);
-            // The window fades out 0.16 s after the drop, over 0.14 s, as the real one does.
-            double fade = Math.Clamp(1 - (t - 2.25 - 0.16) / 0.14, 0, 1);
+            // The window fades out 0.16 s after the drop, over 0.14 s, as the real one does (both divided by the
+            // menu's tuned speed).
+            double speed = view.Tuning.SafeSpeed;
+            double fade = Math.Clamp(1 - (t - 2.25 - 0.16 / speed) / (0.14 / speed), 0, 1);
             view.Opacity = glass.Opacity = fade;
 
             clock.Restart();

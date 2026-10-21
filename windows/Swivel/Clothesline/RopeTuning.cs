@@ -13,7 +13,18 @@ static class RopeTuning
     public readonly record struct Oscillator(double K, double C)
     {
         public double DampingRatio => C / (2 * Math.Sqrt(K));
+
+        /// The user's Feel & Text speed and bounce for the clothesline (1.3): speed scales the natural frequency,
+        /// bounce ≤ 1 can only raise the damping ratio toward 1, so a tuned rope is never less damped than this one.
+        public Oscillator Tuned(MotionTuning tuning)
+        {
+            double stiffness = K * tuning.SafeSpeed * tuning.SafeSpeed;
+            return new Oscillator(stiffness, 2 * Math.Sqrt(stiffness) * tuning.Damping(DampingRatio));
+        }
     }
+
+    /// The clothesline's area of Feel & Text.
+    public static MotionTuning Tuning => Prefs.Interaction.Clothesline;
 
     public static readonly Oscillator Fall = new(260, 24);     // the whole rope lowering and lifting (ζ ≈ 0.74)
     public static readonly Oscillator Sag = new(150, 16);      // the cord's extra dip in the middle (ζ ≈ 0.65)
@@ -139,6 +150,20 @@ static class RopeTuning
     public static double EaseOut(double t) => Ease(t, 0, 0, 0.58, 1);
 
     public static double Between(this Random random, (double Lo, double Hi) range) => range.Lo + random.NextDouble() * (range.Hi - range.Lo);
+}
+
+/// The rope's "release to hang" cue (1.3.3): readiness follows the effect the drag source actually permits, not just
+/// the file type. Unlike the Mac (which prefers .move, then .copy, then .generic) the rope only ever reports Copy:
+/// Explorer deletes the source after a move, and Windows has no generic effect. A source that offers only Move or
+/// only Link is not a ready drop, as a link-only drag isn't on the Mac.
+static class RopeDropFeedback
+{
+    public static DragDropEffects Operation(DragDropEffects offered, bool acceptsMedia) =>
+        acceptsMedia && offered.HasFlag(DragDropEffects.Copy) ? DragDropEffects.Copy : DragDropEffects.None;
+
+    /// macOS systemBlue (light appearance) in sRGB: blue means "this can be released here", whatever the chosen
+    /// idle rope colour. Fixed rather than the Windows accent, like the Mac's.
+    public static readonly Color ReadyBlue = Color.FromRgb(0, 122, 255);
 }
 
 /// Touching the top edge reveals the rope immediately. Moving away rearms it, so clicking at the top of the screen

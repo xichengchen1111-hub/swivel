@@ -34,15 +34,18 @@ struct Spring
         Velocity = 0;
     }
 
-    public void Step(double dt)
+    /// Advances by dt. `tuning` is the user's Feel & Text speed and bounce for this area (1.3); the default keeps
+    /// the tuned 1.2 motion.
+    public void Step(double dt, MotionTuning? tuning = null)
     {
+        tuning ??= MotionTuning.Default;
         if (dt <= 0 || IsSettled)
         {
             if (IsSettled) { Value = Target; Velocity = 0; }
             return;
         }
-        double w0 = 2 * Math.PI / Math.Max(Response, 0.001);
-        double zeta = Math.Min(Math.Max(Damping, 0.05), 1);
+        double w0 = 2 * Math.PI / Math.Max(Response / tuning.SafeSpeed, 0.001);
+        double zeta = Math.Min(Math.Max(tuning.Damping(Damping), 0.05), 1);
         double x0 = Value - Target, v0 = Velocity;
         double x, v;
         if (zeta < 0.999)

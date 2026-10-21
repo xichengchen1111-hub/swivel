@@ -36,13 +36,30 @@ static class ToolUI
     }
 
     /// A secondary, wrapping explanation in small type (the Mac app's `ToolUI.note`).
-    public static TextBlock Note(string text) => new()
+    public static TextBlock Note(string text) => Scaled(new TextBlock
     {
         Text = text,
         TextWrapping = TextWrapping.Wrap,
-        FontSize = 12,
         Opacity = 0.68,
-    };
+    }, 12);
+
+    /// An explicit font size that follows Feel & Text's text size (1.3). Everything that inherits its size gets it
+    /// from the window root (`AppTypography.Apply`); text with a size of its own goes through here, and follows a
+    /// change live while it is on screen. Icon glyphs keep their size, like the Mac's symbols.
+    public static T Scaled<T>(T element, double size) where T : FrameworkElement
+    {
+        void update() => element.SetValue(System.Windows.Documents.TextElement.FontSizeProperty, AppTypography.Size(size));
+        void changed() => element.Dispatcher.BeginInvoke(new Action(update));
+        update();
+        element.Loaded += (_, _) =>
+        {
+            Prefs.Changed -= changed;
+            Prefs.Changed += changed;
+            update();
+        };
+        element.Unloaded += (_, _) => Prefs.Changed -= changed;
+        return element;
+    }
 
     /// A Segoe Fluent Icons glyph.
     public static TextBlock Glyph(string glyph, double size = 16) => new()
@@ -195,6 +212,9 @@ static class ToolUI
         allowed.HasFlag(DragDropEffects.Copy) ? DragDropEffects.Copy :
         allowed.HasFlag(DragDropEffects.Link) ? DragDropEffects.Link : DragDropEffects.None;
 
+    /// The Tools & settings area of Feel & Text (1.3): every spring in the tool panels and editors steps with it.
+    public static MotionTuning Tuning => Prefs.Interaction.Tools;
+
     /// Fades an element up to fully opaque. Opacity only (critically damped), so it stays the same with animations off.
     public static void FadeIn(UIElement element, double from = 0, double duration = 0.15)
     {
@@ -202,7 +222,7 @@ static class ToolUI
         element.Opacity = from;
         Animate(element, OpacityKey, dt =>
         {
-            spring.Step(dt);
+            spring.Step(dt, Tuning);
             element.Opacity = Math.Clamp(spring.Value, 0, 1);
             if (spring.IsSettled) element.Opacity = 1;
             return !spring.IsSettled;
@@ -236,9 +256,12 @@ static class ToolUI
         }
         // A kick to the left that a lively spring brings back: [0, -6, 5, -3, 2, 0] over ~0.28 s, as on the Mac.
         var spring = new Spring(0, response: 0.13, damping: 0.6) { Velocity = -260 };
+        // Speed only: the Mac shortens the shake's keyframes (duration / speed) but keeps their shape, so a calm
+        // (bounce 0) setting still shakes.
+        var tuning = Tuning with { Bounce = 1 };
         Animate(element, ShakeKey, dt =>
         {
-            spring.Step(dt);
+            spring.Step(dt, tuning);
             shift.X = spring.IsSettled ? 0 : spring.Value;
             return !spring.IsSettled;
         });
@@ -302,7 +325,7 @@ sealed class DropRing : Border
         ToolUI.UseAccent(this, BorderBrushProperty);
         driver.OnFrame = dt =>
         {
-            fade.Step(dt);
+            fade.Step(dt, ToolUI.Tuning);
             Opacity = Math.Clamp(fade.Value, 0, 1);
             return !fade.IsSettled;
         };

@@ -620,6 +620,41 @@ public sealed class EditorTests
         }
     }
 
+    // MARK: Feel & Text (1.3)
+
+    [STATestMethod]
+    public void EditorsFollowTextSizeButExportedLetteringDoesNot()
+    {
+        var dir = TestSetup.NewFolder("typography");
+        var source = Path.Combine(dir, "photo.png");
+        SavePng(SolidImage(240, 140, Colors.White), source);
+        Mark[] marks =
+        [
+            new(Mark.Kinds.Text, new Point(0.1, 0.3), new Point(0.1, 0.3), Colors.Red, 0.01, "Note"),
+            new(Mark.Kinds.Number, new Point(0.7, 0.6), new Point(0.7, 0.6), Colors.Blue, 0.01, "1"),
+        ];
+        byte[] Export() => Pixels.Bgra(MarkRenderer.Composite(SolidImage(240, 140, Colors.White), marks), out _, out _);
+        var standard = Export();
+        Prefs.Interaction = Prefs.Interaction with { TextSize = TextSize.ExtraLarge, BoldText = true };
+        CollectionAssert.AreEqual(standard, Export(), "exported annotation lettering must not follow the UI text size");
+        var editor = new AnnotateEditor(source);
+        try
+        {
+            Assert.AreEqual(AppTypography.BaseSize * 1.3, editor.Window.FontSize, 1e-9);
+            Assert.AreEqual(FontWeights.SemiBold, editor.Window.FontWeight);
+            // Changes reach an open editor.
+            Prefs.Interaction = Prefs.Interaction with { TextSize = TextSize.Standard, BoldText = false };
+            PumpFor(0.05);
+            Assert.AreEqual(AppTypography.BaseSize, editor.Window.FontSize, 1e-9);
+            Assert.AreEqual(FontWeights.Normal, editor.Window.FontWeight);
+        }
+        finally
+        {
+            editor.DidClose();
+            editor.Window.Close();
+        }
+    }
+
     // MARK: Editors that read files (need the Converters' Images.Load / Write)
 
     [STATestMethod]

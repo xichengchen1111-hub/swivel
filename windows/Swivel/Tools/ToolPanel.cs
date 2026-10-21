@@ -40,6 +40,7 @@ class ToolPanel : Window
         ResizeMode = ResizeMode.CanResize;
         WindowStartupLocation = WindowStartupLocation.Manual;
         Native.MakeNonActivating(this);
+        AppTypography.Apply(this);   // Feel & Text's text size and bold text (the Shelf and Quick Actions)
         SourceInitialized += (_, _) => HwndSource.FromHwnd(Handle)?.AddHook(Hook);
         Deactivated += (_, _) => SetActivatable(false);
         PreviewKeyDown += (_, e) =>

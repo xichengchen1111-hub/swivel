@@ -137,7 +137,7 @@ sealed class TrimEditor : Editor
     public bool IsAudio { get; private set; }
     public DetentSlider Start { get; }
     public DetentSlider End { get; }
-    readonly TextBlock startLabel = new() { Width = 64 }, endLabel = new() { Width = 64 }, lengthLabel = new() { FontWeight = FontWeights.SemiBold, FontSize = 13 };
+    readonly TextBlock startLabel = new() { MinWidth = 64 }, endLabel = new() { MinWidth = 64 }, lengthLabel = ToolUI.Scaled(new TextBlock { FontWeight = FontWeights.SemiBold }, 13);
     double lastStart, lastEnd;
     /// The handles are pushed together at the minimum gap.
     bool pinned;
