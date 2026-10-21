@@ -421,8 +421,8 @@ extension FileActionsTests {
         }
         #expect(throws: (any Error).self) { try QRImage.png("") }
         #expect(throws: (any Error).self) { try QRImage.png(String(repeating: "a", count: 2001)) }
-        #expect(QRTreeView.seed("same") == QRTreeView.seed("same"))
-        #expect(QRTreeView.seed("same") != QRTreeView.seed("different"))
+        #expect(QRGardenView.seed("same") == QRGardenView.seed("same"))
+        #expect(QRGardenView.seed("same") != QRGardenView.seed("different"))
     }
 
     @Test func nativeAppRoutingUsesExplicitFilesAndPrivateClipboardAndHandlesFailures() async throws {
@@ -517,25 +517,75 @@ extension FileActionsTests {
 }
 
 extension FileActionsTests {
-    @Test func renderTreesAndFlatCodesWhenRequested() async throws {
+    @Test func librariesSavedBeforeTemplatesStillLoad() throws {
+        let json = #"[{"id":"7C9E6679-7425-40DE-944B-E07FC1F90AE7","name":"Old","value":"https://example.com","collection":"","season":"spring","created":700000000}]"#
+        let values = try JSONDecoder().decode([SavedQRCode].self, from: Data(json.utf8))
+        #expect(values.count == 1); #expect(values[0].template == .tree); #expect(values[0].season == .spring)
+        var bouquet = values[0]; bouquet.template = .island
+        #expect(try JSONDecoder().decode(SavedQRCode.self, from: JSONEncoder().encode(bouquet)) == bouquet)
+    }
+
+    /// Seen from straight above, every template shows exactly the code: dark modules covered by dark surfaces,
+    /// light modules by light ones, with clear contrast between them.
+    @Test func everyTemplateTopSurfaceMatchesTheCode() throws {
+        func luminance(_ c: SIMD3<Float>) -> Float { 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z }
+        let dark = try QRModules.matrix("https://example.com/swivel")
+        #expect(dark.count == 25); #expect(dark[0][0] && dark[0][6] && !dark[1][1])
+        for template in QRTemplate.allCases { for season in QRSeason.allCases {
+            let model = QRGardenModel.build(dark, template: template, season: season, seed: 42)
+            var darkest: Float = 0, lightest: Float = 1
+            for r in 0..<model.size { for c in 0..<model.size {
+                let l = luminance(model.topColor(row: r, column: c) ?? SIMD3(0.93, 0.93, 0.93))
+                if dark[r][c] { darkest = max(darkest, l) } else { lightest = min(lightest, l) }
+            } }
+            #expect(lightest - darkest > 0.12, "\(template) \(season): dark ≤ \(darkest), light ≥ \(lightest)")
+        } }
+    }
+
+    @Test func renderScenesAndCheckTheyScanFromAbove() async throws {
         guard let path = ProcessInfo.processInfo.environment["SWIVEL_FILE_ACTIONS_RENDERS"] else { return }
         let directory = URL(fileURLWithPath: path, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        for season in QRSeason.allCases {
-            let view = QRTreeView(frame: NSRect(x: 0, y: 0, width: 620, height: 520))
-            let value = SavedQRCode(name: "Swivel", value: "https://example.com/swivel", season: season)
+        let view = QRGardenView(frame: NSRect(x: 0, y: 0, width: 620, height: 520))
+        for template in QRTemplate.allCases { for season in QRSeason.allCases {
+            let value = SavedQRCode(name: "Swivel", value: "https://example.com/swivel", season: season, template: template)
             try view.display(value)
             for showCode in [false, true] {
-                view.setShowsCode(showCode)
-                let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
-                view.cacheDisplay(in: view.bounds, to: rep)
-                let output = directory.appendingPathComponent("tree-\(season.rawValue)-\(showCode ? "qr" : "tree").png")
+                let picture = view.snapshot(size: CGSize(width: 900, height: 760), showsCode: showCode)
+                let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 900, pixelsHigh: 760, bitsPerSample: 8, samplesPerPixel: 4,
+                                           hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+                NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+                NSColor(white: 0.97, alpha: 1).setFill(); NSRect(x: 0, y: 0, width: 900, height: 760).fill()
+                picture.draw(in: NSRect(x: 0, y: 0, width: 900, height: 760)); NSGraphicsContext.restoreGraphicsState()
+                let output = directory.appendingPathComponent("\(template.rawValue)-\(season.rawValue)-\(showCode ? "qr" : "scene").png")
                 try rep.representation(using: .png, properties: [:])!.write(to: output)
                 if showCode {
                     let recognized = try await CodeRecognition.recognize([output])
-                    #expect(recognized.map(\.value) == [value.value])
+                    #expect(recognized.map(\.value) == [value.value], "\(template) \(season) does not scan")
                 }
             }
+        } }
+    }
+}
+
+extension FileActionsTests {
+    /// Renders a transition filmstrip and times the work per frame for the largest code.
+    @Test func renderTransitionFilmstripWhenRequested() throws {
+        guard let path = ProcessInfo.processInfo.environment["SWIVEL_QR_FILMSTRIP"] else { return }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let view = QRGardenView(frame: NSRect(x: 0, y: 0, width: 620, height: 520))
+        for (name, value) in [("short", "https://example.com/swivel"), ("long", String(repeating: "https://example.com/a-long-path?", count: 30))] {
+            var built = Date()
+            try view.display(SavedQRCode(name: name, value: value, template: .tree))
+            print("\(name): build \(Int(Date().timeIntervalSince(built) * 1000)) ms")
+            built = Date()
+            for i in 0...8 {
+                let image = view.snapshot(size: CGSize(width: 600, height: 500), phase: CGFloat(i) / 8)
+                let rep = NSBitmapImageRep(data: image.tiffRepresentation!)!
+                try rep.representation(using: .png, properties: [:])!.write(to: directory.appendingPathComponent("\(name)-\(i).png"))
+            }
+            print("\(name): 9 frames \(Int(Date().timeIntervalSince(built) * 1000)) ms")
         }
     }
 }

@@ -76,6 +76,13 @@ Requires macOS 15+ and the Command Line Tools (Swift 6 toolchain, Swift 5 langua
 - Don't edit sibling projects (`../atelier-focus`, `../clipline`); other sessions own them.
 - Commit messages end with a `Co-Authored-By` line for the agent that wrote the change. Push to `origin main` (private repo `xichengchen1111-hub/swivel`) when the owner asks.
 
+### Version 1.4.3 (build 15): 3D QR scenes and screenshot drag paths (2026-10-21)
+- Installed to /Applications and ~/Desktop after a normal quit (screenshot settings verified restored); previous apps and both defaults domains backed up in ignored build/previous-1.4.2-before-1.4.3/. Not committed or pushed yet.
+- `QRGarden.swift` replaces the flat tree flip: a SceneKit voxel scene (Tree, Bouquet, Island × three seasons) built from the code's modules. Seen straight from above, `cover`/`ground` top faces are exactly the code (dark modules dark, light modules pale); `structure` (trunks, stems, paper, boats, filler leaves over light modules) fades out during the camera turn. Colours are baked per face with a constant lighting model, so the top view keeps exact colours. Camera elevation/azimuth and fade run on one `Spring` via `FrameDriver`.
+- Checks: `everyTemplateTopSurfaceMatchesTheCode` (contrast per module), `SWIVEL_FILE_ACTIONS_RENDERS=<dir>` renders every template/season and decodes the top view with Vision, `SWIVEL_QR_FILMSTRIP=<dir>` renders the transition and times builds (release: ~18 ms for a 2,000-byte code).
+- `SavedQRCode.template` decodes with a default, so older libraries load.
+- Screenshot card drags: the file is moved to the usual screenshot folder before the drag starts, so apps that read a dropped file later (chat attachments) keep a valid path. Hanging it afterwards still moves it, unless another app accepted the drop.
+
 ### Version 1.4.2 screenshot takeover ownership (2026-10-21)
 
 - User reported new screenshots no longer reaching the rope. Live state: only Desktop 1.4.1 running, Clothesline and takeover flags true, but system location/thumbnail overrides and original-settings backup absent. Re-enabling takeover through native UI restored Incoming + thumbnail off immediately. Two same-ID copies could share/clear the original backup and let an exiting process undo another's takeover.

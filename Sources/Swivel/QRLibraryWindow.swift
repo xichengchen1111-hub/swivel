@@ -15,11 +15,12 @@ final class QRLibraryWindow: FileToolWindow, NSOutlineViewDataSource, NSOutlineV
     private var roots: [CodeLibraryNode] = []
     private var undoValues: [(before: [SavedQRCode], after: [SavedQRCode])] = []
     private let outline = NSOutlineView(), search = NSSearchField()
-    let tree = QRTreeView(frame: .zero)
+    let tree = QRGardenView(frame: .zero)
     private let titleLabel = NSTextField(labelWithString: ""), content = NSTextField(wrappingLabelWithString: "")
     private let status = ToolUI.note("")
-    private let mode = NSSegmentedControl(labels: [L("Tree"), L("QR Code")], trackingMode: .selectOne, target: nil, action: nil)
+    private let mode = NSSegmentedControl(labels: [L("Scene"), L("QR Code")], trackingMode: .selectOne, target: nil, action: nil)
     private let season = NSPopUpButton()
+    private let template = NSPopUpButton()
     private let emptyState = NSView()
     private let emptyTitle = NSTextField(labelWithString: "")
     private let emptyHint = ToolUI.note("")
@@ -48,6 +49,8 @@ final class QRLibraryWindow: FileToolWindow, NSOutlineViewDataSource, NSOutlineV
         mode.target = self; mode.action = #selector(modeChanged); mode.selectedSegment = 0
         season.addItems(withTitles: QRSeason.allCases.map(\.title)); season.target = self; season.action = #selector(seasonChanged)
         season.setAccessibilityLabel(L("Season"))
+        template.addItems(withTitles: QRTemplate.allCases.map(\.title)); template.target = self; template.action = #selector(templateChanged)
+        template.setAccessibilityLabel(L("Template"))
         let preview = NSView()
         preview.heightAnchor.constraint(greaterThanOrEqualToConstant: 380).isActive = true
         for child in [tree, emptyState] {
@@ -71,8 +74,8 @@ final class QRLibraryWindow: FileToolWindow, NSOutlineViewDataSource, NSOutlineV
         undoButton = ToolUI.button("Undo", target: self, action: #selector(undoChange))
         copyButton = ToolUI.button("Copy QR Image", target: self, action: #selector(copyImage))
         exportButton = ToolUI.button("Export PNG…", target: self, action: #selector(exportImage))
-        let detail = ToolUI.stack([titleLabel, content, ToolUI.stack([mode, season], vertical: false), preview,
-                                   ToolUI.note("Click the tree to reveal its QR code. Click again to return to the tree."),
+        let detail = ToolUI.stack([titleLabel, content, ToolUI.stack([mode, template, season], vertical: false), preview,
+                                   ToolUI.note("Click the scene to look at it from above, where it becomes the QR code. Click again to look around it."),
                                    ToolUI.stack([editButton!, removeButton!, undoButton!, copyButton!, exportButton!], vertical: false, spacing: 8), status])
         for v in [titleLabel, content, preview, status] { v.widthAnchor.constraint(equalTo: detail.widthAnchor).isActive = true }
         let divider = NSBox(); divider.boxType = .separator
@@ -114,8 +117,9 @@ final class QRLibraryWindow: FileToolWindow, NSOutlineViewDataSource, NSOutlineV
         content.stringValue = selected?.value ?? L("Add a code or import an image to plant your first tree.")
         do { try tree.display(selected) } catch { status.stringValue = error.localizedDescription }
         mode.selectedSegment = 0; season.selectItem(at: QRSeason.allCases.firstIndex(of: selected?.season ?? .summer) ?? 1)
+        template.selectItem(at: QRTemplate.allCases.firstIndex(of: selected?.template ?? .tree) ?? 0)
         for button in [editButton, removeButton, copyButton, exportButton] { button?.isEnabled = selected != nil && !isBusy }
-        mode.isEnabled = selected != nil; season.isEnabled = selected != nil; undoButton?.isEnabled = !undoValues.isEmpty && !isBusy
+        mode.isEnabled = selected != nil; season.isEnabled = selected != nil; template.isEnabled = selected != nil; undoButton?.isEnabled = !undoValues.isEmpty && !isBusy
         status.stringValue = L("%d saved codes · stored on this Mac", entries.count)
     }
     func controlTextDidChange(_ obj: Notification) { rebuild(select: selected?.id) }
@@ -126,7 +130,8 @@ final class QRLibraryWindow: FileToolWindow, NSOutlineViewDataSource, NSOutlineV
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool { (item as? CodeLibraryNode)?.entry != nil }
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         let node = item as! CodeLibraryNode
-        let image = NSImageView(image: NSImage(systemSymbolName: node.entry == nil ? "folder" : "tree", accessibilityDescription: nil)!)
+        let image = NSImageView(image: NSImage(systemSymbolName: node.entry.map(\.template.symbol) ?? "folder", accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "tree", accessibilityDescription: nil)!)
         image.contentTintColor = node.entry == nil ? .secondaryLabelColor : .systemGreen
         let text = NSTextField(labelWithString: node.title); text.lineBreakMode = .byTruncatingTail
         return ToolUI.stack([image, text], vertical: false, spacing: 6)
@@ -135,6 +140,10 @@ final class QRLibraryWindow: FileToolWindow, NSOutlineViewDataSource, NSOutlineV
     @objc private func seasonChanged() {
         guard var entry = selected else { return }
         entry.season = QRSeason.allCases[season.indexOfSelectedItem]; saveEntry(entry)
+    }
+    @objc private func templateChanged() {
+        guard var entry = selected else { return }
+        entry.template = QRTemplate.allCases[template.indexOfSelectedItem]; saveEntry(entry)
     }
     @objc private func addCode() { edit(nil) }
     @objc private func editCode() { if let selected { edit(selected) } }
