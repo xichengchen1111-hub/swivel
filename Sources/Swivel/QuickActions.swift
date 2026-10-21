@@ -205,7 +205,17 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
                 Clothesline.shared.show(force: true); return nil
             })
         }
+        if Feature.qrCodes.isOn {
+            list.append(QuickCommand(id: "qrLibrary", title: L("QR Library"), detail: L("Saved codes and trees"), symbol: "tree") {
+                QRLibraryWindow().show(); return nil
+            })
+        }
         guard !files.isEmpty else {
+            for feature in [Feature.batchRename, .pdfPages, .qrCodes] where feature.isOn {
+                list.append(QuickCommand(id: "choose.\(feature.rawValue)", title: feature.title, detail: L("Choose Files…"), symbol: feature.symbol) {
+                    FileActionsPane.chooseAndOpen(feature); return nil
+                })
+            }
             if Feature.textCapture.isOn {
                 list.append(QuickCommand(id: "chooseOCR", title: L("Extract Text"), detail: L("Choose an image…"), symbol: Feature.textCapture.symbol) {
                     if let url = ToolUI.chooseFiles(imagesOnly: true, multiple: false).first { TextCaptureWindow.present(url) }

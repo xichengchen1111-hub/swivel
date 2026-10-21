@@ -22,9 +22,14 @@ final class WheelController {
     private static let perPage = 8
     /// Demo only: a menu style to use instead of the saved one.
     var styleOverride: MenuStyle?
+    private var clickMonitors: [Any] = []
+    var isVisible: Bool { panel.isVisible && !panel.isClosing }
 
     init() {
         panel.wheel.onDrop = { [weak self] item, urls in self?.perform(item, urls: urls) }
+        panel.wheel.onClick = { [weak self] item in self?.perform(item, urls: []) }
+        panel.wheel.onCancel = { [weak self] in self?.close(.cancel) }
+        panel.wheel.onNextPage = { [weak self] in self?.demoNextPage() }
         panel.wheel.onDragEndedWithoutDrop = { [weak self] in
             guard let self, self.panel.isVisible, !self.panel.isClosing, self.panel.wheel.pressed == nil else { return }
             self.close(.cancel)
@@ -38,6 +43,7 @@ final class WheelController {
     }
 
     func keyTapped(_ newMode: WheelMode, urls: [URL]) {
+        panel.wheel.isClickable = false
         if newMode == mode, panel.isVisible, !panel.isClosing {
             guard pages.count > 1 else {
                 Feedback.refuse()
@@ -65,6 +71,26 @@ final class WheelController {
         panel.show(at: NSEvent.mouseLocation)
     }
 
+    /// Keyboard-launched wheels use the same layouts and feedback, with click/arrow/Return selection.
+    func showClickable(_ items: [WheelItem], mode: WheelMode = .tools) {
+        guard !items.isEmpty else { return }
+        removeClickMonitors()
+        self.mode = mode; page = 0
+        pages = stride(from: 0, to: items.count, by: Self.perPage).map { Array(items[$0..<min($0 + Self.perPage, items.count)]) }
+        panel.wheel.isClickable = true; panel.wheel.style = styleOverride ?? Prefs.style
+        panel.wheel.subtitle = L("Click or use arrows · Return · Space for next page")
+        panel.acceptsMouseMovedEvents = true
+        refresh(); panel.show(at: NSEvent.mouseLocation); panel.makeKey(); panel.makeFirstResponder(panel.wheel)
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.close(.cancel) }
+        }) { clickMonitors.append(monitor) }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] event in
+            if event.window !== self?.panel { self?.close(.cancel) }; return event
+        }) { clickMonitors.append(monitor) }
+    }
+    func dismiss() { close(.cancel) }
+    private func removeClickMonitors() { clickMonitors.forEach(NSEvent.removeMonitor); clickMonitors.removeAll() }
+
     /// Demo only: shows an item as hovered (ignored if out of range).
     func demoHover(_ index: Int) {
         guard panel.wheel.items.indices.contains(index) else { return }
@@ -82,6 +108,7 @@ final class WheelController {
     /// Demo only: turns to the next page as a second key tap would.
     func demoNextPage() {
         guard let mode, pages.count > 1 else { return }
+        if panel.wheel.isClickable { page = (page + 1) % pages.count; refresh(); return }
         keyTapped(mode, urls: [])
     }
 
@@ -107,6 +134,7 @@ final class WheelController {
     }
 
     private func close(_ how: WheelPanel.Dismissal) {
+        removeClickMonitors()
         panel.dismiss(how)
         mode = nil
     }
@@ -218,8 +246,9 @@ final class WheelPanel: NSPanel {
         return blur
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { wheel.isClickable }
     override var canBecomeMain: Bool { false }
+    override func accessibilityChildren() -> [Any]? { wheel.isClickable ? [wheel] : super.accessibilityChildren() }
 
     enum Dismissal { case cancel, confirm }
 

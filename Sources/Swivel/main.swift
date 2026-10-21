@@ -8,15 +8,17 @@ MainActor.assumeIsolated {
 
     // Isolated preview: no screenshot takeover or background watchers. Uses the executable's defaults domain.
     if args.count >= 3, args[1] == "--tool" {
-        for feature in [Feature.textCapture, .shelf, .imagePresets, .quickActions] { Prefs.setFeatureEnabled(feature, true) }
+        if let directory = ProcessInfo.processInfo.environment["SWIVEL_QR_LIBRARY_DIR"] { QRLibraryStore.previewDirectory = URL(fileURLWithPath: directory, isDirectory: true) }
+        for feature in [Feature.textCapture, .shelf, .imagePresets, .quickActions, .batchRename, .pdfPages, .qrCodes, .appRouting] { Prefs.setFeatureEnabled(feature, true) }
         app.setActivationPolicy(.regular)
         app.mainMenu = AppWindow.mainMenu()
         if let appearance = ProcessInfo.processInfo.environment["SWIVEL_PREVIEW_APPEARANCE"] {
             app.appearance = NSAppearance(named: appearance == "light" ? .aqua : .darkAqua)
         }
         QuickActions.shared.syncSettings()
+        ShortcutWheel.shared.sync()
         NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { QuickActions.shared.syncSettings() }
+            MainActor.assumeIsolated { QuickActions.shared.syncSettings(); ShortcutWheel.shared.sync() }
         }
         switch args[2] {
         case "text":
@@ -29,6 +31,18 @@ MainActor.assumeIsolated {
         case "clothesline": AppWindow.shared.show(.clothesline)
         case "style": AppWindow.shared.show(.style)
         case "colors": AppWindow.shared.show(.colors)
+        case "rename":
+            if args.count > 3 { BatchRenameWindow(args.dropFirst(3).map { URL(fileURLWithPath: $0) }).show() }
+            else { AppWindow.shared.show(.batchRename) }
+        case "pdf":
+            if args.count > 3 { PDFPagesWindow(args.dropFirst(3).map { URL(fileURLWithPath: $0) }).show() }
+            else { AppWindow.shared.show(.pdfPages) }
+        case "qr":
+            if args.count > 3 { QRCodesWindow(args.dropFirst(3).map { URL(fileURLWithPath: $0) }).show() }
+            else { AppWindow.shared.show(.qrCodes) }
+        case "apps": AppWindow.shared.show(.appRouting)
+        case "library": QRLibraryWindow().show()
+        case "launcher": Prefs.shortcutWheelEnabled = true; Prefs.isEnabled = true; ShortcutWheel.shared.sync(); ShortcutWheel.shared.show()
         default: AppWindow.shared.show()
         }
         app.run()
@@ -234,6 +248,8 @@ MainActor.assumeIsolated {
         app.run()
     }
 
+    do { if try AppInstance.reopenExisting() { exit(0) } }
+    catch { NSAlert(error: error).runModal(); exit(1) }
     app.delegate = delegate
     app.setActivationPolicy(.accessory)
     app.run()

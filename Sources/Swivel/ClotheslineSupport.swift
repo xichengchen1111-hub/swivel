@@ -106,50 +106,27 @@ final class QLHostWindow: NSWindow {
 
 /// Points macOS screenshots at the clothesline folder and turns off the floating thumbnail,
 /// remembering the user's own settings so they can be put back.
+@MainActor
 enum ScreenshotTakeover {
     private static let domain = "com.apple.screencapture" as CFString
-    private static let savedKey = "savedScreencaptureSettings"
+    private static let session = ScreenshotSession(defaults: .standard, read: { key in
+        CFPreferencesCopyAppValue(key as CFString, domain)
+    }, write: { key, value in
+        CFPreferencesSetAppValue(key as CFString, value as CFPropertyList?, domain)
+    }, synchronize: { CFPreferencesAppSynchronize(domain) })
 
     static func enable(into folder: URL) {
-        let defaults = UserDefaults.standard
-        if defaults.dictionary(forKey: savedKey) == nil {
-            var saved: [String: Any] = [:]
-            for key in ["location", "show-thumbnail"] {
-                if let value = CFPreferencesCopyAppValue(key as CFString, domain) { saved[key] = value }
-                else { saved[key] = "__unset__" }
-            }
-            defaults.set(saved, forKey: savedKey)
-        }
-        CFPreferencesSetAppValue("location" as CFString, folder.path as CFString, domain)
-        CFPreferencesSetAppValue("show-thumbnail" as CFString, kCFBooleanFalse, domain)
-        CFPreferencesAppSynchronize(domain)
+        session.enable(into: folder)
     }
+    static func isActive(into folder: URL) -> Bool { session.isActive(into: folder) }
 
     /// Where screenshots went before Swivel took over (the Desktop if the user never changed it).
     static var originalLocation: URL {
-        let saved = UserDefaults.standard.dictionary(forKey: savedKey)
-        if let path = saved?["location"] as? String, path != "__unset__" {
-            return URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
-        }
-        if saved == nil, let path = CFPreferencesCopyAppValue("location" as CFString, domain) as? String {
-            return URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop", isDirectory: true)
+        session.originalLocation
     }
 
     static func restore() {
-        let defaults = UserDefaults.standard
-        guard let saved = defaults.dictionary(forKey: savedKey) else { return }
-        for key in ["location", "show-thumbnail"] {
-            let value = saved[key]
-            if value as? String == "__unset__" || value == nil {
-                CFPreferencesSetAppValue(key as CFString, nil, domain)
-            } else {
-                CFPreferencesSetAppValue(key as CFString, value as CFPropertyList, domain)
-            }
-        }
-        CFPreferencesAppSynchronize(domain)
-        defaults.removeObject(forKey: savedKey)
+        session.restore()
     }
 }
 

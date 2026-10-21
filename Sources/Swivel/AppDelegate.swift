@@ -9,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launchToast: Toast { Toast.shared }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        DistributedNotificationCenter.default().addObserver(forName: AppInstance.reopen, object: Bundle.main.bundleIdentifier, queue: .main) { _ in
+            MainActor.assumeIsolated { Clothesline.shared.reconcileScreenshotTakeover(); AppWindow.shared.show() }
+        }
         setUpStatusItem()
         watcher.onKeyTap = { [weak self] mode in
             guard let self else { return }
@@ -18,8 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         watcher.start()
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
             TrackpadActuator.refreshAfterWake()
+            Clothesline.shared.reconcileScreenshotTakeover()
         }
         QuickActions.shared.syncSettings()
+        ShortcutWheel.shared.sync()
         Clothesline.shared.start()
         if ProcessInfo.processInfo.environment["SWIVEL_SHOW_ROPE"] != nil {  // for testing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { Clothesline.shared.toggle() }
@@ -28,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated {
                 self?.rebuildMenu()
                 QuickActions.shared.syncSettings()
+                ShortcutWheel.shared.sync()
             }
         }
 
@@ -45,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) { Clothesline.shared.stop() }
+    func applicationDidBecomeActive(_ notification: Notification) { ShortcutWheel.shared.sync(); Clothesline.shared.reconcileScreenshotTakeover() }
 
     /// First launch: ask before redirecting screenshots.
     private func askAboutScreenshots() {
@@ -68,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Opening the app again while it runs brings up the window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        Clothesline.shared.reconcileScreenshotTakeover()
         AppWindow.shared.show()
         return false
     }
@@ -120,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(how)
             for (mode, title, symbol) in [(WheelMode.convert, "Convert formats", "arrow.triangle.2.circlepath"),
                                           (.tools, "File tools", "slider.horizontal.3"),
-                                          (.actions, "File actions", "bolt")] {
+                                          (.actions, "File actions", "bolt"), (.apps, "App Actions", "arrow.up.forward.app"), (.codes, "QR Library", "qrcode")] {
                 let item = NSMenuItem(title: "\(Prefs.key(for: mode).title) — \(L(title))", action: nil, keyEquivalent: "")
                 item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
                 item.submenu = Self.guide(for: mode)
@@ -134,6 +142,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Feature.textCapture.isOn { add(to: menu, "Extract Text…", #selector(extractText)) }
         if Feature.imagePresets.isOn { add(to: menu, "Image Presets…", #selector(openPresets)) }
         if Feature.quickActions.isOn { add(to: menu, "Show Quick Actions", #selector(showQuickActions)) }
+        if Feature.batchRename.isOn { add(to: menu, "Batch Rename…", #selector(batchRename)) }
+        if Feature.pdfPages.isOn { add(to: menu, "PDF Pages…", #selector(pdfPages)) }
+        if Feature.qrCodes.isOn { add(to: menu, "Read QR Codes…", #selector(readCodes)) }
+        if Feature.qrCodes.isOn { add(to: menu, "QR Library…", #selector(openCodeLibrary)) }
+        if Feature.wheel.isOn && Prefs.shortcutWheelEnabled { add(to: menu, "Show Tool Wheel", #selector(showToolWheel)) }
+        if Feature.appRouting.isOn { add(to: menu, "App Actions…", #selector(appActions)) }
 
         if ropeOn {
             menu.addItem(.separator())
@@ -210,6 +224,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openPresets() { AppWindow.shared.show(.imagePresets) }
     @objc private func showQuickActions() { QuickActions.shared.show() }
     @objc private func showShelf() { Shelf.shared.show() }
+    @objc private func batchRename() { FileActionsPane.chooseAndOpen(.batchRename) }
+    @objc private func pdfPages() { FileActionsPane.chooseAndOpen(.pdfPages) }
+    @objc private func readCodes() { FileActionsPane.chooseAndOpen(.qrCodes) }
+    @objc private func appActions() { AppWindow.shared.show(.appRouting) }
+    @objc private func openCodeLibrary() { QRLibraryWindow().show() }
+    @objc private func showToolWheel() { ShortcutWheel.shared.show() }
 
     @objc private func toggleLogin() {
         do {

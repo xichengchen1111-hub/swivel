@@ -67,8 +67,25 @@ enum FileKind: String, CaseIterable {
 /// Decides which wheel items a drag gets, per file kind and key.
 @MainActor
 enum Catalog {
+    private static var codeCache: [SavedQRCode]?
+    private static var codeObserver: NSObjectProtocol?
+    static func savedCodes() -> [SavedQRCode] {
+        if codeObserver == nil {
+            codeObserver = NotificationCenter.default.addObserver(forName: QRLibraryStore.changed, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { codeCache = nil }
+            }
+        }
+        if codeCache == nil { codeCache = (try? QRLibraryStore().load()) ?? [] }
+        return codeCache ?? []
+    }
     static func displayTitle(_ id: String) -> String {
+        if id == "Arrange PDF Pages" { return L("PDF Pages") }
+        if id == "Read QR Codes" { return L("Scan QR") }
         if id == "Float" { return L("Add to Shelf") }
+        if id.hasPrefix("qr."), let entry = savedCodes().first(where: { "qr." + $0.id.uuidString == id }) { return entry.name }
+        if id.hasPrefix("app."), let target = Prefs.fileAppTargets.first(where: { $0.actionID == id }) {
+            return target.name
+        }
         if id.hasPrefix("preset."), let preset = Prefs.imagePresets.first(where: { $0.actionID == id }) {
             return preset.displayName
         }
@@ -77,7 +94,7 @@ enum Catalog {
 
     static func standaloneItems(for urls: [URL], mode: WheelMode) -> [WheelItem] {
         defaultItems(for: urls, mode: mode).filter {
-            $0.title == "Extract Text" || $0.title == "Float" || $0.title == "Hang" || $0.title.hasPrefix("preset.")
+            ["Extract Text", "Float", "Hang", "Batch Rename", "Arrange PDF Pages", "Read QR Codes", "QR Library"].contains($0.title) || $0.title.hasPrefix("preset.") || $0.title.hasPrefix("app.") || $0.title.hasPrefix("qr.")
         }
     }
     /// The menu for a drag, in the user's order with hidden items removed.
@@ -88,20 +105,59 @@ enum Catalog {
 
     /// Everything a menu can offer for a kind of file, used by the Customize settings.
     static func allItems(mode: WheelMode, kind: FileKind) -> [String] {
+        if mode == .apps {
+            guard Feature.appRouting.isOn else { return [] }
+            // Customize represents a whole category, not just its sample .jpg/.docx file.
+            return Prefs.fileAppTargets.filter { target in
+                target.enabled && (target.extensions.isEmpty || target.extensions.contains { ext in
+                    FileKind.of(URL(fileURLWithPath: "/nonexistent/file." + ext)) == kind
+                })
+            }.map(\.actionID)
+        }
         let multi = defaultItems(for: kind.sampleURLs, mode: mode).map(\.title)
         let single = defaultItems(for: Array(kind.sampleURLs.prefix(1)), mode: mode).map(\.title)
         return multi + single.filter { !multi.contains($0) }
     }
 
     static func defaultItems(for urls: [URL], mode: WheelMode) -> [WheelItem] {
+        if mode == .codes {
+            guard Feature.qrCodes.isOn else { return [] }
+            return [WheelItem(title: "QR Library") { _ in
+                guard Feature.qrCodes.isOn else { throw ToolError(L("This feature is turned off.")) }
+                QRLibraryWindow().show(); return ActionResult(message: "")
+            }] + savedCodes().map { entry in
+                WheelItem(title: "qr." + entry.id.uuidString) { _ in
+                    guard Feature.qrCodes.isOn else { throw ToolError(L("This feature is turned off.")) }
+                    guard try QRLibraryStore().load().contains(where: { $0.id == entry.id }) else { throw ToolError(L("This saved code was removed. Open the QR Library to refresh.")) }
+                    QRLibraryWindow(select: entry.id).show(); return ActionResult(message: "")
+                }
+            }
+        }
+        if mode == .apps {
+            guard Feature.appRouting.isOn else { return [] }
+            return Prefs.fileAppTargets.filter { $0.enabled && (urls.isEmpty || $0.accepts(urls)) }.map { target in
+                WheelItem(title: target.actionID) { files in
+                    let selected = files.isEmpty ? ToolUI.chooseFiles(folders: true) : files
+                    guard !selected.isEmpty else { throw Cancelled() }
+                    return try await FileAppRouting.run(target, files: selected)
+                }
+            }
+        }
         guard !urls.isEmpty else { return [] }
         let kind = FileKind.of(urls)
         let sourceExt = Set(urls.map { $0.pathExtension.lowercased() })
         let multi = urls.count > 1
 
         switch mode {
+        case .apps, .codes: return [] // Handled above, including no-file shortcut wheels.
         case .actions:
             var list = actions(multi: multi)
+            if Feature.batchRename.isOn {
+                list.append(WheelItem(title: "Batch Rename") { files in
+                    guard Feature.batchRename.isOn else { throw ToolError(L("This feature is turned off.")) }
+                    BatchRenameWindow(files).show(); return ActionResult(message: "")
+                })
+            }
             if kind == .image && Feature.clothesline.isOn {
                 list.insert(WheelItem(title: "Hang") { urls in
                     guard Feature.clothesline.isOn else { throw ToolError(L("This feature is turned off.")) }
@@ -153,6 +209,12 @@ enum Catalog {
                 ]
                 var list = editors + Images.toolItems.map { option in each(option.title, urls, option.run) }
                     + [WheelItem(title: "Make PDF") { saved(try await Images.makePDF($0)) }]
+                if Feature.qrCodes.isOn {
+                    list.insert(WheelItem(title: "Read QR Codes") { files in
+                        guard Feature.qrCodes.isOn else { throw ToolError(L("This feature is turned off.")) }
+                        QRCodesWindow(files).show(); return ActionResult(message: "")
+                    }, at: 0)
+                }
                 if Feature.textCapture.isOn && !multi {
                     list.insert(WheelItem(title: "Extract Text") { urls in
                         guard Feature.textCapture.isOn, let url = urls.first else { throw ToolError(L("This feature is turned off.")) }
@@ -181,6 +243,12 @@ enum Catalog {
             case .pdf:
                 var list = [each("Crop", urls) { try await CropEditor(source: $0).present() }]
                     + PDFs.toolItems.map { option in each(option.title, urls, option.run) }
+                if Feature.pdfPages.isOn {
+                    list.insert(WheelItem(title: "Arrange PDF Pages") { files in
+                        guard Feature.pdfPages.isOn else { throw ToolError(L("This feature is turned off.")) }
+                        PDFPagesWindow(files).show(); return ActionResult(message: "")
+                    }, at: 0)
+                }
                 if multi { list.insert(WheelItem(title: "Merge") { saved([try await PDFs.merge($0)]) }, at: 0) }
                 return list
             case .document:

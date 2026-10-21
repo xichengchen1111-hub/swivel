@@ -3,6 +3,7 @@ import AppKit
 /// The tools in the Swivel bundle. Each one can be switched on or off on its own.
 enum Feature: String, CaseIterable {
     case wheel, clothesline, textCapture, shelf, imagePresets, quickActions
+    case batchRename, pdfPages, qrCodes, appRouting
 
     var title: String {
         switch self {
@@ -12,6 +13,10 @@ enum Feature: String, CaseIterable {
         case .shelf: L("File Shelf")
         case .imagePresets: L("Image Presets")
         case .quickActions: L("Quick Actions")
+        case .batchRename: L("Batch Rename")
+        case .pdfPages: L("PDF Pages")
+        case .qrCodes: L("QR & Barcodes")
+        case .appRouting: L("App Actions")
         }
     }
 
@@ -23,6 +28,10 @@ enum Feature: String, CaseIterable {
         case .shelf: "tray.full"
         case .imagePresets: "slider.horizontal.3"
         case .quickActions: "command.square"
+        case .batchRename: "character.cursor.ibeam"
+        case .pdfPages: "doc.on.doc"
+        case .qrCodes: "qrcode.viewfinder"
+        case .appRouting: "arrow.up.forward.app"
         }
     }
 
@@ -34,6 +43,10 @@ enum Feature: String, CaseIterable {
         case .shelf: L("Gather files from different places, then drag a selection out together.")
         case .imagePresets: L("Save your favourite image sizes, formats and privacy settings for next time.")
         case .quickActions: L("Find an action from the keyboard, even when the menu bar is crowded.")
+        case .batchRename: L("Preview and rename a batch of files, with conflict checks and undo.")
+        case .pdfPages: L("Pick, reorder, rotate and export PDF pages without changing the originals.")
+        case .qrCodes: L("Read QR codes and barcodes from selected images, entirely on your Mac.")
+        case .appRouting: L("Open files in your chosen apps, or prepare a Codex or Claude Code draft.")
         }
     }
 

@@ -27,6 +27,8 @@ final class Clothesline: NSObject {
     private(set) var items: [URL] = []
     let panel = RopePanel()
     private var watches: [DispatchSourceFileSystemObject] = []
+    private var settingsObserver: NSObjectProtocol?
+    private(set) var isRunning = false
     private var hoverTimer: Timer?
     private var monitors: [Any] = []
     private var wasAtTopEdge = false
@@ -46,6 +48,8 @@ final class Clothesline: NSObject {
     static let mediaExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tiff", "gif", "webp", "mov", "mp4"]
 
     func start() {
+        guard !isRunning else { return }
+        isRunning = true
         reload()
         // Anything left waiting from last time goes where screenshots normally go.
         for url in mediaFiles(in: incoming) { IncomingCard.shared.putAway(url) }
@@ -53,11 +57,15 @@ final class Clothesline: NSObject {
         watch(incoming) { [weak self] in self?.checkIncoming() }
         hotKey = HotKey { [weak self] in self?.toggle() }
         // The pointer is only watched while the feature is on, wherever the setting gets changed.
-        NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.syncWatching() }
+        settingsObserver = NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncWatching(); self?.reconcileScreenshotTakeover() }
         }
         syncWatching()
-        if Prefs.clotheslineEnabled && Prefs.clotheslineTakeover { ScreenshotTakeover.enable(into: incoming) }
+        reconcileScreenshotTakeover()
+    }
+    func reconcileScreenshotTakeover() {
+        guard isRunning, Prefs.clotheslineEnabled, Prefs.clotheslineTakeover else { return }
+        ScreenshotTakeover.enable(into: incoming)
     }
 
     /// Turning the feature off puts the rope and any waiting card away, stops hanging copies and gives screenshots
@@ -77,7 +85,12 @@ final class Clothesline: NSObject {
     /// Called on quit so the user's own screenshot settings come back, and nothing stays behind in the hidden
     /// Incoming folder: a card still up, one queued behind a drag, or one that arrived a moment ago.
     func stop() {
+        guard isRunning else { return }
+        isRunning = false
         stopWatching()
+        watches.forEach { $0.cancel() }; watches.removeAll()
+        hotKey?.unregister(); hotKey = nil
+        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver); self.settingsObserver = nil }
         ScreenshotTakeover.restore()  // first, so a screenshot taken from here on goes straight to the usual folder
         putAwayWaiting(animated: false)
     }
@@ -171,6 +184,7 @@ final class Clothesline: NSObject {
         for url in urls where Self.mediaExtensions.contains(url.pathExtension.lowercased()) {
             let destination = Paths.unique(folder.appendingPathComponent(url.lastPathComponent))
             let waiting = url.deletingLastPathComponent().standardizedFileURL == incoming.standardizedFileURL
+                || IncomingCard.shared.takeSaved(url)
             do {
                 if waiting { try fm.moveItem(at: url, to: destination) } else { try fm.copyItem(at: url, to: destination) }
             } catch {
@@ -1669,6 +1683,15 @@ final class IncomingCard: NSObject, NSDraggingSource {
     private var dragging = false
     private var next: URL?                  // arrived during a drag; shown once the drag ends
     private var presentation = 0
+    /// The card's file, already moved where screenshots normally go so a drag out hands over a lasting path. Hanging
+    /// it still moves it rather than leaving a copy behind, unless another app took it in the meantime.
+    private var savedForDrag: URL?
+    /// Whether `url` is the card's screenshot that a drag already saved; it is handed to the rope only once.
+    func takeSaved(_ url: URL) -> Bool {
+        guard url == savedForDrag else { return false }
+        savedForDrag = nil
+        return true
+    }
     private static let waitSeconds: TimeInterval = 2.5
     private static let resumeSeconds: TimeInterval = 1
 
@@ -1701,6 +1724,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
         pauseDismissal()
         presentation += 1
         self.url = url
+        savedForDrag = nil
         view.resetInteraction()
         view.setThumbnail(Clothesline.thumbnail(url, maxPixels: 480))
         let size = view.preferredSize
@@ -1755,7 +1779,9 @@ final class IncomingCard: NSObject, NSDraggingSource {
     /// Saves the file where screenshots normally go, and returns where it ended up.
     @discardableResult
     private func release(_ url: URL) -> URL? {
-        Self.save(url, to: ScreenshotTakeover.originalLocation, otherwise: Clothesline.shared.folder)
+        // Saved already (a drag moved it out first): it stays where it is.
+        guard url.deletingLastPathComponent().standardizedFileURL == Clothesline.shared.incoming.standardizedFileURL else { return url }
+        return Self.save(url, to: ScreenshotTakeover.originalLocation, otherwise: Clothesline.shared.folder)
     }
 
     /// Moves a waiting screenshot into `folder` without overwriting anything. If that fails (the folder is gone or
@@ -1794,6 +1820,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
         release(url)
         guard url == self.url else { return }
         self.url = nil
+        savedForDrag = nil
         pauseDismissal()
         guard animated else { orderOut(); return }
         let generation = presentation
@@ -1840,6 +1867,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
         guard let url else { return }
         pauseDismissal()
         self.url = nil
+        savedForDrag = nil
         let saved = release(url) ?? url
         let generation = presentation
         view.fadeOut { [weak self] in
@@ -1850,7 +1878,10 @@ final class IncomingCard: NSObject, NSDraggingSource {
     }
 
     func beginDrag(with event: NSEvent) {
-        guard let url else { return }
+        guard var url else { return }
+        // Another app may read a dropped file long after the drop (a chat attachment is read when it is sent), so
+        // the file goes where screenshots normally go before the drag starts, and the path it hands over stays valid.
+        if let saved = release(url), saved != url { url = saved; self.url = saved; savedForDrag = saved }
         dragging = true
         pauseDismissal()
         Feedback.prepare()
@@ -1882,10 +1913,15 @@ final class IncomingCard: NSObject, NSDraggingSource {
         }
         if operation == .delete {
             NSWorkspace.shared.recycle([url])
+        } else if operation != [] && !Clothesline.shared.isTaking(url) {
+            // Another app holds this path now; hanging it later copies instead of moving it out from under that app.
+            savedForDrag = nil
         }
         // The rope may have taken it without having moved it yet (that happens on the next turn of the run loop).
         if Clothesline.shared.isTaking(url) || operation == .delete || !FileManager.default.fileExists(atPath: url.path) {
-            // Hung on the rope, moved to a folder or thrown away: the card's job is done.
+            // Hung on the rope, moved to a folder or thrown away: the card's job is done. A rope drop still needs
+            // to know the saved file is the card's when it moves it on the next turn of the run loop.
+            if !Clothesline.shared.isTaking(url) { savedForDrag = nil }
             self.url = nil
             pauseDismissal()
             orderOut()
@@ -1950,6 +1986,14 @@ final class IncomingView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+    override func isAccessibilityElement() -> Bool { card?.url != nil }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { L("Hang Screenshot") }
+    override func accessibilityHelp() -> String? { L("Click to hang this screenshot on the clothesline.") }
+    override func accessibilityPerformPress() -> Bool {
+        guard let card, card.url != nil else { return false }
+        card.hangNow(); return true
+    }
 
     func resetInteraction(hovered: Bool = false, afterDrag: Bool = false) {
         singleClick?.cancel()

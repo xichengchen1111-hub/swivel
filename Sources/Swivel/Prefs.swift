@@ -147,6 +147,21 @@ enum Prefs {
         set { defaults.set(newValue.rawValue, forKey: "quickActions.shortcut"); post() }
     }
 
+    static var fileAppTargets: [FileAppTarget] {
+        get {
+            guard let bytes = defaults.data(forKey: "appTargets.v1"),
+                  let values = try? JSONDecoder().decode([FileAppTarget].self, from: bytes) else { return FileAppTarget.starters }
+            var ids = Set<String>()
+            return values.filter { $0.isValid && ids.insert($0.id).inserted }
+        }
+        set {
+            var ids = Set<String>()
+            let values = newValue.filter { $0.isValid && ids.insert($0.id).inserted }
+            guard let bytes = try? JSONEncoder().encode(values) else { return }
+            defaults.set(bytes, forKey: "appTargets.v1"); post()
+        }
+    }
+
     /// Force Touch trackpad taps when the pointer moves between menu items and on a drop.
     static var haptics: Bool {
         get { defaults.object(forKey: "feedback.haptics") as? Bool ?? true }
@@ -192,10 +207,29 @@ enum Prefs {
         set { defaults.set(newValue.rawValue, forKey: "style"); post() }
     }
 
-    private static let defaultKeys: [WheelMode: TriggerKey] = [.convert: .shift, .tools: .command, .actions: .control]
+    private static let defaultKeys: [WheelMode: TriggerKey] = [.convert: .shift, .tools: .command, .actions: .control, .apps: .option, .codes: .fn]
 
     static func key(for mode: WheelMode) -> TriggerKey {
-        TriggerKey(rawValue: defaults.string(forKey: "key.\(mode.id)") ?? "") ?? defaultKeys[mode]!
+        // Preserve explicit old assignments first; give new wheels whichever keys remain free.
+        var chosen: [WheelMode: TriggerKey] = [:], used = Set<TriggerKey>()
+        for candidate in WheelMode.allCases {
+            if let value = defaults.string(forKey: "key.\(candidate.id)"), let key = TriggerKey(rawValue: value), used.insert(key).inserted { chosen[candidate] = key }
+        }
+        for candidate in WheelMode.allCases where chosen[candidate] == nil {
+            let preferred = defaultKeys[candidate]!
+            let value = used.contains(preferred) ? TriggerKey.allCases.first { !used.contains($0) }! : preferred
+            chosen[candidate] = value; used.insert(value)
+        }
+        return chosen[mode]!
+    }
+
+    static var shortcutWheelEnabled: Bool {
+        get { defaults.bool(forKey: "wheel.shortcutEnabled") }
+        set { defaults.set(newValue, forKey: "wheel.shortcutEnabled"); post() }
+    }
+    static var wheelShortcut: WheelShortcut {
+        get { WheelShortcut(rawValue: defaults.string(forKey: "wheel.shortcut") ?? "") ?? .j }
+        set { defaults.set(newValue.rawValue, forKey: "wheel.shortcut"); post() }
     }
 
     /// Assigns a key; if another menu already used it, that menu takes this one's old key.
