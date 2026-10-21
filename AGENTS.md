@@ -11,6 +11,9 @@ Swivel is a native macOS menu-bar app (Swift, AppKit, no third-party dependencie
 
 The four additions are opt-in and default off. Each can be used independently of Wheel.
 
+A native Windows port (C# / WPF) lives in `windows/`; it has its own notes in `windows/AGENTS.md`. When a Mac
+feature or string changes, port it there too (regenerate the shared strings with `python windows/tools/port_strings.py`).
+
 The owner is a Chinese-speaking user; talk to them in Chinese. The app UI is English with translations (see Localization).
 
 ## Build, install, run

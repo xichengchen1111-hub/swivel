@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Swivel.Tests/Swivel.Tests.csproj" />
+  <Project Path="Swivel/Swivel.csproj" />
+</Solution>

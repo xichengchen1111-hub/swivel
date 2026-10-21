@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- The 10.0.19041 Windows SDK projection gives access to the built-in WinRT APIs (OCR, imaging, media, PDF). -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <!-- Only for NotifyIcon (tray) and silent printing to "Microsoft Print to PDF". -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- WPF and WinForms share many type names; files import what they use explicitly (see Core/GlobalUsings.cs). -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Swivel</RootNamespace>
+    <AssemblyName>Swivel</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Swivel.ico</ApplicationIcon>
+    <Version>1.2.0</Version>
+    <Product>Swivel</Product>
+    <Description>A zero-click, offline file converter and toolkit for Windows.</Description>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- WPF0001: Fluent ThemeMode is marked experimental. -->
+    <NoWarn>$(NoWarn);WPF0001;WFO0003;CA1416</NoWarn>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Swivel.ico" />
+    <InternalsVisibleTo Include="Swivel.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -2,6 +2,8 @@
 
 A zero-click, offline file converter for macOS. Drag any file, tap a key, and drop it on the wheel that appears under your cursor.
 
+**Windows:** a native Windows 10/11 port with the same tools lives in [`windows/`](windows/README.md) (C# / WPF, built with `windows/build.ps1`).
+
 | Key while dragging | Wheel |
 | --- | --- |
 | ⇧ Shift | **Convert** formats |
