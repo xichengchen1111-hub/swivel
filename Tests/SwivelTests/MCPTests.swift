@@ -278,6 +278,182 @@ struct MCPTests {
         #expect(intoItself.structured["can_apply"] as? Bool == false)
     }
 
+    @Test func undoLeavesACreatedFolderAloneWhenAnythingInsideItChanged() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let pack = dir.appendingPathComponent("pack")
+        try FileManager.default.createDirectory(at: pack.appendingPathComponent("inner"), withIntermediateDirectories: true)
+        try "first".write(to: pack.appendingPathComponent("inner/note.txt"), atomically: false, encoding: .utf8)
+        let zip = Process()
+        zip.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        zip.arguments = ["-c", "-k", "--keepParent", "--", pack.path, dir.appendingPathComponent("pack.zip").path]
+        try zip.run(); zip.waitUntilExit()
+        try FileManager.default.removeItem(at: pack)
+        let session = try await initialized(dir)
+
+        let plan = try await call(session, "plan_action", ["action": "convert.Extract", "paths": [dir.appendingPathComponent("pack.zip").path]])
+        let applied = try await call(session, "apply_plan", ["plan_id": try #require(plan.structured["plan_id"] as? String, "\(plan.text)")])
+        #expect(applied.structured["created"] as? [String] == [pack.path], "\(applied.text)")
+        // Edited in place, two levels down: the folder's own entry (size, date) stays exactly as it was.
+        let folderBefore = try MCPFingerprint.read(pack)
+        try "edited".write(to: pack.appendingPathComponent("inner/note.txt"), atomically: false, encoding: .utf8)
+        #expect(try MCPFingerprint.read(pack) == folderBefore)
+
+        let undone = try await call(session, "undo", [:])
+        #expect((undone.structured["skipped"] as? [[String: Any]])?.first?["path"] as? String == pack.path, "\(undone.text)")
+        #expect(undone.structured["complete"] as? Bool == false)
+        #expect(try String(contentsOf: pack.appendingPathComponent("inner/note.txt"), encoding: .utf8) == "edited")
+
+        // Too many entries to check counts as changed.
+        let tree = try MCPFingerprint.read(pack, withContents: true)
+        #expect(tree.tree != nil && tree.tree != MCPFingerprint.unchecked && tree.isCurrent())
+        #expect(MCPFingerprint.digest(pack.path, limit: 1) == MCPFingerprint.unchecked)
+        var unchecked = tree; unchecked.tree = MCPFingerprint.unchecked
+        #expect(!unchecked.isCurrent())
+    }
+
+    @Test func anUndoThatSkipsSomethingStaysOpenAndRetriesOnlyWhatIsLeft() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appendingPathComponent("a.txt"), b = dir.appendingPathComponent("b.txt")
+        try "A".write(to: a, atomically: true, encoding: .utf8)
+        try "B".write(to: b, atomically: true, encoding: .utf8)
+        let inbox = dir.appendingPathComponent("Inbox")
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: false)
+        let session = try await initialized(dir)
+        let move = try await call(session, "plan_move", ["paths": [a.path, b.path], "destination": inbox.path])
+        let moved = try await call(session, "apply_plan", ["plan_id": try #require(move.structured["plan_id"] as? String)])
+        let entryID = try #require(moved.structured["entry_id"] as? String)
+
+        try "blocker".write(to: a, atomically: true, encoding: .utf8)  // a.txt can't go back yet.
+        let first = try await call(session, "undo", [:])
+        #expect(first.structured["complete"] as? Bool == false)
+        #expect((first.structured["restored"] as? [[String: Any]])?.compactMap { $0["to"] as? String } == [b.path])
+        #expect((first.structured["skipped"] as? [[String: Any]])?.first?["path"] as? String == inbox.appendingPathComponent("a.txt").path)
+        let open = try #require((try await call(session, "history", [:])).structured["entries"] as? [[String: Any]]).first
+        #expect(open?["undone"] == nil && (open?["moves"] as? [Any])?.count == 1)
+
+        try FileManager.default.removeItem(at: a)
+        let retry = try await call(session, "undo", [:])
+        #expect(retry.structured["entry_id"] as? String == entryID && retry.structured["complete"] as? Bool == true, "\(retry.text)")
+        #expect((retry.structured["restored"] as? [[String: Any]])?.compactMap { $0["to"] as? String } == [a.path])
+        #expect(try String(contentsOf: a, encoding: .utf8) == "A" && (try String(contentsOf: b, encoding: .utf8)) == "B")
+        #expect(try await call(session, "undo", [:]).text.contains("Nothing to undo"))
+    }
+
+    @Test func aMoveIsRefusedWhenItsDestinationWasReplacedOrBecameALink() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let a = dir.appendingPathComponent("a.txt")
+        try "A".write(to: a, atomically: true, encoding: .utf8)
+        let inbox = dir.appendingPathComponent("Inbox"), elsewhere = dir.appendingPathComponent("Elsewhere")
+        try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: false)
+        try FileManager.default.createDirectory(at: elsewhere, withIntermediateDirectories: false)
+        let session = try await initialized(dir)
+
+        for swap in [
+            { try FileManager.default.moveItem(at: inbox, to: dir.appendingPathComponent("Inbox old"))
+              try FileManager.default.createSymbolicLink(at: inbox, withDestinationURL: elsewhere) },
+            { try FileManager.default.removeItem(at: inbox)
+              try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: false) },
+        ] as [() throws -> Void] {
+            try? FileManager.default.removeItem(at: inbox)
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent("Inbox old"))
+            try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: false)
+            let plan = try await call(session, "plan_move", ["paths": [a.path], "destination": inbox.path])
+            try swap()
+            let refused = try await call(session, "apply_plan", ["plan_id": try #require(plan.structured["plan_id"] as? String)])
+            #expect(refused.isError && refused.text.contains("destination"), "\(refused.text)")
+            #expect(FileManager.default.fileExists(atPath: a.path))
+            #expect(try FileManager.default.contentsOfDirectory(atPath: elsewhere.path).isEmpty)
+        }
+    }
+
+    @Test func foldersAboveTheUndoLogAndHardLinksToItAreRefused() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let session = try await initialized(dir)  // Its undo log is dir/.history.
+        let history = dir.appendingPathComponent(".history")
+        try FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
+        try Data("[]".utf8).write(to: history.appendingPathComponent("history.json"))
+        let link = dir.appendingPathComponent("notes.json")
+        try FileManager.default.linkItem(at: history.appendingPathComponent("history.json"), to: link)
+        let target = try folder(); defer { try? FileManager.default.removeItem(at: target) }
+
+        var above = [dir.path, dir.deletingLastPathComponent().path]
+        // The same folder spelled in another case, on a disk that doesn't tell them apart.
+        let shouted = dir.deletingLastPathComponent().appendingPathComponent(dir.lastPathComponent.uppercased()).path
+        if FileManager.default.fileExists(atPath: shouted) { above.append(shouted) }
+        for path in above + [link.path] {
+            for (tool, arguments) in [("plan_rename", ["paths": [path], "prefix": "x "]), ("plan_move", ["paths": [path], "destination": target.path]),
+                                      ("plan_action", ["paths": [path], "action": "convert.ZIP"])] as [(String, [String: Any])] {
+                let result = try await call(session, tool, arguments)
+                #expect(result.isError && result.text.contains("undo log"), "\(tool) \(path): \(result.text)")
+            }
+        }
+        // Moving something into a folder above the log leaves the log where it is.
+        let sub = dir.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: false)
+        try "x".write(to: sub.appendingPathComponent("x.txt"), atomically: true, encoding: .utf8)
+        #expect(try await call(session, "plan_move", ["paths": [sub.appendingPathComponent("x.txt").path], "destination": dir.path]).structured["can_apply"] as? Bool == true)
+        #expect(try await call(session, "plan_move", ["paths": [sub.appendingPathComponent("x.txt").path], "destination": history.path]).text.contains("undo log"))
+    }
+
+    @Test func trailingSlashesOnFilesAndInvisibleCharactersInNewNamesAreRefused() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let real = dir.appendingPathComponent("real.png")
+        try png(real)
+        let session = try await initialized(dir)
+        let slash = try await call(session, "plan_action", ["action": "convert.JPG", "paths": [real.path + "/"]])
+        #expect(slash.isError && slash.text.contains("ends in /"), "\(slash.text)")
+        // A folder may still be written with one.
+        let sub = dir.appendingPathComponent("sub")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: false)
+        #expect(!(try await call(session, "plan_action", ["action": "convert.ZIP", "paths": [sub.path + "/"]]).isError))
+
+        for hidden in ["\u{202E}gnp", "\u{2066}x", "a\u{200B}b", "\u{FEFF}", "a\u{202A}"] {
+            let plan = try await call(session, "plan_rename", ["paths": [real.path], "base_name": "photo" + hidden])
+            #expect(plan.structured["can_apply"] as? Bool == false && plan.structured["plan_id"] == nil, "\(hidden.unicodeScalars.map(\.value))")
+        }
+        // Emoji sequences keep their joiners.
+        #expect(try await call(session, "plan_rename", ["paths": [real.path], "base_name": "family \u{1F468}\u{200D}\u{1F469}"]).structured["can_apply"] as? Bool == true)
+
+        // Long values from the host are cut short in errors.
+        let long = String(repeating: "x", count: 5_000)
+        let refused = try await call(session, "plan_action", ["action": "convert.JPG", "paths": [long]])
+        #expect(refused.isError && refused.text.count < 600 && refused.text.contains("…"))
+    }
+
+    // MARK: Framing
+
+    @Test func aLineOverTheLimitIsDroppedAsItArrivesAndAnsweredOnce() throws {
+        var reader = MCPLineReader()
+        var lines: [MCPLineReader.Line] = []
+        let megabyte = [UInt8](repeating: 0x61, count: 1 << 20)
+        for _ in 0..<40 {  // 40 MB without a newline
+            lines += reader.feed(megabyte)
+            #expect(reader.buffer.count <= MCPLineReader.limit)
+        }
+        lines += reader.feed(Data("tail\n{\"a\":1}\r\npartial".utf8))
+        lines += reader.finish()
+        #expect(lines == [.tooLong, .message(Data(#"{"a":1}"#.utf8)), .message(Data("partial".utf8))])
+
+        var sent: [[String: Any]] = []
+        let session = MCPSession(tools: MCPTools(history: MCPHistory(directory: FileManager.default.temporaryDirectory.appendingPathComponent("unused-\(UUID().uuidString)")))) { sent.append($0) }
+        session.receiveTooLong()
+        #expect(sent.first.map(errorCode) == -32600 && sent.first?["id"] is NSNull)
+    }
+
+    @Test func aReusedRequestIdIsAnsweredAfterTheCallInFlightAndNeverRun() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        var sent: [[String: Any]] = []
+        let session = MCPSession(tools: MCPTools(history: MCPHistory(directory: dir.appendingPathComponent(".history")))) { sent.append($0) }
+        _ = try await rpc(session, "initialize", ["protocolVersion": "2025-11-25"])
+        session.receive(Data(#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"history","arguments":{}}}"#.utf8))
+        session.receive(Data(#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"undo","arguments":{}}}"#.utf8))
+        for _ in 0..<400 where sent.count < 2 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(sent.count == 2)
+        // The first answer with id 5 is the original's; the duplicate's refusal follows.
+        #expect(sent.first?["result"] != nil && sent.first?["id"] as? Int == 5)
+        #expect(sent.last.map(errorCode) == -32600 && sent.last?["id"] as? Int == 5)
+    }
+
     // MARK: Paths
 
     @Test func badPathsAndArgumentsAreRejectedWithoutTouchingAnything() async throws {

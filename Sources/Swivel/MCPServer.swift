@@ -36,6 +36,8 @@ final class MCPSession {
     private(set) var legacyVersion: String?
     private var running: [String: Task<Void, Never>] = [:]
     private var cancelled: Set<String> = []
+    /// Requests that reused the id of one in flight, answered once it has.
+    private var duplicates: [String: [Any]] = [:]
     private var inputEnded = false
 
     init(tools: MCPTools, send: @escaping ([String: Any]) -> Void) {
@@ -59,7 +61,12 @@ final class MCPSession {
         if message["method"] == nil, message["result"] != nil || message["error"] != nil { return }  // We send no requests.
         guard message["id"] != nil else { return notify(message) }
         guard let key = Self.key(message["id"]) else { return send(Self.failure(nil, -32600, "Invalid request id")) }
-        guard running[key] == nil else { return send(Self.failure(message["id"], -32600, "Request id is already in use")) }
+        guard running[key] == nil else {
+            // A host can't tell two answers with one id apart, so the call in flight answers first; this one is then
+            // refused without running (a second undo would undo something else).
+            duplicates[key, default: []].append(message["id"]!)
+            return
+        }
         switch prepare(message) {
         case .reply(let response): send(response)
         case .call(let name, let arguments, let modern):
@@ -68,9 +75,17 @@ final class MCPSession {
                 let response = Self.success(message["id"], Self.complete(await self.call(name, arguments), modern: modern))
                 self.running[key] = nil
                 if self.cancelled.remove(key) == nil { self.send(response) }
+                for id in self.duplicates.removeValue(forKey: key) ?? [] {
+                    self.send(Self.failure(id, -32600, "Request id is already in use"))
+                }
                 self.checkFinished()
             }
         }
+    }
+
+    /// A line longer than `MCPLineReader.limit`: its start was read and dropped, the rest is skipped.
+    func receiveTooLong() {
+        send(Self.failure(nil, -32600, "Invalid request: a message may be at most \(MCPLineReader.limit >> 20) MB"))
     }
 
     /// stdin closed: answer what's in flight, then stop.
@@ -155,13 +170,13 @@ final class MCPSession {
                 return .reply(Self.success(id, Self.complete(result, modern: modern)))
             }
             guard let name = params["name"] as? String else { return .reply(Self.failure(id, -32602, "Missing tool name")) }
-            guard MCPTools.names.contains(name) else { return .reply(Self.failure(id, -32602, "Unknown tool: \(name)")) }
+            guard MCPTools.names.contains(name) else { return .reply(Self.failure(id, -32602, "Unknown tool: \(MCPPaths.shown(name))")) }
             if params["arguments"] != nil, !(params["arguments"] is [String: Any]) {
                 return .reply(Self.failure(id, -32602, "arguments must be an object"))
             }
             return .call(name: name, arguments: params["arguments"] as? [String: Any] ?? [:], modern: modern)
         default:
-            return .reply(Self.failure(id, -32601, "Method not found: \(method)"))
+            return .reply(Self.failure(id, -32601, "Method not found: \(MCPPaths.shown(method))"))
         }
     }
 
@@ -244,10 +259,27 @@ enum MCPStdio {
             signalSources.append(source)
         }
         Thread.detachNewThread {
-            while let line = readLine(strippingNewline: true) {
-                let data = Data(line.utf8)
-                DispatchQueue.main.async { MainActor.assumeIsolated { session.receive(data) } }
+            var reader = MCPLineReader()
+            var chunk = [UInt8](repeating: 0, count: 65_536)
+            func deliver(_ lines: [MCPLineReader.Line]) {
+                for line in lines {
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated {
+                            switch line {
+                            case .message(let data): session.receive(data)
+                            case .tooLong: session.receiveTooLong()
+                            }
+                        }
+                    }
+                }
             }
+            while true {
+                let count = Darwin.read(STDIN_FILENO, &chunk, chunk.count)
+                if count < 0, errno == EINTR { continue }
+                guard count > 0 else { break }
+                deliver(reader.feed(chunk[0..<count]))
+            }
+            deliver(reader.finish())
             DispatchQueue.main.async { MainActor.assumeIsolated { session.endOfInput() } }
         }
         // No NSApplication: creating one checks this process in with Launch Services as an instance of Swivel, and
@@ -287,5 +319,54 @@ final class MCPWriter: @unchecked Sendable {
                 if written > 0 { offset += written } else if written < 0, errno == EINTR { continue } else { return }
             }
         }
+    }
+}
+
+/// Splits stdin into lines without ever holding more than `limit` bytes of one: the rest of a longer line (a host
+/// bug, or a 512 MB line without a newline) is dropped as it arrives and reported once.
+struct MCPLineReader {
+    enum Line: Sendable, Equatable {
+        case message(Data)
+        case tooLong
+    }
+    static let limit = 16 << 20
+    let limit: Int
+    private(set) var buffer = Data()
+    private var skipping = false
+
+    init(limit: Int = MCPLineReader.limit) { self.limit = limit }
+
+    mutating func feed<Bytes: Collection<UInt8>>(_ bytes: Bytes) -> [Line] {
+        var lines: [Line] = []
+        var rest = bytes[...]
+        while true {
+            let newline = rest.firstIndex(of: 0x0A)
+            let part = rest[..<(newline ?? rest.endIndex)]
+            if !skipping {
+                if buffer.count + part.count > limit {
+                    buffer = Data()
+                    skipping = true
+                    lines.append(.tooLong)
+                } else {
+                    buffer.append(contentsOf: part)
+                }
+            }
+            guard let newline else { break }
+            if !skipping { lines.append(.message(Self.trimmed(buffer))) }
+            buffer = Data()
+            skipping = false
+            rest = rest[rest.index(after: newline)...]
+        }
+        return lines
+    }
+
+    /// End of input: a last line without a newline still counts.
+    mutating func finish() -> [Line] {
+        defer { buffer = Data(); skipping = false }
+        return skipping || buffer.isEmpty ? [] : [.message(Self.trimmed(buffer))]
+    }
+
+    private static func trimmed(_ line: Data) -> Data {
+        line.last == 0x0D ? Data(line.dropLast()) : line
     }
 }
