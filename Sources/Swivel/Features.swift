@@ -4,6 +4,7 @@ import AppKit
 enum Feature: String, CaseIterable {
     case wheel, clothesline, textCapture, shelf, imagePresets, quickActions
     case batchRename, pdfPages, qrCodes, appRouting, keepAwake
+    case doctor
 
     var title: String {
         switch self {
@@ -18,6 +19,7 @@ enum Feature: String, CaseIterable {
         case .qrCodes: L("QR & Barcodes")
         case .appRouting: L("App Actions")
         case .keepAwake: L("Keep Awake")
+        case .doctor: L("Mac Doctor")
         }
     }
 
@@ -34,6 +36,7 @@ enum Feature: String, CaseIterable {
         case .qrCodes: "qrcode.viewfinder"
         case .appRouting: "arrow.up.forward.app"
         case .keepAwake: "cup.and.saucer"
+        case .doctor: "stethoscope"
         }
     }
 
@@ -50,6 +53,7 @@ enum Feature: String, CaseIterable {
         case .qrCodes: L("Read QR codes and barcodes from selected images, entirely on your Mac.")
         case .appRouting: L("Open files in your chosen apps, or prepare a Codex or Claude Code draft.")
         case .keepAwake: L("Stop your Mac from going to sleep for a while: during a long copy, a download or a presentation.")
+        case .doctor: L("Find out why your Mac is full, slow or won’t open an app. It only reads, and fixes nothing without asking.")
         }
     }
 

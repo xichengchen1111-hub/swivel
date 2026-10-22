@@ -237,6 +237,7 @@ final class QuickActionsPane: Pane {
         separator.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
         stack.addArrangedSubview(label("Assistant (optional)", size: 15, weight: .semibold))
         stack.addArrangedSubview(label("Type what you want done, such as “make these photos smaller than 1 MB”, and a language model picks the action. It only suggests: the action runs when you press Return. Swivel sends your request, the names of the available actions and the kinds of chosen files, never file names, paths or contents. You pay the service for its use with your own key.", secondary: true))
+        stack.addArrangedSubview(label("Mac Doctor can use the same service only if you allow it on its own page, and it sends only a report you have read first.", size: 12, secondary: true))
         provider.addItems(withTitles: Assistant.Provider.allCases.map(\.title))
         provider.target = self; provider.action = #selector(providerChanged)
         stack.addArrangedSubview(row("Service", provider))
@@ -274,7 +275,7 @@ final class QuickActionsPane: Pane {
         keyStatus.stringValue = saved ? L("A key is saved in your keychain.")
             : Assistant.isLocal(settings.baseURL) ? L("A server on this Mac needs no key.") : L("No key saved: the assistant is off.")
         removeButton?.isEnabled = saved
-        testButton?.isEnabled = Assistant.isReady
+        testButton?.isEnabled = Assistant.isConfigured
     }
     @objc private func shortcutChanged() { Prefs.quickShortcut = QuickShortcut.allCases[shortcuts.indexOfSelectedItem] }
     @objc private func showPanel() { QuickActions.shared.show() }

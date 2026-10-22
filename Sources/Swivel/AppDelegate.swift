@@ -163,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if Feature.qrCodes.isOn { add(to: menu, "QR Library…", #selector(openCodeLibrary)) }
         if Feature.wheel.isOn && Prefs.shortcutWheelEnabled { add(to: menu, "Show Tool Wheel", #selector(showToolWheel)) }
         if Feature.appRouting.isOn { add(to: menu, "App Actions…", #selector(appActions)) }
+        if Feature.doctor.isOn { add(to: menu, "Mac Doctor…", #selector(openDoctor)) }
         if Feature.keepAwake.isOn {
             let item = NSMenuItem(title: keepAwakeTitle, action: nil, keyEquivalent: "")
             item.image = NSImage(systemSymbolName: KeepAwake.shared.isActive ? "cup.and.saucer.fill" : "cup.and.saucer", accessibilityDescription: nil)
@@ -281,6 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func pdfPages() { FileActionsPane.chooseAndOpen(.pdfPages) }
     @objc private func readCodes() { FileActionsPane.chooseAndOpen(.qrCodes) }
     @objc private func appActions() { AppWindow.shared.show(.appRouting) }
+    @objc private func openDoctor() { DoctorWindow.present() }
     @objc private func openCodeLibrary() { QRLibraryWindow().show() }
     @objc private func showToolWheel() { ShortcutWheel.shared.show() }
 

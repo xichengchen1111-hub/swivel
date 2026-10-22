@@ -7,7 +7,7 @@ import ServiceManagement
 final class AppWindow: NSObject, NSWindowDelegate {
     static let shared = AppWindow()
 
-    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions, feel, colors, batchRename, pdfPages, qrCodes, appRouting, keepAwake }
+    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions, feel, colors, batchRename, pdfPages, qrCodes, appRouting, keepAwake, doctor }
 
     private var window: NSWindow?
     private var split: BundleSplit?

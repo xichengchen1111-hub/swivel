@@ -232,6 +232,12 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
                 QRLibraryWindow().show(); return nil
             })
         }
+        if Feature.doctor.isOn {
+            list.append(QuickCommand(id: "doctor.open", title: L("Mac Doctor"), detail: L("Check storage, speed and apps"),
+                                     symbol: Feature.doctor.symbol) {
+                DoctorWindow.present(); return nil
+            })
+        }
         guard !files.isEmpty else {
             for feature in [Feature.batchRename, .pdfPages, .qrCodes] where feature.isOn {
                 list.append(QuickCommand(id: "choose.\(feature.rawValue)", title: feature.title, detail: L("Choose Files…"), symbol: feature.symbol) {
