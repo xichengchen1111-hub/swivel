@@ -35,4 +35,27 @@ struct ClipboardTests {
             #expect(png.starts(with: [0x89, 0x50, 0x4E, 0x47]))
         }
     }
+
+    /// Another app can put anything on the clipboard: an image too big to decode on the main thread isn't hung,
+    /// read from its header before decoding; secrets copied from a QR code carry the concealed marker.
+    @Test func hugeCopiedImagesAreLeftAloneAndSecretsAreConcealed() throws {
+        func png(_ width: Int, _ height: Int) throws -> Data {
+            let ctx = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                             space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue))
+            let data = NSMutableData()
+            let destination = try #require(CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil))
+            CGImageDestinationAddImage(destination, try #require(ctx.makeImage()), nil)
+            #expect(CGImageDestinationFinalize(destination))
+            return data as Data
+        }
+        let pasteboard = NSPasteboard.withUniqueName(); defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents(); pasteboard.setData(try png(9000, 8000), forType: .png)
+        #expect(!Clothesline.isSmallEnough(pasteboard, types: pasteboard.types ?? []))
+        pasteboard.clearContents(); pasteboard.setData(try png(3000, 2000), forType: .png)
+        #expect(Clothesline.isSmallEnough(pasteboard, types: pasteboard.types ?? []))
+        pasteboard.clearContents(); pasteboard.setData(Data("not an image".utf8), forType: .init("public.data"))
+        #expect(!Clothesline.isSmallEnough(pasteboard, types: pasteboard.types ?? []))
+        #expect(DetectedCode.isSecret("WIFI:T:WPA;S:home;P:secret;;") && DetectedCode.isSecret("otpauth://totp/x?secret=A"))
+        #expect(!DetectedCode.isSecret("https://example.com"))
+    }
 }

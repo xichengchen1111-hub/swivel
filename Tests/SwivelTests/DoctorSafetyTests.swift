@@ -334,6 +334,14 @@ struct DoctorSafetyTests {
         let size = DoctorStorage.size(of: home, home: home)
         #expect(size.skipped == 3)
         #expect(size.bytes >= 100_000 && size.bytes < 200_000)
+        // Other spellings of the same places: the Data volume's firmlink, "..", another case, network mounts.
+        let data = URL(fileURLWithPath: "/System/Volumes/Data" + DoctorPrivacy.canonical(home.path))
+        for spelling in [data.appendingPathComponent("Documents/a").path, home.path + "/Library/../Documents/a",
+                         home.path.uppercased() + "/DESKTOP", "/System/Volumes/Data/Volumes/USB", "/Network", "/net/host/x"] {
+            #expect(DoctorPrivacy.isProtected(URL(fileURLWithPath: spelling), home: home), "\(spelling)")
+        }
+        let throughData = DoctorStorage.size(of: data, home: home)
+        #expect(throughData.skipped == 3 && throughData.bytes < 200_000)
         // A protected folder the user picked themselves is looked into.
         let picked = DoctorStorage.size(of: home.appendingPathComponent("Documents"), home: home)
         #expect(picked.skipped == 0 && picked.bytes >= 100_000)

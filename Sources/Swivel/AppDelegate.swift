@@ -9,8 +9,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastReopen = Date.distantPast
     private weak var keepAwakeItem: NSMenuItem?
     private var launchToast: Toast { Toast.shared }
+    private var signalSources: [DispatchSourceSignal] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // `kill`, `killall` and logout send SIGTERM rather than asking AppKit to quit: quit normally, so screenshots
+        // go back where they used to and temporary files are removed (applicationWillTerminate).
+        for number in [SIGTERM, SIGINT, SIGHUP] {
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+            source.setEventHandler { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+            source.resume()
+            signalSources.append(source)
+        }
         // Any local process can post a distributed notification, so a burst only brings the window forward once.
         DistributedNotificationCenter.default().addObserver(forName: AppInstance.reopen, object: Bundle.main.bundleIdentifier, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {

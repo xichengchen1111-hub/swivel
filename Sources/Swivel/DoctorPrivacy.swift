@@ -27,14 +27,31 @@ enum DoctorPrivacy {
         return trimmed
     }
 
+    /// The place a path names, for comparing against the protected list: every spelling of one folder gives the same
+    /// answer. "." and ".." are folded without touching the disk, the firmlinked "/System/Volumes/Data/Users/…" is the
+    /// same folder as "/Users/…", and APFS ignores case, so "/users/me/documents" is ~/Documents too.
+    static func location(_ path: String) -> String {
+        var parts: [Substring] = []
+        for part in canonical(path).split(separator: "/", omittingEmptySubsequences: true) {
+            if part == "." { continue }
+            if part == ".." { _ = parts.popLast(); continue }
+            parts.append(part)
+        }
+        var folded = canonical("/" + parts.joined(separator: "/")).lowercased()
+        let data = "/system/volumes/data"
+        if folded == data { return "/" }
+        if folded.hasPrefix(data + "/") { folded = canonical(String(folded.dropFirst(data.count))).lowercased() }
+        return folded
+    }
+
     /// True when reading `url` (or anything inside it) could make macOS ask for access or needs Full Disk Access.
     static func isProtected(_ url: URL, home: URL) -> Bool {
-        let path = canonical(url.path)
-        if path == "/Volumes" || path.hasPrefix("/Volumes/") || path.hasPrefix("/Network/") { return true }
+        let path = location(url.path)
+        for mounts in ["/volumes", "/network", "/net"] where path == mounts || path.hasPrefix(mounts + "/") { return true }
         if path.hasSuffix(".photoslibrary") || path.contains(".photoslibrary/") { return true }
-        let base = canonical(home.path)
+        let base = location(home.path)
         for relative in homeRelative {
-            let protected = base + "/" + relative
+            let protected = base + "/" + relative.lowercased()
             if path == protected || path.hasPrefix(protected + "/") { return true }
         }
         return false
@@ -43,7 +60,7 @@ enum DoctorPrivacy {
     /// True when `url` lies inside one of the protected places, but isn't itself what the user picked: a folder the
     /// user chose is theirs to look into, its protected subfolders are skipped.
     static func shouldSkip(_ url: URL, below root: URL, home: URL) -> Bool {
-        canonical(url.path) != canonical(root.path) && isProtected(url, home: home)
+        location(url.path) != location(root.path) && isProtected(url, home: home)
             && !isProtected(root, home: home)
     }
 }
