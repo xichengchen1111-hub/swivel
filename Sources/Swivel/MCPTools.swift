@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CryptoKit
 import Darwin
 import ImageIO
 import PDFKit
@@ -27,7 +28,7 @@ final class MCPTools {
         self.trash = trash
     }
 
-    /// Swivel's own agent data is never an input.
+    /// Swivel's own agent data, and the folders that hold it, are never an input.
     private var protected: [String] { [MCPPaths.resolved(history.directory)] }
 
     func call(_ name: String, _ arguments: [String: Any]) async throws -> [String: Any] {
@@ -44,7 +45,7 @@ final class MCPTools {
         case "apply_plan": return try await oneAtATime { try await self.apply(args) }
         case "undo": return try undo(args)
         case "history": return try listHistory(args)
-        default: throw ToolError("Unknown tool \(name)")
+        default: throw ToolError("Unknown tool \(MCPPaths.shown(name))")
         }
     }
 
@@ -173,10 +174,10 @@ final class MCPTools {
         let id = try args.string("action", required: true)!
         let actions = MCPCatalog.actions(for: urls)
         guard let action = actions.first(where: { $0.id == id }) else {
-            throw ToolError("“\(id)” isn't available for these files. Available: \(actions.map(\.id).joined(separator: ", ")). Call list_actions for details.")
+            throw ToolError("“\(MCPPaths.shown(id))” isn't available for these files. Available: \(actions.map(\.id).joined(separator: ", ")). Call list_actions for details.")
         }
         let prediction = try MCPCatalog.predict(action.output, urls)
-        let plan = MCPPlan(action: action.id, inputs: try urls.map(MCPFingerprint.read), work: .action(action), predicted: prediction.files)
+        let plan = MCPPlan(action: action.id, inputs: try urls.map { try MCPFingerprint.read($0) }, work: .action(action), predicted: prediction.files)
         var details: [String: Any] = ["title": action.title, "will_create": prediction.files.map(\.path)]
         if let note = prediction.note { details["note"] = note }
         return planned(plan, details)
@@ -219,7 +220,7 @@ final class MCPTools {
                 throw ToolError("plan_compress takes images and videos; \(url.lastPathComponent) is \(FileKind.of(url).rawValue). For PDFs use plan_action with tools.Compress.")
             }
         }
-        let plan = MCPPlan(action: "compress", inputs: try urls.map(MCPFingerprint.read), work: .compress(jobs, target: target), predicted: jobs.map(\.output))
+        let plan = MCPPlan(action: "compress", inputs: try urls.map { try MCPFingerprint.read($0) }, work: .compress(jobs, target: target), predicted: jobs.map(\.output))
         var details: [String: Any] = ["target_bytes": target, "will_create": jobs.map(\.output.path)]
         if !notes.isEmpty { details["note"] = notes.joined(separator: " ") }
         return planned(plan, details)
@@ -242,8 +243,10 @@ final class MCPTools {
         // RenamePlan.preview, minus its standardizing (which turns /private/var into /var): the paths stay resolved.
         let preview = RenamePlan.validate(urls.enumerated().map { index, url in
             let name = rules.name(for: url, index: index)
+            let issue = !RenamePlan.validName(name) ? L("Invalid name or numbering")
+                : name.unicodeScalars.contains(where: Self.isInvisible) ? "Contains invisible or text-direction characters" : nil
             return RenameEntry(source: url, destination: url.deletingLastPathComponent().appendingPathComponent(name),
-                               identity: try? FileIdentity.read(url), issue: RenamePlan.validName(name) ? nil : L("Invalid name or numbering"))
+                               identity: try? FileIdentity.read(url), issue: issue)
         })
         let rows: [[String: Any]] = preview.entries.map { entry in
             var row: [String: Any] = ["from": entry.source.path, "to": entry.destination.path]
@@ -255,17 +258,29 @@ final class MCPTools {
             return ["can_apply": false, "renames": rows,
                     "next": preview.entries.contains { $0.issue != nil } ? "Some names conflict or are invalid; change the rules and plan again." : "These rules don't change any name."]
         }
-        let plan = MCPPlan(action: "rename", inputs: try urls.map(MCPFingerprint.read), work: .rename(preview),
+        let plan = MCPPlan(action: "rename", inputs: try urls.map { try MCPFingerprint.read($0) }, work: .rename(preview),
                            predicted: preview.entries.filter(\.changes).map(\.destination))
         return planned(plan, ["can_apply": true, "renames": rows])
+    }
+
+    /// Characters that change how a name reads without showing: direction overrides and isolates (U+202A–U+202E,
+    /// U+2066–U+2069, so "photo<U+202E>gnp.app" can't pose as a PNG), zero-width spaces and other format or control
+    /// characters. Joiners stay, since emoji sequences need them.
+    static func isInvisible(_ scalar: Unicode.Scalar) -> Bool {
+        guard scalar != "\u{200C}", scalar != "\u{200D}" else { return false }
+        switch scalar.properties.generalCategory {
+        case .format, .control, .lineSeparator, .paragraphSeparator: return true
+        default: return false
+        }
     }
 
     private func planMove(_ args: MCPArguments) throws -> [String: Any] {
         let urls = try paths(args)
         guard let raw = try args.string("destination", required: true) else { throw ToolError("destination is required") }
-        let folder = try MCPPaths.entry(raw, folder: true, protected: protected)
+        // Moving things into a folder above the undo log leaves the log where it is; only the log's own folder is out.
+        let folder = try MCPPaths.entry(raw, folder: true, protected: protected, ancestors: false)
         var device = stat()
-        guard lstat(folder.path, &device) == 0 else { throw ToolError("“\(raw)” doesn't exist") }
+        guard lstat(folder.path, &device) == 0 else { throw ToolError("“\(MCPPaths.shown(raw))” doesn't exist") }
         var reserved = Set<String>(), moves: [(from: URL, to: URL)] = [], rows: [[String: Any]] = [], issues = false
         for url in urls {
             let to = MCPCatalog.unique(folder.appendingPathComponent(url.lastPathComponent), &reserved)
@@ -283,7 +298,8 @@ final class MCPTools {
             moves.append((url, to))
         }
         guard !issues else { return ["can_apply": false, "moves": rows, "next": "Resolve the issues and plan again."] }
-        let plan = MCPPlan(action: "move", inputs: try urls.map(MCPFingerprint.read), work: .move(moves), predicted: moves.map(\.to))
+        let plan = MCPPlan(action: "move", inputs: try urls.map { try MCPFingerprint.read($0) }, work: .move(moves, into: try MCPFingerprint.read(folder)),
+                           predicted: moves.map(\.to))
         return planned(plan, ["can_apply": true, "destination": folder.path, "moves": rows])
     }
 
@@ -304,13 +320,20 @@ final class MCPTools {
     private func apply(_ args: MCPArguments) async throws -> [String: Any] {
         let id = try args.string("plan_id", required: true)!
         guard let plan = plans.removeValue(forKey: id) else {
-            throw ToolError("No plan “\(id)”. A plan runs once and lasts an hour; make a new one with a plan_* tool.")
+            throw ToolError("No plan “\(MCPPaths.shown(id))”. A plan runs once and lasts an hour; make a new one with a plan_* tool.")
         }
         guard Date().timeIntervalSince(plan.made) < Self.planLifetime else { throw ToolError("This plan expired. Make a new one.") }
         // The plan described these files as they were; anything since (an edit, a replacement) needs a fresh plan.
         for input in plan.inputs {
             let unchanged = plan.movesFiles ? input.isSameEntry() : input.isCurrent()
             guard unchanged else { throw ToolError("\(input.path) changed since it was planned. Make a new plan.") }
+        }
+        if case .move(_, let folder) = plan.work {
+            // The same folder entry, still a folder (not a link put in its place) and still not the undo log's.
+            let now = try? MCPPaths.entry(folder.path, folder: true, protected: protected, ancestors: false)
+            guard now?.path == folder.path, folder.isSameEntry() else {
+                throw ToolError("The destination \(folder.path) changed since it was planned. Make a new plan.")
+            }
         }
         var created: [URL] = [], moves: [MCPHistory.Move] = [], failures: [[String: String]] = []
         var stopped: Error?
@@ -335,13 +358,13 @@ final class MCPTools {
         case .rename(let renamePlan):
             let receipt = try BatchRenamer.execute(renamePlan)
             moves = receipt.entries.map { MCPHistory.Move(from: $0.source.path, to: $0.destination.path, device: $0.identity!.device, inode: $0.identity!.inode) }
-        case .move(let planned):
+        case .move(let planned, _):
             moves = try Self.move(planned)
         }
         var result: [String: Any] = ["action": plan.action]
         if !created.isEmpty || !moves.isEmpty {
             let entry = MCPHistory.Entry(id: UUID().uuidString, date: Date(), action: plan.action, inputs: plan.inputs.map(\.path),
-                                         created: created.compactMap { try? MCPFingerprint.read($0) }, moves: moves,
+                                         created: created.compactMap { try? MCPFingerprint.read($0, withContents: true) }, moves: moves,
                                          isRename: plan.movesFiles && plan.action == "rename", undone: nil)
             do { try history.update { $0.append(entry) }; result["entry_id"] = entry.id }
             catch { result["warning"] = "Done, but it couldn't be recorded in the undo log: \(error.localizedDescription)" }
@@ -395,11 +418,13 @@ final class MCPTools {
         return try history.update { entries in
             let index = requested.map { id in entries.firstIndex { $0.id == id } } ?? entries.lastIndex { $0.undone == nil }
             guard let index else {
-                throw ToolError(requested == nil ? "Nothing to undo." : "No undo log entry “\(requested!)”. Call history to see them.")
+                throw ToolError(requested == nil ? "Nothing to undo." : "No undo log entry “\(MCPPaths.shown(requested!))”. Call history to see them.")
             }
             let entry = entries[index]
             guard entry.undone == nil else { throw ToolError("That change was already undone.") }
             var restored: [[String: String]] = [], trashed: [String] = [], skipped: [[String: String]] = []
+            // What is left to undo; the entry keeps only these, so a later undo retries just them.
+            var movesLeft: [MCPHistory.Move] = [], createdLeft: [MCPFingerprint] = []
             if entry.isRename {
                 let made = entry.moves.map { RenameEntry(source: URL(fileURLWithPath: $0.from), destination: URL(fileURLWithPath: $0.to),
                                                           identity: FileIdentity(device: $0.device, inode: $0.inode), issue: nil) }
@@ -417,34 +442,45 @@ final class MCPTools {
                         for move in entry.moves { skipped.append(["path": move.to, "reason": error.localizedDescription]) }
                     }
                 }
+                if restored.isEmpty { movesLeft = entry.moves }
             } else {
                 for move in entry.moves.reversed() {
                     let now = URL(fileURLWithPath: move.to), original = URL(fileURLWithPath: move.from)
                     guard (try? FileIdentity.read(now)) == FileIdentity(device: move.device, inode: move.inode) else {
-                        skipped.append(["path": move.to, "reason": "Moved or replaced since; left as it is"]); continue
+                        skipped.append(["path": move.to, "reason": "Moved or replaced since; left as it is"]); movesLeft.insert(move, at: 0); continue
                     }
                     guard !Paths.taken(original) else {
-                        skipped.append(["path": move.to, "reason": "Something else now uses \(move.from)"]); continue
+                        skipped.append(["path": move.to, "reason": "Something else now uses \(move.from)"]); movesLeft.insert(move, at: 0); continue
                     }
                     do {
                         if !dryRun { try Paths.renameExclusively(now, to: original) }
                         restored.append(["from": move.to, "to": move.from])
-                    } catch { skipped.append(["path": move.to, "reason": error.localizedDescription]) }
+                    } catch { skipped.append(["path": move.to, "reason": error.localizedDescription]); movesLeft.insert(move, at: 0) }
                 }
             }
             for file in entry.created.reversed() {
-                guard file.isCurrent() else {
-                    skipped.append(["path": file.path, "reason": "Changed or gone since Swivel created it; left as it is"]); continue
+                // A folder logged before its contents were recorded can't be checked; it stays.
+                guard file.isCurrent(), !file.folder || file.tree != nil else {
+                    skipped.append(["path": file.path, "reason": "Changed or gone since Swivel created it; left as it is"])
+                    createdLeft.insert(file, at: 0); continue
                 }
                 do {
                     if !dryRun { try trash(URL(fileURLWithPath: file.path)) }
                     trashed.append(file.path)
-                } catch { skipped.append(["path": file.path, "reason": error.localizedDescription]) }
+                } catch { skipped.append(["path": file.path, "reason": error.localizedDescription]); createdLeft.insert(file, at: 0) }
             }
-            if !dryRun { entries[index].undone = Date() }
+            // Done only when nothing was skipped; otherwise the entry stays open with what's left.
+            if !dryRun {
+                entries[index].moves = movesLeft
+                entries[index].created = createdLeft
+                if skipped.isEmpty { entries[index].undone = Date() }
+            }
             var result: [String: Any] = ["entry_id": entry.id, "action": entry.action, "dry_run": dryRun,
-                                         "restored": restored, "moved_to_trash": trashed]
-            if !skipped.isEmpty { result["skipped"] = skipped }
+                                         "restored": restored, "moved_to_trash": trashed, "complete": skipped.isEmpty]
+            if !skipped.isEmpty {
+                result["skipped"] = skipped
+                result["next"] = "The skipped items are still in the undo log under this entry_id. Sort them out and call undo again to retry just those."
+            }
             return result
         }
     }
@@ -524,7 +560,7 @@ final class MCPTools {
                  "Carry out a plan returned by a plan_* tool. A plan runs once, within an hour, and is refused if any input changed since it was planned. Creates new files without overwriting anything, or renames or moves items. Records the change in the undo log and returns what changed with an entry_id.",
                  ["plan_id": ["type": "string"]], required: ["plan_id"], annotations: writes),
             tool("undo", "Undo an applied plan",
-                 "Undo an applied plan, the latest one by default: files it created go to the Trash, items it renamed or moved go back. Anything changed since is left alone and reported as skipped. With dry_run true, only reports what would happen.",
+                 "Undo an applied plan, the latest one by default: files it created go to the Trash, items it renamed or moved go back. Anything changed since (a created folder counts as changed when anything inside it changed) is left alone and reported as skipped; the entry is marked undone (complete true) only when nothing was skipped. Otherwise it stays in the log holding just the skipped items, so calling undo again retries only those. With dry_run true, only reports what would happen.",
                  ["entry_id": ["type": "string", "description": "From apply_plan or history; default: the latest change not yet undone"],
                   "dry_run": ["type": "boolean"]],
                  required: [], annotations: writes),
@@ -548,7 +584,8 @@ struct MCPPlan {
         case action(MCPCatalog.Action)
         case compress([Compression], target: Int)
         case rename(RenamePlan)
-        case move([(from: URL, to: URL)])
+        /// The destination folder as it was planned, checked again before anything moves.
+        case move([(from: URL, to: URL)], into: MCPFingerprint)
     }
     let id = UUID().uuidString
     let made = Date()
@@ -755,32 +792,56 @@ enum MCPPaths {
         return result
     }
 
-    static func entry(_ raw: String, folder: Bool = false, protected: [String] = []) throws -> URL {
-        guard raw.hasPrefix("/") else { throw ToolError("“\(raw)” is not an absolute path. Pass the full path, starting with /.") }
-        guard !raw.contains("\0"), raw.utf8.count < Int(PATH_MAX) else { throw ToolError("“\(raw)” is not a valid path") }
+    /// `protected` folders (the undo log's) are refused, with anything inside them, hard links to their files and,
+    /// unless `ancestors` is false, every folder above them (renaming or moving one would orphan the log).
+    static func entry(_ raw: String, folder: Bool = false, protected: [String] = [], ancestors: Bool = true) throws -> URL {
+        let shown = shown(raw)
+        guard raw.hasPrefix("/") else { throw ToolError("“\(shown)” is not an absolute path. Pass the full path, starting with /.") }
+        guard !raw.contains("\0"), raw.utf8.count < Int(PATH_MAX) else { throw ToolError("“\(shown)” is not a valid path") }
         var path = raw
         while path.count > 1, path.hasSuffix("/") { path.removeLast() }
         let parts = path.split(separator: "/", omittingEmptySubsequences: false).dropFirst()
         guard path != "/", !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else {
-            throw ToolError("“\(raw)” must be a plain absolute path, without “.”, “..” or empty parts")
+            throw ToolError("“\(shown)” must be a plain absolute path, without “.”, “..” or empty parts")
         }
         var info = stat()
-        guard lstat(path, &info) == 0 else { throw ToolError("“\(raw)” doesn't exist") }
+        guard lstat(path, &info) == 0 else { throw ToolError("“\(shown)” doesn't exist") }
         let type = info.st_mode & S_IFMT
-        guard type != S_IFLNK else { throw ToolError("“\(raw)” is a symbolic link. Pass the path of the file it points to.") }
-        guard type == S_IFREG || type == S_IFDIR else { throw ToolError("“\(raw)” is not a regular file or folder") }
-        if folder, type != S_IFDIR { throw ToolError("“\(raw)” is not a folder") }
-        guard let resolved = realpath(path, nil) else { throw ToolError("“\(raw)” can't be read") }
+        guard type != S_IFLNK else { throw ToolError("“\(shown)” is a symbolic link. Pass the path of the file it points to.") }
+        guard type == S_IFREG || type == S_IFDIR else { throw ToolError("“\(shown)” is not a regular file or folder") }
+        if folder, type != S_IFDIR { throw ToolError("“\(shown)” is not a folder") }
+        // "photo.png/" names a folder, not the file.
+        if raw.hasSuffix("/"), type != S_IFDIR { throw ToolError("“\(shown)” ends in / but is not a folder") }
+        guard let resolved = realpath(path, nil) else { throw ToolError("“\(shown)” can't be read") }
         let canonical = String(cString: resolved)
         free(resolved)
         var again = stat()
         guard lstat(canonical, &again) == 0, again.st_dev == info.st_dev, again.st_ino == info.st_ino else {
-            throw ToolError("“\(raw)” changed while it was being checked")
+            throw ToolError("“\(shown)” changed while it was being checked")
         }
-        if protected.contains(where: { canonical == $0 || canonical.hasPrefix($0 + "/") }) {
-            throw ToolError("“\(raw)” holds Swivel's undo log and can't be used here")
+        // Compared without case: the usual Mac disk doesn't tell "Library" from "library".
+        let folded = canonical.lowercased()
+        let guarded = protected.contains { place in
+            let place = place.lowercased()
+            return folded == place || folded.hasPrefix(place + "/") || (ancestors && place.hasPrefix(folded + "/"))
+        }
+        if guarded || (type == S_IFREG && info.st_nlink > 1 && protected.contains { holds($0, device: info.st_dev, inode: info.st_ino) }) {
+            throw ToolError("“\(shown)” holds Swivel's undo log and can't be used here")
         }
         return URL(fileURLWithPath: canonical, isDirectory: type == S_IFDIR)
+    }
+
+    /// Whether this entry is one of the files directly in `folder` (a hard link has no other tell).
+    private static func holds(_ folder: String, device: dev_t, inode: ino_t) -> Bool {
+        ((try? FileManager.default.contentsOfDirectory(atPath: folder)) ?? []).contains { name in
+            var info = stat()
+            return lstat(folder + "/" + name, &info) == 0 && info.st_dev == device && info.st_ino == inode
+        }
+    }
+
+    /// A value from the host, short enough to echo in an error.
+    static func shown(_ raw: String, limit: Int = 300) -> String {
+        raw.count > limit ? String(raw.prefix(limit)) + "…" : raw
     }
 }
 
@@ -810,15 +871,50 @@ struct MCPFingerprint: Codable, Equatable, Sendable {
     var seconds: Int
     var nanoseconds: Int
     var folder: Bool
+    /// For a folder read `withContents`: a digest of everything beneath it, since editing a file inside changes
+    /// nothing about the folder's own entry. `unchecked` when it was too big or partly unreadable.
+    var tree: String? = nil
 
-    static func read(_ url: URL) throws -> Self {
+    static let unchecked = "unchecked"
+    static let maxTreeEntries = 20_000
+
+    static func read(_ url: URL, withContents: Bool = false) throws -> Self {
         var info = stat()
         guard lstat(url.path, &info) == 0 else { throw ToolError("\(url.path) is missing") }
+        let folder = info.st_mode & S_IFMT == S_IFDIR
         return Self(path: url.path, device: info.st_dev, inode: UInt64(info.st_ino), size: Int64(info.st_size),
-                    seconds: info.st_mtimespec.tv_sec, nanoseconds: info.st_mtimespec.tv_nsec, folder: info.st_mode & S_IFMT == S_IFDIR)
+                    seconds: info.st_mtimespec.tv_sec, nanoseconds: info.st_mtimespec.tv_nsec, folder: folder,
+                    tree: folder && withContents ? digest(url.path) : nil)
     }
-    /// Still there and unchanged.
-    func isCurrent() -> Bool { (try? Self.read(URL(fileURLWithPath: path))) == self }
+    /// Still there and unchanged (contents included, when they were read). A folder that couldn't be checked counts
+    /// as changed.
+    func isCurrent() -> Bool {
+        tree != Self.unchecked && (try? Self.read(URL(fileURLWithPath: path), withContents: tree != nil)) == self
+    }
+
+    /// Every entry below `path` (relative name, type, inode, size, modification time), without following links or
+    /// leaving the disk, sorted and hashed.
+    static func digest(_ path: String, limit: Int = maxTreeEntries) -> String {
+        guard let root = strdup(path) else { return unchecked }
+        defer { free(root) }
+        var paths: [UnsafeMutablePointer<CChar>?] = [root, nil]
+        guard let fts = fts_open(&paths, FTS_PHYSICAL | FTS_XDEV | FTS_NOCHDIR, nil) else { return unchecked }
+        defer { fts_close(fts) }
+        var lines: [String] = []
+        while let entry = fts_read(fts) {
+            switch Int32(entry.pointee.fts_info) {
+            case FTS_DNR, FTS_ERR, FTS_NS: return unchecked
+            case FTS_DP: continue
+            default:
+                guard entry.pointee.fts_level > 0, let info = entry.pointee.fts_statp?.pointee else { continue }
+                guard lines.count < limit else { return unchecked }
+                let name = String(decoding: String(cString: entry.pointee.fts_path).utf8.dropFirst(path.utf8.count), as: UTF8.self)
+                lines.append("\(name)\0\(info.st_mode)\0\(info.st_ino)\0\(info.st_size)\0\(info.st_mtimespec.tv_sec).\(info.st_mtimespec.tv_nsec)")
+            }
+        }
+        let hash = SHA256.hash(data: Data(lines.sorted().joined(separator: "\n").utf8))
+        return hash.map { String(format: "%02x", $0) }.joined()
+    }
     /// Still the same entry at this path, whatever happened to its contents.
     func isSameEntry() -> Bool {
         guard let now = try? Self.read(URL(fileURLWithPath: path)) else { return false }
@@ -832,7 +928,7 @@ struct MCPArguments {
 
     init(_ values: [String: Any], allowed: Set<String>) throws {
         if let unknown = values.keys.sorted().first(where: { !allowed.contains($0) }) {
-            throw ToolError("Unknown argument “\(unknown)”. This tool takes: \(allowed.sorted().joined(separator: ", "))")
+            throw ToolError("Unknown argument “\(MCPPaths.shown(unknown))”. This tool takes: \(allowed.sorted().joined(separator: ", "))")
         }
         self.values = values
     }
@@ -879,8 +975,9 @@ final class MCPHistory: @unchecked Sendable {
         let date: Date
         let action: String
         let inputs: [String]
-        let created: [MCPFingerprint]
-        let moves: [Move]
+        /// After a partial undo, only what is still to be undone.
+        var created: [MCPFingerprint]
+        var moves: [Move]
         /// Renames are undone together, so swapped names work.
         let isRename: Bool
         var undone: Date?
