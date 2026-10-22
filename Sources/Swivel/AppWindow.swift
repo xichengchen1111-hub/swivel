@@ -434,6 +434,7 @@ final class GeneralPane: Pane {
         let shelf = NSButton(title: L("Show Shelf"), target: self, action: #selector(showShelf))
         let rope = NSButton(title: L("Show Clothesline"), target: self, action: #selector(showClothesline))
         stack.addArrangedSubview(row("", shelf, rope))
+        stack.addArrangedSubview(row("Agents", MCPSetupView()))
     }
 
     override func refresh() {
