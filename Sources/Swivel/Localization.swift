@@ -57,6 +57,12 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 enum Strings {
     static let table: [String: [String]] = [
         // Media safety and validation
+        "The bundled upscaling model is missing or damaged. Rebuild Swivel.": ["内置放大模型缺失或损坏，请重新构建 Swivel。", "內建放大模型缺失或損壞，請重新建置 Swivel。", "内蔵の拡大モデルが見つからないか壊れています。Swivel を再ビルドしてください。"],
+        "Couldn't create private upscaling model storage.": ["无法创建私有放大模型存储。", "無法建立私有放大模型儲存空間。", "非公開の拡大モデル保存先を作成できませんでした。"],
+        "Real-ESRGAN input is limited to 16 megapixels. Choose a smaller file.": ["Real-ESRGAN 最多处理 1600 万像素，请选择较小的文件。", "Real-ESRGAN 最多處理 1600 萬像素，請選擇較小的檔案。", "Real-ESRGAN の入力は 1600 万画素までです。小さなファイルを選んでください。"],
+        "Real-ESRGAN processes files on this Mac. Fine details may be reconstructed.": ["Real-ESRGAN 在本机处理文件，细小纹理可能经过重建。", "Real-ESRGAN 在本機處理檔案，細小紋理可能經過重建。", "Real-ESRGAN はこの Mac で処理します。細かな模様が再構成される場合があります。"],
+        "This image is too large to upscale. Use an image up to 16 megapixels.": ["这张图片过大，请使用不超过 1600 万像素的图片。", "這張圖片過大，請使用不超過 1600 萬像素的圖片。", "画像が大きすぎます。1600 万画素以下の画像を使用してください。"],
+        "This video is too large to upscale. Use frames up to 16 megapixels.": ["视频画面过大，请使用每帧不超过 1600 万像素的视频。", "影片畫面過大，請使用每幀不超過 1600 萬像素的影片。", "動画の画面が大きすぎます。各フレームが 1600 万画素以下の動画を使用してください。"],
         "ID Photo can process images up to 4096 pixels per side.": ["证件照最多可处理每边 4096 像素的图像。", "證件照最多可處理每邊 4096 像素的影像。", "証明写真は各辺 4096 ピクセルまでの画像を処理できます。"],
         "Couldn't find a reliable foreground. Choose a clearer portrait.": ["无法可靠识别人像前景，请选择主体更清晰的人像。", "無法可靠辨識人像前景，請選擇主體更清晰的人像。", "人物の前景を正しく検出できませんでした。人物が鮮明な写真を選んでください。"],
         "This recording needs too much temporary storage. Choose a shorter recording.": ["这段录音需要过多临时存储，请选择较短的录音。", "這段錄音需要過多暫存空間，請選擇較短的錄音。", "一時保存に必要な容量が大きすぎます。短い録音を選んでください。"],

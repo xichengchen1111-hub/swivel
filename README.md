@@ -20,7 +20,7 @@ Tap the same key again to page through a wheel that has more than eight options.
 - On a Force Touch trackpad each new option gives a light **detent**, a page turn a step, and the drop a firmer **press**. Optional **sound effects** (a soft tick per option, a ratchet for pages, a key “thock” on the drop and a short chime when a result is saved) follow the system's “Play user interface sound effects” setting. Both have switches in General and in the ◎ menu.
 - Reduce Motion keeps the colour and feedback but nothing moves; Reduce Transparency puts a solid backdrop behind the wheel.
 
-Everything runs locally, using built-in macOS frameworks (Vision, ImageIO, AVFoundation, PDFKit, AppKit text system) and `afconvert` / `ditto` / `tar`. No third-party code; Mac Doctor's cache list is vendored MIT data (see Acknowledgements).
+Media processing runs locally, using macOS frameworks (Core ML, Vision, ImageIO, AVFoundation, PDFKit, AppKit text system) and `afconvert` / `ditto` / `tar`. Upscale includes a pinned Real-ESRGAN model, and Mac Doctor includes vendored cache data (see Acknowledgements). Neither sends files to a service.
 
 ## The app window
 
@@ -159,6 +159,8 @@ Quit the running app normally before replacing an installed build, so screenshot
 `SWIVEL_TAB=17` opens Mac Doctor's settings page. `SWIVEL_DOCTOR_RENDERS=/path ./test.sh --filter DoctorTests` renders its page and the Overview in four languages, the window's Summary and Caches in four languages and every window section in Simplified Chinese, light and dark. `SWIVEL_DOCTOR_LIVE=1 ./test.sh --filter DoctorLiveTests` runs every read-only check against this Mac and prints the results (no speed test, no Eject, nothing moved).
 
 ## Acknowledgements
+
+- Upscale uses [Real-ESRGAN x4plus](https://github.com/xinntao/Real-ESRGAN), Copyright (c) 2021 Xintao Wang, BSD-3-Clause. The included model runs through Apple Core ML on macOS 15+; it reconstructs textures and may change small details. Its provenance and reproducible conversion are in `ThirdParty/RealESRGAN/UPSTREAM.md`. Conversion-only RRDB code comes from BasicSR (Apache-2.0); conversion tools are not shipped. The model licences and notice ship inside the app.
 
 - Mac Doctor's cache list (paths and "removes / keeps / note" texts) comes from [ClearDisk](https://github.com/bysiber/cleardisk) by Kadir Can Ozden, MIT License, revision `fb5429c`. See `ThirdParty/ClearDisk/` (`LICENSE`, `UPSTREAM.md`); the licence also ships inside the app.
 

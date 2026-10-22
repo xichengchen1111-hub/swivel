@@ -12,6 +12,11 @@ cp Resources/Swivel.icns "$APP/Contents/Resources/Swivel.icns"
 # Licences of vendored third-party data (Mac Doctor), inside the signature.
 mkdir -p "$APP/Contents/Resources/ThirdParty"
 cp ThirdParty/ClearDisk/LICENSE "$APP/Contents/Resources/ThirdParty/ClearDisk-LICENSE.txt"
+# The approved Real-ESRGAN model runs through Core ML; ship model data and licences, never conversion tools.
+cp -R .build/release/Swivel_UpscaleModel.bundle "$APP/Contents/Resources/Swivel_UpscaleModel.bundle"
+cp ThirdParty/RealESRGAN/LICENSE "$APP/Contents/Resources/ThirdParty/RealESRGAN-LICENSE.txt"
+cp ThirdParty/RealESRGAN/LICENSE-BasicSR.txt "$APP/Contents/Resources/ThirdParty/RealESRGAN-BasicSR-LICENSE.txt"
+cp ThirdParty/RealESRGAN/NOTICE "$APP/Contents/Resources/ThirdParty/RealESRGAN-NOTICE.txt"
 # The Claude Desktop extension (Settings → General → Agents → Install in Claude Desktop). Its launcher starts the
 # installed app, so the bundle holds no second copy of Swivel.
 mcpb/pack.sh "$APP/Contents/Resources/Swivel.mcpb" >/dev/null

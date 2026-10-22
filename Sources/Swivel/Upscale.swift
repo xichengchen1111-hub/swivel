@@ -2,106 +2,7 @@ import AppKit
 import AVFoundation
 import CoreImage
 import ImageIO
-import VideoToolbox
-
-private actor UpscaleAdmission {
-    private var busy = false
-    private var waiting: [CheckedContinuation<Void, Never>] = []
-    func enter() async {
-        if busy { await withCheckedContinuation { waiting.append($0) } } else { busy = true }
-    }
-    func leave() {
-        if waiting.isEmpty { busy = false } else { waiting.removeFirst().resume() }
-    }
-}
-
-/// One system processor, serialized even when AVFoundation requests multiple frames concurrently.
-@available(macOS 26, *)
-final class SystemUpscaler: @unchecked Sendable {
-    let configuration: VTSuperResolutionScalerConfiguration
-    private let processor = VTFrameProcessor()
-    private let admission = UpscaleAdmission()
-    private let context = CIContext()
-    let requestedFactor: Int
-    init(width: Int, height: Int, factor: Int, video: Bool) throws {
-        guard VTSuperResolutionScalerConfiguration.isSupported else { throw ToolError(L("AI upscaling is not supported on this Mac.")) }
-        guard width <= 1920, height <= (video ? 1080 : 1920) else {
-            throw ToolError(L("AI upscaling input is limited to %@. Choose a smaller file.", video ? "1920 × 1080" : "1920 × 1920"))
-        }
-        let factors = VTSuperResolutionScalerConfiguration.supportedScaleFactors
-        // This Mac exposes only 4×. A 2× result is reconstructed at 4× and then reduced, retaining the AI pass.
-        guard let internalFactor = factors.filter({ $0 >= factor }).min(),
-              let config = VTSuperResolutionScalerConfiguration(frameWidth: width, frameHeight: height, scaleFactor: internalFactor,
-                inputType: video ? .video : .image, usePrecomputedFlow: false, qualityPrioritization: .normal, revision: .revision1)
-        else { throw ToolError(L("These dimensions or this scale are not supported by the system upscaler.")) }
-        requestedFactor = factor
-        configuration = config
-    }
-    func start() throws {
-        guard configuration.configurationModelStatus == .ready else { throw ToolError(L("Upscaling resources are not installed.")) }
-        try processor.startSession(configuration: configuration)
-    }
-    deinit { processor.endSession() }
-
-    private func buffer(width: Int, height: Int, attributes: [String: Any]) throws -> CVPixelBuffer {
-        var attrs = attributes
-        attrs[kCVPixelBufferIOSurfacePropertiesKey as String] = [:] as [String: Any]
-        var pixel: CVPixelBuffer?
-        let format = configuration.supportedPixelFormats.first ?? kCVPixelFormatType_64RGBAHalf
-        guard CVPixelBufferCreate(nil, width, height, format, attrs as CFDictionary, &pixel) == kCVReturnSuccess, let pixel else {
-            throw ToolError(L("Couldn't allocate an upscaling frame."))
-        }
-        return pixel
-    }
-    func render(_ source: CIImage, time: CMTime = .zero) async throws -> CIImage {
-        await admission.enter()
-        do {
-            try Task.checkCancellation()
-            let w = configuration.frameWidth, h = configuration.frameHeight, factor = configuration.scaleFactor
-            let input = try buffer(width: w, height: h, attributes: configuration.sourcePixelBufferAttributes)
-            let output = try buffer(width: w * factor, height: h * factor, attributes: configuration.destinationPixelBufferAttributes)
-            let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
-            CVBufferSetAttachment(input, kCVImageBufferCGColorSpaceKey, colorSpace, .shouldPropagate)
-            CVBufferSetAttachment(output, kCVImageBufferCGColorSpaceKey, colorSpace, .shouldPropagate)
-            // VT produces opaque colour. Sending premultiplied RGB would bake transparency into the colour,
-            // then restoring alpha below would darken soft edges a second time.
-            let colors = try Upscale.opaqueColors(source)
-            context.render(colors, to: input, bounds: CGRect(x: 0, y: 0, width: w, height: h), colorSpace: colorSpace)
-            guard let a = VTFrameProcessorFrame(buffer: input, presentationTimeStamp: time),
-                  let b = VTFrameProcessorFrame(buffer: output, presentationTimeStamp: time),
-                  let parameters = VTSuperResolutionScalerParameters(sourceFrame: a, previousFrame: nil, previousOutputFrame: nil,
-                    opticalFlow: nil, submissionMode: .random, destinationFrame: b) else {
-                throw ToolError(L("Couldn't allocate an upscaling frame."))
-            }
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                processor.process(parameters: parameters) { _, error in
-                    if let error { continuation.resume(throwing: error) } else { continuation.resume() }
-                }
-            }
-            try Task.checkCancellation()
-            var result = CIImage(cvPixelBuffer: output, options: [.colorSpace: colorSpace])
-            // Back-project the reconstructed low frequencies onto the known input. The model may shift colour;
-            // correcting that shift uses only the input, while retaining its synthesized fine detail.
-            let baseline = Upscale.lanczos(colors, factor: Double(factor))
-            guard let kernel = Upscale.consistencyKernel else { throw ToolError(L("Couldn't render")) }
-            let reprojected = Upscale.lanczos(Upscale.lanczos(result, factor: 1 / Double(factor)), factor: Double(factor))
-            guard let corrected = kernel.apply(extent: result.extent, arguments: [result, baseline, reprojected]) else { throw ToolError(L("Couldn't render")) }
-            result = corrected
-            if factor != requestedFactor {
-                result = Upscale.lanczos(result, factor: Double(requestedFactor) / Double(factor))
-            }
-            // Keep transparency independently of the system model's supported colour buffer formats.
-            let alpha = Upscale.lanczos(source, factor: Double(requestedFactor))
-            result = result.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: alpha])
-            // Materialize before the next frame reuses the processor, without keeping its buffers alive indefinitely.
-            guard let cg = context.createCGImage(result, from: CGRect(x: 0, y: 0, width: w * requestedFactor, height: h * requestedFactor)) else {
-                throw ToolError(L("Couldn't render"))
-            }
-            await admission.leave()
-            return CIImage(cgImage: cg)
-        } catch { await admission.leave(); throw error }
-    }
-}
+import os
 
 enum Upscale {
     private static let opaqueColorKernel = CIColorKernel(source: """
@@ -120,17 +21,34 @@ enum Upscale {
         }
         return result
     }
-    static let consistencyKernel = CIColorKernel(source: """
-        kernel vec4 consistency(__sample reconstructed, __sample known, __sample projected) {
-            return vec4(clamp(reconstructed.rgb + known.rgb - projected.rgb, 0.0, 1.0), reconstructed.a);
-        }
-        """)
     static func dimensions(width: Int, height: Int, factor: Int) throws -> CGSize {
         guard width > 0, height > 0, [2, 4].contains(factor),
-              Double(width) * Double(height) * Double(factor * factor) <= Images.maxDecodePixels else {
+              Double(width) * Double(height) * Double(factor * factor) <= 64_000_000,
+              Double(width) * Double(factor) <= 16384, Double(height) * Double(factor) <= 16384 else {
             throw ToolError(L("The enlarged image would be too large."))
         }
         return CGSize(width: width * factor, height: height * factor)
+    }
+    /// Read metadata and decode through the same ImageIO source, with a hard thumbnail bound even if the source changes.
+    static func loadStill(_ source: URL, factor: Int) throws -> CGImage {
+        try Task.checkCancellation()
+        guard let file = CGImageSourceCreateWithURL(source as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(file, 0, nil) as? [CFString: Any],
+              let width = props[kCGImagePropertyPixelWidth] as? Int, let height = props[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0, max(width, height) <= 8192,
+              Double(width) * Double(height) <= 16_000_000 else {
+            throw ToolError(L("This image is too large to upscale. Use an image up to 16 megapixels."))
+        }
+        _ = try dimensions(width: width, height: height, factor: factor)
+        let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: max(width, height)]
+        guard let result = CGImageSourceCreateThumbnailAtIndex(file, 0, options as CFDictionary) else {
+            throw ToolError(L("Couldn't render"))
+        }
+        try Task.checkCancellation()
+        _ = try dimensions(width: result.width, height: result.height, factor: factor)
+        return result
     }
     static func lanczos(_ image: CIImage, factor: Double) -> CIImage {
         // Resampling a finite image against transparent black leaves a bright outline after back-projection.
@@ -168,39 +86,70 @@ enum Upscale {
             try await worker.value
         } onCancel: { worker.cancel() }
     }
-    static func video(_ source: URL, engine: SystemUpscalerBox, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+    static func video(_ source: URL, engine: UpscaleProcessor, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let asset = try await Video.safeAsset(source)
         guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw ToolError(L("No video track")) }
         let size = try await VideoEdit.uprightSize(of: track)
         let factor = 2
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0,
+              size.width * size.height <= 16_000_000 else {
+            throw ToolError(L("This video is too large to upscale. Use frames up to 16 megapixels."))
+        }
+        let outputSize = try dimensions(width: Int(size.width), height: Int(size.height), factor: factor)
+        let work = UpscaleVideoWork(engine: engine)
+        defer { work.cancel() }
         let composition = try await AVMutableVideoComposition.videoComposition(with: asset) { request in
+            let frame = UpscaleVideoFrame(request)
             Task.detached {
                 do {
-                    let frame = try await engine.render(request.sourceImage, request.compositionTime)
-                    request.finish(with: frame, context: nil)
-                } catch { request.finish(with: error) }
+                    try work.checkCancellation()
+                    let result = try await engine.render(frame.request.sourceImage, frame.request.compositionTime)
+                    try work.checkCancellation()
+                    frame.request.finish(with: result, context: nil)
+                } catch { frame.request.finish(with: error) }
             }
         }
-        composition.renderSize = CGSize(width: size.width * Double(factor), height: size.height * Double(factor))
+        composition.renderSize = outputSize
         guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else { throw ToolError(L("Couldn't encode video.")) }
         session.videoComposition = composition
+        session.timeRange = CMTimeRange(start: .zero, duration: try await asset.load(.duration))
         let monitor = Task {
             while !Task.isCancelled { progress(Double(session.progress)); try await Task.sleep(for: .milliseconds(100)) }
         }
         defer { monitor.cancel() }
         return try await Paths.produce(Paths.preferred(for: source, ext: "mov", suffix: " 2x")) { temporary in
-            try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            // AVFoundation installs its own synchronous cancellation handler, which can wait for pending
+            // composition requests. Keep that task separate so our processor is stopped before it drains.
+            let exporter = Task.detached(priority: .userInitiated) {
                 try Task.checkCancellation()
                 try await session.export(to: temporary, as: .mov)
+            }
+            try await withTaskCancellationHandler {
+                // Always join this worker before Paths.produce removes its temporary, even if already cancelled.
+                try await exporter.value
                 try Task.checkCancellation()
-            } onCancel: { session.cancelExport() }
+            } onCancel: { work.cancel(); exporter.cancel() }
         }
     }
 }
 
-/// The macOS-15 fallback is explicit. The system implementation is boxed so older OSes never instantiate it.
-struct SystemUpscalerBox: Sendable {
+struct UpscaleProcessor: Sendable {
     let render: @Sendable (CIImage, CMTime) async throws -> CIImage
+    var cancel: @Sendable () -> Void = {}
+}
+
+private final class UpscaleVideoWork: @unchecked Sendable {
+    private let stopped = OSAllocatedUnfairLock(initialState: false)
+    private let engine: UpscaleProcessor
+    init(engine: UpscaleProcessor) { self.engine = engine }
+    func cancel() { stopped.withLock { $0 = true }; engine.cancel() }
+    func checkCancellation() throws { if Task.isCancelled || stopped.withLock({ $0 }) { throw CancellationError() } }
+}
+/// Each AVFoundation request has one finishing worker; different requests can arrive on different queues.
+private final class UpscaleVideoFrame: @unchecked Sendable {
+    let request: AVAsynchronousCIImageFilteringRequest
+    init(_ request: AVAsynchronousCIImageFilteringRequest) { self.request = request }
 }
 
 final class UpscaleEditor: Editor {
@@ -212,15 +161,13 @@ final class UpscaleEditor: Editor {
     private let progress = NSProgressIndicator()
     private var sourceSize = CGSize.zero
     private var task: Task<[URL], Error>?
-    private var progressTask: Task<Void, Never>?
 
     init(source: URL, video: Bool = false) {
         self.video = video
         super.init(title: "Upscale", source: source, canvas: preview)
         factors = segments(video ? ["2×"] : ["2×", "4×"])
         addRow("Scale", factors, sizeLabel)
-        if #available(macOS 26, *) { explanation.stringValue = L("AI upscaling uses Apple's on-device model.") }
-        else { explanation.stringValue = L("Ordinary Lanczos enlargement. AI upscaling requires macOS 26.") }
+        explanation.stringValue = L("Real-ESRGAN processes files on this Mac. Fine details may be reconstructed.")
         explanation.font = .systemFont(ofSize: 11); explanation.textColor = .secondaryLabelColor
         addRow("", explanation)
         progress.isIndeterminate = false; progress.minValue = 0; progress.maxValue = 1
@@ -233,6 +180,10 @@ final class UpscaleEditor: Editor {
             let asset = try await Video.safeAsset(source)
             guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw ToolError(L("No video track")) }
             sourceSize = try await VideoEdit.uprightSize(of: track)
+            guard sourceSize.width.isFinite, sourceSize.height.isFinite, sourceSize.width > 0, sourceSize.height > 0,
+                  max(sourceSize.width, sourceSize.height) <= 8192, sourceSize.width * sourceSize.height <= 16_000_000 else {
+                throw ToolError(L("This video is too large to upscale. Use frames up to 16 megapixels."))
+            }
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true; generator.maximumSize = CGSize(width: 1400, height: 1400)
             preview.image = try await generator.image(at: .zero).image
@@ -242,6 +193,9 @@ final class UpscaleEditor: Editor {
                       let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
                       var w = props[kCGImagePropertyPixelWidth] as? Int, var h = props[kCGImagePropertyPixelHeight] as? Int else {
                     throw ToolError(L("Couldn't render"))
+                }
+                guard w > 0, h > 0, max(w, h) <= 8192, Double(w) * Double(h) <= 16_000_000 else {
+                    throw ToolError(L("This image is too large to upscale. Use an image up to 16 megapixels."))
                 }
                 if let orientation = props[kCGImagePropertyOrientation] as? Int, orientation >= 5 { swap(&w, &h) }
                 return (try Images.load(source, maxPixels: 1400), CGSize(width: w, height: h))
@@ -256,48 +210,36 @@ final class UpscaleEditor: Editor {
     override func reset() { factors.selectedSegment = 0 }
     override var canCancelSaving: Bool { true }
     override func cancelSaving() { task?.cancel() }
-    override func didClose() { task?.cancel(); progressTask?.cancel() }
+    override func didClose() { task?.cancel() }
     override func apply() async throws -> [URL] {
         let factor = factors.selectedSegment == 1 ? 4 : 2, source = self.source, video = self.video
         let size = try Upscale.dimensions(width: Int(sourceSize.width), height: Int(sourceSize.height), factor: factor)
         _ = size
         let task = Task { [self] () throws -> [URL] in
-            var box: SystemUpscalerBox
-            if #available(macOS 26, *) {
-                let engine = try SystemUpscaler(width: Int(sourceSize.width), height: Int(sourceSize.height), factor: factor, video: video)
-                if engine.configuration.configurationModelStatus != .ready {
-                    let alert = NSAlert()
-                    alert.messageText = L("Download upscaling resources?")
-                    alert.informativeText = L("Apple needs to download an upscaling model once. Your files stay on this Mac.")
-                    alert.addButton(withTitle: L("Download")); alert.addButton(withTitle: L("Cancel"))
-                    let answer = await withCheckedContinuation { continuation in alert.beginSheetModal(for: window) { continuation.resume(returning: $0) } }
-                    guard answer == .alertFirstButtonReturn else { throw Cancelled() }
-                    try Task.checkCancellation()
-                    progressTask = Task { [weak self, engine] in
-                        while !Task.isCancelled {
-                            self?.progress.doubleValue = Double(engine.configuration.configurationModelPercentageAvailable)
-                            try? await Task.sleep(for: .milliseconds(100))
-                        }
-                    }
-                    try await engine.configuration.downloadConfigurationModel()
-                    progressTask?.cancel(); progressTask = nil
+            progress.isIndeterminate = true; progress.startAnimation(nil)
+            let engine: RealESRGANEngine
+            do { engine = try await RealESRGANEngine.make() }
+            catch { progress.stopAnimation(nil); progress.isIndeterminate = false; throw error }
+            progress.stopAnimation(nil); progress.isIndeterminate = false; progress.doubleValue = 0
+            return try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                if video {
+                    let processor = UpscaleProcessor(render: { image, _ in try await engine.render(image, factor: 2) }, cancel: { engine.cancel() })
+                    return [try await Upscale.video(source, engine: processor) { [weak self] value in
+                        Task { @MainActor in self?.progress.doubleValue = value }
+                    }]
+                }
+                let worker = Task.detached(priority: .userInitiated) { try Upscale.loadStill(source, factor: factor) }
+                let image = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+                let result = try await engine.render(CIImage(cgImage: image), factor: factor) { [weak self] value in
+                    Task { @MainActor in self?.progress.doubleValue = value }
                 }
                 try Task.checkCancellation()
-                try engine.start()
-                box = SystemUpscalerBox { image, time in try await engine.render(image, time: time) }
-            } else {
-                box = SystemUpscalerBox { image, _ in Upscale.lanczos(image, factor: Double(factor)) }
-            }
-            if video {
-                return [try await Upscale.video(source, engine: box) { [weak self] value in Task { @MainActor in self?.progress.doubleValue = value } }]
-            }
-            let image = try await Images.detached { try Images.load(source) }
-            let result = try await box.render(CIImage(cgImage: image), .zero)
-            try Task.checkCancellation()
-            return [try await Upscale.finishStill(result, source: source, factor: factor)]
+                return [try await Upscale.finishStill(result, source: source, factor: factor)]
+            } onCancel: { engine.cancel() }
         }
         self.task = task
-        defer { self.task = nil; progressTask?.cancel(); progressTask = nil }
+        defer { self.task = nil; progress.stopAnimation(nil); progress.isIndeterminate = false }
         return try await task.value
     }
 }

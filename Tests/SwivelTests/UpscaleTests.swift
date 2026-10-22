@@ -1,9 +1,9 @@
 import AppKit
 import AVFoundation
 import CoreImage
+import os
 import Testing
 import UniformTypeIdentifiers
-import VideoToolbox
 @testable import Swivel
 
 @Suite(.serialized)
@@ -24,16 +24,15 @@ struct UpscaleTests {
             #expect(try Data(contentsOf: source) == before)
         }
         #expect(throws: (any Error).self) { try Upscale.dimensions(width: 50000, height: 50000, factor: 4) }
-        if #available(macOS 26, *) {
-            #expect(throws: (any Error).self) { try SystemUpscaler(width: 1921, height: 1920, factor: 2, video: false) }
-        }
+        #expect(throws: (any Error).self) { try Upscale.dimensions(width: 8193, height: 1, factor: 2) }
+        #expect(throws: (any Error).self) { try Upscale.dimensions(width: 4001, height: 4000, factor: 2) }
     }
     @Test @MainActor func menusKeepImageAndVideoActionsNearResizeAndCompression() throws {
         let image = URL(fileURLWithPath: "/nonexistent/photo.png"), video = URL(fileURLWithPath: "/nonexistent/clip.mov")
         let titles = Catalog.defaultItems(for: [image], mode: .tools).map(\.title)
-        #expect(titles.firstIndex(of: "Upscale") == titles.firstIndex(of: "Resize…").map { $0 - 1 })
+        #expect(try #require(titles.firstIndex(of: "Upscale")) + 1 == #require(titles.firstIndex(of: "Resize…")))
         let movies = Catalog.defaultItems(for: [video], mode: .tools).map(\.title)
-        #expect(movies.firstIndex(of: "Upscale") == movies.firstIndex(of: "Compress").map { $0 - 1 })
+        #expect(try #require(movies.firstIndex(of: "Upscale")) + 1 == #require(movies.firstIndex(of: "Compress")))
         for source in [image, video] { #expect(!MCPCatalog.actions(for: [source]).contains { $0.id == "tools.Upscale" }) }
         #expect(Strings.table["Upscale"]?.count == 3)
     }
@@ -43,7 +42,7 @@ struct UpscaleTests {
         let source = try await MediaBatchFixtures.video(in: folder)
         let before = try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
         let task = Task {
-            try await Upscale.video(source, engine: SystemUpscalerBox { image, _ in Upscale.lanczos(image, factor: 2) }) { _ in }
+            try await Upscale.video(source, engine: UpscaleProcessor(render: { image, _ in Upscale.lanczos(image, factor: 2) })) { _ in }
         }
         task.cancel()
         do { _ = try await task.value; Issue.record("Cancelled upscale unexpectedly completed") }
@@ -51,6 +50,36 @@ struct UpscaleTests {
             #expect((error as NSError).domain == AVFoundationErrorDomain)
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == before)
+    }
+
+    @Test func cancellingAfterTheFirstVideoFrameStartsStopsProcessingAndPublication() async throws {
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = try await MediaBatchFixtures.video(in: folder)
+        let before = try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
+        let bytes = try Data(contentsOf: source)
+        let first = OSAllocatedUnfairLock(initialState: true), cancelled = OSAllocatedUnfairLock(initialState: false)
+        let gate = UpscaleRenderGate()
+        let task = Task {
+            try await Upscale.video(source, engine: UpscaleProcessor(render: { image, _ in
+                let shouldWait = first.withLock { value -> Bool in let wasFirst = value; value = false; return wasFirst }
+                if shouldWait { gate.blockRenderer() }
+                return Upscale.lanczos(image, factor: 2)
+            }, cancel: {
+                cancelled.withLock { $0 = true }
+                // AVFoundation may synchronously drain requests while cancelling. The processor must
+                // receive Cancel before that drain, so release this deliberately suspended frame here.
+                gate.releaseRenderer()
+            })) { _ in }
+        }
+        defer { gate.releaseRenderer(); task.cancel() }
+        try await gate.waitForRenderer()
+        task.cancel()
+        do { _ = try await task.value; Issue.record("A video cancelled during frame processing was published") }
+        catch is CancellationError {} catch { #expect((error as NSError).domain == AVFoundationErrorDomain) }
+        #expect(cancelled.withLock { $0 })
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == before)
+        #expect(try Data(contentsOf: source) == bytes)
     }
 
     @Test func cancellingTheFinalStillWorkerBeforeEncodingPublishesNothing() async throws {
@@ -68,7 +97,8 @@ struct UpscaleTests {
                 return cg
             }
         }
-        await gate.waitForRenderer()
+        defer { gate.releaseRenderer(); task.cancel() }
+        try await gate.waitForRenderer()
         task.cancel()
         gate.releaseRenderer()
         do { _ = try await task.value; Issue.record("Cancelled still worker published an output") }
@@ -92,137 +122,72 @@ struct UpscaleTests {
         #expect(maxColorError <= 2 && minAlpha == 255)
     }
 
-    @Test(.enabled("Requires an available system model") { systemUpscaleReady() })
-    func systemUpscalePreservesTransparentColorsAndSoftEdges() async throws {
-        if #available(macOS 26, *) {
-            let context = CIContext()
-            let engine = try SystemUpscaler(width: 128, height: 128, factor: 4, video: false)
-            try engine.start()
-            func raster(_ image: CIImage) throws -> Retouch.Raster {
-                try Retouch.Raster(#require(context.createCGImage(image, from: image.extent)))
+    @Test func realModelStillPipelineKeepsFormatsNamesSourceAndDimensions() async throws {
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var raster = Retouch.Raster(width: 65, height: 47, bytes: [UInt8](repeating: 255, count: 65 * 47 * 4))
+        for y in 0..<47 { for x in 0..<65 {
+            let i = (y * 65 + x) * 4
+            raster.bytes[i] = UInt8(x * 3); raster.bytes[i + 1] = UInt8(y * 4); raster.bytes[i + 2] = 60
+        } }
+        for (ext, type) in [("png", UTType.png), ("jpg", UTType.jpeg)] {
+            let source = try Images.save(raster.image(), as: folder.appendingPathComponent("photo.\(ext)"), type: type, quality: 1)
+            let before = try Data(contentsOf: source)
+            for factor in [2,4] {
+                let engine = try await RealESRGANEngine.make()
+                let input = try Upscale.loadStill(source, factor: factor)
+                let result = try await engine.render(CIImage(cgImage: input), factor: factor)
+                let output = try await Upscale.finishStill(result, source: source, factor: factor)
+                let read = try Images.load(output)
+                #expect(output.lastPathComponent == "photo \(factor)x.\(ext)")
+                #expect(read.width == 65 * factor && read.height == 47 * factor)
+                #expect(try Data(contentsOf: source) == before)
             }
-            func centre(_ image: CIImage) throws -> [UInt8] {
-                let r = try raster(image), i = (r.width * (r.height / 2) + r.width / 2) * 4
-                return Array(r.bytes[i..<i + 4])
-            }
-            for alpha in [0.0, 0.25, 0.5, 0.75, 1.0] {
-                let input = CIImage(color: CIColor(red: 0.8, green: 0.2, blue: 0.1, alpha: alpha))
-                    .cropped(to: CGRect(x: 0, y: 0, width: 128, height: 128))
-                let actual = try centre(await engine.render(input)), expected = try centre(input)
-                for channel in 0..<4 { #expect(abs(Int(actual[channel]) - Int(expected[channel])) <= 2) }
-                if alpha == 0.5 {
-                    // Negative control: restoring alpha twice preserves alpha-related dimensions but corrupts colour.
-                    let wrong = try centre(input.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: input]))
-                    #expect(abs(Int(wrong[0]) - Int(expected[0])) > 20)
-                }
-            }
-            var soft = Retouch.Raster(width: 128, height: 128, bytes: [UInt8](repeating: 0, count: 128 * 128 * 4))
-            for y in 0..<128 { for x in 0..<128 {
-                let alpha = min(1, max(0, (48 - hypot(Double(x) - 63.5, Double(y) - 63.5)) / 12))
-                let i = (y * 128 + x) * 4
-                for (channel, value) in [204.0, 51.0, 25.0, 255.0].enumerated() { soft.bytes[i + channel] = UInt8((value * alpha).rounded()) }
-            } }
-            let source = CIImage(cgImage: try soft.image())
-            let output = try await engine.render(source)
-            let actual = try raster(output), expected = try raster(Upscale.lanczos(source, factor: 4))
-            var maxColorError = 0, maxAlphaError = 0, wrongError = 0, transparentPixelsEmpty = true
-            let wrong = try raster(output.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: Upscale.lanczos(source, factor: 4)]))
-            for y in 0..<actual.height { for x in 0..<actual.width {
-                let i = (y * actual.width + x) * 4
-                maxAlphaError = max(maxAlphaError, abs(Int(actual.bytes[i + 3]) - Int(expected.bytes[i + 3])))
-                // Compare visible soft-edge pixels; fully transparent RGB must remain exactly empty.
-                if (32...224).contains(expected.bytes[i + 3]) {
-                    for channel in 0..<3 {
-                        maxColorError = max(maxColorError, abs(Int(actual.bytes[i + channel]) - Int(expected.bytes[i + channel])))
-                        wrongError = max(wrongError, abs(Int(wrong.bytes[i + channel]) - Int(expected.bytes[i + channel])))
-                    }
-                } else if expected.bytes[i + 3] == 0 {
-                    transparentPixelsEmpty = transparentPixelsEmpty && actual.bytes[i] == 0 && actual.bytes[i + 1] == 0 && actual.bytes[i + 2] == 0
-                }
-            } }
-            print("Upscale soft-edge error: corrected \(maxColorError), double-alpha negative control \(wrongError), alpha \(maxAlphaError)")
-            #expect(maxColorError <= 6 && maxAlphaError <= 1)
-            #expect(wrongError > 20)
-            #expect(transparentPixelsEmpty)
+        }
+        for key in ["Real-ESRGAN processes files on this Mac. Fine details may be reconstructed.",
+                    "This image is too large to upscale. Use an image up to 16 megapixels.",
+                    "This video is too large to upscale. Use frames up to 16 megapixels."] {
+            let values = try #require(Strings.table[key]); #expect(values.count == 3 && values.allSatisfy { !$0.isEmpty })
         }
     }
 
-    @Test(.enabled("Requires an available system model") { systemUpscaleReady() })
-    func systemUpscaleDimensionsAndReportsPSNRForHumanReview() async throws {
-        if #available(macOS 26, *) {
-            let reference = try Images.load(URL(fileURLWithPath: "/Library/User Pictures/Animals/Parrot.heic"), maxPixels: 512)
-            let small = try Images.resized(reference, longEdge: 128)
-            func bytes(_ cg: CGImage) throws -> [UInt8] { try Retouch.Raster(cg).bytes }
-            let original = try bytes(reference)
-            func psnr(_ cg: CGImage) throws -> Double {
-                let values = try bytes(cg)
-                #expect(values.count == original.count)
-                let mse = zip(values, original).reduce(0.0) { $0 + pow(Double($1.0) - Double($1.1), 2) } / Double(original.count)
-                return 10 * log10(255 * 255 / max(mse, 0.000001))
+    @Test func realVideoUpscaleKeepsSoundDurationSourceAndMatchesProcessedPixels() async throws {
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let audio = try MediaBatchFixtures.tone(in: folder, seconds: 0.5)
+        let source = try await MediaBatchFixtures.video(in: folder, seconds: 0.5, audio: audio)
+        let before = try Data(contentsOf: source)
+        let engine = try await RealESRGANEngine.make()
+        let requestInput = OSAllocatedUnfairLock<CGImage?>(initialState: nil)
+        let output = try await Upscale.video(source, engine: UpscaleProcessor(render: { frame, _ in
+            requestInput.withLock { value in
+                if value == nil {
+                    value = CIContext().createCGImage(frame, from: frame.extent, format: .RGBA8,
+                        colorSpace: CGColorSpace(name: CGColorSpace.sRGB))
+                }
             }
-            let engine = try SystemUpscaler(width: small.width, height: small.height, factor: 4, video: false)
-            try engine.start()
-            let result = try await engine.render(CIImage(cgImage: small))
-            let cg = try #require(CIContext().createCGImage(result, from: result.extent))
-            #expect(cg.width == small.width * 4 && cg.height == small.height * 4)
-            let ai = try psnr(cg), regular = try psnr(Upscale.ordinary(small, factor: 4))
-            print("Upscale PSNR: AI \(ai), Lanczos \(regular)")
-            let grey = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: CGRect(x: 0, y: 0, width: small.width, height: small.height))
-            let greyOutput = try await engine.render(grey)
-            let greyCG = try #require(CIContext().createCGImage(greyOutput, from: greyOutput.extent))
-            let greyBytes = try bytes(greyCG)
-            let centre = (greyCG.width * (greyCG.height / 2) + greyCG.width / 2) * 4
-            for channel in 0..<3 { #expect(abs(Int(greyBytes[centre + channel]) - 128) <= 2) }
-            var landmark = Retouch.Raster(width: small.width, height: small.height,
-                bytes: [UInt8](repeating: 0, count: small.width * small.height * 4))
-            for y in 0..<small.height { for x in 0..<small.width {
-                let i = (y * small.width + x) * 4
-                let v: UInt8 = (35..<67).contains(x) && (42..<74).contains(y) ? 220 : 0
-                landmark.bytes[i] = v; landmark.bytes[i + 1] = v; landmark.bytes[i + 2] = v; landmark.bytes[i + 3] = 255
-            } }
-            let landmarkImage = try landmark.image()
-            let landmarkOutput = try await engine.render(CIImage(cgImage: landmarkImage))
-            let landmarkCG = try #require(CIContext().createCGImage(landmarkOutput, from: landmarkOutput.extent))
-            func centroid(_ image: CGImage) throws -> CGPoint {
-                let p = try bytes(image)
-                var mass = 0.0, mx = 0.0, my = 0.0
-                for y in 0..<image.height { for x in 0..<image.width {
-                    let value = Double(p[(y * image.width + x) * 4])
-                    mass += value; mx += value * Double(x); my += value * Double(y)
-                } }
-                return CGPoint(x: mx / mass, y: my / mass)
-            }
-            let modelCentre = try centroid(landmarkCG)
-            #expect(abs(modelCentre.x - 203.5) < 0.2 && abs(modelCentre.y - 231.5) < 0.2)
-            print("Upscale independent landmark: \(modelCentre), expected (203.5, 231.5)")
-            // Owner deferred the superiority gate to visual review on 2026-10-22. Keep the measured comparison.
-            #expect(ai.isFinite && regular.isFinite && ai > 0 && regular > 0)
-            let twice = try SystemUpscaler(width: small.width, height: small.height, factor: 2, video: false)
-            try twice.start()
-            let result2 = try await twice.render(CIImage(cgImage: small))
-            #expect(result2.extent.width == Double(small.width * 2) && result2.extent.height == Double(small.height * 2))
-        }
-    }
-    @Test(.enabled("Requires an available system model") { systemUpscaleReady() })
-    func systemVideoUpscaleKeepsSoundDurationAndSource() async throws {
-        if #available(macOS 26, *) {
-            let folder = try MediaBatchFixtures.folder()
-            defer { try? FileManager.default.removeItem(at: folder) }
-            let audio = try MediaBatchFixtures.tone(in: folder)
-            let source = try await MediaBatchFixtures.video(in: folder, audio: audio)
-            let before = try Data(contentsOf: source)
-            let engine = try SystemUpscaler(width: 320, height: 240, factor: 2, video: true)
-            try engine.start()
-            let box = SystemUpscalerBox { image, time in try await engine.render(image, time: time) }
-            let output = try await Upscale.video(source, engine: box) { _ in }
-            let asset = try await Video.safeAsset(output)
-            let video = try #require(try await asset.loadTracks(withMediaType: .video).first)
-            #expect(try await video.load(.naturalSize) == CGSize(width: 640, height: 480))
-            #expect(try await abs(asset.load(.duration).seconds - 1) < 0.02)
-            #expect(try await !asset.loadTracks(withMediaType: .audio).isEmpty)
-            #expect(try Data(contentsOf: source) == before)
-            #expect(output.lastPathComponent == "clip 2x.mov")
-        }
+            return try await engine.render(frame, factor: 2)
+        }, cancel: { engine.cancel() })) { _ in }
+        let asset = try await Video.safeAsset(output)
+        let video = try #require(try await asset.loadTracks(withMediaType: .video).first)
+        #expect(try await video.load(.naturalSize) == CGSize(width: 640, height: 480))
+        #expect(try await abs(asset.load(.duration).seconds - 0.5) < 0.02)
+        #expect(try await !asset.loadTracks(withMediaType: .audio).isEmpty)
+        #expect(try Data(contentsOf: source) == before)
+        #expect(output.lastPathComponent == "clip 2x.mov")
+        let resultGenerator = AVAssetImageGenerator(asset: asset); resultGenerator.appliesPreferredTrackTransform = true
+        let actual = try await resultGenerator.image(at: CMTime(seconds: 0.2, preferredTimescale: 600)).image
+        let compositionInput = try #require(requestInput.withLock { $0 })
+        // AVAssetImageGenerator on this fixture returns an untagged CGImage, unlike the colour-managed CI
+        // composition input. Independently process that actual decoded input so a colour-space mismatch in the
+        // test fixture cannot disguise itself as model/export error. This fixture has identical frames.
+        let secondEngine = try await RealESRGANEngine.make()
+        let fromComposition = try await secondEngine.render(CIImage(cgImage: compositionInput), factor: 2)
+        let secondCG = try #require(CIContext().createCGImage(fromComposition, from: fromComposition.extent))
+        let a = try Retouch.Raster(actual).bytes, b = try Retouch.Raster(secondCG).bytes
+        let rmse = sqrt(zip(a,b).reduce(0.0) { $0 + pow(Double($1.0)-Double($1.1), 2) } / Double(a.count))
+        print("Real-ESRGAN final-video RMSE vs independently processed composition input: \(rmse)")
+        #expect(a.count == b.count && rmse < 8)
     }
 }
 
@@ -231,17 +196,12 @@ private final class UpscaleRenderGate: @unchecked Sendable {
     private let proceed = DispatchSemaphore(value: 0)
     func blockRenderer() { began.signal(); proceed.wait() }
     func releaseRenderer() { proceed.signal() }
-    func waitForRenderer() async {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global().async { self.began.wait(); continuation.resume() }
+    func waitForRenderer() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            DispatchQueue.global().async {
+                if self.began.wait(timeout: .now() + 10) == .success { continuation.resume() }
+                else { continuation.resume(throwing: ToolError("Timed out waiting for the renderer")) }
+            }
         }
     }
-}
-private func systemUpscaleReady() -> Bool {
-    if #available(macOS 26, *) {
-        return VTSuperResolutionScalerConfiguration.isSupported &&
-            VTSuperResolutionScalerConfiguration(frameWidth: 320, frameHeight: 240, scaleFactor: 4, inputType: .image,
-                usePrecomputedFlow: false, qualityPrioritization: .normal, revision: .revision1)?.configurationModelStatus == .ready
-    }
-    return false
 }
