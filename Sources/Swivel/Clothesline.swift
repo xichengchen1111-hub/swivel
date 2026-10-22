@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import AVFoundation
 import ImageIO
 
@@ -396,14 +397,28 @@ final class Clothesline: NSObject {
     func copy(_ url: URL) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        var objects: [NSPasteboardWriting] = [url as NSURL]
-        if let image = NSImage(contentsOf: url) { objects.append(image) }
-        pasteboard.writeObjects(objects)
+        pasteboard.writeObjects([Self.pasteboardItem(for: url)])
         pasteboardCount = pasteboard.changeCount  // don't re-hang our own copy
         // Confirmed where the user is looking (on the print), with the name at the bottom of the screen.
         panel.rope.confirmCopy(url)
         Feedback.done()
         Toast.shared.show(L("Copied %@", url.lastPathComponent), symbol: "doc.on.doc")
+    }
+
+    /// One clipboard item for a print: the file, plus its picture for apps that paste images rather than files. Two
+    /// separate items (the file and an NSImage) made chat apps send two attachments: the file and a large TIFF.
+    nonisolated static func pasteboardItem(for url: URL) -> NSPasteboardItem {
+        let item = NSPasteboardItem()
+        item.setString(url.absoluteString, forType: .fileURL)
+        guard let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image),
+              let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return item }
+        // The file's own bytes under its own type (a PNG screenshot is pasted as that PNG, not re-encoded).
+        item.setData(data, forType: NSPasteboard.PasteboardType(type.identifier))
+        // Apps that only take PNG or TIFF get PNG, made only if one of them asks.
+        if type != .png, type != .tiff {
+            item.setDataProvider(PNGOnDemand(url), forTypes: [.png])
+        }
+        return item
     }
 
     func openInPreview(_ url: URL) {
@@ -2452,5 +2467,28 @@ final class CardFlight {
         landed?()
         driver.stop()
         panel.orderOut(nil)
+    }
+}
+
+/// Makes a PNG of a copied print only when an app pastes it as PNG. Held until the clipboard changes, since the
+/// pasteboard item may not keep its provider alive.
+final class PNGOnDemand: NSObject, NSPasteboardItemDataProvider, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var current: PNGOnDemand?
+    private let url: URL
+
+    init(_ url: URL) {
+        self.url = url
+        super.init()
+        Self.lock.withLock { Self.current = self }
+    }
+
+    func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
+        guard type == .png, let image = try? Images.load(url), let data = try? Images.encode(image, type: .png, quality: 1) else { return }
+        item.setData(data, forType: .png)
+    }
+
+    func pasteboardFinishedWithDataProvider(_ pasteboard: NSPasteboard) {
+        Self.lock.withLock { if Self.current === self { Self.current = nil } }
     }
 }

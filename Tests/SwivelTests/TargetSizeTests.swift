@@ -194,10 +194,19 @@ struct TargetSizeTests {
         let directory = try folder(); defer { try? FileManager.default.removeItem(at: directory) }
         let source = try await clip(in: directory)
         await #expect(throws: ToolError.self) { try await Video.compressToTarget(source, maxBytes: 1000) }
-        let task = Task { try await Video.compressToTarget(source, maxBytes: 240_000) }
-        try await Task.sleep(for: .milliseconds(20))
-        task.cancel()
-        do { _ = try await task.value; Issue.record("Cancelled encoding must throw") } catch { }
+        // Cancelled before it starts: it must throw and leave nothing.
+        let early = Task { try await Video.compressToTarget(source, maxBytes: 240_000) }
+        early.cancel()
+        do { _ = try await early.value; Issue.record("Cancelled encoding must throw") } catch { }
         #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["source.mp4"])
+
+        // Cancelled while running. Under a busy test run the sleep can outlast the whole encode, so either outcome
+        // is allowed; what must never happen is a partial output or a leftover hidden temporary.
+        let running = Task { try await Video.compressToTarget(source, maxBytes: 240_000) }
+        try await Task.sleep(for: .milliseconds(20))
+        running.cancel()
+        let finished = (try? await running.value) != nil
+        let left = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        #expect(left == (finished ? ["source compressed.mp4", "source.mp4"] : ["source.mp4"]), "\(left)")
     }
 }
