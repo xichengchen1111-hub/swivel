@@ -19,11 +19,14 @@ enum Video {
             FileOption(title: "GIF") { try await gif($0) },
             FileOption(title: "M4A") { try await export($0, AVAssetExportPresetAppleM4A, .m4a, "m4a") },
             FileOption(title: "WAV") { url in
-                let m4a = try await export(url, AVAssetExportPresetAppleM4A, .m4a, "m4a")[0]
-                defer { try? FileManager.default.removeItem(at: m4a) }
-                let out = Paths.output(for: url, ext: "wav")
-                try await Shell.run("/usr/bin/afconvert", ["-f", "WAVE", "-d", "LEI16", m4a.path, out.path])
-                return [out]
+                let asset = try await safeAsset(url)
+                return [try await Paths.produce(Paths.preferred(for: url, ext: "wav")) { wav in
+                    // The soundtrack goes through AAC first, in a temporary of its own that afconvert then reads.
+                    let m4a = Paths.temporary(beside: wav, ext: "m4a")
+                    defer { Paths.discard(m4a) }
+                    try await encode(asset, AVAssetExportPresetAppleM4A, .m4a, to: m4a)
+                    try await Shell.run("/usr/bin/afconvert", ["-f", "WAVE", "-d", "LEI16", m4a.path, wav.path])
+                }]
             },
             FileOption(title: "PNG Frame") { try await frame($0) },
         ]
@@ -72,9 +75,8 @@ enum Video {
     }
 
     private static func compressSmaller(_ url: URL) async throws -> URL {
-        let temporary = url.deletingLastPathComponent().appendingPathComponent(".swivel-\(UUID().uuidString).mp4")
-        TemporaryItems.register(temporary)
-        defer { try? FileManager.default.removeItem(at: temporary); TemporaryItems.unregister(temporary) }
+        let temporary = Paths.temporary(beside: url, ext: "mp4")
+        defer { Paths.discard(temporary) }
         guard let session = AVAssetExportSession(asset: try await safeAsset(url), presetName: AVAssetExportPresetMediumQuality) else {
             throw ToolError(L("Couldn't encode video."))
         }
@@ -83,9 +85,7 @@ enum Video {
             try await session.export(to: temporary, as: .mp4)
             try Task.checkCancellation()
         } onCancel: { session.cancelExport() }
-        let out = Paths.output(for: url, ext: "mp4", suffix: " compressed")
-        try FileManager.default.moveItem(at: temporary, to: out)
-        return out
+        return try Paths.publish(temporary, as: Paths.preferred(for: url, ext: "mp4", suffix: " compressed"))
     }
 
     static func targetBitrates(maxBytes: Int, duration: Double, hasAudio: Bool) throws -> (video: Int, audio: Int) {
@@ -109,9 +109,8 @@ enum Video {
         let budget = try targetBitrates(maxBytes: maxBytes, duration: duration, hasAudio: audio != nil)
         var totalRate = Double(budget.video + budget.audio)
         let audioRate = budget.audio
-        let temporary = url.deletingLastPathComponent().appendingPathComponent(".swivel-\(UUID().uuidString).mp4")
-        TemporaryItems.register(temporary)
-        defer { try? FileManager.default.removeItem(at: temporary); TemporaryItems.unregister(temporary) }
+        let temporary = Paths.temporary(beside: url, ext: "mp4")
+        defer { Paths.discard(temporary) }
         for attempt in 0..<2 {
             try Task.checkCancellation()
             let videoRate = totalRate - Double(audioRate)
@@ -125,9 +124,7 @@ enum Video {
             try FileManager.default.removeItem(at: temporary)
         }
         try Task.checkCancellation()
-        let out = Paths.output(for: url, ext: "mp4", suffix: " compressed")
-        try FileManager.default.moveItem(at: temporary, to: out)
-        return out
+        return try Paths.publish(temporary, as: Paths.preferred(for: url, ext: "mp4", suffix: " compressed"))
     }
 
     private static func encodeTarget(_ asset: AVAsset, audio: AVAssetTrack?, to out: URL,
@@ -224,15 +221,20 @@ enum Video {
 
     static func export(_ url: URL, _ preset: String, _ type: AVFileType, _ ext: String,
                        suffix: String = "") async throws -> [URL] {
-        try await export(try await safeAsset(url), preset, type, to: Paths.output(for: url, ext: ext, suffix: suffix))
+        try await export(try await safeAsset(url), preset, type, as: Paths.preferred(for: url, ext: ext, suffix: suffix))
     }
 
-    private static func export(_ asset: AVAsset, _ preset: String, _ type: AVFileType, to out: URL) async throws -> [URL] {
+    /// Exports into a temporary beside `preferred`, then publishes it there or under the next free name.
+    private static func export(_ asset: AVAsset, _ preset: String, _ type: AVFileType, as preferred: URL) async throws -> [URL] {
+        [try await Paths.produce(preferred) { try await encode(asset, preset, type, to: $0) }]
+    }
+
+    /// One export session writing a new file at `out`.
+    private static func encode(_ asset: AVAsset, _ preset: String, _ type: AVFileType, to out: URL) async throws {
         guard let session = AVAssetExportSession(asset: asset, presetName: preset) else {
             throw ToolError("This video can't be exported that way")
         }
         try await session.export(to: out, as: type)
-        return [out]
     }
 
     private static func mute(_ url: URL) async throws -> [URL] {
@@ -244,7 +246,7 @@ enum Video {
         try videoTrack?.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: track, at: .zero)
         videoTrack?.preferredTransform = try await track.load(.preferredTransform)
         return try await export(composition, AVAssetExportPresetHighestQuality, .mov,
-                                to: Paths.output(for: url, ext: "mov", suffix: " muted"))
+                                as: Paths.preferred(for: url, ext: "mov", suffix: " muted"))
     }
 
     private static func generator(_ asset: AVAsset, maxSize: CGFloat? = nil) -> AVAssetImageGenerator {
@@ -258,9 +260,7 @@ enum Video {
         let asset = try await safeAsset(url)
         let duration = try await asset.load(.duration).seconds
         let (image, _) = try await generator(asset).image(at: CMTime(seconds: duration * 0.1, preferredTimescale: 600))
-        let out = Paths.output(for: url, ext: "png", suffix: " frame")
-        try Images.write(image, to: out, type: .png, quality: 1)
-        return [out]
+        return [try Images.save(image, as: Paths.preferred(for: url, ext: "png", suffix: " frame"), type: .png, quality: 1)]
     }
 
     private static func gif(_ url: URL) async throws -> [URL] {
@@ -272,18 +272,19 @@ enum Video {
         gen.requestedTimeToleranceBefore = CMTime(seconds: 0.5 / fps, preferredTimescale: 600)
         gen.requestedTimeToleranceAfter = gen.requestedTimeToleranceBefore
 
-        let out = Paths.output(for: url, ext: "gif")
-        guard let dest = CGImageDestinationCreateWithURL(out as CFURL, UTType.gif.identifier as CFString, count, nil) else {
-            throw ToolError("Couldn't create GIF")
-        }
-        CGImageDestinationSetProperties(dest, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
-        let frameProps = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1 / fps]] as CFDictionary
-        for i in 0..<count {
-            let (image, _) = try await gen.image(at: CMTime(seconds: Double(i) / fps, preferredTimescale: 600))
-            CGImageDestinationAddImage(dest, image, frameProps)
-        }
-        guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save GIF") }
-        return [out]
+        // Frames stream into a temporary file rather than memory; it is published once complete.
+        return [try await Paths.produce(Paths.preferred(for: url, ext: "gif")) { out in
+            guard let dest = CGImageDestinationCreateWithURL(out as CFURL, UTType.gif.identifier as CFString, count, nil) else {
+                throw ToolError("Couldn't create GIF")
+            }
+            CGImageDestinationSetProperties(dest, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
+            let frameProps = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1 / fps]] as CFDictionary
+            for i in 0..<count {
+                let (image, _) = try await gen.image(at: CMTime(seconds: Double(i) / fps, preferredTimescale: 600))
+                CGImageDestinationAddImage(dest, image, frameProps)
+            }
+            guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save GIF") }
+        }]
     }
 }
 
@@ -321,9 +322,10 @@ enum Audio {
         return try await run(url, ext: format.ext, suffix: suffix, format.args)
     }
 
+    /// afconvert replaces whatever is at its output path, so it only ever writes a temporary.
     private static func run(_ url: URL, ext: String, suffix: String, _ args: [String]) async throws -> [URL] {
-        let out = Paths.output(for: url, ext: ext, suffix: suffix)
-        try await Shell.run("/usr/bin/afconvert", args + [url.path, out.path])
-        return [out]
+        [try await Paths.produce(Paths.preferred(for: url, ext: ext, suffix: suffix)) { out in
+            try await Shell.run("/usr/bin/afconvert", args + [url.path, out.path])
+        }]
     }
 }

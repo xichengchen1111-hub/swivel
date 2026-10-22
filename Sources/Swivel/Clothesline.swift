@@ -179,14 +179,14 @@ final class Clothesline: NSObject {
     /// landed. `thumbnails` (from the card) saves decoding the image again.
     @discardableResult
     func receive(_ urls: [URL], arrival: RopeView.Arrival = .fromAbove, thumbnails: [URL: CGImage] = [:]) -> [URL] {
-        let fm = FileManager.default
         var landed: [URL] = []
         for url in urls where Self.mediaExtensions.contains(url.pathExtension.lowercased()) {
-            let destination = Paths.unique(folder.appendingPathComponent(url.lastPathComponent))
             let waiting = url.deletingLastPathComponent().standardizedFileURL == incoming.standardizedFileURL
                 || IncomingCard.shared.takeSaved(url)
+            let destination: URL
             do {
-                if waiting { try fm.moveItem(at: url, to: destination) } else { try fm.copyItem(at: url, to: destination) }
+                // Each claims its name as it lands (never over a print that arrived meanwhile), even from another volume.
+                destination = waiting ? try Paths.move(url, into: folder) : try Paths.copy(url, into: folder)
             } catch {
                 // Nothing to hang for a file that didn't make it; a waiting screenshot still leaves Incoming.
                 if waiting { IncomingCard.shared.putAway(url) }
@@ -380,8 +380,7 @@ final class Clothesline: NSObject {
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         // Lands in Incoming, so it shows up as a card like a screenshot. It is marked as a copy: left alone, the card
         // is discarded rather than saved where screenshots go (the image is still on the clipboard).
-        let file = Paths.unique(incoming.appendingPathComponent("Copied \(formatter.string(from: Date())).png"))
-        guard (try? png.write(to: file, options: .withoutOverwriting)) != nil else { return }
+        guard let file = try? Paths.create(png, at: incoming.appendingPathComponent("Copied \(formatter.string(from: Date())).png")) else { return }
         _ = setxattr(file.path, Self.copiedMarker, "1", 1, 0, XATTR_NOFOLLOW)
     }
 
@@ -1798,20 +1797,15 @@ final class IncomingCard: NSObject, NSDraggingSource {
         return Self.save(url, to: ScreenshotTakeover.originalLocation, otherwise: Clothesline.shared.folder)
     }
 
-    /// Moves a waiting screenshot into `folder` without overwriting anything. If that fails (the folder is gone or
-    /// read-only, or it is Incoming itself) it hangs on the rope (`fallback`) instead, so it never stays behind in the
-    /// hidden Incoming folder. Returns where it went, or nil if neither worked (the next launch tries again).
-    nonisolated static func save(_ url: URL, to folder: URL, otherwise fallback: URL) -> URL? {
-        let fm = FileManager.default
+    /// Moves a waiting screenshot into `folder` without overwriting anything, even a file that appears there while it
+    /// moves; `folder` can be on another volume (`Paths.move`). If that fails (the folder is gone or read-only, or it
+    /// is Incoming itself) it hangs on the rope (`fallback`) instead, so it never stays behind in the hidden Incoming
+    /// folder. Returns where it went, or nil if neither worked (the next launch tries again). `rename` is for tests.
+    nonisolated static func save(_ url: URL, to folder: URL, otherwise fallback: URL,
+                                 rename: (URL, URL) throws -> Void = Paths.renameExclusively) -> URL? {
         let home = url.deletingLastPathComponent().resolvingSymlinksInPath().path
         for directory in [folder, fallback] where directory.resolvingSymlinksInPath().path != home {
-            let destination = Paths.unique(directory.appendingPathComponent(url.lastPathComponent))
-            do {
-                try fm.moveItem(at: url, to: destination)
-                return destination
-            } catch {
-                continue
-            }
+            if let saved = try? Paths.move(url, into: directory, rename: rename) { return saved }
         }
         return nil
     }

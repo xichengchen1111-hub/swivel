@@ -112,12 +112,14 @@ struct RenameReceipt: Sendable {
 }
 
 enum BatchRenamer {
-    /// Atomic no-replace renames prevent a file created after preview from ever being overwritten.
+    /// Atomic no-replace renames prevent a file created after preview from ever being overwritten. Volumes without
+    /// RENAME_EXCL (exFAT) get the same guarantee from an exclusive placeholder (`Paths.renameExclusively`).
     static func move(_ source: URL, _ destination: URL) throws {
-        let result = source.withUnsafeFileSystemRepresentation { from in
-            destination.withUnsafeFileSystemRepresentation { to in renamex_np(from!, to!, UInt32(RENAME_EXCL)) }
+        do {
+            try Paths.renameExclusively(source, to: destination)
+        } catch {
+            throw ToolError(L("Could not rename %@ to %@", source.path, destination.path))
         }
-        if result != 0 { throw ToolError(L("Could not rename %@ to %@", source.path, destination.path)) }
     }
 
     static func execute(_ plan: RenamePlan, moveFile: (URL, URL) throws -> Void = move) throws -> RenameReceipt {

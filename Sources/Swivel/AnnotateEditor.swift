@@ -389,9 +389,7 @@ final class AnnotateEditor: Editor {
         return try await Images.detached {
             guard let result = MarkRenderer.composite(try Images.load(source), marks) else { throw ToolError("Image too large") }
             let (type, ext) = Images.writableType(for: source)
-            let out = Paths.output(for: source, ext: ext, suffix: " annotated")
-            try Images.write(result, to: out, type: type, quality: 0.95)
-            return [out]
+            return [try Images.save(result, as: Paths.preferred(for: source, ext: ext, suffix: " annotated"), type: type, quality: 0.95)]
         }
     }
 }

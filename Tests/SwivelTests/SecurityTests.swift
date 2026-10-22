@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import ImageIO
 import PDFKit
 import Testing
@@ -33,6 +34,304 @@ struct SecurityTests {
         let outputs = try await Docs.convert(source, to: txt)
         #expect(outputs.map(\.lastPathComponent) == ["note 2.txt"])
         #expect(!FileManager.default.fileExists(atPath: target.path))
+    }
+
+    /// Runs `work` twice at the same moment, the way two quick drops on one file do.
+    private func twice(_ work: @escaping @Sendable () async throws -> [URL]) async throws -> [URL] {
+        try await withThrowingTaskGroup(of: [URL].self) { group in
+            for _ in 0..<2 { group.addTask { try await work() } }
+            return try await group.reduce(into: []) { $0 += $1 }
+        }
+    }
+
+    @Test func simultaneousConversionsOfOneFileEachKeepTheirOwnOutput() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        // Noise keeps the encoders busy long enough for both conversions to have picked a name before either writes.
+        let width = 1600, height = 1200
+        let pixels = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        let bytes = try #require(pixels.data).assumingMemoryBound(to: UInt32.self)
+        var seed: UInt32 = 0x9E37_79B9
+        for i in 0..<(pixels.bytesPerRow / 4 * height) { seed = seed &* 1_664_525 &+ 1_013_904_223; bytes[i] = seed }
+        let photo = dir.appendingPathComponent("photo.png")
+        try Images.encode(try #require(pixels.makeImage()), type: .png, quality: 1).write(to: photo)
+        let tone = dir.appendingPathComponent("tone.wav")
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1))
+        let pcm = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44100))
+        pcm.frameLength = 44100
+        for i in 0..<44100 { pcm.floatChannelData![0][i] = Float(sin(Double(i) * 440 * 2 * .pi / 44100) * 0.2) }
+        do { let file = try AVAudioFile(forWriting: tone, settings: format.settings); try file.write(from: pcm) }
+
+        // Both see photo.jpg free; the second to finish must take photo 2.jpg rather than replace the first.
+        let jpg = try #require(Images.outputFormats.first { $0.ext == "jpg" })
+        let images = try await twice { try await Images.convert(photo, to: jpg) }
+        #expect(Set(images.map(\.lastPathComponent)) == ["photo.jpg", "photo 2.jpg"])
+        for url in images {
+            let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+            #expect(CGImageSourceGetType(source) as String? == UTType.jpeg.identifier)
+            #expect(CGImageSourceCreateImageAtIndex(source, 0, nil)?.width == width)
+        }
+        // A command-line tool (afconvert), an AVFoundation export and an archiver write a temporary, then publish it.
+        let m4a = try #require(Audio.formats.first { $0.name == "M4A" })
+        let audio = try await twice { try await Audio.convert(tone, to: m4a) }
+        #expect(Set(audio.map(\.lastPathComponent)) == ["tone.m4a", "tone 2.m4a"])
+        let exports = try await twice { try await Video.export(tone, AVAssetExportPresetAppleM4A, .m4a, "m4a", suffix: " export") }
+        #expect(Set(exports.map(\.lastPathComponent)) == ["tone export.m4a", "tone export 2.m4a"])
+        for url in audio + exports {
+            let seconds = try await AVURLAsset(url: url).load(.duration).seconds
+            #expect(abs(seconds - 1) < 0.1, "\(url.lastPathComponent): \(seconds) s")
+        }
+        let zips = try await twice { [try await Archives.zip([photo])] }
+        #expect(Set(zips.map(\.lastPathComponent)) == ["photo.zip", "photo 2.zip"])
+        for url in zips {
+            let listing = dir.appendingPathComponent(".listing-\(UUID().uuidString)")
+            let copy = dir.appendingPathComponent(".copy-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: listing); try? FileManager.default.removeItem(at: copy) }
+            try await Shell.run("/bin/sh", ["-c", "/usr/bin/tar -tf \"$1\" > \"$2\"", "sh", url.path, listing.path])
+            let files = try String(contentsOf: listing, encoding: .utf8).split(separator: "\n").filter { !$0.hasSuffix("/") }
+            // ditto's --keepParent files a single item under its folder's name.
+            let entry = try #require(files.first)
+            #expect(files.count == 1 && entry.hasSuffix("photo.png"), "\(url.lastPathComponent): \(files)")
+            try await Shell.run("/bin/sh", ["-c", "/usr/bin/tar -xOf \"$1\" \"$2\" > \"$3\"", "sh", url.path, String(entry), copy.path])
+            #expect(try Data(contentsOf: copy) == Data(contentsOf: photo), "\(url.lastPathComponent)")
+        }
+        // No temporaries or partial files are left behind.
+        let left = Set(try FileManager.default.contentsOfDirectory(atPath: dir.path))
+        #expect(left == Set(["photo.png", "tone.wav"] + (images + audio + exports + zips).map(\.lastPathComponent)))
+    }
+
+    @Test func outputNamesAreClaimedByTheWriteItselfNotCheckedBeforehand() throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let outside = try folder(); defer { try? FileManager.default.removeItem(at: outside) }
+        let fm = FileManager.default
+        // What another conversion saved after this one chose its name, and a link planted under the next name.
+        let preferred = dir.appendingPathComponent("photo.jpg")
+        try Data("theirs".utf8).write(to: preferred)
+        let planted = outside.appendingPathComponent("planted.jpg")
+        try fm.createSymbolicLink(at: dir.appendingPathComponent("photo 2.jpg"), withDestinationURL: planted)
+
+        let written = try Paths.create(Data("ours".utf8), at: preferred)
+        #expect(written.lastPathComponent == "photo 3.jpg")
+        #expect(try Data(contentsOf: written) == Data("ours".utf8))
+
+        // Finished temporaries, files and folders alike, are published the same way.
+        let file = Paths.temporary(beside: preferred, ext: "jpg"); defer { Paths.discard(file) }
+        try Data("late".utf8).write(to: file)
+        #expect(try Paths.publish(file, as: preferred).lastPathComponent == "photo 4.jpg")
+        #expect(!fm.fileExists(atPath: file.path))
+        let extracted = dir.appendingPathComponent("Extracted")
+        try fm.createDirectory(at: extracted, withIntermediateDirectories: false)
+        let folder = Paths.temporary(beside: extracted, ext: ""); defer { Paths.discard(folder) }
+        try fm.createDirectory(at: folder, withIntermediateDirectories: false)
+        try Data("inside".utf8).write(to: folder.appendingPathComponent("a.txt"))
+        let moved = try Paths.publish(folder, as: extracted)
+        #expect(moved.lastPathComponent == "Extracted 2")
+        #expect(try Data(contentsOf: moved.appendingPathComponent("a.txt")) == Data("inside".utf8))
+
+        // Volumes without RENAME_EXCL (exFAT) claim the name with an exclusive create, then rename over that.
+        for isFolder in [false, true] {
+            let item = Paths.temporary(beside: preferred, ext: ""); defer { Paths.discard(item) }
+            if isFolder {
+                try fm.createDirectory(at: item, withIntermediateDirectories: false)
+                try Data("child".utf8).write(to: item.appendingPathComponent("child.txt"))
+            } else {
+                try Data("item".utf8).write(to: item)
+            }
+            for taken in [preferred, dir.appendingPathComponent("photo 2.jpg"), extracted] {
+                do {
+                    try Paths.renameOverPlaceholder(item, to: taken)
+                    Issue.record("\(taken.lastPathComponent) was replaced")
+                } catch let error as CocoaError {
+                    #expect(error.code == .fileWriteFileExists)
+                }
+            }
+            let target = dir.appendingPathComponent(isFolder ? "fallback" : "fallback.txt")
+            try Paths.renameOverPlaceholder(item, to: target)
+            #expect(!fm.fileExists(atPath: item.path))
+            let check = isFolder ? target.appendingPathComponent("child.txt") : target
+            #expect(try Data(contentsOf: check) == Data((isFolder ? "child" : "item").utf8))
+        }
+
+        // Nothing was written through, replaced or left behind.
+        #expect(try Data(contentsOf: preferred) == Data("theirs".utf8))
+        #expect(try fm.destinationOfSymbolicLink(atPath: dir.appendingPathComponent("photo 2.jpg").path) == planted.path)
+        #expect(!fm.fileExists(atPath: planted.path))
+        #expect(try fm.contentsOfDirectory(atPath: extracted.path).isEmpty)
+        #expect(Set(try fm.contentsOfDirectory(atPath: dir.path)) == ["photo.jpg", "photo 2.jpg", "photo 3.jpg", "photo 4.jpg",
+                                                                      "Extracted", "Extracted 2", "fallback.txt", "fallback"])
+    }
+
+    /// The rename `Paths.move` uses, with what a test needs around it. Anything leaving `otherVolume` fails with EXDEV, as
+    /// it would from another disk. `plant` puts a file under the first name a rename is about to take, the way another
+    /// app saving into the folder between Swivel's look and its move would.
+    private func renaming(from otherVolume: URL? = nil, planting plant: ((URL) throws -> Void)? = nil) -> (URL, URL) throws -> Void {
+        var planted = false
+        return { item, destination in
+            if item.deletingLastPathComponent().path == otherVolume?.path {
+                throw CocoaError(.fileWriteUnknown, userInfo: [NSUnderlyingErrorKey: POSIXError(.EXDEV)])
+            }
+            if let plant, !planted { planted = true; try plant(destination) }
+            try Paths.renameExclusively(item, to: destination)
+        }
+    }
+
+    private func theirs(_ url: URL) throws { try Data("theirs".utf8).write(to: url, options: .withoutOverwriting) }
+
+    private func markCopied(_ url: URL) { _ = setxattr(url.path, Clothesline.copiedMarker, "1", 1, 0, XATTR_NOFOLLOW) }
+
+    @Test func movesAndCopiesClaimTheirNameInTheRenameItself() throws {
+        let fm = FileManager.default
+        let source = try folder(); defer { try? fm.removeItem(at: source) }
+        let destination = try folder(); defer { try? fm.removeItem(at: destination) }
+        let rope = try folder(); defer { try? fm.removeItem(at: rope) }
+        let outside = try folder(); defer { try? fm.removeItem(at: outside) }
+        let link = outside.appendingPathComponent("planted.png")
+        try fm.createSymbolicLink(at: destination.appendingPathComponent("Shot 2.png"), withDestinationURL: link)
+
+        // Move here… (Wheel actions): a file saved under the name after the move chose it is skipped, as is a link.
+        let shot = source.appendingPathComponent("Shot.png")
+        try Data("ours".utf8).write(to: shot)
+        let moved = try Paths.move(shot, into: destination, rename: renaming(planting: theirs))
+        #expect(moved.lastPathComponent == "Shot 3.png")
+        #expect(try Data(contentsOf: moved) == Data("ours".utf8))
+        #expect(!fm.fileExists(atPath: shot.path))
+
+        // A file dropped on the rope from elsewhere is copied the same way, and its original stays.
+        let print = source.appendingPathComponent("Print.png")
+        try Data("print".utf8).write(to: print)
+        let copied = try Paths.copy(print, into: destination, rename: renaming(planting: theirs))
+        #expect(copied.lastPathComponent == "Print 2.png")
+        #expect(try Data(contentsOf: copied) == Data("print".utf8))
+        #expect(try Data(contentsOf: print) == Data("print".utf8))
+
+        // The screenshot card saving into the usual folder.
+        let card = source.appendingPathComponent("Card.png")
+        try Data("card".utf8).write(to: card)
+        let saved = IncomingCard.save(card, to: destination, otherwise: rope, rename: renaming(planting: theirs))
+        #expect(saved?.lastPathComponent == "Card 2.png")
+        #expect(try Data(contentsOf: #require(saved)) == Data("card".utf8))
+
+        // Nothing planted was replaced or written through, and no temporaries are left.
+        for name in ["Shot.png", "Print.png", "Card.png"] {
+            #expect(try Data(contentsOf: destination.appendingPathComponent(name)) == Data("theirs".utf8), "\(name)")
+        }
+        #expect(try fm.destinationOfSymbolicLink(atPath: destination.appendingPathComponent("Shot 2.png").path) == link.path)
+        #expect(!fm.fileExists(atPath: link.path))
+        #expect(Set(try fm.contentsOfDirectory(atPath: destination.path)) == ["Shot.png", "Shot 2.png", "Shot 3.png", "Print.png",
+                                                                              "Print 2.png", "Card.png", "Card 2.png"])
+        #expect(try fm.contentsOfDirectory(atPath: source.path) == ["Print.png"])
+        #expect(try fm.contentsOfDirectory(atPath: rope.path).isEmpty)
+    }
+
+    @Test func aMoveToAnotherVolumeCopiesPublishesAndOnlyThenRemovesTheOriginal() throws {
+        let fm = FileManager.default
+        let source = try folder(); defer { try? fm.removeItem(at: source) }
+        let destination = try folder(); defer { try? fm.removeItem(at: destination) }
+        let rope = try folder(); defer { try? fm.removeItem(at: rope) }
+
+        // A file is copied into a hidden temporary in the destination, published past a file saved there meanwhile,
+        // and only then removed from where it was. The copy keeps its attributes (a copied image stays marked).
+        let shot = source.appendingPathComponent("Shot.png")
+        try Data("ours".utf8).write(to: shot)
+        markCopied(shot)
+        let moved = try Paths.move(shot, into: destination, rename: renaming(from: source, planting: theirs))
+        #expect(moved.lastPathComponent == "Shot 2.png")
+        #expect(try Data(contentsOf: moved) == Data("ours".utf8))
+        #expect(Clothesline.isCopiedImage(moved))
+        #expect(!fm.fileExists(atPath: shot.path))
+
+        // A folder moves whole.
+        let album = source.appendingPathComponent("Album", isDirectory: true)
+        try fm.createDirectory(at: album.appendingPathComponent("Inner"), withIntermediateDirectories: true)
+        try Data("deep".utf8).write(to: album.appendingPathComponent("Inner/deep.png"))
+        let movedAlbum = try Paths.move(album, into: destination, rename: renaming(from: source))
+        #expect(movedAlbum.lastPathComponent == "Album")
+        #expect(try Data(contentsOf: movedAlbum.appendingPathComponent("Inner/deep.png")) == Data("deep".utf8))
+        #expect(!fm.fileExists(atPath: album.path))
+
+        // An original that can't be removed (a read-only folder) stays whole, its copy goes again, and the move fails.
+        let locked = source.appendingPathComponent("Locked", isDirectory: true)
+        try fm.createDirectory(at: locked, withIntermediateDirectories: false)
+        let kept = locked.appendingPathComponent("Kept.png")
+        try Data("kept".utf8).write(to: kept)
+        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
+        defer { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
+        #expect(throws: (any Error).self) { try Paths.move(kept, into: destination, rename: renaming(from: locked)) }
+        #expect(try Data(contentsOf: kept) == Data("kept".utf8))
+
+        // The screenshot card: saved across volumes past a file saved meanwhile; with the usual folder gone, it still
+        // hangs on the rope.
+        let card = source.appendingPathComponent("Card.png")
+        try Data("card".utf8).write(to: card)
+        let saved = IncomingCard.save(card, to: destination, otherwise: rope, rename: renaming(from: source, planting: theirs))
+        #expect(saved?.path == destination.appendingPathComponent("Card 2.png").path)
+        let other = source.appendingPathComponent("Other.png")
+        try Data("other".utf8).write(to: other)
+        let gone = source.appendingPathComponent("Unplugged/Screenshots", isDirectory: true)
+        let rescued = IncomingCard.save(other, to: gone, otherwise: rope, rename: renaming(from: source))
+        #expect(rescued?.path == rope.appendingPathComponent("Other.png").path)
+        #expect(try Data(contentsOf: rope.appendingPathComponent("Other.png")) == Data("other".utf8))
+
+        // Nothing planted was replaced and no temporaries are left on either side.
+        #expect(try Data(contentsOf: destination.appendingPathComponent("Shot.png")) == Data("theirs".utf8))
+        #expect(try Data(contentsOf: destination.appendingPathComponent("Card.png")) == Data("theirs".utf8))
+        #expect(Set(try fm.contentsOfDirectory(atPath: destination.path)) == ["Shot.png", "Shot 2.png", "Album", "Card.png", "Card 2.png"])
+        #expect(try fm.contentsOfDirectory(atPath: source.path) == ["Locked"])
+        #expect(try fm.contentsOfDirectory(atPath: rope.path) == ["Other.png"])
+    }
+
+    @Test func movesWorkAcrossVolumesOntoExFAT() throws {
+        let volume = try ScratchVolume.exFAT()
+        defer { volume.detach() }
+        #expect(volume.fileSystem == "exfat")
+        let fm = FileManager.default
+        let local = try folder(); defer { try? fm.removeItem(at: local) }
+        let disk = volume.root
+
+        // Startup disk → exFAT: a real EXDEV, then the copy is published without RENAME_EXCL (ENOTSUP on exFAT).
+        try theirs(disk.appendingPathComponent("Shot.png"))
+        let shot = local.appendingPathComponent("Shot.png")
+        try Data("ours".utf8).write(to: shot)
+        markCopied(shot)
+        let moved = try Paths.move(shot, into: disk)
+        #expect(moved.lastPathComponent == "Shot 2.png")
+        #expect(try Data(contentsOf: moved) == Data("ours".utf8))
+        #expect(Clothesline.isCopiedImage(moved))
+        #expect(!fm.fileExists(atPath: shot.path))
+
+        // Within exFAT, then back to the startup disk, keeping the attribute all the way.
+        let inner = disk.appendingPathComponent("Inner", isDirectory: true)
+        try fm.createDirectory(at: inner, withIntermediateDirectories: false)
+        try theirs(inner.appendingPathComponent("Shot 2.png"))
+        let within = try Paths.move(moved, into: inner)
+        #expect(within.lastPathComponent == "Shot 2 2.png")
+        let back = try Paths.move(within, into: local)
+        #expect(back.path == local.appendingPathComponent("Shot 2 2.png").path)
+        #expect(try Data(contentsOf: back) == Data("ours".utf8))
+        #expect(Clothesline.isCopiedImage(back))
+
+        // A folder, and the screenshot card saving onto an exFAT drive.
+        try fm.createDirectory(at: disk.appendingPathComponent("Album"), withIntermediateDirectories: false)
+        let album = local.appendingPathComponent("Album", isDirectory: true)
+        try fm.createDirectory(at: album, withIntermediateDirectories: false)
+        try Data("a".utf8).write(to: album.appendingPathComponent("a.png"))
+        let movedAlbum = try Paths.move(album, into: disk)
+        #expect(movedAlbum.lastPathComponent == "Album 2")
+        #expect(try Data(contentsOf: movedAlbum.appendingPathComponent("a.png")) == Data("a".utf8))
+        let incoming = local.appendingPathComponent("Incoming", isDirectory: true)
+        try fm.createDirectory(at: incoming, withIntermediateDirectories: false)
+        let card = incoming.appendingPathComponent("Card.png")
+        try Data("card".utf8).write(to: card)
+        let saved = IncomingCard.save(card, to: disk, otherwise: local)
+        #expect(saved?.path == disk.appendingPathComponent("Card.png").path)
+        #expect(try fm.contentsOfDirectory(atPath: incoming.path).isEmpty)
+
+        // No temporaries (or their AppleDouble shadows) are left on the drive.
+        let all = try fm.subpathsOfDirectory(atPath: disk.path)
+        #expect(all.filter { $0.contains(".swivel-") }.isEmpty, "\(all)")
+        #expect(try Data(contentsOf: disk.appendingPathComponent("Shot.png")) == Data("theirs".utf8))
+        #expect(try Data(contentsOf: inner.appendingPathComponent("Shot 2.png")) == Data("theirs".utf8))
     }
 
     @Test func shellDrainsLargeErrorOutputInsteadOfHanging() async throws {
@@ -322,5 +621,54 @@ struct SecurityTests {
             let hidden = try #require(RedactEditor.render(image, rects: box, style: style))
             #expect(!(try words(hidden).joined().contains("4096")), "style \(style) leaves the text readable")
         }
+    }
+}
+
+/// A small exFAT disk image attached for one test, out of Finder's sight: a second volume, and a file system without
+/// RENAME_EXCL.
+struct ScratchVolume {
+    let root: URL
+    private let base: URL
+
+    /// Throws hdiutil's own message when this Mac can't make or attach one.
+    static func exFAT() throws -> ScratchVolume {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("swivel-volume-\(UUID().uuidString)", isDirectory: true)
+        let image = base.appendingPathComponent("scratch.dmg"), root = base.appendingPathComponent("mount", isDirectory: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        do {
+            // An exFAT label is 11 characters at most; a longer one fails with "Operation not permitted".
+            try hdiutil(["create", "-size", "8m", "-fs", "ExFAT", "-volname", "Scratch", "-layout", "NONE", image.path])
+            try hdiutil(["attach", "-nobrowse", "-noverify", "-noautoopen", "-mountpoint", root.path, image.path])
+        } catch {
+            try? fm.removeItem(at: base)
+            throw error
+        }
+        return ScratchVolume(root: root, base: base)
+    }
+
+    var fileSystem: String {
+        var info = statfs()
+        guard statfs(root.path, &info) == 0 else { return "" }
+        return withUnsafeBytes(of: info.f_fstypename) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+    }
+
+    /// Removes the image only once it's detached, so nothing is deleted through a mount that is still there.
+    func detach() {
+        guard (try? Self.hdiutil(["detach", "-force", root.path])) != nil else { return }
+        try? FileManager.default.removeItem(at: base)
+    }
+
+    private static func hdiutil(_ args: [String]) throws {
+        let process = Process(), errors = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.arguments = args
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = errors
+        try process.run()
+        let message = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { throw ToolError("hdiutil \(args[0]): \(message)") }
     }
 }

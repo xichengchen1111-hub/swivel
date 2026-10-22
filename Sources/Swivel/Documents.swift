@@ -25,10 +25,7 @@ enum Docs {
 
     @MainActor
     static func convert(_ url: URL, to format: DocFormat) async throws -> [URL] {
-        let text = try read(url)
-        let out = Paths.output(for: url, ext: format.ext)
-        try write(text, to: out, as: format)
-        return [out]
+        [try save(try read(url), as: Paths.preferred(for: url, ext: format.ext), format: format)]
     }
 
     @MainActor
@@ -84,16 +81,18 @@ enum Docs {
         return copy
     }
 
+    /// Saves `text` as a new file at `preferred` or the next free name, and returns where it went.
     @MainActor
-    static func write(_ text: NSAttributedString, to out: URL, as format: DocFormat) throws {
-        guard let type = format.type else { return try writePDF(text, to: out) }
+    static func save(_ text: NSAttributedString, as preferred: URL, format: DocFormat) throws -> URL {
+        // Printing replaces whatever is at its destination, so it prints into a temporary.
+        guard let type = format.type else { return try Paths.produce(preferred) { try writePDF(text, to: $0) } }
         var attrs: [NSAttributedString.DocumentAttributeKey: Any] = [.documentType: type]
         if type == .plain || type == .html { attrs[.characterEncoding] = String.Encoding.utf8.rawValue }
         let data = try text.data(from: NSRange(location: 0, length: text.length), documentAttributes: attrs)
-        try data.write(to: out, options: .withoutOverwriting)
+        return try Paths.create(data, at: preferred)
     }
 
-    /// Lays the text out on US Letter pages and prints it to a PDF file.
+    /// Lays the text out on US Letter pages and prints it to a PDF file at `out`, replacing anything there.
     @MainActor
     static func writePDF(_ text: NSAttributedString, to out: URL) throws {
         let info = NSPrintInfo()
@@ -159,9 +158,7 @@ enum PDFs {
         guard let text = doc.selectionForEntireDocument?.attributedString, text.length > 0 else {
             throw ToolError("No text found in this PDF")
         }
-        let out = Paths.output(for: url, ext: format.ext)
-        try Docs.write(text, to: out, as: format)
-        return [out]
+        return [try Docs.save(text, as: Paths.preferred(for: url, ext: format.ext), format: format)]
     }
 
     /// Renders every page at 300 DPI, next to the original: "name.png" for one page, "name 1.png", "name 2.png"… for more.
@@ -172,9 +169,8 @@ enum PDFs {
             for index in 0..<doc.pageCount {
                 guard let page = doc.page(at: index) else { continue }
                 let suffix = doc.pageCount > 1 ? " \(index + 1)" : ""
-                let out = Paths.output(for: url, ext: ext, suffix: suffix)
-                try Images.write(try render(page, dpi: 300), to: out, type: type, quality: 0.92)
-                outputs.append(out)
+                outputs.append(try Images.save(try render(page, dpi: 300), as: Paths.preferred(for: url, ext: ext, suffix: suffix),
+                                               type: type, quality: 0.92))
             }
             return outputs
         }
@@ -213,16 +209,13 @@ enum PDFs {
                 if let page = doc.page(at: i)?.copy() as? PDFPage { merged.insert(page, at: merged.pageCount) }
             }
         }
-        let out = Paths.unique(urls[0].deletingLastPathComponent().appendingPathComponent("Merged.pdf"))
-        try save(merged, to: out)
-        return out
+        return try save(merged, as: urls[0].deletingLastPathComponent().appendingPathComponent("Merged.pdf"))
     }
 
     private static func compress(_ url: URL) throws -> [URL] {
         let doc = try open(url)
-        let out = Paths.output(for: url, ext: "pdf", suffix: " compressed")
-        try save(doc, to: out, options: [.saveImagesAsJPEGOption: true, .optimizeImagesForScreenOption: true])
-        return [out]
+        return [try save(doc, as: Paths.preferred(for: url, ext: "pdf", suffix: " compressed"),
+                         options: [.saveImagesAsJPEGOption: true, .optimizeImagesForScreenOption: true])]
     }
 
     /// One PDF per page, next to the original: "name 1.pdf", "name 2.pdf"…
@@ -233,9 +226,7 @@ enum PDFs {
             guard let page = doc.page(at: i)?.copy() as? PDFPage else { continue }
             let single = PDFDocument()
             single.insert(page, at: 0)
-            let out = Paths.output(for: url, ext: "pdf", suffix: " \(i + 1)")
-            try save(single, to: out)
-            outputs.append(out)
+            outputs.append(try save(single, as: Paths.preferred(for: url, ext: "pdf", suffix: " \(i + 1)")))
         }
         return outputs
     }
@@ -243,16 +234,15 @@ enum PDFs {
     private static func rotate(_ url: URL) throws -> [URL] {
         let doc = try open(url)
         for i in 0..<doc.pageCount { doc.page(at: i).map { $0.rotation = ($0.rotation + 90) % 360 } }
-        let out = Paths.output(for: url, ext: "pdf", suffix: " rotated")
-        try save(doc, to: out)
-        return [out]
+        return [try save(doc, as: Paths.preferred(for: url, ext: "pdf", suffix: " rotated"))]
     }
 
-    /// Writes a new PDF file and never through anything already at `url` (`PDFDocument.write` follows symlinks).
-    static func save(_ doc: PDFDocument, to url: URL, options: [PDFDocumentWriteOption: Any] = [:]) throws {
+    /// Writes a new PDF file at `preferred` or the next free name, never through anything already there
+    /// (`PDFDocument.write` follows symlinks). Returns where it went.
+    static func save(_ doc: PDFDocument, as preferred: URL, options: [PDFDocumentWriteOption: Any] = [:]) throws -> URL {
         let keyed = Dictionary(uniqueKeysWithValues: options.map { (AnyHashable($0.key.rawValue), $0.value) })
         guard let data = doc.dataRepresentation(options: keyed) else { throw ToolError("Couldn't write PDF") }
-        try data.write(to: url, options: .withoutOverwriting)
+        return try Paths.create(data, at: preferred)
     }
 }
 
@@ -268,7 +258,7 @@ enum Archives {
         let first = urls[0]
         let dir = first.deletingLastPathComponent()
         let name = urls.count == 1 ? first.deletingPathExtension().lastPathComponent : "Archive"
-        return Paths.unique(dir.appendingPathComponent("\(name).\(ext)"))
+        return dir.appendingPathComponent("\(name).\(ext)")
     }
 
     /// Several files are archived by name from their folder, so they must share it (a name from another folder
@@ -279,25 +269,27 @@ enum Archives {
         }
     }
 
+    /// The archivers replace (ditto, tar) or add to (zip) an archive already at their output path, so each one
+    /// writes a fresh temporary that is published when complete.
     static func zip(_ urls: [URL]) async throws -> URL {
         try checkOneFolder(urls)
-        let out = archiveURL(for: urls, ext: "zip")
-        if urls.count == 1 {
-            try await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", urls[0].path, out.path])
-        } else {
-            // "--" ends the options, so a file named like one ("-T") is archived instead of changing what zip does.
-            try await Shell.run("/usr/bin/zip", ["-r", "-q", "-y", out.path, "--"] + urls.map(\.lastPathComponent),
-                                in: urls[0].deletingLastPathComponent())
+        return try await Paths.produce(archiveURL(for: urls, ext: "zip")) { out in
+            if urls.count == 1 {
+                try await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", urls[0].path, out.path])
+            } else {
+                // "--" ends the options, so a file named like one ("-T") is archived instead of changing what zip does.
+                try await Shell.run("/usr/bin/zip", ["-r", "-q", "-y", out.path, "--"] + urls.map(\.lastPathComponent),
+                                    in: urls[0].deletingLastPathComponent())
+            }
         }
-        return out
     }
 
     static func tar(_ urls: [URL]) async throws -> URL {
         try checkOneFolder(urls)
-        let out = archiveURL(for: urls, ext: "tar.gz")
-        try await Shell.run("/usr/bin/tar", ["-czf", out.path, "-C", urls[0].deletingLastPathComponent().path, "--"]
-                            + urls.map(\.lastPathComponent))
-        return out
+        return try await Paths.produce(archiveURL(for: urls, ext: "tar.gz")) { out in
+            try await Shell.run("/usr/bin/tar", ["-czf", out.path, "-C", urls[0].deletingLastPathComponent().path, "--"]
+                                + urls.map(\.lastPathComponent))
+        }
     }
 
     /// Extensions the system's bsdtar (libarchive) can unpack, beyond what ditto does for ZIP.
@@ -348,11 +340,7 @@ enum Archives {
             .filter { $0.lastPathComponent != "__MACOSX" }
         try quarantine(contents, like: url)
         // Everything lands next to the archive, without an extra wrapping folder.
-        return try contents.map { item in
-            let out = Paths.unique(parent.appendingPathComponent(item.lastPathComponent))
-            try fm.moveItem(at: item, to: out)
-            return out
-        }
+        return try contents.map { try Paths.publish($0, as: parent.appendingPathComponent($0.lastPathComponent)) }
     }
 
     /// A made-up passphrase: without one, bsdtar asks for it about ten thousand times on stderr.

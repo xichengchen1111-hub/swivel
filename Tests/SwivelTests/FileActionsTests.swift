@@ -218,6 +218,42 @@ struct FileActionsTests {
         #expect(try content(a) == "new-original"); #expect(try content(receipt.entries[0].destination) == "alpha")
     }
 
+    @Test func renameWorksOnExFATAndStillNeverReplacesALateFile() throws {
+        // exFAT has no RENAME_EXCL (ENOTSUP), so every rename there used to fail.
+        let volume = try ScratchVolume.exFAT()
+        defer { volume.detach() }
+        let fm = FileManager.default
+        let dir = volume.root.appendingPathComponent("Photos", isDirectory: true)
+        try fm.createDirectory(at: dir.appendingPathComponent("Album"), withIntermediateDirectories: true)
+        let a = try file(dir, "a.txt", "alpha"), b = try file(dir, "b.txt", "beta"), album = dir.appendingPathComponent("Album")
+        try file(album, "inside.txt", "inside")
+        func names() throws -> Set<String> { Set(try fm.contentsOfDirectory(atPath: dir.path).filter { !$0.hasPrefix("._") }) }
+
+        let receipt = try BatchRenamer.execute(RenamePlan.preview([a, b, album], rules: RenameRules(prefix: "new-")))
+        #expect(try names() == ["new-a.txt", "new-b.txt", "new-Album"])
+        #expect(try content(dir.appendingPathComponent("new-a.txt")) == "alpha")
+        #expect(try content(dir.appendingPathComponent("new-Album/inside.txt")) == "inside")
+        _ = try receipt.undo()
+        #expect(try names() == ["a.txt", "b.txt", "Album"])
+
+        // A case-only change on a case-insensitive volume.
+        _ = try BatchRenamer.execute(RenamePlan.preview([a], rules: RenameRules(find: "a", replacement: "A")))
+        #expect(try names() == ["A.txt", "b.txt", "Album"])
+        let upper = dir.appendingPathComponent("A.txt")
+
+        // A file saved under a new name after the preview stays, and the batch rolls back.
+        let plan = RenamePlan.preview([upper, b], rules: RenameRules(prefix: "new-"))
+        #expect(throws: (any Error).self) {
+            try BatchRenamer.execute(plan) { from, to in
+                if to.lastPathComponent == "new-b.txt", !fm.fileExists(atPath: to.path) { try Data("late".utf8).write(to: to) }
+                try BatchRenamer.move(from, to)
+            }
+        }
+        #expect(try content(dir.appendingPathComponent("new-b.txt")) == "late")
+        #expect(try content(upper) == "alpha"); #expect(try content(b) == "beta")
+        #expect(try names() == ["A.txt", "b.txt", "Album", "new-b.txt"])
+    }
+
     @Test func renameReportsRecoveryLocationsWithoutOverwritingANewOriginal() throws {
         let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
         let a = try file(dir, "a.txt", "alpha"), b = try file(dir, "b.txt", "beta")

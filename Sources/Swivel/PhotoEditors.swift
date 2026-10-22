@@ -101,9 +101,7 @@ final class AdjustEditor: Editor {
         return try await Images.detached {
             guard let result = Self.render(try Images.load(source), values) else { throw ToolError("Couldn't render") }
             let (type, ext) = Images.writableType(for: source)
-            let out = Paths.output(for: source, ext: ext, suffix: " edited")
-            try Images.write(result, to: out, type: type, quality: 0.95)
-            return [out]
+            return [try Images.save(result, as: Paths.preferred(for: source, ext: ext, suffix: " edited"), type: type, quality: 0.95)]
         }
     }
 }
@@ -249,9 +247,7 @@ final class BackgroundEditor: Editor {
         let look = self.look, source = self.source
         return try await Images.detached {
             guard let result = Self.render(try Images.load(source), look) else { throw ToolError("Couldn't render") }
-            let out = Paths.output(for: source, ext: "png", suffix: " background")
-            try Images.write(result, to: out, type: .png, quality: 1)
-            return [out]
+            return [try Images.save(result, as: Paths.preferred(for: source, ext: "png", suffix: " background"), type: .png, quality: 1)]
         }
     }
 }
@@ -474,9 +470,7 @@ final class RedactEditor: Editor {
         return try await Images.detached {
             guard let result = Self.render(try Images.load(source), rects: rects, style: style) else { throw ToolError("Couldn't render") }
             let (type, ext) = Images.writableType(for: source)
-            let out = Paths.output(for: source, ext: ext, suffix: " redacted")
-            try Images.write(result, to: out, type: type, quality: 0.95)
-            return [out]
+            return [try Images.save(result, as: Paths.preferred(for: source, ext: ext, suffix: " redacted"), type: type, quality: 0.95)]
         }
     }
 }
@@ -821,9 +815,7 @@ final class MetadataEditor: Editor {
         let source = self.source
         return try await Images.detached {
             let data = try Self.cleaned(source, removal)
-            let out = Paths.output(for: source, ext: source.pathExtension, suffix: " clean")
-            try data.write(to: out, options: .withoutOverwriting)
-            return [out]
+            return [try Paths.create(data, at: Paths.preferred(for: source, ext: source.pathExtension, suffix: " clean"))]
         }
     }
 
