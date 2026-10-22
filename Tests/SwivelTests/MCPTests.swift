@@ -338,8 +338,13 @@ struct MCPTests {
             defaults.set(language.rawValue, forKey: "language")
             let pane = GeneralPane()
             _ = pane.view
+            // With the longest status showing (Claude Desktop's fallback, three lines in some languages).
+            func setup(in view: NSView) -> MCPSetupView? { view as? MCPSetupView ?? view.subviews.lazy.compactMap(setup).first }
+            let setupView = try #require(setup(in: pane.view))
+            setupView.status.stringValue = L("Copied. Quit Claude first (a running Claude rewrites its config file), then add the “swivel” entry to “mcpServers” in claude_desktop_config.json and open Claude again.")
             pane.view.layoutSubtreeIfNeeded()
             #expect(pane.stack.fittingSize.height <= pane.preferredContentSize.height, "\(language.rawValue)")
+            #expect(pane.stack.fittingSize.width <= pane.preferredContentSize.width, "\(language.rawValue)")
             guard let renders else { continue }
             for appearance in [NSAppearance.Name.aqua, .darkAqua] {
                 pane.view.appearance = NSAppearance(named: appearance)
@@ -349,19 +354,98 @@ struct MCPTests {
                     .write(to: renders.appendingPathComponent("general-\(language.rawValue)-\(appearance == .aqua ? "light" : "dark").png"))
             }
         }
-        for key in ["Agents", "Copy Claude Desktop Setup", "Copy Codex Setup"] { #expect(Strings.table[key]?.count == 3) }
+        for key in ["Agents", "Install in Claude Desktop", "Copy Claude Code Setup", "Copy Codex Setup"] { #expect(Strings.table[key]?.count == 3) }
 
         let view = MCPSetupView()
         view.pasteboard = NSPasteboard(name: .init("swivel-mcp-test-\(UUID().uuidString)"))
         defer { view.pasteboard.releaseGlobally() }
-        view.copyClaude()
-        let claude = try JSONSerialization.jsonObject(with: Data(try #require(view.pasteboard.string(forType: .string)).utf8)) as? [String: Any]
-        let server = (claude?["mcpServers"] as? [String: Any])?["swivel"] as? [String: Any]
-        #expect(server?["command"] as? String == MCPSetupView.command && server?["args"] as? [String] == ["--mcp"])
-        #expect(!view.status.stringValue.isEmpty)
+        let marker = "untouched-\(UUID().uuidString)"
+
+        // Claude Desktop installed and the extension bundled: Claude opens the .mcpb (its own installer persists it).
+        var opened: [(URL, URL)] = []
+        let claudeApp = URL(fileURLWithPath: "/Applications/Claude.app"), mcpb = URL(fileURLWithPath: "/tmp/Swivel.mcpb")
+        view.claudeApp = { claudeApp }
+        view.bundledExtension = { mcpb }
+        view.openWithApp = { opened.append(($0, $1)) }
+        view.pasteboard.clearContents(); view.pasteboard.setString(marker, forType: .string)
+        view.installClaude()
+        if MCPSetupView.launcherFindsSwivel() {
+            #expect(opened.count == 1 && opened.first?.0 == mcpb && opened.first?.1 == claudeApp)
+            #expect(view.pasteboard.string(forType: .string) == marker)
+            #expect(!view.status.stringValue.isEmpty)
+        }
+
+        // No Claude.app (or no bundled extension): the JSON, with the note to quit Claude first.
+        for (app, file) in [(nil, mcpb), (claudeApp, nil)] as [(URL?, URL?)] {
+            opened = []
+            view.claudeApp = { app }
+            view.bundledExtension = { file }
+            view.status.stringValue = ""
+            view.installClaude()
+            #expect(opened.isEmpty)
+            let claude = try JSONSerialization.jsonObject(with: Data(try #require(view.pasteboard.string(forType: .string)).utf8)) as? [String: Any]
+            let server = (claude?["mcpServers"] as? [String: Any])?["swivel"] as? [String: Any]
+            #expect(server?["command"] as? String == MCPSetupView.command && server?["args"] as? [String] == ["--mcp"])
+            #expect(view.status.stringValue.contains("claude_desktop_config.json"))
+        }
+        #expect(!MCPSetupView.launcherFindsSwivel(in: ["/nonexistent/Swivel.app"]))
+
+        view.copyClaudeCode()
+        #expect(view.pasteboard.string(forType: .string) == "claude mcp add --scope user swivel -- \(MCPSetupView.shellQuoted(MCPSetupView.command)) --mcp")
+        #expect(MCPSetupView.claudeCodeCommand(command: "/Applications/Swivel.app/Contents/MacOS/Swivel")
+            == "claude mcp add --scope user swivel -- /Applications/Swivel.app/Contents/MacOS/Swivel --mcp")
+        #expect(MCPSetupView.claudeCodeCommand(command: "/Users/a b/it's/Swivel")
+            == #"claude mcp add --scope user swivel -- '/Users/a b/it'\''s/Swivel' --mcp"#)
         view.copyCodex()
         #expect(view.pasteboard.string(forType: .string)?.hasPrefix("[mcp_servers.swivel]\ncommand = \"") == true)
         #expect(MCPSetupView.codexConfig(command: #"/A "b"\c"#).contains(#"command = "/A \"b\"\\c""#))
+    }
+
+    @Test func theExtensionPacksTheCheckedInManifestAndLauncher() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let packed = dir.appendingPathComponent("Swivel.mcpb")
+        let pack = Process()
+        pack.executableURL = URL(fileURLWithPath: "/bin/bash")
+        pack.arguments = [root.appendingPathComponent("mcpb/pack.sh").path, packed.path]
+        pack.standardOutput = FileHandle.nullDevice
+        try pack.run(); pack.waitUntilExit()
+        #expect(pack.terminationStatus == 0)
+
+        func unzip(_ arguments: String...) throws -> Data {
+            let process = Process(), out = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+            process.arguments = arguments
+            process.standardOutput = out
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return data
+        }
+        let manifest = try Data(contentsOf: root.appendingPathComponent("mcpb/manifest.json"))
+        let launcher = try Data(contentsOf: root.appendingPathComponent("mcpb/server/swivel-mcp"))
+        // Built app (./build.sh) too, when there is one: it must carry the same manifest.
+        let built = root.appendingPathComponent("build/Swivel.app/Contents/Resources/Swivel.mcpb")
+        for archive in [packed] + (FileManager.default.fileExists(atPath: built.path) ? [built] : []) {
+            let names = Set(String(decoding: try unzip("-Z1", archive.path), as: UTF8.self).split(separator: "\n").map(String.init))
+            #expect(names.isSuperset(of: ["manifest.json", "icon.png", "server/swivel-mcp"]), "\(archive.path)")
+            #expect(try unzip("-p", archive.path, "manifest.json") == manifest, "\(archive.path)")
+            #expect(try unzip("-p", archive.path, "server/swivel-mcp") == launcher, "\(archive.path)")
+            let mode = String(decoding: try unzip("-Z", archive.path), as: UTF8.self)
+                .split(separator: "\n").first { $0.hasSuffix("server/swivel-mcp") }
+            #expect(mode?.hasPrefix("-rwxr-xr-x") == true, "\(archive.path)")
+        }
+
+        // The extension's version follows the app's, and its launcher looks where the setup page checks.
+        let json = try #require(try JSONSerialization.jsonObject(with: manifest) as? [String: Any])
+        let plist = try #require(NSDictionary(contentsOf: root.appendingPathComponent("Resources/Info.plist")))
+        #expect(json["version"] as? String == plist["CFBundleShortVersionString"] as? String)
+        let script = String(decoding: launcher, as: UTF8.self)
+        for location in MCPSetupView.launcherLocations {
+            let written = location.replacingOccurrences(of: NSHomeDirectory(), with: "$HOME")
+            #expect(script.contains("\"\(written)\""), "\(written)")
+        }
     }
 
     // MARK: The process

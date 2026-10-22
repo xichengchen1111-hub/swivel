@@ -79,19 +79,29 @@ For testing without dragging: `Swivel --run <convert|tools|actions> "<item>" <fi
 
 `Swivel --mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude Desktop, Codex, Cursor, Raycast and other MCP hosts can use Swivel's converters and file tools. The installed app accepts this one argument. It talks over stdin/stdout only (no network port), speaks both the 2025 handshake and the stateless 2026-07-28 revision, and needs no extra permission: the host starts it, so macOS attributes file access to the host.
 
-**Set up.** Settings → General → **Agents** copies a ready setup for Claude Desktop or Codex. By hand:
+**Set up.** Settings → General → **Agents**:
 
-```json
-{ "mcpServers": { "swivel": { "command": "/Applications/Swivel.app/Contents/MacOS/Swivel", "args": ["--mcp"] } } }
+- **Install in Claude Desktop** opens the extension that ships in the app (`Swivel.app/Contents/Resources/Swivel.mcpb`) with Claude, which asks to install it; the installed extension stays across restarts. Its launcher starts the Swivel installed in /Applications, ~/Applications or on the Desktop rather than carrying a copy of it. Without Claude.app (or an installed Swivel) the button copies the JSON below instead.
+- **Copy Claude Code Setup** copies the Terminal command for Claude Code (user scope, so every project sees it).
+- **Copy Codex Setup** copies the lines for `~/.codex/config.toml`.
+
+By hand, for Claude Code and Codex:
+
+```bash
+claude mcp add --scope user swivel -- /Applications/Swivel.app/Contents/MacOS/Swivel --mcp
 ```
-
-That goes in Claude Desktop's `claude_desktop_config.json` (Settings → Developer → Edit Config) or Cursor's `~/.cursor/mcp.json`. For Codex:
 
 ```bash
 codex mcp add swivel -- /Applications/Swivel.app/Contents/MacOS/Swivel --mcp
 ```
 
-Raycast and other hosts take the same command and argument. For a one-click Claude Desktop extension, `./mcpb/pack.sh` builds `build/Swivel.mcpb` (an MCPB bundle, `server.type: "binary"`). Its launcher starts the Swivel installed in /Applications, ~/Applications or on the Desktop rather than carrying a copy of it.
+Cursor (`~/.cursor/mcp.json`), Raycast and other hosts take the same command and argument:
+
+```json
+{ "mcpServers": { "swivel": { "command": "/Applications/Swivel.app/Contents/MacOS/Swivel", "args": ["--mcp"] } } }
+```
+
+Claude Desktop's `claude_desktop_config.json` takes the same entry, but only while Claude is quit: a running Claude rewrites that file from memory and drops an entry added meanwhile (seen on 2026-10-22), so prefer the extension. `./build.sh` packs it into the app; `./mcpb/pack.sh [output]` builds it alone (default `build/Swivel.mcpb`, an MCPB bundle with `server.type: "binary"`), and `open -a Claude build/Swivel.mcpb` installs it.
 
 **Tools.**
 
