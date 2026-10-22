@@ -102,6 +102,8 @@ Cursor (`~/.cursor/mcp.json`), Raycast and other hosts take the same command and
 { "mcpServers": { "swivel": { "command": "/Applications/Swivel.app/Contents/MacOS/Swivel", "args": ["--mcp"] } } }
 ```
 
+`Swivel --mcp` hands over at once to a background-only helper inside the app (`Contents/Helpers/Swivel MCP.app`, same pid), so a running server never stands in for Swivel.app: Finder and the Dock still open the menu-bar app while a host keeps the server open. Point hosts at the main executable as above, not at the helper.
+
 Claude Desktop's `claude_desktop_config.json` takes the same entry, but only while Claude is quit: a running Claude rewrites that file from memory and drops an entry added meanwhile (seen on 2026-10-22), so prefer the extension. `./build.sh` packs it into the app; `./mcpb/pack.sh [output]` builds it alone (default `build/Swivel.mcpb`, an MCPB bundle with `server.type: "binary"`), and `open -a Claude build/Swivel.mcpb` installs it.
 
 **Tools.**

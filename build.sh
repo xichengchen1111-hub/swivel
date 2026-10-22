@@ -15,7 +15,24 @@ cp ThirdParty/ClearDisk/LICENSE "$APP/Contents/Resources/ThirdParty/ClearDisk-LI
 # The Claude Desktop extension (Settings → General → Agents → Install in Claude Desktop). Its launcher starts the
 # installed app, so the bundle holds no second copy of Swivel.
 mcpb/pack.sh "$APP/Contents/Resources/Swivel.mcpb" >/dev/null
+# The agent tool server's own background-only app (`Swivel --mcp` execs it; see MCPStdio.handOffToHelper): the same
+# executable under another bundle identifier, so Launch Services never takes the server for Swivel.app.
+HELPER="$APP/Contents/Helpers/Swivel MCP.app"
+mkdir -p "$HELPER/Contents/MacOS"
+cp .build/release/Swivel "$HELPER/Contents/MacOS/Swivel"
+cp Resources/Info.plist "$HELPER/Contents/Info.plist"
+APP_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Resources/Info.plist)"
+/usr/libexec/PlistBuddy \
+    -c "Set :CFBundleIdentifier $APP_ID.mcp" \
+    -c "Set :CFBundleName Swivel MCP" \
+    -c "Set :CFBundleDisplayName Swivel MCP" \
+    -c "Delete :CFBundleIconFile" \
+    -c "Delete :LSUIElement" \
+    -c "Add :LSBackgroundOnly bool true" \
+    -c "Add :SwivelAppIdentifier string $APP_ID" \
+    "$HELPER/Contents/Info.plist" 2>/dev/null || true
 # Hardened runtime: no DYLD_* injection or unsigned libraries in the shipped app. Don't add entitlements that
-# re-enable either (allow-dyld-environment-variables, disable-library-validation).
+# re-enable either (allow-dyld-environment-variables, disable-library-validation). The helper is signed first.
+codesign --force --options runtime --sign - "$HELPER" >/dev/null
 codesign --force --options runtime --sign - "$APP" >/dev/null
 echo "Built $APP"

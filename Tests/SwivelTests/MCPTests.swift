@@ -692,6 +692,91 @@ struct MCPTests {
             }
         }
     }
+
+    /// PDFKit creates an NSApplication behind the scenes, which checks the process in with Launch Services. Done as
+    /// Swivel.app, `open Swivel.app` then failed with -600 for as long as Claude Desktop kept a server that had once
+    /// made a PDF. In an app bundle, `Swivel --mcp` execs the background-only helper, so whatever checks in is the
+    /// helper, under its own identifier.
+    @Test func inAnAppBundleTheServerRunsAsTheBackgroundHelper() async throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let binary = root.appendingPathComponent(".build/debug/Swivel")
+        try #require(FileManager.default.isExecutableFile(atPath: binary.path), "build the debug binary first (./test.sh does)")
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        // A miniature of build.sh's layout, with identifiers of its own.
+        let app = dir.appendingPathComponent("Swivel.app"), id = "local.swivel.helpertest"
+        let helper = app.appendingPathComponent("Contents/Helpers/Swivel MCP.app")
+        for (bundle, info) in [(app, ["CFBundleIdentifier": id, "CFBundleExecutable": "Swivel", "CFBundlePackageType": "APPL", "LSUIElement": true] as [String: Any]),
+                               (helper, ["CFBundleIdentifier": id + ".mcp", "CFBundleExecutable": "Swivel", "CFBundlePackageType": "APPL",
+                                         "LSBackgroundOnly": true, MCPStdio.appIdentifierKey: id])] {
+            try FileManager.default.createDirectory(at: bundle.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: binary, to: bundle.appendingPathComponent("Contents/MacOS/Swivel"))
+            try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+                .write(to: bundle.appendingPathComponent("Contents/Info.plist"))
+        }
+        let main = app.appendingPathComponent("Contents/MacOS/Swivel")
+        #expect(MCPStdio.helperExecutable(besides: main).standardizedFileURL == helper.appendingPathComponent("Contents/MacOS/Swivel").standardizedFileURL)
+        let source = dir.appendingPathComponent("photo.png")
+        try png(source)
+
+        let process = Process()
+        process.executableURL = main
+        process.arguments = ["--mcp"]
+        process.environment = ["HOME": NSHomeDirectory()]
+        let input = Pipe(), output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        let lines = LineCollector()
+        output.fileHandleForReading.readabilityHandler = { lines.append($0.availableData) }
+        try process.run()
+        defer { if process.isRunning { process.terminate() } }
+        func send(_ text: String) { input.fileHandleForWriting.write(Data((text + "\n").utf8)) }
+        send(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#)
+        _ = try await lines.answer(1)
+
+        // Same pid, the helper's executable.
+        var path = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+        #expect(proc_pidpath(process.processIdentifier, &path, UInt32(path.count)) > 0)
+        #expect(URL(fileURLWithPath: String(cString: path)).resolvingSymlinksInPath().path
+                == helper.appendingPathComponent("Contents/MacOS/Swivel").resolvingSymlinksInPath().path)
+
+        // A PDF is what checked the server in; it may still, but never as the app.
+        send(#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"plan_action","arguments":{"action":"tools.Make PDF","paths":["\#(source.path)"]}}}"#)
+        let plan = try await lines.answer(2)
+        let planID = try #require(((plan["result"] as? [String: Any])?["structuredContent"] as? [String: Any])?["plan_id"] as? String)
+        send(#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"apply_plan","arguments":{"plan_id":"\#(planID)"}}}"#)
+        let applied = try await lines.answer(3)
+        #expect(((applied["result"] as? [String: Any])?["isError"] as? Bool) == false)
+        #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("photo.pdf").path))
+        try await Task.sleep(for: .milliseconds(300))
+        if let checkedIn = NSRunningApplication(processIdentifier: process.processIdentifier) {
+            #expect(checkedIn.bundleIdentifier == id + ".mcp")
+            #expect(checkedIn.activationPolicy == .prohibited)
+        }
+        #expect(NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty)
+        try input.fileHandleForWriting.close()
+        for _ in 0..<100 where process.isRunning { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(!process.isRunning && process.terminationStatus == 0)
+
+        // The helper serves nothing else: no menu-bar app, no developer modes.
+        for arguments in [[String](), ["--tool", "shelf"], ["--run", "convert", "JPG", source.path]] {
+            let other = Process()
+            other.executableURL = helper.appendingPathComponent("Contents/MacOS/Swivel")
+            other.arguments = arguments
+            other.standardOutput = FileHandle.nullDevice
+            other.standardError = FileHandle.nullDevice
+            try other.run()
+            for _ in 0..<100 where other.isRunning { try await Task.sleep(for: .milliseconds(50)) }
+            if other.isRunning { other.terminate() }
+            #expect(other.terminationStatus == 64, "\(arguments)")
+        }
+
+        // build.sh ships it that way.
+        let build = try String(contentsOf: root.appendingPathComponent("build.sh"), encoding: .utf8)
+        for piece in ["Contents/Helpers/Swivel MCP.app", "LSBackgroundOnly bool true", "SwivelAppIdentifier string", "$APP_ID.mcp"] {
+            #expect(build.contains(piece), "\(piece)")
+        }
+    }
 }
 
 /// Collects a child's stdout and hands out the JSON-RPC answer with a given id.

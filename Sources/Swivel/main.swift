@@ -8,7 +8,12 @@ MainActor.assumeIsolated {
     // applies (the menus' own converters: new files next to the originals, numbered rather than replacing; renames
     // and moves that can be undone), listens on no port and reads no other arguments. It refuses to run when
     // launchd is its parent (`open`), where Swivel itself would be the process macOS holds responsible.
-    if MCPStdio.isRequested(CommandLine.arguments) { MCPStdio.run() }
+    if MCPStdio.isRequested(CommandLine.arguments) {
+        MCPStdio.handOffToHelper()
+        MCPStdio.run()
+    }
+    // The helper bundle is for the server only: no menu-bar app and none of the developer modes.
+    if MCPStdio.isHelper { exit(64) }
     let app = NSApplication.shared
     AppTypography.install()
     let delegate = AppDelegate()

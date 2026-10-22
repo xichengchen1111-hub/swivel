@@ -1,6 +1,7 @@
 import AppKit
 import VideoToolbox
 import AVFoundation
+import os
 import ImageIO
 import UniformTypeIdentifiers
 
@@ -173,10 +174,19 @@ enum Video {
             guard reader.canAdd(output), writer.canAdd(input) else { throw ToolError(L("Couldn't encode video.")) }
             reader.add(output); writer.add(input)
         }
+        // Starting and cancelling never overlap: AVAssetReader crashes (EXC_BAD_ACCESS in startReading) when
+        // cancelReading runs on another thread while it is still setting up. A cancel that comes first stops the start.
+        let gate = OSAllocatedUnfairLock(initialState: (started: false, cancelled: false))
         try await withTaskCancellationHandler {
             do {
                 try Task.checkCancellation()
-                guard writer.startWriting(), reader.startReading() else { throw reader.error ?? writer.error ?? ToolError(L("Couldn't encode video.")) }
+                let started = try gate.withLockUnchecked { state -> Bool in
+                    guard !state.cancelled else { return false }
+                    guard writer.startWriting(), reader.startReading() else { throw reader.error ?? writer.error ?? ToolError(L("Couldn't encode video.")) }
+                    state.started = true
+                    return true
+                }
+                guard started else { throw CancellationError() }
                 writer.startSession(atSourceTime: .zero)
                 try await withThrowingTaskGroup(of: Void.self) { group in
                     for (output, input) in streams {
@@ -214,8 +224,12 @@ enum Video {
                 throw error
             }
         } onCancel: {
-            if reader.status == .reading { reader.cancelReading() }
-            if writer.status == .writing { writer.cancelWriting() }
+            gate.withLockUnchecked { state in
+                state.cancelled = true
+                guard state.started else { return }
+                if reader.status == .reading { reader.cancelReading() }
+                if writer.status == .writing { writer.cancelWriting() }
+            }
         }
     }
 

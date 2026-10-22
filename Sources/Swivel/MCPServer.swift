@@ -230,6 +230,33 @@ enum MCPStdio {
         arguments.count == 2 && arguments[1] == "--mcp"
     }
 
+    /// Info.plist key of the helper bundle (`Contents/Helpers/Swivel MCP.app`): the app's own bundle identifier.
+    static let appIdentifierKey = "SwivelAppIdentifier"
+
+    /// Running as the helper rather than as Swivel.app itself.
+    static var isHelper: Bool { Bundle.main.object(forInfoDictionaryKey: appIdentifierKey) is String }
+
+    /// The helper's executable inside the app bundle that contains `executable` (`…/Swivel.app/Contents/MacOS/Swivel`).
+    static func helperExecutable(besides executable: URL) -> URL {
+        executable.deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Helpers/Swivel MCP.app/Contents/MacOS/Swivel")
+    }
+
+    /// The server runs as a separate background-only helper app with its own bundle identifier. PDFKit (every PDF
+    /// action, Make PDF, document → PDF) creates an NSApplication behind the scenes, which checks the process in
+    /// with Launch Services; done as Swivel.app, `open` (Finder, Dock, login items) then fails with -600 while a
+    /// host keeps the server running. Checked in as the helper, Swivel.app still opens. `exec` keeps the pid and the
+    /// host as parent; hosts configured with `Swivel --mcp` need no change. Without a helper (development builds)
+    /// the server runs here.
+    static func handOffToHelper() {
+        guard !isHelper else { return }
+        let helper = helperExecutable(besides: URL(fileURLWithPath: Bundle.main.executablePath ?? CommandLine.arguments[0]))
+        guard FileManager.default.isExecutableFile(atPath: helper.path) else { return }
+        let argv: [UnsafeMutablePointer<CChar>?] = [strdup(CommandLine.arguments[0]), strdup("--mcp"), nil]
+        execv(helper.path, argv)
+        FileHandle.standardError.write(Data("Swivel --mcp: couldn't start the helper (\(String(cString: strerror(errno)))); serving here.\n".utf8))
+    }
+
     @MainActor
     static func run() -> Never {
         // A host starts this process and is its parent. Launched through LaunchServices (`open`), launchd is the
@@ -238,6 +265,9 @@ enum MCPStdio {
             FileHandle.standardError.write(Data("Swivel --mcp is started by an MCP host (Claude Desktop, Codex…), not opened as an app.\n".utf8))
             exit(64)
         }
+        // The helper has its own (empty) defaults domain; settings such as image presets and the language are read
+        // from the app's.
+        if let app = Bundle.main.object(forInfoDictionaryKey: appIdentifierKey) as? String { UserDefaults.standard.addSuite(named: app) }
         signal(SIGPIPE, SIG_IGN)
         // stdout carries protocol messages only. Keep a private copy for them and point fd 1 at stderr, so a stray
         // print or framework warning can't corrupt the stream.
@@ -246,7 +276,8 @@ enum MCPStdio {
         _ = fcntl(protocolOutput, F_SETNOSIGPIPE, 1)
         let writer = MCPWriter(fd: protocolOutput)
         // Development builds can keep a separate undo log (manual sessions, tests); the installed app always uses its own.
-        let directory = Bundle.main.bundleIdentifier == "local.swivel.app" ? nil
+        let appIdentifier = Bundle.main.object(forInfoDictionaryKey: appIdentifierKey) as? String ?? Bundle.main.bundleIdentifier
+        let directory = appIdentifier == "local.swivel.app" ? nil
             : ProcessInfo.processInfo.environment["SWIVEL_MCP_HISTORY_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
         let session = MCPSession(tools: MCPTools(history: directory.map(MCPHistory.init) ?? MCPHistory())) { writer.write($0) }
         session.finished = { stop(0) }
