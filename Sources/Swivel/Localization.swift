@@ -844,6 +844,14 @@ enum Strings {
         "Show Quick Actions": ["显示快捷操作", "顯示快速操作", "クイックアクションを表示"],
         "If another app uses the same shortcut, choose a different one. You can always reopen Swivel from Finder or Spotlight to reach Settings.": ["如果与其他应用的快捷键冲突，请换一个。始终可以从访达或 Spotlight 重新打开 Swivel 进入设置。", "如果與其他應用程式的快速鍵衝突，請換一個。隨時可從 Finder 或 Spotlight 重新開啟 Swivel 進入設定。", "他のアプリと重なる場合は別のキーを選んでください。Finder や Spotlight で Swivel を開き直せば設定に戻れます。"],
         "Shortcut is ready": ["快捷键已就绪", "快速鍵已就緒", "ショートカットを使用できます"],
+
+        // Agents (MCP server, General page)
+        "Agents": ["AI 应用", "AI 應用程式", "AI アプリ"],
+        "AI apps such as Claude Desktop, Codex and Cursor can use Swivel's file tools on the files they pass. Changes are planned first, saved next to the originals and can be undone. Nothing listens on the network.": ["Claude Desktop、Codex、Cursor 等 AI 应用可以对它们传入的文件使用 Swivel 的文件工具。改动会先列出计划，结果保存在原文件旁边，并且可以撤销。不会监听任何网络端口。", "Claude Desktop、Codex、Cursor 等 AI 應用程式可以對它們傳入的檔案使用 Swivel 的檔案工具。變更會先列出計畫，結果儲存在原檔案旁邊，而且可以復原。不會監聽任何網路連接埠。", "Claude Desktop、Codex、Cursor などの AI アプリが、渡したファイルに Swivel のファイルツールを使えます。変更はまず計画として示され、結果は元のファイルの隣に保存され、取り消せます。ネットワークで接続を待ち受けることはありません。"],
+        "Copy Claude Desktop Setup": ["复制 Claude Desktop 配置", "複製 Claude Desktop 設定", "Claude Desktop 用の設定をコピー"],
+        "Copy Codex Setup": ["复制 Codex 配置", "複製 Codex 設定", "Codex 用の設定をコピー"],
+        "Copied. Add the “swivel” entry to “mcpServers” in Claude's config file, then restart Claude.": ["已复制。把“swivel”这一项加到 Claude 配置文件的“mcpServers”里，然后重新启动 Claude。", "已複製。把「swivel」這一項加到 Claude 設定檔的「mcpServers」裡，然後重新啟動 Claude。", "コピーしました。Claude の設定ファイルの「mcpServers」に「swivel」の項目を追加し、Claude を再起動してください。"],
+        "Copied. Add it to ~/.codex/config.toml, then restart Codex.": ["已复制。把它加到 ~/.codex/config.toml，然后重新启动 Codex。", "已複製。把它加到 ~/.codex/config.toml，然後重新啟動 Codex。", "コピーしました。~/.codex/config.toml に追加し、Codex を再起動してください。"],
         "This shortcut is unavailable. Choose another shortcut or open the panel below.": ["这个快捷键不可用。请选择其他组合，或用下方按钮打开面板。", "這個快速鍵無法使用。請選擇其他組合，或用下方按鈕開啟面板。", "このショートカットは使用できません。別のキーを選ぶか、下のボタンで開いてください。"],
     ]
 }

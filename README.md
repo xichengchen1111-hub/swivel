@@ -74,6 +74,43 @@ Requires macOS 15+ and the Xcode command-line tools. It lives in the menu bar (�
 
 For testing without dragging: `Swivel --run <convert|tools|actions> "<item>" <file>...`, or open an editor directly with `Swivel --edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>`.
 
+## Use Swivel from AI agents (MCP)
+
+`Swivel --mcp` is a local [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude Desktop, Codex, Cursor, Raycast and other MCP hosts can use Swivel's converters and file tools. The installed app accepts this one argument. It talks over stdin/stdout only (no network port), speaks both the 2025 handshake and the stateless 2026-07-28 revision, and needs no extra permission: the host starts it, so macOS attributes file access to the host.
+
+**Set up.** Settings → General → **Agents** copies a ready setup for Claude Desktop or Codex. By hand:
+
+```json
+{ "mcpServers": { "swivel": { "command": "/Applications/Swivel.app/Contents/MacOS/Swivel", "args": ["--mcp"] } } }
+```
+
+That goes in Claude Desktop's `claude_desktop_config.json` (Settings → Developer → Edit Config) or Cursor's `~/.cursor/mcp.json`. For Codex:
+
+```bash
+codex mcp add swivel -- /Applications/Swivel.app/Contents/MacOS/Swivel --mcp
+```
+
+Raycast and other hosts take the same command and argument. For a one-click Claude Desktop extension, `./mcpb/pack.sh` builds `build/Swivel.mcpb` (an MCPB bundle, `server.type: "binary"`). Its launcher starts the Swivel installed in /Applications, ~/Applications or on the Desktop rather than carrying a copy of it.
+
+**Tools.**
+
+| Tool | Does |
+| --- | --- |
+| `list_actions` | What the files can become: `convert.*` / `tools.*` ids from the wheel's catalog (formats, Remove BG, resize, rotate, merge, split, ZIP, extract…). Editors that need a window are not offered |
+| `inspect_files` | Kind, size, dimensions, PDF pages, word count, duration |
+| `extract_text`, `read_codes` | On-device OCR and QR/barcode reading for images |
+| `plan_action`, `plan_compress`, `plan_rename`, `plan_move` | Validate and predict: the exact files that would be created, renamed or moved. No side effects |
+| `apply_plan` | Carries out a plan once, within an hour, and only if its inputs haven't changed since |
+| `undo`, `history` | Reverse an applied plan (created files go to the Trash; renames and moves go back, unless something changed since) and list past ones |
+
+Paths must be absolute, plain (no `.`/`..`), existing regular files or folders, and not symbolic links themselves. Outputs follow the usual rules: next to the original, numbered instead of overwriting. The undo log is `~/Library/Application Support/Swivel/Agent History/history.json` (owner-only, last 200 changes). A development build can use another folder with `SWIVEL_MCP_HISTORY_DIR`; the installed app ignores it.
+
+Try it by hand:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"shell","version":"1"}}}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | .build/debug/Swivel --mcp
+```
+
 ## Validate the new tools
 
 ```bash
@@ -92,7 +129,7 @@ For testing without dragging: `Swivel --run <convert|tools|actions> "<item>" <fi
 .build/debug/Swivel --tool launcher
 ```
 
-`test.sh` runs 177 Swift Testing checks for image output safety, metadata and orientation, preset validation, shelf references, feature gating/search, OCR, hotkeys, interaction feel and settings persistence. Coverage includes rename conflicts, rollback/undo, PDF order/rotation and original preservation, QR decoding and library persistence, draft links, app routing, independent switches and wheel shortcuts. It uses the macro plugin bundled with the selected Swift toolchain when available; no package dependencies are downloaded.
+`test.sh` runs 189 Swift Testing checks for image output safety, metadata and orientation, preset validation, shelf references, feature gating/search, OCR, hotkeys, interaction feel and settings persistence. Coverage includes rename conflicts, rollback/undo, PDF order/rotation and original preservation, QR decoding and library persistence, draft links, app routing, independent switches, wheel shortcuts and the MCP server (protocol, plan/apply/undo, path checks, no network listener). It uses the macro plugin bundled with the selected Swift toolchain when available; no package dependencies are downloaded.
 
 `--tool` is a UI preview mode that enables the optional tools **in that executable's preferences domain**, registers the Quick Actions shortcut and skips the normal app delegate, screenshot takeover and background watchers. Use the unbundled debug executable or a separate validation bundle, not the installed production app. `--recognize` prints OCR results without changing the clipboard or feature preferences.
 

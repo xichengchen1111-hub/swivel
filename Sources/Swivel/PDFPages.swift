@@ -68,9 +68,7 @@ struct PDFPagesSnapshot: Sendable {
         guard let bytes = result.dataRepresentation(), let check = PDFDocument(data: bytes), check.pageCount == pages.count else {
             throw ToolError(L("Could not write PDF"))
         }
-        let out = Paths.output(for: first.source, ext: "pdf", suffix: " arranged")
-        try bytes.write(to: out, options: .withoutOverwriting)
-        return out
+        return try Paths.create(bytes, at: Paths.preferred(for: first.source, ext: "pdf", suffix: " arranged"))
     }
 }
 

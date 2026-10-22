@@ -383,25 +383,132 @@ enum FileActions {
 }
 
 enum Paths {
-    /// `folder/name.ext`, or `name 2.ext`, `name 3.ext`… if taken.
+    /// `folder/name.ext`, or `name 2.ext`, `name 3.ext`… if taken. Only a forecast: another conversion can take the
+    /// name before this one writes, so writers claim theirs with `create`, `publish` or `produce` instead.
     static func output(for source: URL, ext: String, suffix: String = "") -> URL {
+        unique(preferred(for: source, ext: ext, suffix: suffix))
+    }
+
+    /// `folder/name<suffix>.ext` beside `source`, free or not: the name `create`, `publish` and `produce` start from.
+    static func preferred(for source: URL, ext: String, suffix: String = "") -> URL {
         let base = source.deletingPathExtension().lastPathComponent + suffix
-        let dir = source.deletingLastPathComponent()
-        return unique(dir.appendingPathComponent(base).appendingPathExtension(ext))
+        return source.deletingLastPathComponent().appendingPathComponent(base).appendingPathExtension(ext)
     }
 
     static func unique(_ url: URL) -> URL {
-        guard taken(url) else { return url }
-        let dir = url.deletingLastPathComponent()
+        var n = 1
+        while taken(numbered(url, n)) { n += 1 }
+        return numbered(url, n)
+    }
+
+    /// `url` itself for 1, else `name n.ext`.
+    private static func numbered(_ url: URL, _ n: Int) -> URL {
+        guard n > 1 else { return url }
         let ext = url.pathExtension
-        let base = url.deletingPathExtension().lastPathComponent
-        var n = 2
-        while true {
-            var candidate = dir.appendingPathComponent("\(base) \(n)")
-            if !ext.isEmpty { candidate.appendPathExtension(ext) }
-            if !taken(candidate) { return candidate }
-            n += 1
+        var candidate = url.deletingLastPathComponent().appendingPathComponent("\(url.deletingPathExtension().lastPathComponent) \(n)")
+        if !ext.isEmpty { candidate.appendPathExtension(ext) }
+        return candidate
+    }
+
+    /// Writes `data` as a new file at `preferred`, or `name 2.ext`, `name 3.ext`…, and returns where it went.
+    /// The write is exclusive (O_EXCL): a name another writer took after Swivel looked is skipped, never replaced.
+    static func create(_ data: Data, at preferred: URL) throws -> URL {
+        try claim(preferred) { try data.write(to: $0, options: .withoutOverwriting) }
+    }
+
+    /// Moves `item` (finished work in a temporary beside `preferred`) to `preferred` or the next free name, and returns
+    /// where it went. The rename is exclusive, so it never replaces anything that appeared after the name was chosen.
+    static func publish(_ item: URL, as preferred: URL) throws -> URL {
+        try claim(preferred) { try renameExclusively(item, to: $0) }
+    }
+
+    /// Lets `make` write an output (a file or a folder) into a hidden temporary beside `preferred`, then publishes it.
+    /// Tools and exports that would replace an existing file only ever see the temporary, which never outlives the call.
+    static func produce(_ preferred: URL, _ make: (URL) throws -> Void) throws -> URL {
+        let work = temporary(beside: preferred, ext: preferred.pathExtension)
+        defer { discard(work) }
+        try make(work)
+        return try publish(work, as: preferred)
+    }
+
+    static func produce(_ preferred: URL, _ make: (URL) async throws -> Void) async throws -> URL {
+        let work = temporary(beside: preferred, ext: preferred.pathExtension)
+        defer { discard(work) }
+        try await make(work)
+        return try publish(work, as: preferred)
+    }
+
+    /// An unused hidden name beside `url` for work in progress, removed at quit if it's still there; `discard` removes it.
+    static func temporary(beside url: URL, ext: String) -> URL {
+        let name = ".swivel-\(UUID().uuidString)" + (ext.isEmpty ? "" : ".\(ext)")
+        let work = url.deletingLastPathComponent().appendingPathComponent(name)
+        TemporaryItems.register(work)
+        return work
+    }
+
+    static func discard(_ temporary: URL) {
+        try? FileManager.default.removeItem(at: temporary)
+        TemporaryItems.unregister(temporary)
+    }
+
+    /// Tries `attempt` at `preferred`, then `name 2.ext`, `name 3.ext`… `attempt` fails with "file exists" rather than
+    /// replace anything, and that is the only check: looking first and writing after would leave a gap between the two.
+    private static func claim(_ preferred: URL, _ attempt: (URL) throws -> Void) throws -> URL {
+        for n in 1...10_000 {
+            let candidate = numbered(preferred, n)
+            do {
+                try attempt(candidate)
+                return candidate
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                continue
+            }
         }
+        throw fileError(EEXIST, preferred)
+    }
+
+    /// `renamex_np` with RENAME_EXCL. Volumes without it (exFAT, some network shares) answer ENOTSUP; there the name is
+    /// claimed by `renameOverPlaceholder` instead.
+    static func renameExclusively(_ item: URL, to destination: URL) throws {
+        let result = item.withUnsafeFileSystemRepresentation { from in
+            destination.withUnsafeFileSystemRepresentation { to in renamex_np(from!, to!, UInt32(RENAME_EXCL)) }
+        }
+        guard result != 0 else { return }
+        let code = errno
+        guard code == ENOTSUP else { throw fileError(code, destination) }
+        try renameOverPlaceholder(item, to: destination)
+    }
+
+    /// Claims `destination` with an exclusive create (an empty file, or folder for a folder), then renames `item` over
+    /// that placeholder. Nothing that was already there is replaced; only Swivel's own placeholder is.
+    static func renameOverPlaceholder(_ item: URL, to destination: URL) throws {
+        var info = stat()
+        guard lstat(item.path, &info) == 0 else { throw fileError(errno, item) }
+        let folder = info.st_mode & S_IFMT == S_IFDIR
+        if folder {
+            guard mkdir(destination.path, 0o700) == 0 else { throw fileError(errno, destination) }
+        } else {
+            let placeholder = open(destination.path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0o600)
+            guard placeholder >= 0 else { throw fileError(errno, destination) }
+            close(placeholder)
+        }
+        guard rename(item.path, destination.path) == 0 else {
+            let code = errno
+            _ = folder ? rmdir(destination.path) : unlink(destination.path)
+            throw fileError(code, destination)
+        }
+    }
+
+    private static func fileError(_ code: Int32, _ url: URL) -> CocoaError {
+        let posix = POSIXErrorCode(rawValue: code) ?? .EIO
+        let cocoa: CocoaError.Code = switch posix {
+        case .EEXIST: .fileWriteFileExists
+        case .EACCES, .EPERM: .fileWriteNoPermission
+        case .ENOSPC, .EDQUOT: .fileWriteOutOfSpace
+        case .EROFS: .fileWriteVolumeReadOnly
+        case .ENOENT: .fileNoSuchFile
+        default: .fileWriteUnknown
+        }
+        return CocoaError(cocoa, userInfo: [NSFilePathErrorKey: url.path, NSUnderlyingErrorKey: POSIXError(posix)])
     }
 
     /// Anything at the path counts, a symlink included. `fileExists` follows links, so a dangling one planted under

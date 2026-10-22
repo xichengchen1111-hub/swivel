@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import ImageIO
 import PDFKit
 import Testing
@@ -33,6 +34,132 @@ struct SecurityTests {
         let outputs = try await Docs.convert(source, to: txt)
         #expect(outputs.map(\.lastPathComponent) == ["note 2.txt"])
         #expect(!FileManager.default.fileExists(atPath: target.path))
+    }
+
+    /// Runs `work` twice at the same moment, the way two quick drops on one file do.
+    private func twice(_ work: @escaping @Sendable () async throws -> [URL]) async throws -> [URL] {
+        try await withThrowingTaskGroup(of: [URL].self) { group in
+            for _ in 0..<2 { group.addTask { try await work() } }
+            return try await group.reduce(into: []) { $0 += $1 }
+        }
+    }
+
+    @Test func simultaneousConversionsOfOneFileEachKeepTheirOwnOutput() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        // Noise keeps the encoders busy long enough for both conversions to have picked a name before either writes.
+        let width = 1600, height = 1200
+        let pixels = try #require(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        let bytes = try #require(pixels.data).assumingMemoryBound(to: UInt32.self)
+        var seed: UInt32 = 0x9E37_79B9
+        for i in 0..<(pixels.bytesPerRow / 4 * height) { seed = seed &* 1_664_525 &+ 1_013_904_223; bytes[i] = seed }
+        let photo = dir.appendingPathComponent("photo.png")
+        try Images.encode(try #require(pixels.makeImage()), type: .png, quality: 1).write(to: photo)
+        let tone = dir.appendingPathComponent("tone.wav")
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1))
+        let pcm = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44100))
+        pcm.frameLength = 44100
+        for i in 0..<44100 { pcm.floatChannelData![0][i] = Float(sin(Double(i) * 440 * 2 * .pi / 44100) * 0.2) }
+        do { let file = try AVAudioFile(forWriting: tone, settings: format.settings); try file.write(from: pcm) }
+
+        // Both see photo.jpg free; the second to finish must take photo 2.jpg rather than replace the first.
+        let jpg = try #require(Images.outputFormats.first { $0.ext == "jpg" })
+        let images = try await twice { try await Images.convert(photo, to: jpg) }
+        #expect(Set(images.map(\.lastPathComponent)) == ["photo.jpg", "photo 2.jpg"])
+        for url in images {
+            let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+            #expect(CGImageSourceGetType(source) as String? == UTType.jpeg.identifier)
+            #expect(CGImageSourceCreateImageAtIndex(source, 0, nil)?.width == width)
+        }
+        // A command-line tool (afconvert), an AVFoundation export and an archiver write a temporary, then publish it.
+        let m4a = try #require(Audio.formats.first { $0.name == "M4A" })
+        let audio = try await twice { try await Audio.convert(tone, to: m4a) }
+        #expect(Set(audio.map(\.lastPathComponent)) == ["tone.m4a", "tone 2.m4a"])
+        let exports = try await twice { try await Video.export(tone, AVAssetExportPresetAppleM4A, .m4a, "m4a", suffix: " export") }
+        #expect(Set(exports.map(\.lastPathComponent)) == ["tone export.m4a", "tone export 2.m4a"])
+        for url in audio + exports {
+            let seconds = try await AVURLAsset(url: url).load(.duration).seconds
+            #expect(abs(seconds - 1) < 0.1, "\(url.lastPathComponent): \(seconds) s")
+        }
+        let zips = try await twice { [try await Archives.zip([photo])] }
+        #expect(Set(zips.map(\.lastPathComponent)) == ["photo.zip", "photo 2.zip"])
+        for url in zips {
+            let listing = dir.appendingPathComponent(".listing-\(UUID().uuidString)")
+            let copy = dir.appendingPathComponent(".copy-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: listing); try? FileManager.default.removeItem(at: copy) }
+            try await Shell.run("/bin/sh", ["-c", "/usr/bin/tar -tf \"$1\" > \"$2\"", "sh", url.path, listing.path])
+            let files = try String(contentsOf: listing, encoding: .utf8).split(separator: "\n").filter { !$0.hasSuffix("/") }
+            // ditto's --keepParent files a single item under its folder's name.
+            let entry = try #require(files.first)
+            #expect(files.count == 1 && entry.hasSuffix("photo.png"), "\(url.lastPathComponent): \(files)")
+            try await Shell.run("/bin/sh", ["-c", "/usr/bin/tar -xOf \"$1\" \"$2\" > \"$3\"", "sh", url.path, String(entry), copy.path])
+            #expect(try Data(contentsOf: copy) == Data(contentsOf: photo), "\(url.lastPathComponent)")
+        }
+        // No temporaries or partial files are left behind.
+        let left = Set(try FileManager.default.contentsOfDirectory(atPath: dir.path))
+        #expect(left == Set(["photo.png", "tone.wav"] + (images + audio + exports + zips).map(\.lastPathComponent)))
+    }
+
+    @Test func outputNamesAreClaimedByTheWriteItselfNotCheckedBeforehand() throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let outside = try folder(); defer { try? FileManager.default.removeItem(at: outside) }
+        let fm = FileManager.default
+        // What another conversion saved after this one chose its name, and a link planted under the next name.
+        let preferred = dir.appendingPathComponent("photo.jpg")
+        try Data("theirs".utf8).write(to: preferred)
+        let planted = outside.appendingPathComponent("planted.jpg")
+        try fm.createSymbolicLink(at: dir.appendingPathComponent("photo 2.jpg"), withDestinationURL: planted)
+
+        let written = try Paths.create(Data("ours".utf8), at: preferred)
+        #expect(written.lastPathComponent == "photo 3.jpg")
+        #expect(try Data(contentsOf: written) == Data("ours".utf8))
+
+        // Finished temporaries, files and folders alike, are published the same way.
+        let file = Paths.temporary(beside: preferred, ext: "jpg"); defer { Paths.discard(file) }
+        try Data("late".utf8).write(to: file)
+        #expect(try Paths.publish(file, as: preferred).lastPathComponent == "photo 4.jpg")
+        #expect(!fm.fileExists(atPath: file.path))
+        let extracted = dir.appendingPathComponent("Extracted")
+        try fm.createDirectory(at: extracted, withIntermediateDirectories: false)
+        let folder = Paths.temporary(beside: extracted, ext: ""); defer { Paths.discard(folder) }
+        try fm.createDirectory(at: folder, withIntermediateDirectories: false)
+        try Data("inside".utf8).write(to: folder.appendingPathComponent("a.txt"))
+        let moved = try Paths.publish(folder, as: extracted)
+        #expect(moved.lastPathComponent == "Extracted 2")
+        #expect(try Data(contentsOf: moved.appendingPathComponent("a.txt")) == Data("inside".utf8))
+
+        // Volumes without RENAME_EXCL (exFAT) claim the name with an exclusive create, then rename over that.
+        for isFolder in [false, true] {
+            let item = Paths.temporary(beside: preferred, ext: ""); defer { Paths.discard(item) }
+            if isFolder {
+                try fm.createDirectory(at: item, withIntermediateDirectories: false)
+                try Data("child".utf8).write(to: item.appendingPathComponent("child.txt"))
+            } else {
+                try Data("item".utf8).write(to: item)
+            }
+            for taken in [preferred, dir.appendingPathComponent("photo 2.jpg"), extracted] {
+                do {
+                    try Paths.renameOverPlaceholder(item, to: taken)
+                    Issue.record("\(taken.lastPathComponent) was replaced")
+                } catch let error as CocoaError {
+                    #expect(error.code == .fileWriteFileExists)
+                }
+            }
+            let target = dir.appendingPathComponent(isFolder ? "fallback" : "fallback.txt")
+            try Paths.renameOverPlaceholder(item, to: target)
+            #expect(!fm.fileExists(atPath: item.path))
+            let check = isFolder ? target.appendingPathComponent("child.txt") : target
+            #expect(try Data(contentsOf: check) == Data((isFolder ? "child" : "item").utf8))
+        }
+
+        // Nothing was written through, replaced or left behind.
+        #expect(try Data(contentsOf: preferred) == Data("theirs".utf8))
+        #expect(try fm.destinationOfSymbolicLink(atPath: dir.appendingPathComponent("photo 2.jpg").path) == planted.path)
+        #expect(!fm.fileExists(atPath: planted.path))
+        #expect(try fm.contentsOfDirectory(atPath: extracted.path).isEmpty)
+        #expect(Set(try fm.contentsOfDirectory(atPath: dir.path)) == ["photo.jpg", "photo 2.jpg", "photo 3.jpg", "photo 4.jpg",
+                                                                      "Extracted", "Extracted 2", "fallback.txt", "fallback"])
     }
 
     @Test func shellDrainsLargeErrorOutputInsteadOfHanging() async throws {

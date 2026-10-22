@@ -1,6 +1,14 @@
 import AppKit
 
 MainActor.assumeIsolated {
+    // `Swivel --mcp`, exactly, is the one mode the installed app also accepts: the agent tool server (MCPServer.swift).
+    // An MCP host (Claude Desktop, Codex…) starts it as its own child and talks over stdin/stdout, so the host
+    // already holds the file access, and macOS attributes it to the host, not to Swivel. The server only touches
+    // the absolute paths the host passes (checked in MCPPaths), changes files only through a plan the host then
+    // applies (the menus' own converters: new files next to the originals, numbered rather than replacing; renames
+    // and moves that can be undone), listens on no port and reads no other arguments. It refuses to run when
+    // launchd is its parent (`open`), where Swivel itself would be the process macOS holds responsible.
+    if MCPStdio.isRequested(CommandLine.arguments) { MCPStdio.run() }
     let app = NSApplication.shared
     AppTypography.install()
     let delegate = AppDelegate()

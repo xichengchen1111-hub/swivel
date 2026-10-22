@@ -699,9 +699,7 @@ final class CropEditor: Editor {
                     page.setBounds(box, for: .cropBox)
                     page.setBounds(box, for: .mediaBox)
                 }
-                let out = Paths.output(for: source, ext: "pdf", suffix: " cropped")
-                try PDFs.save(doc, to: out)
-                return [out]
+                return [try PDFs.save(doc, as: Paths.preferred(for: source, ext: "pdf", suffix: " cropped"))]
             }
         }
         return try await Images.detached {
@@ -712,9 +710,7 @@ final class CropEditor: Editor {
                 .roundedToPixels.intersection(CGRect(x: 0, y: 0, width: full.width, height: full.height))
             guard !rect.isEmpty, let cropped = full.cropping(to: rect) else { throw ToolError("Couldn't crop") }
             let (type, ext) = Images.writableType(for: source)
-            let out = Paths.output(for: source, ext: ext, suffix: " cropped")
-            try Images.write(cropped, to: out, type: type, quality: 0.95)
-            return [out]
+            return [try Images.save(cropped, as: Paths.preferred(for: source, ext: ext, suffix: " cropped"), type: type, quality: 0.95)]
         }
     }
 
@@ -889,9 +885,7 @@ final class CompressEditor: Editor {
                 data = try settings.targetBytes == 0 ? Images.encode(image, type: type, quality: settings.quality)
                     : Images.fitting(image, type: type, maxBytes: settings.targetBytes).data
             }
-            let out = Paths.output(for: source, ext: ext, suffix: " compressed")
-            try data.write(to: out, options: .withoutOverwriting)
-            return [out]
+            return [try Paths.create(data, at: Paths.preferred(for: source, ext: ext, suffix: " compressed"))]
         }
     }
 }

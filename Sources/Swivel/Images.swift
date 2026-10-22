@@ -44,10 +44,7 @@ enum Images {
 
     static func convert(_ url: URL, to format: ImageFormat) async throws -> [URL] {
         try await detached {
-            let image = try load(url)
-            let out = Paths.output(for: url, ext: format.ext)
-            try write(image, to: out, type: format.type, quality: 0.92)
-            return [out]
+            [try save(try load(url), as: Paths.preferred(for: url, ext: format.ext), type: format.type, quality: 0.92)]
         }
     }
 
@@ -59,9 +56,7 @@ enum Images {
             }
             doc.insert(page, at: doc.pageCount)
         }
-        let out = Paths.output(for: urls[0], ext: "pdf")
-        try PDFs.save(doc, to: out)
-        return [out]
+        return [try PDFs.save(doc, as: Paths.preferred(for: urls[0], ext: "pdf"))]
     }
 
     // MARK: Helpers
@@ -161,14 +156,10 @@ enum Images {
         return result
     }
 
-    static func write(_ image: CGImage, to url: URL, type: UTType, quality: Double) throws {
-        var image = image
-        if [UTType.jpeg, .bmp].contains(type), image.hasAlpha { image = image.flattened() }
-        guard let dest = CGImageDestinationCreateWithURL(url as CFURL, type.identifier as CFString, 1, nil) else {
-            throw ToolError("Can't write \(type.preferredFilenameExtension ?? "this format")")
-        }
-        CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save \(url.lastPathComponent)") }
+    /// Encodes `image` and saves it as a new file at `preferred` or the next free name; returns where it went.
+    /// (ImageIO writing to a URL would replace a file another conversion saved there after the name was chosen.)
+    static func save(_ image: CGImage, as preferred: URL, type: UTType, quality: Double) throws -> URL {
+        try Paths.create(try encode(image, type: type, quality: quality), at: preferred)
     }
 
     private static func sourceType(_ url: URL) -> UTType {
@@ -191,9 +182,7 @@ enum Images {
         }
         let image = try change(try load(url, maxPixels: maxPixels))
         let (type, ext) = writableType(for: url)
-        let out = Paths.output(for: url, ext: ext, suffix: suffix)
-        try write(image, to: out, type: type, quality: 0.9)
-        return [out]
+        return [try save(image, as: Paths.preferred(for: url, ext: ext, suffix: suffix), type: type, quality: 0.9)]
     }
 
     private static func compress(_ url: URL) throws -> [URL] {
@@ -208,9 +197,7 @@ enum Images {
         } else {
             (type, outExt) = (.jpeg, "jpg")
         }
-        let out = Paths.output(for: url, ext: outExt, suffix: " compressed")
-        try write(image, to: out, type: type, quality: 0.6)
-        return [out]
+        return [try save(image, as: Paths.preferred(for: url, ext: outExt, suffix: " compressed"), type: type, quality: 0.6)]
     }
 
     private static func stripMetadata(_ url: URL) throws -> [URL] {
@@ -218,8 +205,8 @@ enum Images {
               let type = CGImageSourceGetType(source) else {
             throw ToolError("Couldn't read \(url.lastPathComponent)")
         }
-        let out = Paths.output(for: url, ext: url.pathExtension, suffix: " clean")
-        guard let dest = CGImageDestinationCreateWithURL(out as CFURL, type, 1, nil) else {
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(data, type, 1, nil) else {
             throw ToolError("Can't write this format")
         }
         let removed: [CFString: Any] = [
@@ -232,7 +219,7 @@ enum Images {
         ]
         CGImageDestinationAddImageFromSource(dest, source, 0, removed as CFDictionary)
         guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save") }
-        return [out]
+        return [try Paths.create(data as Data, at: Paths.preferred(for: url, ext: url.pathExtension, suffix: " clean"))]
     }
 }
 

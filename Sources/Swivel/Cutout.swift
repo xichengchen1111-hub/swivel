@@ -23,10 +23,7 @@ enum Cutout {
             guard let image = try maskedImage(Images.load(url)) else {
                 throw ToolError(L("No subject found in this image."))
             }
-            let data = try Images.encode(image, type: .png, quality: 1)
-            let out = Paths.output(for: url, ext: "png", suffix: " cutout")
-            try data.write(to: out, options: .withoutOverwriting)
-            return [out]
+            return [try Images.save(image, as: Paths.preferred(for: url, ext: "png", suffix: " cutout"), type: .png, quality: 1)]
         }
     }
 }

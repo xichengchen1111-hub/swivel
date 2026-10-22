@@ -81,10 +81,7 @@ struct ImagePreset: Codable, Equatable, Identifiable, Sendable {
         }
         CGImageDestinationAddImage(destination, pixels, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw ToolError(L("Could not encode the image.")) }
-        let result = Paths.output(for: url, ext: format.fileExtension, suffix: " processed")
-        // withoutOverwriting also protects against a file appearing after Paths.unique checks.
-        try (data as Data).write(to: result, options: .withoutOverwriting)
-        return result
+        return try Paths.create(data as Data, at: Paths.preferred(for: url, ext: format.fileExtension, suffix: " processed"))
     }
 }
 

@@ -164,9 +164,10 @@ final class TrimEditor: Editor {
         session.timeRange = range
         // A video composition makes the export decode and re-encode even when the codec and size already match.
         if !isAudio { session.videoComposition = try await AVVideoComposition.videoComposition(withPropertiesOf: asset) }
-        let out = Paths.output(for: source, ext: outExt, suffix: " trimmed")
-        try await session.export(to: out, as: type)
-        return [out]
+        // The export goes to a temporary that is published under a free name once complete.
+        return [try await Paths.produce(Paths.preferred(for: source, ext: outExt, suffix: " trimmed")) {
+            try await session.export(to: $0, as: type)
+        }]
     }
 }
 
@@ -209,10 +210,10 @@ extension Video {
             cursor = cursor + duration
         }
         let name = audioOnly ? "Merged.m4a" : "Merged.mp4"
-        let out = Paths.unique(urls[0].deletingLastPathComponent().appendingPathComponent(name))
         let preset = audioOnly ? AVAssetExportPresetAppleM4A : AVAssetExportPresetHighestQuality
         guard let session = AVAssetExportSession(asset: composition, presetName: preset) else { throw ToolError("Can't merge these files") }
-        try await session.export(to: out, as: audioOnly ? .m4a : .mp4)
-        return out
+        return try await Paths.produce(urls[0].deletingLastPathComponent().appendingPathComponent(name)) {
+            try await session.export(to: $0, as: audioOnly ? .m4a : .mp4)
+        }
     }
 }
