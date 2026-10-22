@@ -494,6 +494,10 @@ struct MCPTests {
         lsof.waitUntilExit()
         #expect(String(decoding: sockets.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).isEmpty)
 
+        // Not an app instance to Launch Services: with one checked in, `open Swivel.app` (Finder, Dock, login items)
+        // would only activate this child while a host keeps it running, and the menu-bar app would never start.
+        #expect(NSRunningApplication(processIdentifier: process.processIdentifier) == nil)
+
         // Closing stdin ends the session once the conversion in flight has answered.
         send(#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"apply_plan","arguments":{"plan_id":"\#(planID)"}}}"#)
         try input.fileHandleForWriting.close()
@@ -502,6 +506,7 @@ struct MCPTests {
         #expect(FileManager.default.fileExists(atPath: dir.appendingPathComponent("photo.jpg").path))
         for _ in 0..<100 where process.isRunning { try await Task.sleep(for: .milliseconds(50)) }
         #expect(!process.isRunning && process.terminationStatus == 0)
+        #expect(lines.unparsed == 0)
 
         // And the code has no way to open one.
         for file in ["MCPServer.swift", "MCPTools.swift"] {

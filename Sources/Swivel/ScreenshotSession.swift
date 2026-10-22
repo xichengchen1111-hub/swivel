@@ -121,7 +121,7 @@ enum AppInstance {
         let lease = AppInstanceLease(file: file)
         if try lease.acquire() { self.lease = lease; return false }
         let peers = NSRunningApplication.runningApplications(withBundleIdentifier: id)
-            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier && $0.activationPolicy != .prohibited }
         let pid = leader(peers.map { Process(pid: $0.processIdentifier, launched: $0.launchDate ?? .distantPast) })
         DistributedNotificationCenter.default().postNotificationName(reopen, object: id, userInfo: nil, deliverImmediately: true)
         if let existing = peers.first(where: { $0.processIdentifier == pid }) {
