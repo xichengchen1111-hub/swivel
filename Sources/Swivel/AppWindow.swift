@@ -382,7 +382,7 @@ final class GeneralPane: Pane {
     private var loginPending = 0
     private nonisolated static let loginQueue = DispatchQueue(label: "local.swivel.login")
 
-    init() { super.init(size: NSSize(width: 680, height: 560)) }
+    init() { super.init(size: NSSize(width: 680, height: 640)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func build() {
