@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import CoreImage
 import CoreText
+import Darwin
 import Speech
 
 struct TimedWord: Equatable, Sendable {
@@ -66,54 +67,160 @@ enum Subtitles {
     static func srt(_ cues: [SubtitleCue]) -> String {
         cues.enumerated().map { "\($0.offset + 1)\n\(timestamp($0.element.start)) --> \(timestamp($0.element.end))\n\($0.element.text)\n" }.joined(separator: "\n")
     }
+    static let maximumFileBytes = 2_000_000
+    private static let maximumCueBytes = 16_384
+    private static let maximumLines = 32
+    private static let maximumBitmapPixels = 8_000_000
+
+    /// Validate and read the same open file. A pathname check followed by String(contentsOf:) could measure a
+    /// link rather than its target, or read a file which grew after the size check. O_NONBLOCK also prevents a
+    /// special file from blocking before fstat can reject it.
     static func read(_ url: URL) throws -> [SubtitleCue] {
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? Int.max
-        guard size <= 2_000_000 else { throw ToolError(L("This subtitle file is too large.")) }
-        let text = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "\r\n", with: "\n")
-        func time(_ text: Substring) -> Double? {
-            let values = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".").split(separator: ":")
-            guard values.count == 3, let h = Double(values[0]), let m = Double(values[1]), let s = Double(values[2]),
-                  h >= 0, h < 100, m >= 0, m < 60, s >= 0, s < 60 else { return nil }
-            return h * 3600 + m * 60 + s
+        guard url.isFileURL, !url.path.contains("\0") else {
+            throw ToolError(L("Choose a regular subtitle file, not a link or special file."))
         }
+        let fd = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+        guard fd >= 0 else {
+            if errno == ELOOP { throw ToolError(L("Choose a regular subtitle file, not a link or special file.")) }
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+        defer { Darwin.close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        guard info.st_mode & S_IFMT == S_IFREG else {
+            throw ToolError(L("Choose a regular subtitle file, not a link or special file."))
+        }
+        guard info.st_size <= maximumFileBytes else { throw ToolError(L("This subtitle file is too large.")) }
+        var data = Data(), buffer = [UInt8](repeating: 0, count: 16_384)
+        while data.count <= maximumFileBytes {
+            let wanted = min(buffer.count, maximumFileBytes + 1 - data.count)
+            let count = buffer.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, wanted) }
+            if count < 0 {
+                if errno == EINTR { continue }
+                throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+            }
+            if count == 0 { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        guard data.count <= maximumFileBytes else { throw ToolError(L("This subtitle file is too large.")) }
+        guard var text = String(data: data, encoding: .utf8) else {
+            throw ToolError(L("This subtitle file is not valid UTF-8."))
+        }
+        if text.first == "\u{FEFF}" { text.removeFirst() }
+        text = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        func time(_ text: String) -> Double? {
+            let values = text.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+            guard values.count == 3 else { return nil }
+            let tail = values[2].split(omittingEmptySubsequences: false, whereSeparator: { $0 == "," || $0 == "." })
+            func digits(_ value: Substring, count: Int) -> Bool {
+                value.count == count && value.allSatisfy { $0.isASCII && $0.isNumber }
+            }
+            guard tail.count == 2, digits(values[0], count: 2), digits(values[1], count: 2),
+                  digits(tail[0], count: 2), digits(tail[1], count: 3),
+                  let h = Int(values[0]), let m = Int(values[1]), let sec = Int(tail[0]), let ms = Int(tail[1]),
+                  m < 60, sec < 60 else { return nil }
+            return Double(h * 3600 + m * 60 + sec) + Double(ms) / 1000
+        }
+        var blocks: [[String]] = [], block: [String] = []
+        for line in text.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).isEmpty {
+                if !block.isEmpty { blocks.append(block); block = [] }
+            } else { block.append(line) }
+        }
+        if !block.isEmpty { blocks.append(block) }
         var output: [SubtitleCue] = []
-        for block in text.components(separatedBy: "\n\n") {
-            let lines = block.split(separator: "\n", omittingEmptySubsequences: false)
-            guard let index = lines.firstIndex(where: { $0.contains(" --> ") }) else { continue }
-            let pair = lines[index].components(separatedBy: " --> ")
-            guard pair.count == 2, let a = time(Substring(pair[0])), let b = time(Substring(pair[1])), b > a else { continue }
+        for lines in blocks {
+            let index = lines[0].contains("-->") ? 0 : 1
+            guard lines.count > index + 1,
+                  index == 0 || Int(lines[0].trimmingCharacters(in: .whitespaces)) != nil else {
+                throw ToolError(L("This subtitle file is not valid SRT."))
+            }
+            let pair = lines[index].components(separatedBy: "-->")
+            guard pair.count == 2, let a = time(pair[0]), let b = time(pair[1]), b > a else {
+                throw ToolError(L("This subtitle file has invalid timing or overlapping cues."))
+            }
             let content = lines.dropFirst(index + 1).joined(separator: "\n")
-            guard !content.isEmpty else { continue }
-            output.append(SubtitleCue(start: a, end: b, text: wrap(String(content.prefix(2000)))))
+            _ = try boundedLines(content)
+            output.append(SubtitleCue(start: a, end: b, text: content))
         }
-        return output.sorted { $0.start < $1.start }
+        output.sort { $0.start < $1.start }
+        for (first, next) in zip(output, output.dropFirst()) where next.start < first.end {
+            throw ToolError(L("This subtitle file has invalid timing or overlapping cues."))
+        }
+        return output
     }
 
-    private static let cache = NSCache<NSString, CGImage>()
-    static func overlay(_ cue: SubtitleCue, size: CGSize) -> CIImage? {
-        let key = "\(Int(size.width))x\(Int(size.height)):\(cue.text)" as NSString
-        if let image = cache.object(forKey: key) { return CIImage(cgImage: image) }
-        let w = Int(size.width), h = Int(size.height)
-        guard w > 0, h > 0 else { return nil }
+    private static func boundedLines(_ text: String) throws -> [String] {
+        guard text.utf8.count <= maximumCueBytes else {
+            throw ToolError(L("This subtitle is too long to display. Split it into shorter cues."))
+        }
+        let lines = wrap(text).components(separatedBy: "\n")
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, lines.count <= maximumLines else {
+            throw ToolError(L("This subtitle is too long to display. Split it into shorter cues."))
+        }
+        return lines
+    }
+
+    private struct Layout {
+        var width: Int
+        var height: Int
+        var fontSize: Double
+        var lines: [String]
+    }
+    private static func layout(_ text: String, size: CGSize) throws -> Layout {
+        guard size.width.isFinite, size.height.isFinite, size.width >= 1, size.height >= 1,
+              size.width <= 16_384, size.height <= 16_384 else {
+            throw ToolError(L("These subtitles cannot fit legibly in the video. Use shorter cues or a larger video."))
+        }
+        let lines = try boundedLines(text)
+        let width = Int(size.width), safeHeight = floor(size.height * 0.84)
         var fontSize = max(10, min(size.width * 0.034, size.height * 0.055))
-        let lines = Array(wrap(cue.text).split(separator: "\n").prefix(3))
-        // A 42-character CJK line is wider than an English one. Fit the actual glyphs to the safe width.
         let measuringFont = CTFontCreateUIFontForLanguage(.system, fontSize, nil)!
         let widest = lines.map {
-            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String($0), attributes: [
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: $0, attributes: [
                 NSAttributedString.Key(kCTFontAttributeName as String): measuringFont]))
             return CTLineGetTypographicBounds(line, nil, nil, nil)
         }.max() ?? 0
+        // Fit every line, including CJK glyphs, into the 5% horizontal / 8% vertical safe area. The size floor
+        // scales down for small videos, while rejecting a genuinely unreadable wall of text explicitly at export.
         if widest > size.width * 0.9 { fontSize *= size.width * 0.9 / widest }
-        let lineHeight = fontSize * 1.35
-        let height = min(h, Int(ceil(lineHeight * Double(lines.count) + fontSize)))
+        fontSize = min(fontSize, safeHeight / (1.35 * Double(lines.count) + 1))
+        let minimum = max(3, min(10, min(size.width, size.height) / 64))
+        let height = Int(ceil(fontSize * (1.35 * Double(lines.count) + 1)))
+        guard fontSize >= minimum, height > 0, height <= maximumBitmapPixels / width else {
+            throw ToolError(L("These subtitles cannot fit legibly in the video. Use shorter cues or a larger video."))
+        }
+        return Layout(width: width, height: height, fontSize: fontSize, lines: lines)
+    }
+
+    /// Export calls this with final output dimensions so an unreadable subtitle fails clearly instead of vanishing.
+    static func validate(_ cues: [SubtitleCue], size: CGSize) throws {
+        for cue in cues { _ = try layout(cue.text, size: size) }
+    }
+
+    private static let cache: NSCache<NSString, CGImage> = {
+        let cache = NSCache<NSString, CGImage>()
+        cache.countLimit = 64
+        cache.totalCostLimit = 32 * 1024 * 1024
+        return cache
+    }()
+    static func overlay(_ cue: SubtitleCue, size: CGSize) -> CIImage? {
+        overlayBitmap(cue, size: size).map { CIImage(cgImage: $0) }
+    }
+    /// The shared bitmap is also used for CPU-only verification; it does not require a working CI/GPU renderer.
+    static func overlayBitmap(_ cue: SubtitleCue, size: CGSize) -> CGImage? {
+        guard size.width.isFinite, size.height.isFinite, cue.text.utf8.count <= maximumCueBytes else { return nil }
+        let key = "\(size.width)x\(size.height):\(cue.text)" as NSString
+        if let image = cache.object(forKey: key) { return image }
+        guard let layout = try? layout(cue.text, size: size) else { return nil }
+        let w = layout.width, height = layout.height, fontSize = layout.fontSize
         guard let ctx = CGContext(data: nil, width: w, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         let font = CTFontCreateUIFontForLanguage(.system, fontSize, nil)!
         let attrs: [NSAttributedString.Key: Any] = [NSAttributedString.Key(kCTFontAttributeName as String): font,
             NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1)]
-        let textLines = lines.map { CTLineCreateWithAttributedString(NSAttributedString(string: String($0), attributes: attrs)) }
+        let textLines = layout.lines.map { CTLineCreateWithAttributedString(NSAttributedString(string: $0, attributes: attrs)) }
         let textWidth = textLines.map { CTLineGetTypographicBounds($0, nil, nil, nil) }.max() ?? 0
         let plateWidth = min(Double(w), textWidth + fontSize * 1.2)
         ctx.setFillColor(CGColor(gray: 0, alpha: 0.6))
@@ -123,18 +230,20 @@ enum Subtitles {
         for (index, line) in textLines.enumerated() {
             let width = CTLineGetTypographicBounds(line, nil, nil, nil)
             ctx.textPosition = CGPoint(x: (Double(w) - width) / 2,
-                                      y: Double(height) - fontSize * 1.2 - Double(index) * lineHeight)
+                                      y: Double(height) - fontSize * 1.2 - Double(index) * fontSize * 1.35)
             CTLineDraw(line, ctx)
         }
         guard let image = ctx.makeImage() else { return nil }
-        cache.countLimit = 64
-        cache.setObject(image, forKey: key)
-        return CIImage(cgImage: image)
+        cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
+        return image
     }
+
 }
 
 @available(macOS 26, *)
 enum LocalTranscription {
+    /// Export is started once; cancelExport is its sole concurrent operation, as supported by AVFoundation.
+    private struct AudioExport: @unchecked Sendable { let session: AVAssetExportSession }
     static func recognize(_ source: URL, locale: Locale) async throws -> [TimedWord] {
         guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
             throw ToolError(L("This transcription language is not supported on this Mac."))
@@ -148,19 +257,18 @@ enum LocalTranscription {
         }
         let asset = try await Video.safeAsset(source)
         guard try await !asset.loadTracks(withMediaType: .audio).isEmpty else { throw ToolError(L("This file has no audio.")) }
-        let preferredTemporary = Paths.temporary(beside: source, ext: "m4a")
-        defer { Paths.discard(preferredTemporary) }
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
             throw ToolError(L("Couldn't encode audio."))
         }
-        let temporary = try await Paths.produce(preferredTemporary) { target in
+        let work = AudioExport(session: export)
+        let temporary = try await MediaTemporaryFiles.produce(ext: "m4a") { target in
             try await withTaskCancellationHandler {
                 try Task.checkCancellation()
-                try await export.export(to: target, as: .m4a)
+                try await work.session.export(to: target, as: .m4a)
                 try Task.checkCancellation()
-            } onCancel: { export.cancelExport() }
+            } onCancel: { work.session.cancelExport() }
         }
-        defer { Paths.discard(temporary) }
+        defer { MediaTemporaryFiles.discard(temporary) }
         let audio = try AVAudioFile(forReading: temporary)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
         let consumer = Task { () throws -> [TimedWord] in

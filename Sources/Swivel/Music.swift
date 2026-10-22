@@ -40,30 +40,38 @@ enum Music {
     }
     /// Exact piecewise-linear minimum envelope, including crossings between adjacent attack/release ramps and
     /// the final fade. Ramps cover the timeline once and never overwrite one another in AVAudioMix.
-    static func ramps(intervals: [SpeechInterval], length: Double, volume: Double, duckDB: Double, fadeIn: Double = 0, fadeOut: Double = 0.8) -> [MusicRamp] {
+    static func ramps(intervals: [SpeechInterval], length: Double, volume: Double, duckDB: Double, fadeIn: Double = 0, fadeOut: Double = 0.8, automaticFadeOut: Bool = true) -> [MusicRamp] {
         guard length.isFinite, length > 0 else { return [] }
         let speech = merge(intervals, length: length)
         let base = Float(volume.isFinite ? min(1, max(0, volume)) : 0)
         let duck = pow(10, min(0, max(-60, duckDB.isFinite ? duckDB : -12)) / 20)
         let attack = 0.3, release = 0.8
-        let inLength = min(length, max(0, fadeIn.isFinite ? fadeIn : 0))
-        let outLength = min(length, max(0.8, fadeOut.isFinite ? fadeOut : 0.8))
+        let inLength = max(0, fadeIn.isFinite ? fadeIn : 0)
+        let outLength = max(automaticFadeOut ? min(0.8, length) : 0, fadeOut.isFinite ? fadeOut : 0)
         let fadeStart = length - outLength
         func duckLevel(_ t: Double) -> Double {
+            // Only the nearest previous and next intervals can contribute. Binary lookup avoids rescanning the
+            // entire recording for every envelope corner when long files are adjusted in the preview.
+            var low = 0, high = speech.count
+            while low < high {
+                let mid = (low + high) / 2
+                if speech[mid].start <= t { low = mid + 1 } else { high = mid }
+            }
             var value = 1.0
-            for s in speech {
-                let a = max(0, s.start - attack), b = min(length, s.end + release)
-                if t < a || t > b { continue }
-                let v: Double
-                if t < s.start { v = 1 - (1 - duck) * (t - a) / max(1e-9, s.start - a) }
-                else if t <= s.end { v = duck }
-                else { v = duck + (1 - duck) * (t - s.end) / release }
-                value = min(value, v)
+            if low > 0 {
+                let previous = speech[low - 1]
+                value = t <= previous.end ? duck : min(1, duck + (1 - duck) * (t - previous.end) / release)
+            }
+            if low < speech.count {
+                let next = speech[low], begin = max(0, next.start - attack)
+                if t >= begin {
+                    value = min(value, 1 - (1 - duck) * (t - begin) / max(1e-9, next.start - begin))
+                }
             }
             return max(duck, min(1, value))
         }
         func fade(_ t: Double) -> Double {
-            min(inLength > 0 ? max(0, t / inLength) : 1, min(1, max(0, (length - t) / max(1e-9, outLength))))
+            min(inLength > 0 ? max(0, t / inLength) : 1, outLength > 0 ? min(1, max(0, (length - t) / outLength)) : 1)
         }
         var times = [0.0, length, fadeStart, inLength]
         if inLength > fadeStart { times.append(length * inLength / (inLength + outLength)) }
@@ -71,7 +79,7 @@ enum Music {
         for (left, right) in zip(speech, speech.dropFirst()) where right.start - left.end < attack + release {
             times.append((left.end * attack + right.start * release) / (attack + release))
         }
-        times = Array(Set(times)).sorted()
+        times = Array(Set(times.map { min(length, max(0, $0)) })).sorted()
         // The final fade can cross a speech release; retain that corner too.
         var crossings: [Double] = []
         for (a, b) in zip(times, times.dropFirst()) where b - a > 1e-9 {
@@ -139,7 +147,7 @@ enum SpeechActivity {
         let asset = try await Video.safeAsset(source)
         guard try await !asset.loadTracks(withMediaType: .audio).isEmpty else { return SpeechActivityResult(intervals: [], usedSystemClassifier: true) }
         let pcm = try await AudioFiles.decode(source)
-        defer { Paths.discard(pcm) }
+        defer { MediaTemporaryFiles.discard(pcm) }
         do {
             let request = try SNClassifySoundRequest(classifierIdentifier: .version1)
             request.windowDuration = CMTime(seconds: 0.5, preferredTimescale: 48000)
@@ -181,9 +189,13 @@ enum SpeechActivity {
             try file.read(into: buffer, frameCount: AVAudioFrameCount(count))
             let n = Int(buffer.frameLength)
             guard n > 0 else { break }
-            let samples = buffer.floatChannelData![0]
             var energy = 0.0, crossings = 0
-            for i in 0..<n { energy += pow(Double(samples[i]), 2); if i > 0, samples[i] * samples[i - 1] < 0 { crossings += 1 } }
+            for channel in 0..<Int(format.channelCount) {
+                let samples = buffer.floatChannelData![channel]
+                var candidate = 0.0, zeros = 0
+                for i in 0..<n { candidate += pow(Double(samples[i]), 2); if i > 0, samples[i] * samples[i - 1] < 0 { zeros += 1 } }
+                if candidate > energy { energy = candidate; crossings = zeros }
+            }
             frames.append((Double(position) / format.sampleRate, energy / Double(n), Double(crossings) / Double(n)))
             position += n
         }
@@ -210,6 +222,7 @@ final class MusicPreview {
     private var settings = VideoSettings()
     private var envelope: [MusicRamp] = []
     private var generation = 0
+    private var analysisGeneration = 0
     private var closed = false
     private var seeking = false
     private let driver: FrameDriver
@@ -244,16 +257,22 @@ final class MusicPreview {
                 }
             } else { onStatus?("") }
         }
-        if selected != nil, settings.duckMusic, !hasAnalysis, analysis == nil {
+        let needsAnalysis = selected != nil && settings.duckMusic && !settings.removeAudio && settings.volume > 0
+        if !needsAnalysis, let running = analysis {
+            analysisGeneration += 1; running.cancel(); analysis = nil; onStatus?("")
+        }
+        if needsAnalysis, !hasAnalysis, analysis == nil {
+            analysisGeneration += 1
+            let token = analysisGeneration
             onStatus?(L("Analyzing speech for music preview…"))
             analysis = Task { [weak self, source] in
                 do {
                     let result = try await SpeechActivity.detect(source)
-                    guard let self, !Task.isCancelled, !self.closed else { return }
+                    guard let self, !Task.isCancelled, !self.closed, token == self.analysisGeneration else { return }
                     self.speech = result.intervals; self.hasAnalysis = true; self.analysis = nil
                     self.rebuild(); self.onStatus?(""); self.driver.start()
                 } catch {
-                    guard let self, !Task.isCancelled, !self.closed else { return }
+                    guard let self, !Task.isCancelled, !self.closed, token == self.analysisGeneration else { return }
                     self.analysis = nil; self.onStatus?(error.localizedDescription)
                 }
             }
@@ -288,6 +307,6 @@ final class MusicPreview {
         return true
     }
     func stop() {
-        closed = true; generation += 1; loading?.cancel(); analysis?.cancel(); driver.stop(); queue.pause(); looper = nil; queue.removeAllItems()
+        closed = true; generation += 1; analysisGeneration += 1; loading?.cancel(); analysis?.cancel(); driver.stop(); queue.pause(); looper = nil; queue.removeAllItems()
     }
 }

@@ -56,6 +56,23 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 /// English → [简体中文, 繁體中文, 日本語].
 enum Strings {
     static let table: [String: [String]] = [
+        // Media safety and validation
+        "ID Photo can process images up to 4096 pixels per side.": ["证件照最多可处理每边 4096 像素的图像。", "證件照最多可處理每邊 4096 像素的影像。", "証明写真は各辺 4096 ピクセルまでの画像を処理できます。"],
+        "Couldn't find a reliable foreground. Choose a clearer portrait.": ["无法可靠识别人像前景，请选择主体更清晰的人像。", "無法可靠辨識人像前景，請選擇主體更清晰的人像。", "人物の前景を正しく検出できませんでした。人物が鮮明な写真を選んでください。"],
+        "This recording needs too much temporary storage. Choose a shorter recording.": ["这段录音需要过多临时存储，请选择较短的录音。", "這段錄音需要過多暫存空間，請選擇較短的錄音。", "一時保存に必要な容量が大きすぎます。短い録音を選んでください。"],
+        "Couldn't check temporary storage space.": ["无法检查临时存储的可用空间。", "無法檢查暫存空間的可用容量。", "一時保存先の空き容量を確認できませんでした。"],
+        "Not enough free space for temporary audio. At least 1 GB must remain free.": ["临时音频的可用空间不足，必须保留至少 1 GB 空间。", "暫存音訊的可用空間不足，必須保留至少 1 GB 空間。", "一時音声の空き容量が不足しています。最低 1 GB の空き容量が必要です。"],
+        "Couldn't create private temporary audio storage.": ["无法创建私有音频临时存储。", "無法建立私有音訊暫存空間。", "非公開の一時音声保存先を作成できませんでした。"],
+        "Invalid audio samples.": ["音频包含无效的采样值。", "音訊包含無效的取樣值。", "音声に無効なサンプル値が含まれています。"],
+        "Choose a regular subtitle file, not a link or special file.": ["请选择普通字幕文件，不能使用链接或特殊文件。", "請選擇一般字幕檔案，不能使用連結或特殊檔案。", "リンクや特殊ファイルではなく、通常の字幕ファイルを選んでください。"],
+        "This subtitle file is not valid UTF-8.": ["字幕文件不是有效的 UTF-8 文本。", "字幕檔案不是有效的 UTF-8 文字。", "字幕ファイルが有効な UTF-8 ではありません。"],
+        "This subtitle file is not valid SRT.": ["字幕文件不是有效的 SRT 格式。", "字幕檔案不是有效的 SRT 格式。", "字幕ファイルが有効な SRT 形式ではありません。"],
+        "This subtitle file has invalid timing or overlapping cues.": ["字幕文件包含无效时间或相互重叠的字幕。", "字幕檔案包含無效時間或互相重疊的字幕。", "字幕の時刻が無効か、表示時間が重複しています。"],
+        "This subtitle is too long to display. Split it into shorter cues.": ["这条字幕过长，无法显示，请拆成较短的字幕。", "這條字幕過長，無法顯示，請拆成較短的字幕。", "字幕が長すぎます。短い字幕に分割してください。"],
+        "These subtitles cannot fit legibly in the video. Use shorter cues or a larger video.": ["这些字幕无法在视频内清晰显示，请缩短字幕或使用更大的画面。", "這些字幕無法在影片內清楚顯示，請縮短字幕或使用更大的畫面。", "動画内に読みやすく収まりません。字幕を短くするか、大きな動画を使ってください。"],
+        "This repair area is too large. Use smaller, separate strokes.": ["修复区域过大，请使用较小、分开的笔划。", "修復區域過大，請使用較小、分開的筆劃。", "修復範囲が大きすぎます。小さなストロークに分けてください。"],
+        "This image is too large to retouch. Resize it first.": ["这张图过大，无法修复，请先缩小尺寸。", "這張圖過大，無法修復，請先縮小尺寸。", "画像が大きすぎて修復できません。先に縮小してください。"],
+        "Retouch can't preserve this image's color format.": ["修复无法保留这张图的颜色格式。", "修復無法保留這張圖的色彩格式。", "この画像の色形式を維持して修復できません。"],
         "Open Trim → Subtitles to burn them into the video.": ["打开“剪辑 → 字幕”可将字幕烧录到视频。", "開啟「剪輯 → 字幕」可將字幕燒錄到影片。", "「トリム → 字幕」で動画に字幕を焼き込めます。"],
         // Music and speech ducking
         "Music": ["配乐", "配樂", "BGM"],

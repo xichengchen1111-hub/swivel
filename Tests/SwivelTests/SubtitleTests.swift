@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import CoreImage
+import Darwin
 import Speech
 import Testing
 @testable import Swivel
@@ -60,12 +61,96 @@ struct SubtitleTests {
 
     }
 
+    @Test func importedSRTSupportsWhitespaceSeparatorsBOMAndCRLFAndRejectsBadTiming() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Swivel-SRT-Parse-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let text = "\u{FEFF}1\r\n00:00:00,000 --> 00:00:01,000\r\nFirst\r\n \t\r\n2\r\n00:00:01,000 --> 00:00:02,000\r\nSecond\r\n"
+        let url = try Paths.create(Data(text.utf8), at: folder.appendingPathComponent("windows.srt"))
+        #expect(try Subtitles.read(url) == [SubtitleCue(start: 0, end: 1, text: "First"),
+                                          SubtitleCue(start: 1, end: 2, text: "Second")])
+        let cr = try Paths.create(Data("1\r00:00:03,000 --> 00:00:04,000\rThird\r".utf8),
+                                  at: folder.appendingPathComponent("classic.srt"))
+        #expect(try Subtitles.read(cr) == [SubtitleCue(start: 3, end: 4, text: "Third")])
+        let invalid = ["00:00:NaN --> 00:00:02,000", "00:00:00,000 --> 00:00:inf",
+                       "00:00:02,000 --> 00:00:01,000", "00:60:00,000 --> 01:01:00,000",
+                       "00:00:00,000 --> 00:00:00,000"]
+        for (index, timing) in invalid.enumerated() {
+            let bad = try Paths.create(Data("1\n\(timing)\nBad".utf8),
+                                       at: folder.appendingPathComponent("bad-\(index).srt"))
+            #expect(throws: ToolError.self) { try Subtitles.read(bad) }
+        }
+        let overlap = try Paths.create(Data("1\n00:00:00,000 --> 00:00:03,000\nFirst\n\n2\n00:00:01,000 --> 00:00:02,000\nSecond".utf8),
+                                       at: folder.appendingPathComponent("overlap.srt"))
+        #expect(throws: ToolError.self) { try Subtitles.read(overlap) }
+    }
+
+    @Test func subtitleReadsRejectLinksSpecialFilesOversizedInputsAndInvalidUTF8() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Swivel-SRT-Bounds-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let content = Data("1\n00:00:00,000 --> 00:00:01,000\nWhole\n\n".utf8)
+        var exact = content
+        exact.append(Data(repeating: 32, count: Subtitles.maximumFileBytes - exact.count))
+        let boundary = try Paths.create(exact, at: folder.appendingPathComponent("boundary.srt"))
+        #expect(try Subtitles.read(boundary) == [SubtitleCue(start: 0, end: 1, text: "Whole")])
+        let oversized = try Paths.create(exact + Data([32]), at: folder.appendingPathComponent("oversized.srt"))
+        #expect(throws: ToolError.self) { try Subtitles.read(oversized) }
+        // The link's own length is tiny, but the target's actual bytes exceed the cap. Both are rejected rather
+        // than following it, independent of URLResourceValues' platform-specific symlink size semantics.
+        let link = folder.appendingPathComponent("short-link.srt")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: oversized)
+        let linkSize = try #require(link.resourceValues(forKeys: [.fileSizeKey]).fileSize)
+        #expect(linkSize < Subtitles.maximumFileBytes)
+        #expect(throws: (any Error).self) { try Subtitles.read(link) }
+        let invalid = try Paths.create(Data([0xff, 0xfe, 0x00]), at: folder.appendingPathComponent("invalid.srt"))
+        #expect(throws: ToolError.self) { try Subtitles.read(invalid) }
+        let fifo = folder.appendingPathComponent("pipe.srt")
+        #expect(mkfifo(fifo.path, 0o600) == 0)
+        #expect(throws: (any Error).self) { try Subtitles.read(fifo) }
+        #expect(throws: ToolError.self) { try Subtitles.read(folder) }
+    }
+
+    @Test func longCaptionKeepsItsLastLineAndRefusesUnreadableOrExcessiveText() throws {
+        let size = CGSize(width: 640, height: 360)
+        let common = String(repeating: "A", count: 126)
+        let finalA = SubtitleCue(start: 0, end: 4, text: common + "HIDDEN TEXT")
+        let finalB = SubtitleCue(start: 0, end: 4, text: common + "IIIIIIIIIII")
+        let a = try #require(Subtitles.overlayBitmap(finalA, size: size))
+        let b = try #require(Subtitles.overlayBitmap(finalB, size: size))
+        let dataA = try #require(a.dataProvider?.data) as Data
+        let dataB = try #require(b.dataProvider?.data) as Data
+        // Identical first three lines and equal-height bitmaps: only the formerly discarded fourth line differs.
+        #expect(a.height == b.height && dataA != dataB)
+        #expect(dataA.contains { $0 > 200 }) // fail if the CPU renderer silently returned an empty image
+        #expect(Double(a.height) <= size.height * 0.84 + 1)
+        try Subtitles.validate([finalA], size: size)
+        for output in [CGSize(width: 512, height: 512), CGSize(width: 1280, height: 720), CGSize(width: 360, height: 640)] {
+            let cjk = SubtitleCue(start: 0, end: 1, text: String(repeating: "你", count: 84))
+            try Subtitles.validate([cjk], size: output)
+            #expect(Subtitles.overlayBitmap(cjk, size: output) != nil)
+        }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Swivel-SRT-Long-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let kept = try Paths.create(Data(Subtitles.srt([finalA]).utf8), at: folder.appendingPathComponent("long.srt"))
+        #expect(try Subtitles.read(kept) == [finalA])
+        let excessive = try Paths.create(Data(Subtitles.srt([SubtitleCue(start: 0, end: 1, text: String(repeating: "B", count: 2100))]).utf8),
+                                         at: folder.appendingPathComponent("excessive.srt"))
+        #expect(throws: ToolError.self) { try Subtitles.read(excessive) }
+        #expect(throws: ToolError.self) { try Subtitles.validate([finalA], size: CGSize(width: 8, height: 8)) }
+        #expect(Subtitles.overlayBitmap(finalA, size: CGSize(width: CGFloat.infinity, height: 360)) == nil)
+    }
+
     @Test @MainActor func menuPlacementAvailabilityAndTranslations() throws {
         for (ext, title) in [("mp4", "Subtitles"), ("m4a", "Transcribe")] {
             let url = URL(fileURLWithPath: "/nonexistent/clip.\(ext)")
             let titles = Catalog.defaultItems(for: [url], mode: .tools).map(\.title)
-            if #available(macOS 26, *) { #expect(titles.firstIndex(of: title) == titles.firstIndex(of: "Trim").map { $0 + 1 }) }
-            else { #expect(!titles.contains(title)) }
+            if #available(macOS 26, *) {
+                let trim = try #require(titles.firstIndex(of: "Trim"))
+                let added = try #require(titles.firstIndex(of: title))
+                #expect(added == trim + 1)
+            } else { #expect(!titles.contains(title)) }
             #expect(!MCPCatalog.actions(for: [url]).contains { $0.id == "tools.\(title)" })
         }
         for key in ["Subtitles", "Transcribe", "Transcription Language", "Follow App Language", "Burn subtitles", "Choose SRT…", "Also save SRT"] {

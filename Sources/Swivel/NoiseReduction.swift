@@ -3,11 +3,24 @@ import AVFoundation
 import AVKit
 import Accelerate
 
-/// Original STFT spectral subtraction. A quiet file segment estimates the noise; smoothed spectral gains keep
-/// narrow-band content and suppress the noise floor. Memory is bounded by channels × FFT size, not file duration.
+/// Original STFT spectral subtraction. A credible quiet file segment estimates the noise; when no such segment
+/// exists, attenuation stays conservative. Memory is bounded by channels × FFT size, not file duration.
 enum NoiseReduction {
     static let size = 2048, hop = 512
     static let logSize = vDSP_Length(11)
+
+    /// A quiet voice segment is not automatically a noise sample. Require useful level separation and reject
+    /// concentrated tonal profiles, which may be a held vowel / note. This is a conservative signal heuristic,
+    /// not a speech classifier; an uncertain profile must not authorize aggressive subtraction.
+    static func isCredibleNoise(quietEnergy: Double, activeEnergy: Double, spectrum: [Float]) -> Bool {
+        guard quietEnergy.isFinite, activeEnergy.isFinite, activeEnergy > 1e-16,
+              quietEnergy <= activeEnergy * 0.25,
+              spectrum.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return false }
+        let total = spectrum.reduce(0.0) { $0 + Double($1) }
+        guard total > 1e-20 else { return true } // Digital silence cannot subtract audible material.
+        let peak = Double(spectrum.max() ?? 0)
+        return peak < total * 0.08
+    }
 
     private static func transform(_ real: inout [Float], _ imaginary: inout [Float], setup: FFTSetup, inverse: Bool) {
         real.withUnsafeMutableBufferPointer { r in imaginary.withUnsafeMutableBufferPointer { i in
@@ -30,16 +43,32 @@ enum NoiseReduction {
         let window = (0..<size).map { Float(sqrt(0.5 - 0.5 * cos(2 * .pi * (Double($0) + 0.5) / Double(size)))) }
         let quietSize = Int(buffer.frameCapacity)
         var quiet = 0, leastEnergy = Double.infinity, cursor = 0
-        // Select the quietest quarter second, across all channels, without loading the whole recording.
+        var quietEnergy = [Double](repeating: 0, count: channels)
+        // A fixed 1 dB histogram gives a robust active-level percentile without storing per-window energies.
+        var energies = [[Int]](repeating: [Int](repeating: 0, count: 201), count: channels)
+        var analyzed = 0
+        let analysisSize = min(quietSize, length)
+        // Ignore a final partial window when choosing a profile: a tiny truncated tail is not noise evidence.
         while cursor < length {
             try Task.checkCancellation()
             try input.read(into: buffer, frameCount: AVAudioFrameCount(min(quietSize, length - cursor)))
             let count = Int(buffer.frameLength)
             guard count > 0 else { break }
-            var energy = 0.0
-            for c in 0..<channels { for i in 0..<count { energy += pow(Double(buffer.floatChannelData![c][i]), 2) } }
-            energy /= Double(count * channels)
-            if energy < leastEnergy { leastEnergy = energy; quiet = cursor }
+            var channelEnergy = [Double](repeating: 0, count: channels)
+            for c in 0..<channels { for i in 0..<count {
+                let value = buffer.floatChannelData![c][i]
+                guard value.isFinite else { throw ToolError(L("Couldn't encode audio.")) }
+                channelEnergy[c] += Double(value) * Double(value) / Double(count)
+            } }
+            if count >= analysisSize {
+                for c in 0..<channels {
+                    let bin = min(200, max(0, Int((10 * log10(max(1e-16, channelEnergy[c])) + 160).rounded(.down))))
+                    energies[c][bin] += 1
+                }
+                analyzed += 1
+                let energy = channelEnergy.reduce(0, +) / Double(channels)
+                if energy < leastEnergy { leastEnergy = energy; quiet = cursor; quietEnergy = channelEnergy }
+            }
             cursor += count
         }
         var noise = [[Float]](repeating: [Float](repeating: 0, count: size / 2 + 1), count: channels)
@@ -53,15 +82,29 @@ enum NoiseReduction {
             for c in 0..<channels {
                 for i in 0..<size { real[i] = i < Int(buffer.frameLength) ? buffer.floatChannelData![c][i] * window[i] : 0; imaginary[i] = 0 }
                 transform(&real, &imaginary, setup: setup, inverse: false)
-                for k in 0...size / 2 { noise[c][k] += real[k] * real[k] + imaginary[k] * imaginary[k] }
+                for k in 0...size / 2 {
+                    let power = real[k] * real[k] + imaginary[k] * imaginary[k]
+                    guard power.isFinite else { throw ToolError(L("Couldn't encode audio.")) }
+                    noise[c][k] += power
+                }
             }
             profiles += 1
         }
         for c in 0..<channels { for k in 0...size / 2 { noise[c][k] /= Float(max(1, profiles)) } }
+        let credible = (0..<channels).map { c -> Bool in
+            var count = 0, percentile = 0
+            for bin in 0..<energies[c].count {
+                count += energies[c][bin]
+                if count >= max(1, Int(ceil(Double(analyzed) * 0.8))) { percentile = bin; break }
+            }
+            let active = pow(10, Double(percentile - 160) / 10)
+            return isCredibleNoise(quietEnergy: quietEnergy[c], activeEnergy: active, spectrum: noise[c])
+        }
+        let floors = credible.map { $0 ? pow(Float(0.01), strength) : pow(Float(10), -3 * strength / 20) }
         let output = try AVAudioFile(forWriting: target, settings: format.settings.merging([AVLinearPCMIsNonInterleaved: false]) { _, new in new })
         var accumulation = [[Float]](repeating: [Float](repeating: 0, count: size), count: channels)
         var weights = [Float](repeating: 0, count: size)
-        var previous = [[Float]](repeating: [Float](repeating: 0, count: size / 2 + 1), count: channels)
+        var previous = [[Float]](repeating: [Float](repeating: 1, count: size / 2 + 1), count: channels)
         let writeBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(hop))!
         for start in stride(from: -size + hop, to: length, by: hop) {
             try Task.checkCancellation()
@@ -78,7 +121,8 @@ enum NoiseReduction {
                 for k in 0...size / 2 {
                     let power = real[k] * real[k] + imaginary[k] * imaginary[k]
                     let estimate = noise[c][k]
-                    var gain: Float = strength == 0 ? 1 : sqrt(max(pow(0.01, 2 * strength), 1 - (1 + 3 * strength) * estimate / max(1e-15, power)))
+                    guard power.isFinite, estimate.isFinite else { throw ToolError(L("Couldn't encode audio.")) }
+                    var gain: Float = strength == 0 ? 1 : sqrt(max(floors[c] * floors[c], 1 - (1 + 3 * strength) * estimate / max(1e-15, power)))
                     if strength > 0 {
                         let speed: Float = gain > previous[c][k] ? 0.8 : 0.3
                         gain = speed * gain + (1 - speed) * previous[c][k]
@@ -111,19 +155,16 @@ enum NoiseReduction {
 
     static func cleanedPCM(_ source: URL, strength: Double, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
         let decoded = try await AudioFiles.decode(source)
-        defer { Paths.discard(decoded) }
-        let preferred = Paths.temporary(beside: source, ext: "caf")
-        do {
-            return try await Paths.produce(preferred) { target in
-                let worker = Task.detached(priority: .userInitiated) { try processPCM(decoded, to: target, strength: strength, progress: progress) }
-                try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
-            }
-        } catch { Paths.discard(preferred); throw error }
+        defer { MediaTemporaryFiles.discard(decoded) }
+        return try await MediaTemporaryFiles.produce(ext: "caf") { target in
+            let worker = Task.detached(priority: .userInitiated) { try processPCM(decoded, to: target, strength: strength, progress: progress) }
+            try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+        }
     }
 
     static func save(_ source: URL, strength: Double, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws -> URL {
         let cleaned = try await cleanedPCM(source, strength: strength, progress: progress)
-        defer { Paths.discard(cleaned) }
+        defer { MediaTemporaryFiles.discard(cleaned) }
         guard let session = AVAssetExportSession(asset: try await Video.safeAsset(cleaned), presetName: AVAssetExportPresetAppleM4A) else {
             throw ToolError(L("Couldn't encode audio."))
         }

@@ -53,6 +53,100 @@ struct UpscaleTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == before)
     }
 
+    @Test func cancellingTheFinalStillWorkerBeforeEncodingPublishesNothing() async throws {
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let image = CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 64, height: 64))
+        let cg = try #require(CIContext().createCGImage(image, from: image.extent))
+        let source = try Images.save(cg, as: folder.appendingPathComponent("photo.png"), type: .png, quality: 1)
+        let original = try Data(contentsOf: source)
+        let files = try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted()
+        let gate = UpscaleRenderGate()
+        let task = Task {
+            try await Upscale.finishStill(image, source: source, factor: 2) { _ in
+                gate.blockRenderer()
+                return cg
+            }
+        }
+        await gate.waitForRenderer()
+        task.cancel()
+        gate.releaseRenderer()
+        do { _ = try await task.value; Issue.record("Cancelled still worker published an output") }
+        catch is CancellationError {} catch { Issue.record("Unexpected cancellation error: \(error)") }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == files)
+        #expect(try Data(contentsOf: source) == original)
+    }
+
+    @Test func lanczosBackProjectionKeepsOpaqueBordersAndFiniteDimensions() throws {
+        let source = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5))
+            .cropped(to: CGRect(x: 0, y: 0, width: 32, height: 24))
+        let projected = Upscale.lanczos(Upscale.lanczos(Upscale.lanczos(source, factor: 4), factor: 0.25), factor: 4)
+        #expect(projected.extent == CGRect(x: 0, y: 0, width: 128, height: 96))
+        let cg = try #require(CIContext().createCGImage(projected, from: projected.extent))
+        let bytes = try Retouch.Raster(cg).bytes
+        var maxColorError = 0, minAlpha = 255
+        for i in stride(from: 0, to: bytes.count, by: 4) {
+            for channel in 0..<3 { maxColorError = max(maxColorError, abs(Int(bytes[i + channel]) - 128)) }
+            minAlpha = min(minAlpha, Int(bytes[i + 3]))
+        }
+        #expect(maxColorError <= 2 && minAlpha == 255)
+    }
+
+    @Test(.enabled("Requires an available system model") { systemUpscaleReady() })
+    func systemUpscalePreservesTransparentColorsAndSoftEdges() async throws {
+        if #available(macOS 26, *) {
+            let context = CIContext()
+            let engine = try SystemUpscaler(width: 128, height: 128, factor: 4, video: false)
+            try engine.start()
+            func raster(_ image: CIImage) throws -> Retouch.Raster {
+                try Retouch.Raster(#require(context.createCGImage(image, from: image.extent)))
+            }
+            func centre(_ image: CIImage) throws -> [UInt8] {
+                let r = try raster(image), i = (r.width * (r.height / 2) + r.width / 2) * 4
+                return Array(r.bytes[i..<i + 4])
+            }
+            for alpha in [0.0, 0.25, 0.5, 0.75, 1.0] {
+                let input = CIImage(color: CIColor(red: 0.8, green: 0.2, blue: 0.1, alpha: alpha))
+                    .cropped(to: CGRect(x: 0, y: 0, width: 128, height: 128))
+                let actual = try centre(await engine.render(input)), expected = try centre(input)
+                for channel in 0..<4 { #expect(abs(Int(actual[channel]) - Int(expected[channel])) <= 2) }
+                if alpha == 0.5 {
+                    // Negative control: restoring alpha twice preserves alpha-related dimensions but corrupts colour.
+                    let wrong = try centre(input.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: input]))
+                    #expect(abs(Int(wrong[0]) - Int(expected[0])) > 20)
+                }
+            }
+            var soft = Retouch.Raster(width: 128, height: 128, bytes: [UInt8](repeating: 0, count: 128 * 128 * 4))
+            for y in 0..<128 { for x in 0..<128 {
+                let alpha = min(1, max(0, (48 - hypot(Double(x) - 63.5, Double(y) - 63.5)) / 12))
+                let i = (y * 128 + x) * 4
+                for (channel, value) in [204.0, 51.0, 25.0, 255.0].enumerated() { soft.bytes[i + channel] = UInt8((value * alpha).rounded()) }
+            } }
+            let source = CIImage(cgImage: try soft.image())
+            let output = try await engine.render(source)
+            let actual = try raster(output), expected = try raster(Upscale.lanczos(source, factor: 4))
+            var maxColorError = 0, maxAlphaError = 0, wrongError = 0, transparentPixelsEmpty = true
+            let wrong = try raster(output.applyingFilter("CISourceInCompositing", parameters: [kCIInputBackgroundImageKey: Upscale.lanczos(source, factor: 4)]))
+            for y in 0..<actual.height { for x in 0..<actual.width {
+                let i = (y * actual.width + x) * 4
+                maxAlphaError = max(maxAlphaError, abs(Int(actual.bytes[i + 3]) - Int(expected.bytes[i + 3])))
+                // Compare visible soft-edge pixels; fully transparent RGB must remain exactly empty.
+                if (32...224).contains(expected.bytes[i + 3]) {
+                    for channel in 0..<3 {
+                        maxColorError = max(maxColorError, abs(Int(actual.bytes[i + channel]) - Int(expected.bytes[i + channel])))
+                        wrongError = max(wrongError, abs(Int(wrong.bytes[i + channel]) - Int(expected.bytes[i + channel])))
+                    }
+                } else if expected.bytes[i + 3] == 0 {
+                    transparentPixelsEmpty = transparentPixelsEmpty && actual.bytes[i] == 0 && actual.bytes[i + 1] == 0 && actual.bytes[i + 2] == 0
+                }
+            } }
+            print("Upscale soft-edge error: corrected \(maxColorError), double-alpha negative control \(wrongError), alpha \(maxAlphaError)")
+            #expect(maxColorError <= 6 && maxAlphaError <= 1)
+            #expect(wrongError > 20)
+            #expect(transparentPixelsEmpty)
+        }
+    }
+
     @Test(.enabled("Requires an available system model") { systemUpscaleReady() })
     func systemUpscaleDimensionsAndReportsPSNRForHumanReview() async throws {
         if #available(macOS 26, *) {
@@ -128,6 +222,18 @@ struct UpscaleTests {
             #expect(try await !asset.loadTracks(withMediaType: .audio).isEmpty)
             #expect(try Data(contentsOf: source) == before)
             #expect(output.lastPathComponent == "clip 2x.mov")
+        }
+    }
+}
+
+private final class UpscaleRenderGate: @unchecked Sendable {
+    private let began = DispatchSemaphore(value: 0)
+    private let proceed = DispatchSemaphore(value: 0)
+    func blockRenderer() { began.signal(); proceed.wait() }
+    func releaseRenderer() { proceed.signal() }
+    func waitForRenderer() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async { self.began.wait(); continuation.resume() }
         }
     }
 }

@@ -135,17 +135,12 @@ enum VideoEdit {
         let volume = Float(s.removeAudio ? 0 : s.volume)
         let origin = preview ? s.start : 0, scale = preview ? s.speed : 1
         func at(_ seconds: Double) -> CMTime { CMTime(seconds: origin + seconds * scale, preferredTimescale: 600) }
-        parameters.setVolume(s.fadeIn > 0 ? 0 : volume, at: .zero)
-        let length = s.outputLength
-        if s.fadeIn > 0 {
-            let fadeIn = min(s.fadeIn, length)
-            parameters.setVolumeRamp(fromStartVolume: 0, toEndVolume: volume,
-                                     timeRange: CMTimeRange(start: at(0), end: at(fadeIn)))
-        }
-        if s.fadeOut > 0 {
-            let from = max(min(s.fadeIn, length), length - s.fadeOut)
-            parameters.setVolumeRamp(fromStartVolume: volume, toEndVolume: 0,
-                                     timeRange: CMTimeRange(start: at(from), end: at(length)))
+        let envelope = Music.ramps(intervals: [], length: s.outputLength, volume: Double(volume), duckDB: 0,
+                                   fadeIn: s.fadeIn, fadeOut: s.fadeOut, automaticFadeOut: false)
+        parameters.setVolume(envelope.first?.from ?? volume, at: .zero)
+        for ramp in envelope {
+            parameters.setVolumeRamp(fromStartVolume: ramp.from, toEndVolume: ramp.to,
+                                     timeRange: CMTimeRange(start: at(ramp.start), end: at(ramp.end)))
         }
         let mix = AVMutableAudioMix()
         mix.inputParameters = [parameters]
@@ -169,9 +164,10 @@ enum VideoEdit {
             hasVideo = true
         }
         var cleanedAudio: URL?
-        defer { if let cleanedAudio { Paths.discard(cleanedAudio) } }
+        defer { if let cleanedAudio { MediaTemporaryFiles.discard(cleanedAudio) } }
+        let originalAudio = try await asset.loadTracks(withMediaType: .audio).first
         let audioAsset: AVAsset
-        if s.noiseReduction > 0, !s.removeAudio || isAudio {
+        if s.noiseReduction > 0, (!s.removeAudio || isAudio), originalAudio != nil {
             let url = try await NoiseReduction.cleanedPCM(source, strength: s.noiseReduction)
             cleanedAudio = url
             audioAsset = Video.openAsset(url)
@@ -211,6 +207,7 @@ enum VideoEdit {
         session.timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: s.outputLength, preferredTimescale: 600))
         session.audioTimePitchAlgorithm = .spectral
         if hasVideo {
+            try Subtitles.validate(s.subtitles, size: renderSize(upright: upright, s))
             // Always drawn through the composition, which also makes the export decode and re-encode.
             let lock = OSAllocatedUnfairLock(initialState: s)
             session.videoComposition = try await videoComposition(for: composition, settings: lock, preview: false, upright: upright)

@@ -3,6 +3,13 @@ import os
 
 /// File-only PCM decoding shared by media effects. No input device, permissions, or network.
 enum AudioFiles {
+    /// One worker owns sample reads. The only cross-task operation is cancellation, serialized with reader startup.
+    private final class DecoderState: @unchecked Sendable {
+        let reader: AVAssetReader
+        let output: AVAssetReaderTrackOutput
+        let gate = OSAllocatedUnfairLock(initialState: (started: false, cancelled: false))
+        init(reader: AVAssetReader, output: AVAssetReaderTrackOutput) { self.reader = reader; self.output = output }
+    }
     static func decode(_ source: URL) async throws -> URL {
         let asset = try await Video.safeAsset(source)
         guard let track = try await asset.loadTracks(withMediaType: .audio).first,
@@ -17,17 +24,18 @@ enum AudioFiles {
               let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: AVAudioChannelCount(channels)) else {
             throw ToolError(L("This audio format or duration is not supported."))
         }
+        let storage = try MediaTemporaryFiles.pcmBudget(rate: rate, channels: channels, duration: duration)
+        let totalFrames = Int((duration * rate).rounded())
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: rate, AVNumberOfChannelsKey: channels, AVLinearPCMBitDepthKey: 32,
             AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false, AVLinearPCMIsBigEndianKey: false])
         guard reader.canAdd(output) else { throw ToolError(L("Couldn't encode audio.")) }
         reader.add(output)
-        let gate = OSAllocatedUnfairLock(initialState: (started: false, cancelled: false))
-        let preferred = Paths.temporary(beside: source, ext: "caf")
-        do {
-            return try await Paths.produce(preferred) { target in
+        let state = DecoderState(reader: reader, output: output)
+        return try await MediaTemporaryFiles.produce(ext: "caf", budgetBytes: storage) { target in
                 let worker = Task.detached(priority: .userInitiated) {
+                    let reader = state.reader, output = state.output, gate = state.gate
                     let started = try gate.withLockUnchecked { state -> Bool in
                         guard !state.cancelled else { return false }
                         guard reader.startReading() else { throw reader.error ?? ToolError(L("Couldn't encode audio.")) }
@@ -36,7 +44,30 @@ enum AudioFiles {
                     }
                     guard started else { throw CancellationError() }
                     let file = try AVAudioFile(forWriting: target, settings: format.settings.merging([AVLinearPCMIsNonInterleaved: false]) { _, new in new })
+                    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096) else {
+                        throw ToolError(L("Couldn't encode audio."))
+                    }
                     var written = 0
+                    var bytesSinceSpaceCheck: Int64 = 1_048_576
+                    func writeBuffer(_ count: Int) throws {
+                        try Task.checkCancellation()
+                        let bytes = Int64(count * channels * 4)
+                        if bytesSinceSpaceCheck >= 1_048_576 {
+                            try MediaTemporaryFiles.ensureSpace(at: target, writing: bytes)
+                            bytesSinceSpaceCheck = 0
+                        }
+                        buffer.frameLength = AVAudioFrameCount(count)
+                        try file.write(from: buffer)
+                        written += count; bytesSinceSpaceCheck += bytes
+                    }
+                    func silence(until end: Int) throws {
+                        while written < end {
+                            let count = min(4096, end - written)
+                            for c in 0..<channels { buffer.floatChannelData![c].initialize(repeating: 0, count: count) }
+                            try writeBuffer(count)
+                        }
+                    }
+                    var interleaved = [Float](repeating: 0, count: 4096 * channels)
                     while true {
                         try Task.checkCancellation()
                         guard let sample = output.copyNextSampleBuffer() else { break }
@@ -44,37 +75,38 @@ enum AudioFiles {
                         guard frames > 0, frames <= 4_000_000, let block = CMSampleBufferGetDataBuffer(sample) else { continue }
                         let seconds = CMSampleBufferGetPresentationTimeStamp(sample).seconds
                         guard seconds.isFinite, seconds >= -1, seconds <= duration + 1 else { throw ToolError(L("Invalid audio timing.")) }
-                        let expected = max(0, Int((seconds * rate).rounded()))
-                        while written < expected {
-                            try Task.checkCancellation()
-                            let count = min(4096, expected - written)
-                            guard let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(count)) else { throw ToolError(L("Couldn't encode audio.")) }
-                            silence.frameLength = AVAudioFrameCount(count)
-                            for c in 0..<channels { silence.floatChannelData![c].initialize(repeating: 0, count: count) }
-                            try file.write(from: silence); written += count
+                        let packetStart = Int((seconds * rate).rounded())
+                        let expected = min(totalFrames, max(0, packetStart))
+                        try silence(until: expected)
+                        // Do not append overlapping packets or codec priming outside the declared timeline.
+                        var offset = min(frames, max(0, written - packetStart))
+                        guard CMBlockBufferGetDataLength(block) >= frames * channels * 4 else { throw ToolError(L("Couldn't encode audio.")) }
+                        while offset < frames, written < totalFrames {
+                            let count = min(4096, frames - offset, totalFrames - written)
+                            let code = interleaved.withUnsafeMutableBytes {
+                                CMBlockBufferCopyDataBytes(block, atOffset: offset * channels * 4,
+                                    dataLength: count * channels * 4, destination: $0.baseAddress!)
+                            }
+                            guard code == noErr else { throw ToolError(L("Couldn't encode audio.")) }
+                            for c in 0..<channels { for i in 0..<count {
+                                let sample = interleaved[i * channels + c]
+                                guard sample.isFinite else { throw ToolError(L("Invalid audio samples.")) }
+                                buffer.floatChannelData![c][i] = sample
+                            } }
+                            try writeBuffer(count); offset += count
                         }
-                        var interleaved = [Float](repeating: 0, count: frames * channels)
-                        let code = interleaved.withUnsafeMutableBytes {
-                            CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: $0.count, destination: $0.baseAddress!)
-                        }
-                        guard code == noErr, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)) else {
-                            throw ToolError(L("Couldn't encode audio."))
-                        }
-                        buffer.frameLength = AVAudioFrameCount(frames)
-                        for c in 0..<channels { for i in 0..<frames { buffer.floatChannelData![c][i] = interleaved[i * channels + c] } }
-                        try file.write(from: buffer); written += frames
                     }
                     guard reader.status == .completed else { throw reader.error ?? CancellationError() }
+                    try silence(until: totalFrames)
                     try Task.checkCancellation()
                 }
                 try await withTaskCancellationHandler { try await worker.value } onCancel: {
                     worker.cancel()
-                    gate.withLockUnchecked { state in
-                        state.cancelled = true
-                        if state.started, reader.status == .reading { reader.cancelReading() }
+                    state.gate.withLockUnchecked { flags in
+                        flags.cancelled = true
+                        if flags.started, state.reader.status == .reading { state.reader.cancelReading() }
                     }
                 }
-            }
-        } catch { Paths.discard(preferred); throw error }
+        }
     }
 }

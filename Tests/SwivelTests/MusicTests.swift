@@ -45,6 +45,35 @@ struct MusicTests {
         #expect(throws: (any Error).self) { try Music.loopPlan(duration: 0, length: 8) }
         #expect(throws: (any Error).self) { try Music.loopPlan(duration: 0.000001, length: 8) }
     }
+    @Test func longSpeechEnvelopesStayResponsiveAndMatchTheShortCase() {
+        let intervals = (0..<16000).map { SpeechInterval(start: Double($0) * 2 + 0.5, end: Double($0) * 2 + 1) }
+        let started = ContinuousClock.now
+        let result = Music.ramps(intervals: intervals, length: 32000, volume: 0.7, duckDB: -12)
+        let elapsed = started.duration(to: .now)
+        print("16k speech envelope duration: \(elapsed)")
+        #expect(elapsed < .seconds(3))
+        #expect(abs(Music.level(at: 20000.75, ramps: result) - 0.7 * Float(pow(10, -12.0 / 20))) < 0.00001)
+        #expect(abs(Music.level(at: 20001.9, ramps: result) - 0.7) < 0.00001)
+    }
+    @Test func fallbackFindsSpeechActivityInEitherChannelWithoutPhaseCancellation() throws {
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2))
+        func recording(channel: Int) throws -> URL {
+            let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 88200))
+            buffer.frameLength = 88200
+            for c in 0..<2 { buffer.floatChannelData![c].initialize(repeating: 0, count: 88200) }
+            for i in 22050..<66150 { buffer.floatChannelData![channel][i] = Float(0.3 * sin(Double(i) * 880 * 2 * .pi / 44100)) }
+            return try Paths.produce(folder.appendingPathComponent("channel\(channel).caf")) {
+                let file = try AVAudioFile(forWriting: $0, settings: format.settings.merging([AVLinearPCMIsNonInterleaved: false]) { _, new in new })
+                try file.write(from: buffer)
+            }
+        }
+        let left = try SpeechActivity.energyIntervals(recording(channel: 0))
+        let right = try SpeechActivity.energyIntervals(recording(channel: 1))
+        #expect(!left.isEmpty && left == right)
+        #expect(left.contains { $0.start <= 0.52 && $0.end >= 1.48 })
+    }
     private func paddedSpeech(in folder: URL) async throws -> URL {
         let spoken = try await Paths.produce(folder.appendingPathComponent("spoken.aiff")) { output in
             try await Shell.run("/usr/bin/say", ["-v", "Samantha", "-o", output.path, "--", "The purple bicycle is beside the yellow house."])
@@ -65,13 +94,27 @@ struct MusicTests {
     }
     private func rms(_ source: URL, at time: Double) async throws -> Double {
         let decoded = try await AudioFiles.decode(source)
-        defer { Paths.discard(decoded) }
+        defer { MediaTemporaryFiles.discard(decoded) }
         let file = try AVAudioFile(forReading: decoded), rate = file.processingFormat.sampleRate
         file.framePosition = AVAudioFramePosition((time - 0.1) * rate)
         let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(rate * 0.2)))
         try file.read(into: buffer)
         let count = Int(buffer.frameLength)
         return sqrt((0..<count).reduce(0.0) { $0 + pow(Double(buffer.floatChannelData![0][$1]), 2) } / Double(count))
+    }
+    private func toneLevel(_ source: URL, at time: Double, frequency: Double) async throws -> Double {
+        let decoded = try await AudioFiles.decode(source)
+        defer { MediaTemporaryFiles.discard(decoded) }
+        let file = try AVAudioFile(forReading: decoded), rate = file.processingFormat.sampleRate
+        file.framePosition = AVAudioFramePosition(max(0, (time - 0.1) * rate))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(rate * 0.2)))
+        try file.read(into: buffer)
+        var real = 0.0, imaginary = 0.0
+        for i in 0..<Int(buffer.frameLength) {
+            let angle = Double(i) * frequency * 2 * .pi / rate, sample = Double(buffer.floatChannelData![0][i])
+            real += sample * cos(angle); imaginary += sample * sin(angle)
+        }
+        return 2 * hypot(real, imaginary) / Double(buffer.frameLength)
     }
     @Test func offlineSpeechAndRealAudioMixLowerMusicDuringSpeech() async throws {
         let folder = try MediaBatchFixtures.folder()
@@ -110,6 +153,11 @@ struct MusicTests {
         let asset = try await Video.safeAsset(output)
         #expect(try await abs(asset.load(.duration).seconds - 8) < 0.02)
         #expect(try await !asset.loadTracks(withMediaType: .audio).isEmpty)
+        let finalBefore = try await toneLevel(output, at: quiet, frequency: 880)
+        let finalDuring = try await toneLevel(output, at: during, frequency: 880)
+        let finalDucking = 20 * log10(finalDuring / finalBefore)
+        print("Final video music at 880 Hz during speech: \(finalDucking) dB")
+        #expect(finalBefore > 0.2 && finalDucking < -6)
         var cut = settings; cut.start = 1; cut.end = 7; cut.speed = 2; cut.removeAudio = true
         let shortened = try await VideoEdit.export(movie, cut, isAudio: false)
         let cutAsset = try await Video.safeAsset(shortened)

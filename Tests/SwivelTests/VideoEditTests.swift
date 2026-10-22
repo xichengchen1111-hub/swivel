@@ -8,6 +8,26 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct VideoEditTests {
+    @Test func overlappingSoundFadesMatchPictureAtCutAndSpeed() throws {
+        let composition = AVMutableComposition()
+        let track = try #require(composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid))
+        for length in [0.3, 3.0] {
+            var settings = VideoSettings(); settings.start = 2; settings.end = 2 + length * 2
+            settings.speed = 2; settings.fadeIn = 3; settings.fadeOut = 3
+            for preview in [false, true] {
+                let parameters = try #require(VideoEdit.audioMix(for: track, settings, preview: preview).inputParameters.first)
+                for time in [length * 0.1, length * 0.5, length * 0.99] {
+                    let timestamp = preview ? settings.start + time * settings.speed : time
+                    var start: Float = 0, end: Float = 0, range = CMTimeRange.zero
+                    #expect(parameters.getVolumeRamp(for: CMTime(seconds: timestamp, preferredTimescale: 60000),
+                        startVolume: &start, endVolume: &end, timeRange: &range))
+                    let position = (timestamp - range.start.seconds) / range.duration.seconds
+                    let actual = Double(start) + Double(end - start) * position
+                    #expect(abs(actual - VideoEdit.fade(at: time, length: length, fadeIn: 3, fadeOut: 3)) < 0.001)
+                }
+            }
+        }
+    }
     private func folder() throws -> URL {
         let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("build/video-edit-tests/\(UUID().uuidString)")

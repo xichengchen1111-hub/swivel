@@ -63,7 +63,10 @@ final class SystemUpscaler: @unchecked Sendable {
             let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
             CVBufferSetAttachment(input, kCVImageBufferCGColorSpaceKey, colorSpace, .shouldPropagate)
             CVBufferSetAttachment(output, kCVImageBufferCGColorSpaceKey, colorSpace, .shouldPropagate)
-            context.render(source, to: input, bounds: CGRect(x: 0, y: 0, width: w, height: h), colorSpace: colorSpace)
+            // VT produces opaque colour. Sending premultiplied RGB would bake transparency into the colour,
+            // then restoring alpha below would darken soft edges a second time.
+            let colors = try Upscale.opaqueColors(source)
+            context.render(colors, to: input, bounds: CGRect(x: 0, y: 0, width: w, height: h), colorSpace: colorSpace)
             guard let a = VTFrameProcessorFrame(buffer: input, presentationTimeStamp: time),
                   let b = VTFrameProcessorFrame(buffer: output, presentationTimeStamp: time),
                   let parameters = VTSuperResolutionScalerParameters(sourceFrame: a, previousFrame: nil, previousOutputFrame: nil,
@@ -79,7 +82,7 @@ final class SystemUpscaler: @unchecked Sendable {
             var result = CIImage(cvPixelBuffer: output, options: [.colorSpace: colorSpace])
             // Back-project the reconstructed low frequencies onto the known input. The model may shift colour;
             // correcting that shift uses only the input, while retaining its synthesized fine detail.
-            let baseline = Upscale.lanczos(source, factor: Double(factor))
+            let baseline = Upscale.lanczos(colors, factor: Double(factor))
             guard let kernel = Upscale.consistencyKernel else { throw ToolError(L("Couldn't render")) }
             let reprojected = Upscale.lanczos(Upscale.lanczos(result, factor: 1 / Double(factor)), factor: Double(factor))
             guard let corrected = kernel.apply(extent: result.extent, arguments: [result, baseline, reprojected]) else { throw ToolError(L("Couldn't render")) }
@@ -101,6 +104,22 @@ final class SystemUpscaler: @unchecked Sendable {
 }
 
 enum Upscale {
+    private static let opaqueColorKernel = CIColorKernel(source: """
+        kernel vec4 opaqueColors(__sample source, __sample nearby) {
+            vec3 color = source.a > 0.000001 ? source.rgb / source.a :
+                (nearby.a > 0.000001 ? nearby.rgb / nearby.a : vec3(0.0));
+            return vec4(clamp(color, 0.0, 1.0), 1.0);
+        }
+        """)
+    /// Preserve straight colour at soft edges and extend it into transparent neighbours before spatial processing.
+    static func opaqueColors(_ image: CIImage) throws -> CIImage {
+        let nearby = image.clampedToExtent().applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 16])
+            .cropped(to: image.extent)
+        guard let result = opaqueColorKernel?.apply(extent: image.extent, arguments: [image, nearby]) else {
+            throw ToolError(L("Couldn't render"))
+        }
+        return result
+    }
     static let consistencyKernel = CIColorKernel(source: """
         kernel vec4 consistency(__sample reconstructed, __sample known, __sample projected) {
             return vec4(clamp(reconstructed.rgb + known.rgb - projected.rgb, 0.0, 1.0), reconstructed.a);
@@ -114,7 +133,10 @@ enum Upscale {
         return CGSize(width: width * factor, height: height * factor)
     }
     static func lanczos(_ image: CIImage, factor: Double) -> CIImage {
-        image.applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: factor, kCIInputAspectRatioKey: 1])
+        // Resampling a finite image against transparent black leaves a bright outline after back-projection.
+        // Extend its actual edge pixels, then restore a finite extent for the next render/scale operation.
+        image.clampedToExtent().applyingFilter("CILanczosScaleTransform", parameters: [kCIInputScaleKey: factor, kCIInputAspectRatioKey: 1])
+            .cropped(to: image.extent.applying(CGAffineTransform(scaleX: factor, y: factor)))
     }
     static func ordinary(_ image: CGImage, factor: Int) throws -> CGImage {
         let size = try dimensions(width: image.width, height: image.height, factor: factor)
@@ -123,8 +145,28 @@ enum Upscale {
         return cg
     }
     static func save(_ image: CGImage, source: URL, factor: Int) throws -> URL {
+        try Task.checkCancellation()
         let (type, ext) = Images.writableType(for: source)
-        return try Images.save(image, as: Paths.preferred(for: source, ext: ext, suffix: " \(factor)x"), type: type, quality: 0.95)
+        let data = try Images.encode(image, type: type, quality: 0.95)
+        try Task.checkCancellation()
+        // Exclusive publication is the commit point: a later cancellation may return this completed output.
+        return try Paths.create(data, at: Paths.preferred(for: source, ext: ext, suffix: " \(factor)x"))
+    }
+    /// Own the last worker so Cancel reaches both rendering and the check between encoding and publication.
+    static func finishStill(_ image: CIImage, source: URL, factor: Int,
+                            render: @escaping @Sendable (CIImage) throws -> CGImage = { image in
+        guard let cg = CIContext().createCGImage(image, from: image.extent) else { throw ToolError(L("Couldn't render")) }
+        return cg
+    }) async throws -> URL {
+        let worker = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            let cg = try render(image)
+            try Task.checkCancellation()
+            return try save(cg, source: source, factor: factor)
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: { worker.cancel() }
     }
     static func video(_ source: URL, engine: SystemUpscalerBox, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let asset = try await Video.safeAsset(source)
@@ -252,11 +294,7 @@ final class UpscaleEditor: Editor {
             let image = try await Images.detached { try Images.load(source) }
             let result = try await box.render(CIImage(cgImage: image), .zero)
             try Task.checkCancellation()
-            return try await Images.detached {
-                guard let cg = CIContext().createCGImage(result, from: result.extent) else { throw ToolError(L("Couldn't render")) }
-                try Task.checkCancellation()
-                return [try Upscale.save(cg, source: source, factor: factor)]
-            }
+            return [try await Upscale.finishStill(result, source: source, factor: factor)]
         }
         self.task = task
         defer { self.task = nil; progressTask?.cancel(); progressTask = nil }

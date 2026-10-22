@@ -308,7 +308,8 @@ final class TrimEditor: Editor {
         lengthLabel.stringValue = time(s.outputLength)
         position.isEnabled = s.ratio != nil && !isSaving
         volume.isEnabled = !s.removeAudio && audioTrack != nil && !isSaving
-        noiseStrength.isEnabled = reduceNoise.state == .on && !s.removeAudio && audioTrack != nil && !isSaving
+        reduceNoise.isEnabled = !s.removeAudio && audioTrack != nil && !isSaving
+        noiseStrength.isEnabled = reduceNoise.state == .on && reduceNoise.isEnabled
         musicVolume.isEnabled = musicURL != nil && !isSaving
         duckMusic.isEnabled = musicURL != nil && audioTrack != nil && !s.removeAudio && !isSaving
         duckDB.isEnabled = duckMusic.isEnabled && s.duckMusic

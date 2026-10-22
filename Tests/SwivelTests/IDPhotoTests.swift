@@ -37,7 +37,7 @@ struct IDPhotoTests {
     }
     @Test func backgroundReplacementRemovesOldBlueFromSoftEdgesAndNaiveBlendFails() throws {
         let (image, mask) = try synthetic()
-        let output = try #require(IDPhoto.replaceBackground(image, mask: mask, color: SIMD3(1, 1, 1)))
+        let output = try IDPhoto.replaceBackground(image, mask: mask, color: SIMD3(1, 1, 1))
         let ctx = CIContext(), extent = CGRect(x: 0, y: 0, width: 128, height: 128)
         let clean = try Retouch.Raster(#require(ctx.createCGImage(output, from: extent)))
         let naive = CIImage(cgImage: image).applyingFilter("CIBlendWithMask", parameters: [
@@ -53,6 +53,97 @@ struct IDPhotoTests {
         print("ID Photo old-background contamination: naive \(naiveLeak), corrected \(abs(Int(clean.bytes[edge + 2]) - Int(clean.bytes[edge + 1])))")
         // The same six-level tolerance used above must reject the ordinary blend.
         #expect(naiveLeak >= 6)
+    }
+    @Test func transparentForegroundKeepsSourceAlphaOverEveryBackground() throws {
+        let w = 64, h = 16
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        for y in 0..<h { for x in 0..<w {
+            let a = [0, 64, 128, 255][x / 16], i = (y * w + x) * 4
+            for (channel, value) in [220, 80, 20].enumerated() { pixels[i + channel] = UInt8((Double(value * a) / 255).rounded()) }
+            pixels[i + 3] = UInt8(a)
+        } }
+        let image = try Retouch.Raster(width: w, height: h, bytes: pixels).image()
+        let mask = try Retouch.Raster(width: w, height: h, bytes: [UInt8](repeating: 255, count: w * h * 4)).image()
+        let context = CIContext(), extent = CGRect(x: 0, y: 0, width: w, height: h)
+        for color in [SIMD3<Double>(1, 1, 1), SIMD3(67.0 / 255, 142.0 / 255, 219.0 / 255), SIMD3(217.0 / 255, 0, 27.0 / 255)] {
+            let output = try IDPhoto.replaceBackground(image, mask: mask, color: color)
+            let background = CIImage(color: CIColor(red: color.x, green: color.y, blue: color.z))
+            let reference = CIImage(cgImage: image).composited(over: background).cropped(to: extent)
+            let actual = try Retouch.Raster(#require(context.createCGImage(output, from: extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))))
+            let expected = try Retouch.Raster(#require(context.createCGImage(reference, from: extent, format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB))))
+            for x in [8, 24, 40, 56] {
+                let i = (8 * w + x) * 4
+                for channel in 0..<3 { #expect(abs(Int(actual.bytes[i + channel]) - Int(expected.bytes[i + channel])) <= 1) }
+                #expect(actual.bytes[i + 3] == 255)
+            }
+        }
+    }
+    @Test func longSoftHairUsesForegroundSeedsInsteadOfOldBackgroundOrBlack() throws {
+        let w = 256, h = 256, headY = 140
+        let context = CIContext(), extent = CGRect(x: 0, y: 0, width: w, height: h)
+        for length in [40, 100] { for hairWidth in [2, 5] {
+            var pixels = [UInt8](repeating: 255, count: w * h * 4), masks = pixels
+            for y in 0..<h { for x in 0..<w {
+                let head = (80..<150).contains(x) && (headY..<240).contains(y)
+                let hair = (110..<(110 + hairWidth)).contains(x) && ((headY - length)..<(headY + 10)).contains(y)
+                let alpha = head ? 1.0 : (hair ? 128.0 / 255 : 0)
+                let i = (y * w + x) * 4
+                pixels[i] = UInt8((220 * alpha).rounded()); pixels[i + 1] = 0; pixels[i + 2] = UInt8((220 * (1 - alpha)).rounded())
+                masks[i] = UInt8((255 * alpha).rounded()); masks[i + 1] = masks[i]; masks[i + 2] = masks[i]
+            } }
+            let image = try Retouch.Raster(width: w, height: h, bytes: pixels).image()
+            let mask = try Retouch.Raster(width: w, height: h, bytes: masks).image()
+            let output = try IDPhoto.replaceBackground(image, mask: mask, color: SIMD3(1, 1, 1))
+            let clean = try Retouch.Raster(#require(context.createCGImage(output, from: extent)))
+            let naive = CIImage(cgImage: image).applyingFilter("CIBlendWithMask", parameters: [
+                kCIInputMaskImageKey: CIImage(cgImage: mask, options: [.colorSpace: NSNull()]),
+                kCIInputBackgroundImageKey: CIImage(color: .white).cropped(to: extent)])
+            let dirty = try Retouch.Raster(#require(context.createCGImage(naive, from: extent)))
+            let i = ((headY - length / 2) * w + 110 + hairWidth / 2) * 4
+            #expect(abs(Int(clean.bytes[i + 2]) - Int(clean.bytes[i + 1])) < 6)
+            // An opaque black fallback would also pass the blue/green test. Preserve the red foreground too.
+            #expect(Int(clean.bytes[i]) - Int(clean.bytes[i + 1]) > 30)
+            #expect(Int(dirty.bytes[i + 2]) - Int(dirty.bytes[i + 1]) >= 6)
+            let solid = (180 * w + 100) * 4
+            #expect(Array(clean.bytes[solid..<solid + 4]) == [220, 0, 0, 255])
+        } }
+    }
+    @Test func noReliableSeedIsAnExplicitErrorAndWorkingSurfacesHaveABudget() throws {
+        let image = try Retouch.Raster(width: 32, height: 32, bytes: [UInt8](repeating: 255, count: 32 * 32 * 4)).image()
+        let mask = try Retouch.Raster(width: 32, height: 32, bytes: Array(repeating: [UInt8(128), 128, 128, 255], count: 32 * 32).flatMap { $0 }).image()
+        do {
+            _ = try IDPhoto.replaceBackground(image, mask: mask, color: SIMD3(1, 1, 1))
+            Issue.record("A mask without reliable foreground must not silently reuse mixed photo colours")
+        } catch {
+            #expect(error.localizedDescription == L("Couldn't find a reliable foreground. Choose a clearer portrait."))
+        }
+        #expect(try IDPhoto.workingEdge(settings: IDPhotoSettings()) == 1400)
+        #expect(try IDPhoto.workingEdge(settings: IDPhotoSettings(width: 1000, height: 1500)) == 3000)
+        #expect(try IDPhoto.workingEdge(settings: IDPhotoSettings(width: 4000, height: 4000)) == IDPhoto.maxWorkingEdge)
+        #expect(throws: (any Error).self) { try IDPhoto.workingEdge(settings: IDPhotoSettings(width: Int.max, height: 1)) }
+        for width in [Double.nan, .infinity, -.infinity, .greatestFiniteMagnitude] {
+            #expect(throws: (any Error).self) { try IDPhoto.dimensions(preset: 4, width: width, height: 100, millimeters: true, dpi: 1200) }
+        }
+        #expect(throws: (any Error).self) { try IDPhoto.dimensions(preset: 4, width: 6324.55, height: 6324.55, millimeters: false, dpi: 300) }
+        let oversized = try Retouch.Raster(width: IDPhoto.maxWorkingEdge + 1, height: 1,
+                                           bytes: [UInt8](repeating: 255, count: (IDPhoto.maxWorkingEdge + 1) * 4)).image()
+        #expect(throws: (any Error).self) { try IDPhoto.detect(oversized) }
+        #expect(throws: (any Error).self) { try IDPhoto.replaceBackground(oversized, mask: mask, color: SIMD3(1, 1, 1)) }
+    }
+    @Test func cancelledSaveCreatesNoOutput() async throws {
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let (image, _) = try synthetic()
+        let source = try Images.save(image, as: folder.appendingPathComponent("portrait.png"), type: .png, quality: 1)
+        let before = try Data(contentsOf: source)
+        let worker = Task.detached { () throws -> URL in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try IDPhoto.save(image, source: source, dpi: 300)
+        }
+        do { _ = try await worker.value; Issue.record("Cancelled ID Photo save should throw") }
+        catch is CancellationError { }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == [source.lastPathComponent])
+        #expect(try Data(contentsOf: source) == before)
     }
     @Test func presetsCustomUnitsAndDPIOutputAreExactAndNeverReplaceTheSource() throws {
         let folder = try MediaBatchFixtures.folder()
