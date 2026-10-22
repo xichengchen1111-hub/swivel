@@ -356,14 +356,20 @@ class Editor: NSObject, NSWindowDelegate {
     // MARK: Control builders
 
     func addRow(_ title: String, _ views: NSView...) {
+        let row = makeRow(title, views)
+        controls.addArrangedSubview(row)
+        row.widthAnchor.constraint(equalTo: controls.widthAnchor).isActive = true
+    }
+
+    /// A row as `addRow` builds it, for an editor that places its rows itself.
+    func makeRow(_ title: String, _ views: [NSView]) -> NSStackView {
         // Right-aligned "Label:" column, as in System Settings and inspector panels.
         let label = NSTextField(labelWithString: title.isEmpty ? "" : L(title) + (Language.resolved == .en ? ":" : "："))
         label.alignment = .right
         label.widthAnchor.constraint(equalToConstant: 96).isActive = true
         let row = NSStackView(views: [label] + views)
         row.spacing = 8
-        controls.addArrangedSubview(row)
-        row.widthAnchor.constraint(equalTo: controls.widthAnchor).isActive = true
+        return row
     }
 
     /// A continuous slider whose starting value is a soft detent (see `DetentSlider`).

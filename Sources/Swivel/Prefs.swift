@@ -86,6 +86,20 @@ enum Prefs {
         set { defaults.set(newValue, forKey: "videoCompress.target"); post() }
     }
 
+    /// Resize…'s last answer: how it measured, the number, and whether smaller images could grow.
+    static var resizeMode: String {
+        get { defaults.string(forKey: "resize.mode") ?? "longEdge" }
+        set { defaults.set(newValue, forKey: "resize.mode"); post() }
+    }
+    static var resizeValue: Int {
+        get { defaults.integer(forKey: "resize.value") }
+        set { defaults.set(newValue, forKey: "resize.value"); post() }
+    }
+    static var resizeEnlarge: Bool {
+        get { defaults.bool(forKey: "resize.enlarge") }
+        set { defaults.set(newValue, forKey: "resize.enlarge"); post() }
+    }
+
     /// Keep Awake also keeps the display on (otherwise only the Mac itself stays awake).
     static var keepAwakeDisplay: Bool {
         get { defaults.object(forKey: "keepAwake.display") as? Bool ?? true }

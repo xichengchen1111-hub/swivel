@@ -1,12 +1,16 @@
 import AppKit
 import AVFoundation
 import AVKit
+import os
 
-/// Trims a video or audio file between two points, with a player to preview the cut.
+/// Edits a video (or an audio file) with a player to preview it, in sections: Trim (two handles), Picture (crop to a
+/// ratio, turn, flip), Speed, Sound (volume, removing it, fades) and Color (looks and four sliders). Audio files get
+/// Trim, Speed and Sound.
 ///
-/// The handles stop with a tap at the clip's ends (reaching exactly 0 and the full length) and where they meet;
+/// The trim handles stop with a tap at the clip's ends (reaching exactly 0 and the full length) and where they meet;
 /// scrubbing shows the frame under the handle (a nearby one while dragging, the exact one on release), and playback
-/// stays inside the cut.
+/// stays inside the cut. Every other control changes the preview in place: the player draws each frame through
+/// the current settings, plays at the chosen speed and mixes the sound with the chosen volume and fades.
 final class TrimEditor: Editor {
     private let asset: AVURLAsset
     private let player: AVPlayer
@@ -29,6 +33,39 @@ final class TrimEditor: Editor {
     private var seeking = false
     private var rateObservation: NSKeyValueObservation?
 
+    private var sections: [String] = []
+    private var section: NSSegmentedControl!
+    private var pages: [String: [NSView]] = [:]
+    private var pageViews: [NSStackView] = []
+    // Picture
+    private var ratio: NSPopUpButton!
+    private var position: DetentSlider!
+    private var turns: NSSegmentedControl!
+    private var flip: NSButton!
+    // Speed
+    private var speed: NSSegmentedControl!
+    // Sound
+    private var volume: DetentSlider!
+    private let volumeLabel = TrimEditor.valueLabel()
+    private var removeAudio: NSButton!
+    private var fadeIn: DetentSlider!
+    private var fadeOut: DetentSlider!
+    private let fadeInLabel = TrimEditor.valueLabel()
+    private let fadeOutLabel = TrimEditor.valueLabel()
+    // Color
+    private let strip = LookStrip(looks: PhotoLook.all)
+    private var strength: DetentSlider!
+    private let strengthLabel = TrimEditor.valueLabel()
+    private var look = 0
+    private var colorSliders: [(slider: DetentSlider, label: NSTextField, key: WritableKeyPath<PhotoSettings, Double>)] = []
+
+    /// What every frame of the preview is drawn with; the composition reads it on its own thread.
+    private let live = OSAllocatedUnfairLock(initialState: VideoSettings())
+    private var videoComposition: AVMutableVideoComposition?
+    private var audioTrack: AVAssetTrack?
+    private var upright = CGSize.zero
+    private var shownPicture: VideoSettings?
+
     /// Builds the window at once; the asset's length and tracks load in `load()`, after `present()` has counted the
     /// window, so the menu that opened it doesn't put up a busy toast meanwhile. (Still `async throws`, as callers
     /// await it.)
@@ -36,9 +73,11 @@ final class TrimEditor: Editor {
         asset = Video.openAsset(source)
         isAudio = FileKind.of(source) == .audio
         player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
+        player.currentItem?.audioTimePitchAlgorithm = .spectral
         playerView.player = player
         playerView.controlsStyle = .inline
         super.init(title: isAudio ? "Trim Audio" : "Trim Video", source: source, canvas: playerView)
+        if !isAudio { window.setContentSize(NSSize(width: 620, height: 780)) }
 
         // Each handle's default is its own end of the clip: an end stop that taps, never a band that swallows the
         // first or last seconds. The real range arrives with the duration.
@@ -48,20 +87,100 @@ final class TrimEditor: Editor {
             label.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
             label.widthAnchor.constraint(equalToConstant: 64).isActive = true
         }
-        addRow("Start", start, startLabel)
-        addRow("End", end, endLabel)
         lengthLabel.font = .systemFont(ofSize: 13, weight: .semibold)
         lengthLabel.textColor = .controlAccentColor
-        addRow("Length", lengthLabel)
+        pages["Trim"] = [makeRow("Start", [start, startLabel]), makeRow("End", [end, endLabel]), makeRow("Length", [lengthLabel])]
+
+        ratio = popup(VideoEdit.ratios.map(\.name))
+        position = slider(0, 1, 0.5)
+        turns = segments(["0°", "90°", "180°", "270°"])
+        flip = checkbox("Flip", false)
+        pages["Picture"] = [makeRow("Aspect ratio", [ratio]), makeRow("Position", [position]),
+                            makeRow("Rotate", [turns, flip])]
+
+        speed = segments(VideoEdit.speeds.map { Self.speedName($0) })
+        speed.selectedSegment = VideoEdit.speeds.firstIndex(of: 1) ?? 0
+        let pitch = NSTextField(labelWithString: L("Sound keeps its pitch."))
+        pitch.textColor = .secondaryLabelColor
+        pitch.font = .systemFont(ofSize: 11)
+        pages["Speed"] = [makeRow("Speed", [speed]), makeRow("", [pitch])]
+
+        volume = slider(0, 1, 1)
+        removeAudio = checkbox("Remove audio", false)
+        fadeIn = slider(0, 3, 0)
+        fadeOut = slider(0, 3, 0)
+        var sound = [makeRow("Volume", [volume, volumeLabel])]
+        if !isAudio { sound.append(makeRow("", [removeAudio])) }
+        sound += [makeRow("Fade in", [fadeIn, fadeInLabel]), makeRow("Fade out", [fadeOut, fadeOutLabel])]
+        pages["Sound"] = sound
+
+        strip.onPick = { [weak self] index in
+            guard let self, self.isLoaded, !self.isSaving, index != self.look else { return }
+            self.look = index
+            self.update()
+        }
+        strength = slider(0, 1, 1)
+        var color: [NSView] = [strip, makeRow("Strength", [strength, strengthLabel])]
+        for name in VideoEdit.colorFields {
+            guard let field = PhotoSettings.fields.first(where: { $0.name == name }) else { continue }
+            let control = slider(field.range.lowerBound, field.range.upperBound, 0)
+            let label = Self.valueLabel()
+            colorSliders.append((control, label, field.key))
+            color.append(makeRow(name, [control, label]))
+        }
+        pages["Color"] = color
+
+        sections = isAudio ? ["Trim", "Speed", "Sound"] : ["Trim", "Picture", "Speed", "Sound", "Color"]
+        section = segments(sections)
+        controls.addArrangedSubview(section)
+        // Every section is laid over the others in one box as tall as the tallest, so switching sections never
+        // resizes the player above.
+        let box = NSView()
+        box.translatesAutoresizingMaskIntoConstraints = false
+        controls.addArrangedSubview(box)
+        box.widthAnchor.constraint(equalTo: controls.widthAnchor).isActive = true
+        let fit = box.heightAnchor.constraint(equalToConstant: 0)
+        fit.priority = .defaultLow
+        fit.isActive = true
+        for name in sections {
+            let rows = pages[name] ?? []
+            let page = NSStackView(views: rows)
+            page.orientation = .vertical
+            page.alignment = .leading
+            page.spacing = 10
+            page.translatesAutoresizingMaskIntoConstraints = false
+            box.addSubview(page)
+            NSLayoutConstraint.activate([
+                page.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+                page.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+                page.topAnchor.constraint(equalTo: box.topAnchor),
+                box.bottomAnchor.constraint(greaterThanOrEqualTo: page.bottomAnchor),
+            ])
+            for row in rows { row.widthAnchor.constraint(equalTo: page.widthAnchor).isActive = true }
+            pageViews.append(page)
+        }
 
         rateObservation = player.observe(\.rate, options: [.new]) { [weak self] _, _ in
             Task { @MainActor in self?.playbackChanged() }
         }
     }
 
+    private static func valueLabel() -> NSTextField {
+        let label = NSTextField(labelWithString: "")
+        label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        label.alignment = .right
+        label.widthAnchor.constraint(equalToConstant: 52).isActive = true
+        return label
+    }
+
+    private static func speedName(_ speed: Double) -> String {
+        (speed == speed.rounded() ? String(Int(speed)) : String(format: "%g", speed)) + "×"
+    }
+
     override func load() async throws {
         let seconds = try await asset.load(.duration).seconds
-        let audio = try await asset.loadTracks(withMediaType: .video).isEmpty
+        let video = try await asset.loadTracks(withMediaType: .video).first
+        let audio = video == nil
         guard seconds > 0 else { throw ToolError("This file has no duration") }  // also NaN (indefinite)
         duration = seconds
         if audio != isAudio {
@@ -74,6 +193,46 @@ final class TrimEditor: Editor {
         end.neutral = seconds
         lastStart = 0
         lastEnd = seconds
+        audioTrack = try await asset.loadTracks(withMediaType: .audio).first
+        if audioTrack == nil { removeAudio.isEnabled = false }
+        let initial = settings
+        live.withLock { $0 = initial }
+        guard let video else { return }
+        upright = try await VideoEdit.uprightSize(of: video)
+        let composition = try await VideoEdit.videoComposition(for: asset, settings: live, preview: true, upright: upright)
+        videoComposition = composition
+        player.currentItem?.videoComposition = composition
+        shownPicture = settings
+        // The looks strip shows each look on the first frame.
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 160, height: 160)
+        if let first = try? await generator.image(at: .zero).image {
+            let thumbs = try await Images.detached { PhotoLook.all.map { PhotoAdjust.render(first, $0.settings) } }
+            strip.setThumbnails(thumbs)
+        }
+    }
+
+    /// The controls as one value.
+    private var settings: VideoSettings {
+        var s = VideoSettings()
+        s.start = start.doubleValue
+        s.end = end.doubleValue
+        s.speed = VideoEdit.speeds[max(0, speed.selectedSegment)]
+        if !isAudio {
+            s.quarterTurns = max(0, turns.selectedSegment)
+            s.flip = flip.state == .on
+            s.ratio = VideoEdit.ratios[max(0, ratio.indexOfSelectedItem)].value
+            s.position = position.doubleValue
+            s.removeAudio = removeAudio.state == .on && removeAudio.isEnabled
+            var color = PhotoSettings()
+            for control in colorSliders { color[keyPath: control.key] = control.slider.doubleValue }
+            s.color = color.adding(PhotoLook.all[look].settings, amount: strength.doubleValue)
+        }
+        s.volume = volume.doubleValue
+        s.fadeIn = fadeIn.doubleValue
+        s.fadeOut = fadeOut.doubleValue
+        return s
     }
 
     private func time(_ seconds: Double) -> String {
@@ -82,6 +241,7 @@ final class TrimEditor: Editor {
     }
 
     override func update() {
+        for (index, page) in pageViews.enumerated() { page.isHidden = index != section.selectedSegment }
         // Keep at least a tenth of a second between the handles, and preview whichever one moved.
         let startMoved = start.doubleValue != lastStart, endMoved = end.doubleValue != lastEnd
         var meeting = false
@@ -92,15 +252,50 @@ final class TrimEditor: Editor {
         // The handles meeting is a hard stop: one tap as they touch, none while held there.
         if meeting, !pinned, isTracking { Haptics.tick(.alignment) }
         pinned = meeting
+        let firstShow = lastEnd == duration && lastStart == 0 && !startMoved && !endMoved
         lastStart = start.doubleValue
         lastEnd = end.doubleValue
-        startLabel.stringValue = time(start.doubleValue)
-        endLabel.stringValue = time(end.doubleValue)
-        lengthLabel.stringValue = time(end.doubleValue - start.doubleValue)
-        player.currentItem?.reversePlaybackEndTime = CMTime(seconds: start.doubleValue, preferredTimescale: 600)
-        player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: end.doubleValue, preferredTimescale: 600)
+
+        let s = settings
+        startLabel.stringValue = time(s.start)
+        endLabel.stringValue = time(s.end)
+        lengthLabel.stringValue = time(s.outputLength)
+        position.isEnabled = s.ratio != nil && !isSaving
+        volume.isEnabled = !s.removeAudio && audioTrack != nil && !isSaving
+        volumeLabel.stringValue = "\(Int((s.volume * 100).rounded()))%"
+        fadeInLabel.stringValue = String(format: "%.1f s", s.fadeIn)
+        fadeOutLabel.stringValue = String(format: "%.1f s", s.fadeOut)
+        for (label, value) in [(volumeLabel, s.volume == 1), (fadeInLabel, s.fadeIn == 0), (fadeOutLabel, s.fadeOut == 0)] {
+            label.textColor = value ? .tertiaryLabelColor : .secondaryLabelColor
+        }
+        strip.selected = look
+        strength.isEnabled = look != 0 && !isSaving
+        strengthLabel.stringValue = "\(Int((strength.doubleValue * 100).rounded()))%"
+        strengthLabel.textColor = look == 0 ? .tertiaryLabelColor : .secondaryLabelColor
+        for control in colorSliders {
+            let value = control.slider.doubleValue
+            control.label.stringValue = value == 0 ? "0" : (value > 0 ? "+" : "−") + "\(Int(abs(value * 100).rounded()))"
+            control.label.textColor = value == 0 ? .tertiaryLabelColor : .secondaryLabelColor
+        }
+
+        // The preview: the cut, the speed, the sound and the picture, each changed in place.
+        live.withLock { [s] in $0 = s }
+        player.currentItem?.reversePlaybackEndTime = CMTime(seconds: s.start, preferredTimescale: 600)
+        player.currentItem?.forwardPlaybackEndTime = CMTime(seconds: s.end, preferredTimescale: 600)
+        player.defaultRate = Float(s.speed)
+        if player.rate > 0, player.rate != Float(s.speed) { player.rate = Float(s.speed) }
+        if let audioTrack { player.currentItem?.audioMix = VideoEdit.audioMix(for: audioTrack, s, preview: true) }
+        if let videoComposition, shownPicture != s {
+            // A new size needs a new render size; any change needs the paused frame drawn again, which handing the
+            // item its composition again does.
+            videoComposition.renderSize = VideoEdit.renderSize(upright: upright, s)
+            player.currentItem?.videoComposition = videoComposition.copy() as? AVVideoComposition
+            shownPicture = s
+        }
         // Opening (or Reset) shows the first frame of the cut, not its last.
-        seek(to: endMoved && !startMoved ? end.doubleValue : start.doubleValue, exact: !isTracking)
+        if startMoved || endMoved || firstShow {
+            seek(to: endMoved && !startMoved ? s.end : s.start, exact: !isTracking)
+        }
     }
 
     override func trackingEnded() { seek(to: seekTarget, exact: true) }
@@ -137,6 +332,18 @@ final class TrimEditor: Editor {
     override func reset() {
         start.doubleValue = 0
         end.doubleValue = duration
+        ratio.selectItem(at: 0)
+        position.doubleValue = 0.5
+        turns.selectedSegment = 0
+        flip.state = .off
+        speed.selectedSegment = VideoEdit.speeds.firstIndex(of: 1) ?? 0
+        volume.doubleValue = 1
+        removeAudio.state = .off
+        fadeIn.doubleValue = 0
+        fadeOut.doubleValue = 0
+        look = 0
+        strength.doubleValue = 1
+        for control in colorSliders { control.slider.doubleValue = 0 }
     }
 
     override func didClose() {
@@ -147,27 +354,7 @@ final class TrimEditor: Editor {
 
     override func apply() async throws -> [URL] {
         player.pause()
-        let range = CMTimeRange(start: CMTime(seconds: start.doubleValue, preferredTimescale: 600),
-                                end: CMTime(seconds: end.doubleValue, preferredTimescale: 600))
-        let asset = try await Video.safeAsset(source)
-        let ext = source.pathExtension.lowercased()
-        let (preset, type, outExt): (String, AVFileType, String)
-        if isAudio {
-            (preset, type, outExt) = (AVAssetExportPresetAppleM4A, .m4a, "m4a")
-        } else {
-            // Re-encoded rather than passed through: a passthrough cut starts at the previous keyframe and only hides
-            // the frames before the start point behind an edit list, so "trimmed" footage would still be in the file.
-            (preset, type, outExt) = (AVAssetExportPresetHighestQuality, ext == "mp4" ? .mp4 : ext == "m4v" ? .m4v : .mov,
-                                      ext == "mp4" || ext == "m4v" ? ext : "mov")
-        }
-        guard let session = AVAssetExportSession(asset: asset, presetName: preset) else { throw ToolError("Can't trim this file") }
-        session.timeRange = range
-        // A video composition makes the export decode and re-encode even when the codec and size already match.
-        if !isAudio { session.videoComposition = try await AVVideoComposition.videoComposition(withPropertiesOf: asset) }
-        // The export goes to a temporary that is published under a free name once complete.
-        return [try await Paths.produce(Paths.preferred(for: source, ext: outExt, suffix: " trimmed")) {
-            try await session.export(to: $0, as: type)
-        }]
+        return [try await VideoEdit.export(source, settings, isAudio: isAudio)]
     }
 }
 

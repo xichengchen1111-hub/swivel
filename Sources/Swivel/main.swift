@@ -119,7 +119,7 @@ MainActor.assumeIsolated {
         app.run()
     }
 
-    // `Swivel --edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>` opens one editor directly (for testing).
+    // `Swivel --edit <crop|compress|edit|bg|blur|redact|metadata|annotate|collage|trim> <file>` opens one editor directly (for testing).
     if args.count >= 4, args[1] == "--edit" {
         let url = URL(fileURLWithPath: args[3])
         app.setActivationPolicy(.accessory)
@@ -129,6 +129,7 @@ MainActor.assumeIsolated {
                 case "compress": try CompressEditor(source: url)
                 case "edit": try AdjustEditor(source: url)
                 case "bg": try BackgroundEditor(source: url)
+                case "blur": try BlurBackgroundEditor(source: url)
                 case "redact": try RedactEditor(source: url)
                 case "metadata": try MetadataEditor(source: url)
                 case "annotate": try AnnotateEditor(source: url)

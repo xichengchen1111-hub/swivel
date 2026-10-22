@@ -6,43 +6,104 @@ import Vision
 
 private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
-/// Exposure, contrast, saturation, warmth, vignette and sharpness with a live preview.
+/// Lightroom-style basic adjustments in four sections (Looks, Light, Color, Effects) with a live preview. A look
+/// sits on top of the sliders with its own strength; Auto sets the sliders, so what it did can be seen and undone.
 final class AdjustEditor: Editor {
     private struct Adjustment {
         let slider: DetentSlider
         let label: NSTextField
-        let neutral: Double
+        let key: WritableKeyPath<PhotoSettings, Double>
         let describe: (Double) -> String
     }
+
+    private static let sections = ["Looks", "Light", "Color", "Effects"]
+    /// Which fields each slider section shows, by name (Looks has the strip instead).
+    private static let sectionFields: [[String]] = [
+        [], ["Exposure", "Contrast", "Highlights", "Shadows", "Whites", "Blacks"],
+        ["Saturation", "Vibrance", "Warmth", "Tint"], ["Clarity", "Sharpen", "Noise Reduction", "Vignette"],
+    ]
 
     private let preview = ImagePreview()
     private var small: CGImage?
     private var adjustments: [Adjustment] = []
+    private var section: NSSegmentedControl!
+    private var autoButton: NSButton!
+    private var pages: [NSStackView] = []
+    private let strip = LookStrip(looks: PhotoLook.all)
+    private var strength: DetentSlider!
+    private let strengthLabel = AdjustEditor.valueLabel()
+    private var look = 0
     private lazy var renderer = LiveRender<CGImage?> { [weak self] image in
         if let image { self?.preview.image = image }
     }
 
     init(source: URL) throws {
         super.init(title: "Edit Photo", source: source, canvas: preview)
-        let percent: (Double) -> String = { Self.signed(($0 - 1) * 100, decimals: 0) + "%" }
-        let specs: [(String, Double, Double, Double, (Double) -> String)] = [
-            ("Exposure", -2, 2, 0, { Self.signed($0, decimals: 1) + " EV" }),
-            ("Contrast", 0.5, 1.5, 1, percent),
-            ("Saturation", 0, 2, 1, percent),
-            ("Warmth", -1, 1, 0, { Self.signed($0 * 100, decimals: 0) }),
-            ("Vignette", 0, 2, 0, { "\(Int(($0 / 2 * 100).rounded()))%" }),
-            ("Sharpen", 0, 2, 0, { "\(Int(($0 / 2 * 100).rounded()))%" }),
-        ]
-        for (name, min, max, neutral, describe) in specs {
-            let control = slider(min, max, neutral)
-            // The value beside each slider greys out at neutral: with the detent, that's how you find it again.
-            let label = NSTextField(labelWithString: "")
-            label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-            label.alignment = .right
-            label.widthAnchor.constraint(equalToConstant: 52).isActive = true
-            adjustments.append(Adjustment(slider: control, label: label, neutral: neutral, describe: describe))
-            addRow(name, control, label)
+        section = segments(Self.sections)
+        section.selectedSegment = 1
+        autoButton = NSButton(title: L("Auto"), target: self, action: #selector(autoClicked))
+        autoButton.bezelStyle = .push
+        autoButton.toolTip = L("Set light and colour from the photo itself")
+        let spacer = NSView()
+        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
+        let header = NSStackView(views: [section, spacer, autoButton])
+        header.spacing = 8
+        controls.addArrangedSubview(header)
+        header.widthAnchor.constraint(equalTo: controls.widthAnchor).isActive = true
+
+        // Every section is laid over the others in one box as tall as the tallest, so switching sections never
+        // resizes the photo above.
+        let box = NSView()
+        box.translatesAutoresizingMaskIntoConstraints = false
+        controls.addArrangedSubview(box)
+        box.widthAnchor.constraint(equalTo: controls.widthAnchor).isActive = true
+        let fit = box.heightAnchor.constraint(equalToConstant: 0)
+        fit.priority = .defaultLow
+        fit.isActive = true
+
+        strip.onPick = { [weak self] index in self?.pick(index) }
+        strength = slider(0, 1, 1)
+        var rows: [[NSView]] = [[strip, makeRow("Strength", [strength, strengthLabel])]]
+        for names in Self.sectionFields.dropFirst() {
+            var pageRows: [NSView] = []
+            for name in names {
+                guard let field = PhotoSettings.fields.first(where: { $0.name == name }) else { continue }
+                let control = slider(field.range.lowerBound, field.range.upperBound, 0)
+                // The value beside each slider greys out at neutral: with the detent, that's how you find it again.
+                let label = Self.valueLabel()
+                let describe: (Double) -> String = field.name == "Exposure"
+                    ? { Self.signed($0, decimals: 1) + " EV" }
+                    : field.range.lowerBound < 0 ? { Self.signed($0 * 100, decimals: 0) } : { "\(Int(($0 * 100).rounded()))" }
+                adjustments.append(Adjustment(slider: control, label: label, key: field.key, describe: describe))
+                pageRows.append(makeRow(name, [control, label]))
+            }
+            rows.append(pageRows)
         }
+        for pageRows in rows {
+            let page = NSStackView(views: pageRows)
+            page.orientation = .vertical
+            page.alignment = .leading
+            page.spacing = 10
+            page.translatesAutoresizingMaskIntoConstraints = false
+            box.addSubview(page)
+            NSLayoutConstraint.activate([
+                page.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+                page.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+                page.topAnchor.constraint(equalTo: box.topAnchor),
+                box.bottomAnchor.constraint(greaterThanOrEqualTo: page.bottomAnchor),
+            ])
+            for row in pageRows { row.widthAnchor.constraint(equalTo: page.widthAnchor).isActive = true }
+            pages.append(page)
+        }
+        showSection()
+    }
+
+    private static func valueLabel() -> NSTextField {
+        let label = NSTextField(labelWithString: "")
+        label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        label.alignment = .right
+        label.widthAnchor.constraint(equalToConstant: 52).isActive = true
+        return label
     }
 
     /// "+0.7", "−0.3", or "0" at neutral, with a real minus sign.
@@ -54,54 +115,241 @@ final class AdjustEditor: Editor {
 
     override func load() async throws {
         let source = self.source
-        let image = try await Images.detached { try Images.load(source, maxPixels: 1400) }
+        let (image, thumbs) = try await Images.detached { () throws -> (CGImage, [CGImage?]) in
+            let image = try Images.load(source, maxPixels: 1400)
+            // The strip shows each look on this photo, small.
+            let base = (try? Images.resized(image, longEdge: 120)) ?? image
+            return (image, PhotoLook.all.map { PhotoAdjust.render(base, $0.settings) })
+        }
         small = image
         preview.image = image
         preview.original = image
+        strip.setThumbnails(thumbs)
     }
 
-    private nonisolated static func render(_ image: CGImage, _ v: [Double]) -> CGImage? {
-        var ci = CIImage(cgImage: image)
-        let extent = ci.extent
-        func filter(_ name: String, _ params: [String: Any]) {
-            guard let f = CIFilter(name: name) else { return }
-            f.setValue(ci, forKey: kCIInputImageKey)
-            for (k, value) in params { f.setValue(value, forKey: k) }
-            if let out = f.outputImage { ci = out }
+    private var manual: PhotoSettings {
+        var s = PhotoSettings()
+        for adjustment in adjustments { s[keyPath: adjustment.key] = adjustment.slider.doubleValue }
+        return s
+    }
+
+    /// The sliders with the chosen look on top.
+    private var settings: PhotoSettings { manual.adding(PhotoLook.all[look].settings, amount: strength.doubleValue) }
+
+    private func showSection() {
+        for (index, page) in pages.enumerated() { page.isHidden = index != section.selectedSegment }
+    }
+
+    private func pick(_ index: Int) {
+        guard isLoaded, !isSaving, index != look else { return }
+        look = index
+        update()
+    }
+
+    @objc private func autoClicked() {
+        guard isLoaded, !isSaving, let small else { return }
+        autoButton.isEnabled = false
+        Task { @MainActor [self] in
+            let found = try? await Images.detached { PhotoAdjust.auto(for: small) }
+            autoButton.isEnabled = true
+            guard let found, !isSaving else { return }
+            for adjustment in adjustments where [\PhotoSettings.exposure, \.highlights, \.shadows, \.vibrance].contains(adjustment.key) {
+                adjustment.slider.doubleValue = found[keyPath: adjustment.key]
+            }
+            // Auto works on light (and a little colour): show where its changes are.
+            if section.selectedSegment != 1 {
+                section.selectedSegment = 1
+            }
+            update()
         }
-        if v[0] != 0 { filter("CIExposureAdjust", [kCIInputEVKey: v[0]]) }
-        if v[1] != 1 || v[2] != 1 { filter("CIColorControls", [kCIInputContrastKey: v[1], kCIInputSaturationKey: v[2]]) }
-        if v[3] != 0 {
-            filter("CITemperatureAndTint", ["inputNeutral": CIVector(x: 6500 + v[3] * 2500, y: 0),
-                                            "inputTargetNeutral": CIVector(x: 6500, y: 0)])
-        }
-        if v[4] > 0 { filter("CIVignette", [kCIInputIntensityKey: v[4], kCIInputRadiusKey: 2]) }
-        if v[5] > 0 { filter("CISharpenLuminance", [kCIInputSharpnessKey: v[5]]) }
-        return ciContext.createCGImage(ci.cropped(to: extent), from: extent)
     }
 
     override func update() {
-        let values = adjustments.map { $0.slider.doubleValue }
+        showSection()
         for adjustment in adjustments {
             let value = adjustment.slider.doubleValue
             adjustment.label.stringValue = adjustment.describe(value)
-            // Grey at neutral, so the detent reads at a glance too.
-            adjustment.label.textColor = value == adjustment.neutral ? .tertiaryLabelColor : .secondaryLabelColor
+            adjustment.label.textColor = value == 0 ? .tertiaryLabelColor : .secondaryLabelColor
         }
+        strip.selected = look
+        strength.isEnabled = look != 0 && !isSaving
+        strengthLabel.stringValue = "\(Int((strength.doubleValue * 100).rounded()))%"
+        strengthLabel.textColor = look == 0 ? .tertiaryLabelColor : .secondaryLabelColor
         guard let small else { return }
-        renderer.request { Self.render(small, values) }
+        let settings = self.settings
+        renderer.request { PhotoAdjust.render(small, settings) }
     }
 
-    override func reset() { for adjustment in adjustments { adjustment.slider.doubleValue = adjustment.neutral } }
+    override func reset() {
+        for adjustment in adjustments { adjustment.slider.doubleValue = 0 }
+        look = 0
+        strength.doubleValue = 1
+    }
 
     override func didClose() { renderer.cancel() }
 
     override func apply() async throws -> [URL] {
-        let values = adjustments.map { $0.slider.doubleValue }, source = self.source
+        let settings = self.settings, source = self.source
         return try await Images.detached {
-            guard let result = Self.render(try Images.load(source), values) else { throw ToolError("Couldn't render") }
+            guard let result = PhotoAdjust.render(try Images.load(source), settings) else { throw ToolError("Couldn't render") }
             let (type, ext) = Images.writableType(for: source)
             return [try Images.save(result, as: Paths.preferred(for: source, ext: ext, suffix: " edited"), type: type, quality: 0.95)]
+        }
+    }
+}
+
+/// A row of small previews, one per look; a press picks it (on mouse-down, as everywhere in Swivel).
+final class LookStrip: NSStackView {
+    var onPick: ((Int) -> Void)?
+    var selected = 0 { didSet { for (index, tile) in tiles.enumerated() { tile.isSelected = index == selected } } }
+    private var tiles: [LookTile] = []
+
+    init(looks: [PhotoLook]) {
+        super.init(frame: .zero)
+        orientation = .horizontal
+        spacing = 6
+        for (index, look) in looks.enumerated() {
+            let tile = LookTile(title: L(look.name))
+            tile.onPress = { [weak self] in self?.onPick?(index) }
+            tiles.append(tile)
+            addArrangedSubview(tile)
+        }
+        tiles.first?.isSelected = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func setThumbnails(_ images: [CGImage?]) {
+        for (tile, image) in zip(tiles, images) { tile.image = image }
+    }
+}
+
+final class LookTile: NSView {
+    var onPress: (() -> Void)?
+    var image: CGImage? { didSet { picture.contents = image } }
+    var isSelected = false {
+        didSet {
+            ring.borderColor = isSelected ? NSColor.controlAccentColor.cgColor : NSColor.separatorColor.cgColor
+            ring.borderWidth = isSelected ? 2 : 1
+            label.textColor = isSelected ? .labelColor : .secondaryLabelColor
+            setAccessibilityValue(isSelected ? L("Selected") : nil)
+        }
+    }
+    private let picture = CALayer()
+    private let ring = CALayer()
+    private let label: NSTextField
+    private static let side: CGFloat = 56
+
+    init(title: String) {
+        label = NSTextField(labelWithString: title)
+        super.init(frame: .zero)
+        wantsLayer = true
+        translatesAutoresizingMaskIntoConstraints = false
+        picture.contentsGravity = .resizeAspectFill
+        picture.masksToBounds = true
+        picture.cornerRadius = 7
+        picture.backgroundColor = NSColor.quaternaryLabelColor.cgColor
+        ring.cornerRadius = 8
+        ring.borderColor = NSColor.separatorColor.cgColor
+        ring.borderWidth = 1
+        ring.actions = ["borderColor": NSNull(), "borderWidth": NSNull()]
+        layer?.addSublayer(picture)
+        layer?.addSublayer(ring)
+        label.font = .systemFont(ofSize: 10)
+        label.alignment = .center
+        label.lineBreakMode = .byTruncatingTail
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: Self.side + 4),
+            heightAnchor.constraint(equalToConstant: Self.side + 4 + 16),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(title)
+        toolTip = title
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isFlipped: Bool { true }
+
+    override func layout() {
+        super.layout()
+        let frame = CGRect(x: 2, y: 2, width: Self.side, height: Self.side)
+        picture.frame = frame
+        ring.frame = frame.insetBy(dx: -2, dy: -2)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            picture.backgroundColor = NSColor.quaternaryLabelColor.cgColor
+            let selected = isSelected
+            isSelected = selected
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) { onPress?() }
+
+    override func accessibilityPerformPress() -> Bool {
+        onPress?()
+        return true
+    }
+}
+
+/// Keeps the subject sharp and blurs what's behind it, with a live preview of the strength.
+final class BlurBackgroundEditor: Editor {
+    private let preview = ImagePreview()
+    private var small: CGImage?
+    private var mask: CGImage?
+    private var amount: DetentSlider!
+    private lazy var renderer = LiveRender<CGImage?> { [weak self] image in
+        if let image { self?.preview.image = image }
+    }
+
+    init(source: URL) throws {
+        super.init(title: "Blur Background", source: source, canvas: preview)
+        amount = slider(0.05, 1, 0.5)
+        addRow("Amount", amount)
+    }
+
+    override func load() async throws {
+        let source = self.source
+        let (image, mask, first) = try await Images.detached { () throws -> (CGImage, CGImage, CGImage?) in
+            let image = try Images.load(source, maxPixels: 1400)
+            guard let mask = try BackgroundBlur.subjectMask(image) else { throw ToolError(L("No subject found in this image.")) }
+            return (image, mask, BackgroundBlur.render(image, mask: mask, amount: 0.5))
+        }
+        small = image
+        self.mask = mask
+        preview.image = first
+        preview.original = image
+    }
+
+    override func update() {
+        guard let small, let mask else { return }
+        let amount = self.amount.doubleValue
+        renderer.request { BackgroundBlur.render(small, mask: mask, amount: amount) }
+    }
+
+    override func reset() { amount.doubleValue = 0.5 }
+
+    override func didClose() { renderer.cancel() }
+
+    override func apply() async throws -> [URL] {
+        let amount = self.amount.doubleValue, source = self.source
+        return try await Images.detached {
+            let image = try Images.load(source)
+            // The mask is found again at full size, so the edge follows the full-resolution subject.
+            guard let mask = try BackgroundBlur.subjectMask(image) else { throw ToolError(L("No subject found in this image.")) }
+            guard let result = BackgroundBlur.render(image, mask: mask, amount: amount) else { throw ToolError("Couldn't render") }
+            let (type, ext) = Images.writableType(for: source)
+            return [try Images.save(result, as: Paths.preferred(for: source, ext: ext, suffix: " blurred"), type: type, quality: 0.95)]
         }
     }
 }

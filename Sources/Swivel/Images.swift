@@ -48,6 +48,91 @@ enum Images {
         }
     }
 
+    // MARK: Resize
+
+    enum ResizeMode: String, CaseIterable {
+        case longEdge, width, height, percent
+
+        var title: String {
+            switch self {
+            case .longEdge: L("Long edge")
+            case .width: L("Width")
+            case .height: L("Height")
+            case .percent: L("Percent")
+            }
+        }
+
+        /// The sizes offered in the field's list; the first is the default.
+        var suggestions: [Int] {
+            self == .percent ? [50, 75, 33, 25, 200] : [1920, 3840, 2560, 2048, 1600, 1280, 1080, 800, 640, 512]
+        }
+
+        /// Pixels need at least one; nothing above 20,000 px (or 1,000 %) is sensible.
+        var range: ClosedRange<Int> { self == .percent ? 1...1000 : 1...20_000 }
+    }
+
+    /// The new size, keeping the aspect ratio, or nil when it would leave the image unchanged (or enlarge it while
+    /// `enlarge` is off). Pure, so it can be tested.
+    static func resizedSize(width: Int, height: Int, mode: ResizeMode, value: Int, enlarge: Bool) -> (width: Int, height: Int)? {
+        guard width > 0, height > 0, mode.range.contains(value) else { return nil }
+        let w = Double(width), h = Double(height), v = Double(value)
+        let scale: Double = switch mode {
+        case .longEdge: v / max(w, h)
+        case .width: v / w
+        case .height: v / h
+        case .percent: v / 100
+        }
+        guard enlarge || scale < 1 else { return nil }
+        // The side that was asked for is exact; the other follows.
+        var out = (width: max(1, Int((w * scale).rounded())), height: max(1, Int((h * scale).rounded())))
+        switch mode {
+        case .width: out.width = value
+        case .height: out.height = value
+        case .longEdge: if width >= height { out.width = value } else { out.height = value }
+        case .percent: break
+        }
+        return out == (width, height) ? nil : out
+    }
+
+    /// Asks once for a size, then resizes every image to it beside the original ("photo 1920×1280.jpg").
+    @MainActor
+    static func resize(_ urls: [URL]) async throws -> ActionResult {
+        let form = ResizeForm(urls: urls)
+        NSApp.activate()
+        guard form.run() else { throw Cancelled() }
+        let (mode, value, enlarge) = (form.mode, form.value, form.enlarge)
+        Prefs.resizeMode = mode.rawValue
+        Prefs.resizeValue = value
+        Prefs.resizeEnlarge = enlarge
+        var files: [URL] = [], unchanged = 0
+        for url in urls {
+            if let file = try await detached({ try resizeFile(url, mode: mode, value: value, enlarge: enlarge) }) {
+                files.append(file)
+            } else {
+                unchanged += 1
+            }
+        }
+        if files.isEmpty { throw ToolError(L("Already at or below that size.")) }
+        var result = Catalog.saved(files)
+        if unchanged > 0 { result.message += "\n" + L("%d already at or below that size", unchanged) }
+        return result
+    }
+
+    static func resizeFile(_ url: URL, mode: ResizeMode, value: Int, enlarge: Bool) throws -> URL? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw ToolError("Couldn't read \(url.lastPathComponent)") }
+        let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
+        var width = props[kCGImagePropertyPixelWidth] as? Int ?? 0, height = props[kCGImagePropertyPixelHeight] as? Int ?? 0
+        // Orientations 5–8 are turned a quarter: the upright picture is the other way round.
+        if let orientation = props[kCGImagePropertyOrientation] as? Int, orientation >= 5 { swap(&width, &height) }
+        guard let size = resizedSize(width: width, height: height, mode: mode, value: value, enlarge: enlarge) else { return nil }
+        // Shrinking decodes straight at the new size (ImageIO's resampling, and no full-size decode); growing, or
+        // a size ImageIO rounded the other way, is drawn exactly.
+        var image = try load(url, maxPixels: size.width > width || size.height > height ? nil : max(size.width, size.height))
+        if image.width != size.width || image.height != size.height { image = image.scaled(width: size.width, height: size.height) }
+        let (type, ext) = writableType(for: url)
+        return try save(image, as: Paths.preferred(for: url, ext: ext, suffix: " \(size.width)×\(size.height)"), type: type, quality: 0.92)
+    }
+
     static func makePDF(_ urls: [URL]) async throws -> [URL] {
         let doc = PDFDocument()
         for url in urls {
@@ -255,6 +340,13 @@ extension CGImage {
         return ctx.makeImage() ?? self
     }
 
+    /// Exactly `width` × `height`, in the image's own colour space when it's RGB.
+    func scaled(width: Int, height: Int) -> CGImage {
+        redraw(width: width, height: height, space: colorSpace?.model == .rgb ? colorSpace : nil) {
+            $0.draw(self, in: CGRect(x: 0, y: 0, width: width, height: height))
+        }
+    }
+
     func flattened() -> CGImage {
         redraw(width: width, height: height, background: CGColor(gray: 1, alpha: 1)) {
             $0.draw(self, in: CGRect(x: 0, y: 0, width: width, height: height))
@@ -282,5 +374,93 @@ extension CGImage {
                background: CGColor(gray: 1, alpha: 1), bitmapInfo: CGImageAlphaInfo.none.rawValue) {
             $0.draw(self, in: CGRect(x: 0, y: 0, width: width, height: height))
         }
+    }
+}
+
+/// The question Resize… asks: how to measure (long edge, width, height or percent), how big, and whether smaller
+/// images may grow. It opens on the last answer, so a repeated resize is one Return.
+@MainActor
+final class ResizeForm: NSObject, NSComboBoxDelegate {
+    private let alert = NSAlert()
+    private let modePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let field = NSComboBox()
+    private let unit = NSTextField(labelWithString: "")
+    private let enlargeBox: NSButton
+    private let modes = Images.ResizeMode.allCases
+    private var resizeButton: NSButton!
+
+    init(urls: [URL]) {
+        enlargeBox = NSButton(checkboxWithTitle: L("Enlarge smaller images"), target: nil, action: nil)
+        super.init()
+        alert.messageText = urls.count == 1 ? L("Resize Image") : L("Resize %d Images", urls.count)
+        if urls.count == 1, let size = Self.pixelSize(urls[0]) {
+            alert.informativeText = L("Now %d × %d px.", size.width, size.height)
+        } else {
+            alert.informativeText = L("The aspect ratio is kept. Originals stay as they are.")
+        }
+        modePopup.addItems(withTitles: modes.map(\.title))
+        modePopup.target = self
+        modePopup.action = #selector(modeChanged)
+        let mode = Images.ResizeMode(rawValue: Prefs.resizeMode) ?? .longEdge
+        modePopup.selectItem(at: modes.firstIndex(of: mode) ?? 0)
+        field.usesDataSource = false
+        field.completes = false
+        field.numberOfVisibleItems = 10
+        field.delegate = self
+        field.widthAnchor.constraint(equalToConstant: 96).isActive = true
+        field.alignment = .right
+        unit.textColor = .secondaryLabelColor
+        enlargeBox.state = Prefs.resizeEnlarge ? .on : .off
+        let row = NSStackView(views: [modePopup, field, unit])
+        row.spacing = 8
+        let stack = NSStackView(views: [row, enlargeBox])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.frame = NSRect(origin: .zero, size: stack.fittingSize)
+        alert.accessoryView = stack
+        resizeButton = alert.addButton(withTitle: L("Resize"))
+        alert.addButton(withTitle: L("Cancel"))
+        fill(mode, value: mode.range.contains(Prefs.resizeValue) ? Prefs.resizeValue : mode.suggestions[0])
+    }
+
+    var mode: Images.ResizeMode { modes[max(0, modePopup.indexOfSelectedItem)] }
+    var value: Int { Int(field.stringValue.trimmingCharacters(in: .whitespaces)) ?? 0 }
+    var enlarge: Bool { enlargeBox.state == .on }
+
+    func run() -> Bool {
+        alert.window.initialFirstResponder = field
+        return alert.runModal() == .alertFirstButtonReturn && mode.range.contains(value)
+    }
+
+    private func fill(_ mode: Images.ResizeMode, value: Int) {
+        field.removeAllItems()
+        field.addItems(withObjectValues: mode.suggestions.map { "\($0)" })
+        field.stringValue = "\(value)"
+        unit.stringValue = mode == .percent ? "%" : L("px")
+        validate()
+    }
+
+    @objc private func modeChanged() {
+        fill(mode, value: mode.suggestions[0])
+        field.selectText(nil)
+    }
+
+    private func validate() { resizeButton.isEnabled = mode.range.contains(value) }
+
+    func controlTextDidChange(_ obj: Notification) { validate() }
+
+    func comboBoxSelectionDidChange(_ notification: Notification) {
+        // The picked item reaches stringValue only after this returns.
+        DispatchQueue.main.async { [weak self] in self?.validate() }
+    }
+
+    private static func pixelSize(_ url: URL) -> (width: Int, height: Int)? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              var width = props[kCGImagePropertyPixelWidth] as? Int, var height = props[kCGImagePropertyPixelHeight] as? Int
+        else { return nil }
+        if let orientation = props[kCGImagePropertyOrientation] as? Int, orientation >= 5 { swap(&width, &height) }
+        return (width, height)
     }
 }

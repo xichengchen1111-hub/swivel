@@ -215,10 +215,12 @@ enum Catalog {
             case .image:
                 let editors: [WheelItem] = [
                     each("Crop", urls) { try await CropEditor(source: $0).present() },
+                    WheelItem(title: "Resize…") { try await Images.resize($0) },
                     each("Compress", urls) { try await CompressEditor(source: $0).present() },
                     each("Edit", urls) { try await AdjustEditor(source: $0).present() },
                     each("Add BG", urls) { try await BackgroundEditor(source: $0).present() },
                     each("Remove BG", urls) { try await Cutout.removeBackground($0) },
+                    each("Blur BG", urls) { try await BlurBackgroundEditor(source: $0).present() },
                     each("Redact", urls) { try await RedactEditor(source: $0).present() },
                     each("Metadata", urls) { try await MetadataEditor(source: $0).present() },
                     each("Annotate", urls) { try await AnnotateEditor(source: $0).present() },
