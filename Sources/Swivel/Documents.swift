@@ -32,7 +32,7 @@ enum Docs {
     static func wordCount(_ url: URL) async throws -> [URL] {
         let string = try read(url).string
         let words = string.split { $0.isWhitespace || $0.isNewline }.count
-        throw Info("\(url.lastPathComponent): \(words) words, \(string.count) characters")
+        throw Info(L("%@: %ld words, %ld characters", url.lastPathComponent, words, string.count))
     }
 
     @MainActor

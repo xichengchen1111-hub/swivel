@@ -29,7 +29,7 @@ struct FileActionsTests {
     }
 
     @Test func appCustomizationIncludesEveryAllowedExtensionInItsCategory() {
-        let defaults = UserDefaults.standard, keys = ["feature.appRouting", "appTargets.v1"]
+        let defaults = UserDefaults.standard, keys = ["feature.appRouting"] + Prefs.fileAppTargetKeys
         let before = keys.map { defaults.object(forKey: $0) }
         defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
         defaults.set(true, forKey: "feature.appRouting")
@@ -368,8 +368,9 @@ struct FileActionsTests {
     }
 
     @Test func appFiltersPersistenceAndStableNames() throws {
-        let defaults = UserDefaults.standard, key = "appTargets.v1", old = UserDefaults.standard.object(forKey: "appTargets.v1")
-        defer { if let old { defaults.set(old, forKey: key) } else { defaults.removeObject(forKey: key) } }
+        let defaults = UserDefaults.standard, keys = Prefs.fileAppTargetKeys
+        let before = keys.map { defaults.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
         var target = FileAppTarget.starters[0]
         let id = target.actionID; target.name = "My Codex"; target.extensions = FileAppTarget.normalizedExtensions(".PNG, jpg，PNG pdf")
         #expect(target.actionID == id); #expect(target.extensions == ["png", "jpg", "pdf"])
@@ -383,7 +384,7 @@ struct FileActionsTests {
     @Test func independentFeatureGatesIncludeWheelOffAndStaleActions() async throws {
         let defaults = UserDefaults.standard
         let features: [Feature] = [.batchRename, .pdfPages, .qrCodes, .appRouting]
-        let keys = ["enabled", "appTargets.v1"] + features.map { "feature." + $0.rawValue }
+        let keys = ["enabled"] + Prefs.fileAppTargetKeys + features.map { "feature." + $0.rawValue }
         let before = keys.map { defaults.object(forKey: $0) }
         defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
         let image = [URL(fileURLWithPath: "/tmp/a.png")], pdf = [URL(fileURLWithPath: "/tmp/a.pdf")]
@@ -468,7 +469,7 @@ extension FileActionsTests {
         let info: [String: Any] = ["CFBundleIdentifier": "local.swivel.routing-fixture", "CFBundlePackageType": "APPL", "CFBundleName": "Fixture", "CFBundleURLTypes": [["CFBundleURLSchemes": ["codex", "claude"]]]]
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: fake.appendingPathComponent("Contents/Info.plist"))
         let source = try file(dir, "file & #.txt")
-        let keys = ["feature.appRouting", "appTargets.v1"], defaults = UserDefaults.standard
+        let keys = ["feature.appRouting"] + Prefs.fileAppTargetKeys, defaults = UserDefaults.standard
         let before = keys.map { defaults.object(forKey: $0) }
         defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
         Prefs.setFeatureEnabled(.appRouting, true)
@@ -665,7 +666,7 @@ extension FileActionsTests {
         let info: [String: Any] = ["CFBundleIdentifier": "local.swivel.browser-fixture", "CFBundlePackageType": "APPL", "CFBundleName": "Browser"]
         try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: browser.appendingPathComponent("Contents/Info.plist"))
         let source = try file(dir, "secret plan.txt")
-        let keys = ["feature.appRouting", "appTargets.v1"], defaults = UserDefaults.standard
+        let keys = ["feature.appRouting"] + Prefs.fileAppTargetKeys, defaults = UserDefaults.standard
         let before = keys.map { defaults.object(forKey: $0) }
         defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
         Prefs.setFeatureEnabled(.appRouting, true)
@@ -734,7 +735,7 @@ extension FileActionsTests {
     }
 
     @Test func myWheelShowsPickedActionsThatFitTheFilesInTheUsersOrder() throws {
-        let defaults = UserDefaults.standard, keys = ["customWheel.items", "feature.appRouting", "appTargets.v1"]
+        let defaults = UserDefaults.standard, keys = ["customWheel.items", "feature.appRouting"] + Prefs.fileAppTargetKeys
         let before = keys.map { defaults.object(forKey: $0) }
         defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
         Prefs.setFeatureEnabled(.appRouting, true)
@@ -781,5 +782,138 @@ extension FileActionsTests {
         let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.control, .option], timestamp: 0, windowNumber: 0, context: nil,
                                      characters: "µ", charactersIgnoringModifiers: "m", isARepeat: false, keyCode: UInt16(kVK_ANSI_M))!
         #expect(m.matches(event) && !space.matches(event))
+    }
+}
+
+// MARK: - Review fixes: shortcuts, saved app targets, local addresses, My Wheel availability
+
+extension FileActionsTests {
+    @Test func recordedShortcutsNeverTakeOrdinaryAppShortcutsOrTyping() throws {
+        let defaults = UserDefaults.standard, before = defaults.object(forKey: "customWheel.shortcut")
+        defer { if let before { defaults.set(before, forKey: "customWheel.shortcut") } else { defaults.removeObject(forKey: "customWheel.shortcut") } }
+        func record(_ code: Int, _ flags: NSEvent.ModifierFlags, _ characters: String = "k") -> Result<KeyCombo, ToolError> {
+            KeyCombo.recorded(keyCode: UInt16(code), flags: flags, characters: characters)
+        }
+        // ⌘ or ⌃ with one key belongs to apps (copy, paste, quit, close, save, app switcher…).
+        for code in [kVK_ANSI_C, kVK_ANSI_V, kVK_ANSI_X, kVK_ANSI_Z, kVK_ANSI_A, kVK_ANSI_Q, kVK_ANSI_W, kVK_ANSI_S, kVK_ANSI_T, kVK_ANSI_N,
+                     kVK_ANSI_O, kVK_ANSI_P, kVK_ANSI_F, kVK_ANSI_H, kVK_ANSI_M, kVK_ANSI_Comma, kVK_Tab, kVK_Space] {
+            #expect((try? record(code, [.command]).get()) == nil, "⌘ \(code)")
+            #expect((try? record(code, [.control]).get()) == nil, "⌃ \(code)")
+        }
+        // ⌥ and ⌥⇧ type accented characters.
+        for flags: NSEvent.ModifierFlags in [[.option], [.option, .shift]] {
+            guard case .failure(let problem) = record(kVK_ANSI_E, flags, "e") else { Issue.record("⌥ E was accepted"); continue }
+            #expect(problem.message == L("⌥ and ⇧ type special characters. Add ⌃ or ⌘ to the shortcut."))
+        }
+        guard case .failure(let single) = record(kVK_ANSI_C, [.command], "c") else { Issue.record("⌘C was accepted"); return }
+        #expect(single.message == L("Apps use ⌘ or ⌃ with one key. Add another modifier, such as ⌃⌥ or ⌘⇧, or use a function key."))
+        // Two modifiers, or a function key with one.
+        for flags: NSEvent.ModifierFlags in [[.control, .option], [.command, .shift], [.command, .option], [.control, .command], [.control, .shift], [.control, .option, .shift]] {
+            #expect((try? record(kVK_ANSI_K, flags).get()) != nil, "\(flags)")
+        }
+        for flags: NSEvent.ModifierFlags in [[.command], [.option], [.control]] {
+            #expect((try? record(kVK_F5, flags, "").get())?.key == "F5", "\(flags)")
+        }
+        #expect((try? record(kVK_F5, [.shift], "").get()) == nil)
+        #expect((try? record(kVK_ANSI_K, [.control, .option], "\u{200B}").get()) == nil)
+        // A saved shortcut that older rules allowed (⌘C, ⌥⇧E) is ignored when read.
+        defaults.set(try JSONEncoder().encode(KeyCombo(keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(cmdKey), key: "C")), forKey: "customWheel.shortcut")
+        #expect(Prefs.customWheelShortcut == nil)
+        defaults.set(try JSONEncoder().encode(KeyCombo(keyCode: UInt32(kVK_ANSI_E), modifiers: UInt32(optionKey | shiftKey), key: "E")), forKey: "customWheel.shortcut")
+        #expect(Prefs.customWheelShortcut == nil)
+    }
+
+    @Test func otherSwivelShortcutsClashEvenWhileTheirToolIsOff() {
+        let defaults = UserDefaults.standard, keys = ["feature.quickActions", "feature.clothesline"]
+        let before = keys.map { defaults.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
+        Prefs.setFeatureEnabled(.quickActions, false)
+        Prefs.setFeatureEnabled(.clothesline, false)
+        let quick = Prefs.quickShortcut
+        #expect(KeyCombo(keyCode: quick.keyCode, modifiers: quick.modifiers, key: "X").isUsedBySwivel)
+        #expect(KeyCombo(keyCode: UInt32(kVK_ANSI_T), modifiers: UInt32(controlKey | optionKey), key: "T").isUsedBySwivel)
+        #expect(KeyCombo(keyCode: Prefs.wheelShortcut.keyCode, modifiers: UInt32(controlKey | optionKey), key: "X").isUsedBySwivel)
+        #expect(!KeyCombo(keyCode: UInt32(kVK_ANSI_M), modifiers: UInt32(controlKey | optionKey), key: "M").isUsedBySwivel)
+    }
+
+    /// FileAppTarget as Swivel 1.6 decoded it: four deliveries, no web pages.
+    private struct LegacyTarget: Codable {
+        enum Delivery: String, Codable { case openFiles, codexDraft, claudeCodeDraft, copyFiles }
+        let id: String, name: String, bundleID: String, appPath: String, delivery: Delivery, extensions: [String], enabled: Bool
+    }
+
+    @Test func savedAppTargetsStayReadableByOlderBuildsAndOneBadEntryLosesNothingElse() throws {
+        let defaults = UserDefaults.standard, keys = Prefs.fileAppTargetKeys
+        let before = keys.map { defaults.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
+        let app = FileAppTarget(id: "preview", name: "Preview", bundleID: "com.apple.Preview", appPath: "", delivery: .openFiles)
+        let page = FileAppTarget(id: "page", name: "Upload", bundleID: "", appPath: "", delivery: .copyAndOpenPage, webAddress: "example.com/up")
+        let other = FileAppTarget(id: "draft", name: "Codex", bundleID: "", appPath: "", delivery: .codexDraft)
+        Prefs.fileAppTargets = [app, page, other]
+        #expect(Prefs.fileAppTargets == [app, page, other])
+        // 1.6 reads the applications from the list it knows.
+        let legacy = try JSONDecoder().decode([LegacyTarget].self, from: #require(defaults.data(forKey: "appTargets.v1")))
+        #expect(legacy.map(\.id) == ["preview", "draft"])
+        Prefs.fileAppTargets = [page, other, app]
+        #expect(Prefs.fileAppTargets == [page, other, app])
+        // 1.6 saving its own list back (one app removed) keeps the pages; an app it added lands at the end.
+        let added = LegacyTarget(id: "new", name: "TextEdit", bundleID: "com.apple.TextEdit", appPath: "", delivery: .openFiles, extensions: [], enabled: true)
+        let kept = LegacyTarget(id: "draft", name: "Codex", bundleID: "", appPath: "", delivery: .codexDraft, extensions: [], enabled: true)
+        defaults.set(try JSONEncoder().encode([kept, added]), forKey: "appTargets.v1")
+        #expect(Prefs.fileAppTargets.map(\.id) == ["page", "draft", "new"])
+        // A list with an entry this build can't read (a future delivery) and a page saved in it, as 1.7.0 did.
+        let mixed = #"""
+        [{"id":"future","name":"Future","bundleID":"","appPath":"","delivery":"teleport","extensions":[],"enabled":true},
+         {"id":"preview","name":"Preview","bundleID":"com.apple.Preview","appPath":"","delivery":"openFiles","extensions":[],"enabled":true},
+         {"id":"page","name":"Upload","bundleID":"","appPath":"","delivery":"copyAndOpenPage","extensions":[],"enabled":true,"webAddress":"example.com/up"}]
+        """#
+        for key in keys { defaults.removeObject(forKey: key) }
+        defaults.set(Data(mixed.utf8), forKey: "appTargets.v1")
+        #expect(Prefs.fileAppTargets == [app, page])
+        defaults.set(Data("not json".utf8), forKey: "appTargets.v1")
+        #expect(Prefs.fileAppTargets == FileAppTarget.starters)
+        for key in keys { defaults.removeObject(forKey: key) }
+        #expect(Prefs.fileAppTargets == FileAppTarget.starters)
+    }
+
+    @Test func localAddressesAreCanonicalDecimalAndHostsCarryNoEscapes() {
+        for bad in ["http://010.0.0.1", "http://0127.0.0.1", "http://+127.0.0.1", "http://10.0.0.01", "http://127.0.0.1.", "http://0x7f.0.0.1",
+                    "http://127.1", "http://2130706433", "https://exa%2Fmple.com", "https://example.com%23.evil.com", "https://a%3Fb.com",
+                    "https://a%00b.com", "https://%65xample.com"] {
+            #expect(FileAppTarget.pageURL(from: bad) == nil, "\(bad)")
+        }
+        for host in ["010.0.0.1", "0127.0.0.1", "+127.0.0.1", "127.0.0.+1", "1٠.0.0.1", "10.0.0.1000"] { #expect(!FileAppTarget.isLocal(host), "\(host)") }
+        for host in ["10.0.0.0", "127.0.0.1", "192.168.0.10", "172.16.0.1", "169.254.1.1"] { #expect(FileAppTarget.isLocal(host), "\(host)") }
+        #expect(FileAppTarget.pageURL(from: "example.com/upload?next=https://other.example/x")?.absoluteString == "https://example.com/upload?next=https://other.example/x")
+        #expect(FileAppTarget.pageURL(from: "localhost:3000/cb?back=http://x")?.host == "localhost")
+        #expect(FileAppTarget.pageURL(from: "https://例子.com/up") != nil)
+        #expect(FileAppTarget.pageURL(from: "http://10.0.0.5:8080") != nil)
+    }
+
+    @Test func myWheelKeyNeedsAPickThatStillResolves() {
+        let defaults = UserDefaults.standard, keys = ["customWheel.items", "feature.appRouting"] + Prefs.fileAppTargetKeys
+        let before = keys.map { defaults.object(forKey: $0) }
+        defer { for (key, value) in zip(keys, before) { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
+        Prefs.setFeatureEnabled(.appRouting, true)
+        Prefs.fileAppTargets = [FileAppTarget(id: "kept-app", name: "Kept", bundleID: "", appPath: "", delivery: .openFiles)]
+        Prefs.customWheelItems = ["apps/app.deleted", "tools/preset.deleted", "convert/NoSuchFormat"]
+        #expect(!Prefs.customWheelItems.isEmpty && !WheelMode.custom.isAvailable)
+        Prefs.customWheelItems = ["apps/app.deleted", "apps/app.kept-app"]
+        #expect(WheelMode.custom.isAvailable)
+        Prefs.setFeatureEnabled(.appRouting, false)
+        #expect(!WheelMode.custom.isAvailable)
+        Prefs.customWheelItems = ["apps/app.deleted", "actions/Copy Path"]
+        #expect(WheelMode.custom.isAvailable)
+        Prefs.customWheelItems = []
+        #expect(!WheelMode.custom.isAvailable)
+    }
+
+    @Test func wordCountResultIsTranslated() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let note = try file(dir, "note.txt", "one two three")
+        let expected = L("%@: %ld words, %ld characters", "note.txt", 3, 13)
+        #expect(expected.contains("3") && expected.contains("13"))
+        await #expect { try await Docs.wordCount(note) } throws: { ($0 as? Info)?.message == expected }
+        #expect(Strings.table["%@: %ld words, %ld characters"]?.count == 3)
     }
 }

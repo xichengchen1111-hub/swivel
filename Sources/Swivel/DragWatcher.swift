@@ -30,7 +30,7 @@ enum WheelMode: String, CaseIterable {
         switch self {
         case .apps: Feature.appRouting.isOn
         case .codes: Feature.qrCodes.isOn
-        case .custom: !Prefs.customWheelItems.isEmpty
+        case .custom: CustomWheel.hasUsablePick
         default: true
         }
     }

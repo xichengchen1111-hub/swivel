@@ -179,19 +179,43 @@ enum Prefs {
         set { defaults.set(newValue.rawValue, forKey: "quickActions.shortcut"); post() }
     }
 
+    /// App Actions. Applications stay in "appTargets.v1" in the shape 1.6 reads (an older build that met a web page's
+    /// delivery there failed on the whole list, fell back to the starters and saved those over it); web pages and the
+    /// combined order have keys of their own, which older builds don't know about and leave alone.
+    static let fileAppTargetKeys = ["appTargets.v1", "appTargets.pages.v1", "appTargets.order.v1"]
     static var fileAppTargets: [FileAppTarget] {
         get {
-            guard let bytes = defaults.data(forKey: "appTargets.v1"),
-                  let values = try? JSONDecoder().decode([FileAppTarget].self, from: bytes) else { return FileAppTarget.starters }
+            let apps = defaults.data(forKey: fileAppTargetKeys[0]).flatMap(decodeEachTarget)
+            let pages = defaults.data(forKey: fileAppTargetKeys[1]).flatMap(decodeEachTarget) ?? []
+            guard apps != nil || !pages.isEmpty else { return FileAppTarget.starters }
+            // 1.7.0 kept pages in the first list; they are read from either place.
+            let order = defaults.stringArray(forKey: fileAppTargetKeys[2]) ?? []
+            let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+            let values = ((apps ?? []) + pages).enumerated().sorted {
+                (rank[$0.element.id] ?? order.count + $0.offset, $0.offset) < (rank[$1.element.id] ?? order.count + $1.offset, $1.offset)
+            }.map(\.element)
             var ids = Set<String>()
             return values.filter { $0.isValid && ids.insert($0.id).inserted }
         }
         set {
             var ids = Set<String>()
             let values = newValue.filter { $0.isValid && ids.insert($0.id).inserted }
-            guard let bytes = try? JSONEncoder().encode(values) else { return }
-            defaults.set(bytes, forKey: "appTargets.v1"); post()
+            guard let apps = try? JSONEncoder().encode(values.filter { !$0.isWebPage }),
+                  let pages = try? JSONEncoder().encode(values.filter(\.isWebPage)) else { return }
+            defaults.set(apps, forKey: fileAppTargetKeys[0])
+            defaults.set(pages, forKey: fileAppTargetKeys[1])
+            defaults.set(values.map(\.id), forKey: fileAppTargetKeys[2]); post()
         }
+    }
+
+    /// The targets in a saved list, one by one: an entry this build can't read is skipped instead of losing the rest.
+    /// Nil only when the data isn't a list at all.
+    static func decodeEachTarget(_ bytes: Data) -> [FileAppTarget]? {
+        struct Entry: Decodable {
+            let value: FileAppTarget?
+            init(from decoder: Decoder) throws { value = try? FileAppTarget(from: decoder) }
+        }
+        return (try? JSONDecoder().decode([Entry].self, from: bytes))?.compactMap(\.value)
     }
 
     /// Force Touch trackpad taps when the pointer moves between menu items and on a drop.
