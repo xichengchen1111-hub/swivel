@@ -47,9 +47,12 @@ struct FileAppTarget: Codable, Equatable, Identifiable, Sendable {
         var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= 2048,
               !text.unicodeScalars.contains(where: { $0.properties.isWhitespace || AssistantDraft.isHidden($0) }) else { return nil }
-        if !text.contains("://") { text = "https://" + text }
+        // A scheme only counts at the start: "example.com/up?next=https://x" is still a bare address.
+        if text.range(of: "^[A-Za-z][A-Za-z0-9+.-]*://", options: .regularExpression) == nil { text = "https://" + text }
         guard let parts = URLComponents(string: text), let scheme = parts.scheme?.lowercased(), let host = parts.host?.lowercased(),
               !host.isEmpty, parts.user == nil, parts.password == nil, let url = parts.url else { return nil }
+        // A percent-escape in the host ("%2F", "%23", "%00") decodes to something else than what a browser connects to.
+        guard !(parts.encodedHost ?? parts.percentEncodedHost ?? "%").contains("%") else { return nil }
         switch scheme {
         case "https": return url
         case "http": return isLocal(host) ? url : nil
@@ -60,7 +63,13 @@ struct FileAppTarget: Codable, Equatable, Identifiable, Sendable {
     /// This Mac, a Bonjour name or a private IPv4 address.
     static func isLocal(_ host: String) -> Bool {
         if host == "localhost" || host.hasSuffix(".localhost") || host.hasSuffix(".local") || host == "[::1]" || host == "::1" { return true }
-        let octets = host.split(separator: ".", omittingEmptySubsequences: false).map { Int($0) }
+        // Canonical decimal only: browsers read "010" or "0127" as octal (and "+127" isn't an octet), so those could
+        // name a public address.
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        let octets = parts.map { part -> Int? in
+            guard (1...3).contains(part.count), part.allSatisfy({ $0.isASCII && $0.isNumber }), part == "0" || !part.hasPrefix("0") else { return nil }
+            return Int(part)
+        }
         guard octets.count == 4, octets.allSatisfy({ $0.map { (0...255).contains($0) } ?? false }) else { return false }
         let a = octets[0]!, b = octets[1]!
         return a == 10 || a == 127 || (a == 172 && (16...31).contains(b)) || (a == 192 && b == 168) || (a == 169 && b == 254)

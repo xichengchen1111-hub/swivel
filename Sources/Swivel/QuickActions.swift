@@ -62,13 +62,14 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         if !Feature.quickActions.isOn {
             hotKey?.unregister(); hotKey = nil; registeredShortcut = nil
             hide()
-        } else if registeredShortcut != Prefs.quickShortcut {
+        } else if registeredShortcut != Prefs.quickShortcut || !shortcutAvailable {
+            // Also retried while the keys are taken (by My Wheel's shortcut until it gives way, say), not only on a change.
             hotKey?.unregister()
-            let key = Prefs.quickShortcut
+            let key = Prefs.quickShortcut, wasAvailable = shortcutAvailable, changed = registeredShortcut != key
             hotKey = HotKey(keyCode: key.keyCode, modifiers: key.modifiers) { [weak self] in self?.toggle() }
             registeredShortcut = key
             shortcutAvailable = hotKey?.status == noErr
-            NotificationCenter.default.post(name: Self.shortcutChanged, object: nil)
+            if changed || shortcutAvailable != wasAvailable { NotificationCenter.default.post(name: Self.shortcutChanged, object: nil) }
         }
         if window?.isVisible == true, !confirming { rebuild() }
     }
