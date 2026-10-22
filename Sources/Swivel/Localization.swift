@@ -57,6 +57,26 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 enum Strings {
     static let table: [String: [String]] = [
         "Open Trim → Subtitles to burn them into the video.": ["打开“剪辑 → 字幕”可将字幕烧录到视频。", "開啟「剪輯 → 字幕」可將字幕燒錄到影片。", "「トリム → 字幕」で動画に字幕を焼き込めます。"],
+        // ID Photo
+        "ID Photo": ["证件照", "證件照", "証明写真"],
+        "One inch (295 × 413)": ["一寸（295 × 413）", "一寸（295 × 413）", "一寸（295 × 413）"],
+        "Two inch (413 × 579)": ["二寸（413 × 579）", "二寸（413 × 579）", "二寸（413 × 579）"],
+        "Passport (33 × 48 mm)": ["护照（33 × 48 毫米）", "護照（33 × 48 公釐）", "パスポート（33 × 48 mm）"],
+        "US Visa (600 × 600)": ["美国签证（600 × 600）", "美國簽證（600 × 600）", "米国ビザ（600 × 600）"],
+        "Pixels": ["像素", "像素", "ピクセル"],
+        "Millimeters": ["毫米", "公釐", "ミリメートル"],
+        "DPI": ["DPI", "DPI", "DPI"],
+        "Zoom": ["缩放", "縮放", "ズーム"],
+        "Vertical Position": ["上下位置", "上下位置", "上下位置"],
+        "Blue": ["蓝色", "藍色", "青"],
+        "Red": ["红色", "紅色", "赤"],
+        "Choose a DPI from 72 to 1200 and valid dimensions.": ["请输入 72–1200 的 DPI 和有效尺寸。", "請輸入 72–1200 的 DPI 和有效尺寸。", "DPI は 72〜1200、サイズは有効な値を入力してください。"],
+        "Choose positive dimensions below 40 megapixels and 10000 pixels per side.": ["尺寸须大于零，总像素低于 4000 万，单边不超过 10000 像素。", "尺寸須大於零，總像素低於 4000 萬，單邊不超過 10000 像素。", "サイズは正の値で、4000 万画素以下、各辺 10000 ピクセル以下にしてください。"],
+        "No face found. Choose a clear portrait facing the camera.": ["找不到人脸，请选择清晰的正面人像。", "找不到人臉，請選擇清晰的正面人像。", "顔が見つかりません。正面を向いた鮮明な写真を選んでください。"],
+        "More than one face found. Choose a photo with just one person.": ["检测到多张人脸，请选择只有一个人的照片。", "偵測到多張人臉，請選擇只有一人的照片。", "複数の顔が見つかりました。一人だけの写真を選んでください。"],
+        "Couldn't locate the eyes and chin. Choose a clearer portrait.": ["无法定位眼睛和下巴，请选择更清晰的人像。", "無法定位眼睛和下巴，請選擇更清晰的人像。", "目とあごの位置を特定できません。鮮明な写真を選んでください。"],
+        "For convenience only. Follow the issuing authority's requirements for official use.": ["仅供便捷使用，正式用途请以办理机构要求为准。", "僅供便捷使用，正式用途請以辦理機構要求為準。", "手軽な作成用です。正式な用途では発行機関の要件に従ってください。"],
+
         // Voice noise reduction
         "Reduce Noise": ["降噪", "降噪", "ノイズを低減"],
         "This audio format or duration is not supported.": ["不支持此音频格式或时长（最长 24 小时）。", "不支援此音訊格式或長度（最長 24 小時）。", "この音声形式または長さは未対応です（最長 24 時間）。"],

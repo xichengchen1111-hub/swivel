@@ -140,6 +140,7 @@ MainActor.assumeIsolated {
                 case "metadata": try MetadataEditor(source: url)
                 case "annotate": try AnnotateEditor(source: url)
                 case "collage": try CollageEditor(urls: args[3...].map { URL(fileURLWithPath: $0) })
+                case "idphoto": IDPhotoEditor(source: url)
                 case "noise": NoiseReductionEditor(source: url)
                 case "trim": try await TrimEditor(source: url)
                 default: try CropEditor(source: url)

@@ -219,6 +219,7 @@ enum Catalog {
                     WheelItem(title: "Resize…") { try await Images.resize($0) },
                     each("Compress", urls) { try await CompressEditor(source: $0).present() },
                     each("Edit", urls) { try await AdjustEditor(source: $0).present() },
+                    each("ID Photo", urls) { try await IDPhotoEditor(source: $0).present() },
                     each("Add BG", urls) { try await BackgroundEditor(source: $0).present() },
                     each("Remove BG", urls) { try await Cutout.removeBackground($0) },
                     each("Blur BG", urls) { try await BlurBackgroundEditor(source: $0).present() },
