@@ -504,18 +504,22 @@ enum Strings {
             ["选择用哪个键打开每个菜单。先开始拖动，再按键。", "選擇用哪個鍵開啟每個選單。先開始拖曳，再按鍵。", "各メニューを開くキーを選びます。先にドラッグを始めてからキーを押します。"],
         """
         Picking a key that another menu uses swaps the two.
+        My Wheel’s actions and shortcut are in Customize.
         For fn / 🌐: System Settings → Keyboard →
         “Press 🌐 key to” → “Do Nothing”.
         """: ["""
         选了另一个菜单正在用的键，两者会互换。
+        我的轮盘的操作和快捷键在“自定义”里设置。
         使用 fn / 🌐 键：系统设置 → 键盘 →
         “按下 🌐 键时” → “不执行任何操作”。
         """, """
         選了另一個選單正在用的鍵，兩者會互換。
+        我的輪盤的操作和快速鍵在「自訂」裡設定。
         使用 fn / 🌐 鍵：系統設定 → 鍵盤 →
         「按下 🌐 鍵時」→「不執行任何動作」。
         """, """
         他のメニューが使っているキーを選ぶと、入れ替わります。
+        マイホイールの操作とショートカットは「カスタマイズ」で設定します。
         fn / 🌐 を使う場合：システム設定 → キーボード →
         「🌐 キーを押して」→「何もしない」。
         """],
@@ -856,5 +860,48 @@ enum Strings {
         "Copied. Paste it into Terminal and press Return, then start a new Claude Code session.": ["已复制。把它粘贴到“终端”并按回车，然后开始一个新的 Claude Code 会话。", "已複製。把它貼到「終端機」並按 Return，然後開始一個新的 Claude Code 工作階段。", "コピーしました。「ターミナル」に貼り付けて Return キーを押し、Claude Code の新しいセッションを始めてください。"],
         "Copied. Add it to ~/.codex/config.toml, then restart Codex.": ["已复制。把它加到 ~/.codex/config.toml，然后重新启动 Codex。", "已複製。把它加到 ~/.codex/config.toml，然後重新啟動 Codex。", "コピーしました。~/.codex/config.toml に追加し、Codex を再起動してください。"],
         "This shortcut is unavailable. Choose another shortcut or open the panel below.": ["这个快捷键不可用。请选择其他组合，或用下方按钮打开面板。", "這個快速鍵無法使用。請選擇其他組合，或用下方按鈕開啟面板。", "このショートカットは使用できません。別のキーを選ぶか、下のボタンで開いてください。"],
+
+        // App Actions: web pages
+        "Copy files and open page": ["复制文件并打开网页", "複製檔案並開啟網頁", "ファイルをコピーしてページを開く"],
+        "The browser for %@ is not installed. Choose another in App Actions.": ["“%@”使用的浏览器未安装，请在应用衔接中另选一个。", "「%@」使用的瀏覽器未安裝，請在 App 動作中另選一個。", "%@ 用のブラウザがインストールされていません。アプリ操作で別のブラウザを選んでください。"],
+        "This web address isn’t valid. Edit it in App Actions.": ["这个网址无效，请在应用衔接中修改。", "這個網址無效，請在 App 動作中修改。", "この Web アドレスは無効です。アプリ操作で編集してください。"],
+        "Drag the files from the card into %@, or paste them there with ⌘V.": ["把卡片上的文件拖进 %@，或在网页里按 ⌘V 粘贴。", "把卡片上的檔案拖進 %@，或在網頁裡按 ⌘V 貼上。", "カードのファイルを %@ にドラッグするか、ページで ⌘V で貼り付けてください。"],
+        "Drag into the page to attach, or press ⌘V there.": ["拖进网页即可添加附件，或在网页里按 ⌘V。", "拖進網頁即可加入附件，或在網頁裡按 ⌘V。", "ページにドラッグして添付するか、ページで ⌘V を押します。"],
+        "Web page · %@": ["网页 · %@", "網頁 · %@", "Web ページ · %@"],
+        "Choose a browser to finish setup": ["选择浏览器以完成设置", "選取瀏覽器以完成設定", "ブラウザを選択して設定を完了"],
+        "Web Page": ["网页", "網頁", "Web ページ"],
+        "Open in": ["打开方式", "開啟方式", "開く場所"],
+        "Browser": ["浏览器", "瀏覽器", "ブラウザ"],
+        "Default Browser (%@)": ["默认浏览器（%@）", "預設瀏覽器（%@）", "デフォルトのブラウザ（%@）"],
+        "Default Browser": ["默认浏览器", "預設瀏覽器", "デフォルトのブラウザ"],
+        "Enter a web address starting with https:// (http only for this Mac or your local network).": ["请输入以 https:// 开头的网址（http 仅限本机或局域网地址）。", "請輸入以 https:// 開頭的網址（http 僅限本機或區域網路位址）。", "https:// で始まるアドレスを入力してください（http はこの Mac かローカルネットワークのみ）。"],
+        "Choose an installed browser.": ["请选择已安装的浏览器。", "請選取已安裝的瀏覽器。", "インストール済みのブラウザを選んでください。"],
+        "Add Web Page…": ["添加网页…", "加入網頁…", "Web ページを追加…"],
+        "Add Web Page": ["添加网页", "加入網頁", "Web ページを追加"],
+        "Edit Web Page": ["编辑网页", "編輯網頁", "Web ページを編集"],
+        "App or Web Page": ["应用或网页", "App 或網頁", "アプリまたは Web ページ"],
+        "Choose which apps and web pages appear in the Apps wheel. Add as many as you like, such as Word, Mail, Photoshop or an upload page, and optionally limit their file extensions.": ["选择在应用衔接轮盘中出现的应用和网页。数量不限，比如 Word、邮件、Photoshop 或某个上传网页，还可以限定文件扩展名。", "選擇在 App 動作輪盤中出現的 App 和網頁。數量不限，例如 Word、郵件、Photoshop 或某個上傳網頁，還可以限定副檔名。", "アプリ操作ホイールに表示するアプリと Web ページを選びます。Word、メール、Photoshop、アップロード用ページなど、いくつでも追加でき、拡張子で絞り込むこともできます。"],
+        "A web page opens in your browser, and the files appear on a small card: drag it into the page (or press ⌘V there) to attach them. Nothing is uploaded until you do.": ["网页会在浏览器中打开，文件显示在一张小卡片上：把它拖进网页（或在网页里按 ⌘V）即可添加。在你这样做之前不会上传任何内容。", "網頁會在瀏覽器中開啟，檔案顯示在一張小卡片上：把它拖進網頁（或在網頁裡按 ⌘V）即可加入。在你這樣做之前不會上傳任何內容。", "Web ページがブラウザで開き、ファイルが小さなカードに表示されます。カードをページにドラッグする（またはページで ⌘V）と添付できます。そうするまで何もアップロードされません。"],
+        "Swivel opens the page, copies the files and shows them on a small card: drag it into the page to attach them, or press ⌘V there. For Gmail, use a new-message link: https://mail.google.com/mail/?view=cm&fs=1. File names and contents are never added to the address.": ["Swivel 会打开网页、复制文件，并在一张小卡片上显示文件：把卡片拖进网页即可添加附件，或在网页里按 ⌘V。Gmail 请用写邮件链接：https://mail.google.com/mail/?view=cm&fs=1。文件名和内容不会加进网址。", "Swivel 會開啟網頁、複製檔案，並在一張小卡片上顯示檔案：把卡片拖進網頁即可加入附件，或在網頁裡按 ⌘V。Gmail 請用撰寫郵件連結：https://mail.google.com/mail/?view=cm&fs=1。檔名和內容不會加進網址。", "Swivel がページを開いてファイルをコピーし、小さなカードに表示します。カードをページにドラッグして添付するか、ページで ⌘V を押します。Gmail では新規メールのリンク https://mail.google.com/mail/?view=cm&fs=1 を使ってください。ファイル名や内容がアドレスに加えられることはありません。"],
+
+        // My Wheel
+        "My Wheel": ["我的轮盘", "我的輪盤", "マイホイール"],
+        "Not used": ["不使用", "不使用", "使用しない"],
+        "Key while dragging:": ["拖动时按键：", "拖曳時按鍵：", "ドラッグ中のキー："],
+        "Key while dragging": ["拖动时按键", "拖曳時按鍵", "ドラッグ中のキー"],
+        "Shortcut:": ["快捷键：", "快速鍵：", "ショートカット："],
+        "Keyboard shortcut": ["键盘快捷键", "鍵盤快速鍵", "キーボードショートカット"],
+        "Record Shortcut": ["录制快捷键", "錄製快速鍵", "ショートカットを記録"],
+        "Type a shortcut…": ["请按下快捷键…", "請按下快速鍵…", "ショートカットを入力…"],
+        "Show My Wheel": ["显示我的轮盘", "顯示我的輪盤", "マイホイールを表示"],
+        "Tick actions from every menu to build My Wheel. While dragging, it shows only the ones that fit the file.": ["从所有菜单里勾选操作，组成你的轮盘。拖动文件时只显示适用于该文件的操作。", "從所有選單裡勾選操作，組成你的輪盤。拖曳檔案時只顯示適用於該檔案的操作。", "すべてのメニューから操作を選んでマイホイールを作ります。ドラッグ中は、そのファイルに使える操作だけが表示されます。"],
+        "Record a shortcut to open My Wheel without dragging; picked actions then ask for files.": ["录制一个快捷键，不拖文件也能打开我的轮盘；点选操作后会让你选择文件。", "錄製一個快速鍵，不拖曳檔案也能開啟我的輪盤；點選操作後會請你選擇檔案。", "ショートカットを記録すると、ドラッグせずにマイホイールを開けます。その場合は操作を選んだあとにファイルを選びます。"],
+        "Another Swivel shortcut uses these keys. Choose a different one.": ["Swivel 的其他快捷键已在使用这组按键，请换一个。", "Swivel 的其他快速鍵已在使用這組按鍵，請換一個。", "Swivel の別のショートカットがこのキーを使っています。別のキーを選んでください。"],
+        "Include ⌘, ⌃ or ⌥ in the shortcut.": ["快捷键需要包含 ⌘、⌃ 或 ⌥。", "快速鍵需要包含 ⌘、⌃ 或 ⌥。", "ショートカットには ⌘、⌃、⌥ のいずれかを含めてください。"],
+        "This key can’t be used. Try a letter, number or function key.": ["这个键不能使用，请试试字母、数字或功能键。", "這個鍵不能使用，請試試字母、數字或功能鍵。", "このキーは使えません。文字、数字、ファンクションキーを試してください。"],
+        "“%@” can’t be used with these files.": ["“%@”不适用于这些文件。", "「%@」不適用於這些檔案。", "「%@」はこれらのファイルには使えません。"],
+        "Remove every action from My Wheel?": ["从我的轮盘中移除全部操作？", "從我的輪盤中移除全部操作？", "マイホイールからすべての操作を削除しますか？"],
+        "Its key and shortcut stay as they are.": ["它的按键和快捷键保持不变。", "它的按鍵和快速鍵保持不變。", "キーとショートカットはそのまま残ります。"],
+        "Remove All": ["全部移除", "全部移除", "すべて削除"],
     ]
 }

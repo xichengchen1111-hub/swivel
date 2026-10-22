@@ -252,7 +252,8 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
             }
             return list
         }
-        for mode in WheelMode.allCases {
+        // My Wheel only repeats actions the other menus already list.
+        for mode in WheelMode.allCases where mode != .custom {
             let items = Feature.wheel.isOn ? Catalog.items(for: files, mode: mode) : Catalog.standaloneItems(for: files, mode: mode)
             list += items.map { item in
                 QuickCommand(id: "\(mode.id).\(item.title)", title: item.displayTitle, detail: mode.title, symbol: mode.symbol) {

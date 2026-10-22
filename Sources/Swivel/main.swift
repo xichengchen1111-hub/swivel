@@ -28,8 +28,9 @@ MainActor.assumeIsolated {
         }
         QuickActions.shared.syncSettings()
         ShortcutWheel.shared.sync()
+        CustomWheelLauncher.shared.sync()
         NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { QuickActions.shared.syncSettings(); ShortcutWheel.shared.sync() }
+            MainActor.assumeIsolated { QuickActions.shared.syncSettings(); ShortcutWheel.shared.sync(); CustomWheelLauncher.shared.sync() }
         }
         switch args[2] {
         case "text":
@@ -52,6 +53,9 @@ MainActor.assumeIsolated {
             if args.count > 3 { QRCodesWindow(args.dropFirst(3).map { URL(fileURLWithPath: $0) }).show() }
             else { AppWindow.shared.show(.qrCodes) }
         case "apps": AppWindow.shared.show(.appRouting)
+        case "customize": AppWindow.shared.show(.customize)
+        case "shortcuts": AppWindow.shared.show(.shortcuts)
+        case "mywheel": CustomizePane.open(.custom)
         case "library": QRLibraryWindow().show()
         case "doctor":
             if args.count > 3 { DoctorWindow.present(app: URL(fileURLWithPath: args[3])) } else { DoctorWindow.present() }

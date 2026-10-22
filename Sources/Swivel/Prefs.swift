@@ -2,8 +2,11 @@ import AppKit
 
 /// A modifier key that can open a menu while dragging.
 enum TriggerKey: String, CaseIterable {
-    case shift, command, control, option, fn
+    /// `off`: the menu opens by no key during a drag. There are five keys and six menus, so one at least has none
+    /// (My Wheel until the user gives it a key).
+    case shift, command, control, option, fn, off
 
+    /// Empty for `off`, which no tap matches.
     var flag: NSEvent.ModifierFlags {
         switch self {
         case .shift: .shift
@@ -11,6 +14,7 @@ enum TriggerKey: String, CaseIterable {
         case .control: .control
         case .option: .option
         case .fn: .function
+        case .off: []
         }
     }
 
@@ -21,6 +25,7 @@ enum TriggerKey: String, CaseIterable {
         case .control: L("⌃")
         case .option: L("⌥")
         case .fn: L("fn")
+        case .off: "–"
         }
     }
 
@@ -31,8 +36,12 @@ enum TriggerKey: String, CaseIterable {
         case .control: L("⌃ Control")
         case .option: L("⌥ Option")
         case .fn: L("fn / 🌐")
+        case .off: L("Not used")
         }
     }
+
+    /// Whether tapping these keys opens a menu with this key.
+    func isTapped(in pressed: NSEvent.ModifierFlags) -> Bool { self != .off && pressed.contains(flag) }
 }
 
 /// How the menu that pops up under the cursor is laid out.
@@ -233,14 +242,15 @@ enum Prefs {
     private static let defaultKeys: [WheelMode: TriggerKey] = [.convert: .shift, .tools: .command, .actions: .control, .apps: .option, .codes: .fn]
 
     static func key(for mode: WheelMode) -> TriggerKey {
-        // Preserve explicit old assignments first; give new wheels whichever keys remain free.
+        // Preserve explicit old assignments first; give new wheels whichever keys remain free. Any number of menus
+        // can be off; My Wheel has no default key, so it never takes one the user didn't give it.
         var chosen: [WheelMode: TriggerKey] = [:], used = Set<TriggerKey>()
         for candidate in WheelMode.allCases {
-            if let value = defaults.string(forKey: "key.\(candidate.id)"), let key = TriggerKey(rawValue: value), used.insert(key).inserted { chosen[candidate] = key }
+            if let value = defaults.string(forKey: "key.\(candidate.id)"), let key = TriggerKey(rawValue: value), key == .off || used.insert(key).inserted { chosen[candidate] = key }
         }
         for candidate in WheelMode.allCases where chosen[candidate] == nil {
-            let preferred = defaultKeys[candidate]!
-            let value = used.contains(preferred) ? TriggerKey.allCases.first { !used.contains($0) }! : preferred
+            guard let preferred = defaultKeys[candidate] else { chosen[candidate] = .off; continue }
+            let value = used.contains(preferred) ? TriggerKey.allCases.first { $0 != .off && !used.contains($0) } ?? .off : preferred
             chosen[candidate] = value; used.insert(value)
         }
         return chosen[mode]!
@@ -255,10 +265,10 @@ enum Prefs {
         set { defaults.set(newValue.rawValue, forKey: "wheel.shortcut"); post() }
     }
 
-    /// Assigns a key; if another menu already used it, that menu takes this one's old key.
+    /// Assigns a key; if another menu already used it, that menu takes this one's old key (possibly none).
     static func setKey(_ key: TriggerKey, for mode: WheelMode) {
         let old = self.key(for: mode)
-        if let clash = WheelMode.allCases.first(where: { $0 != mode && self.key(for: $0) == key }) {
+        if key != .off, let clash = WheelMode.allCases.first(where: { $0 != mode && self.key(for: $0) == key }) {
             defaults.set(old.rawValue, forKey: "key.\(clash.id)")
         }
         defaults.set(key.rawValue, forKey: "key.\(mode.id)")
@@ -268,6 +278,33 @@ enum Prefs {
     static func resetKeys() {
         for mode in WheelMode.allCases { defaults.removeObject(forKey: "key.\(mode.id)") }
         post()
+    }
+
+    // MARK: My Wheel
+
+    /// My Wheel's actions in the user's order, as `CustomWheel.Ref` ids ("convert/JPG", "apps/app.<id>").
+    static var customWheelItems: [String] {
+        get { defaults.stringArray(forKey: "customWheel.items") ?? [] }
+        set {
+            var seen = Set<String>()
+            defaults.set(newValue.filter { CustomWheel.Ref(id: $0) != nil && seen.insert($0).inserted }, forKey: "customWheel.items"); post()
+        }
+    }
+
+    /// The keyboard shortcut that opens My Wheel without a drag, if the user recorded one.
+    static var customWheelShortcut: KeyCombo? {
+        get {
+            guard let bytes = defaults.data(forKey: "customWheel.shortcut"), let combo = try? JSONDecoder().decode(KeyCombo.self, from: bytes) else { return nil }
+            return combo.isValid ? combo : nil
+        }
+        set {
+            if let newValue, newValue.isValid, let bytes = try? JSONEncoder().encode(newValue) {
+                defaults.set(bytes, forKey: "customWheel.shortcut")
+            } else {
+                defaults.removeObject(forKey: "customWheel.shortcut")
+            }
+            post()
+        }
     }
 
     // MARK: Menu contents

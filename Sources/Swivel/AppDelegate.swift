@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         QuickActions.shared.syncSettings()
         ShortcutWheel.shared.sync()
+        CustomWheelLauncher.shared.sync()
         Clothesline.shared.start()
         if ProcessInfo.processInfo.environment["SWIVEL_SHOW_ROPE"] != nil {  // for testing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { Clothesline.shared.toggle() }
@@ -41,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.rebuildMenu()
                 QuickActions.shared.syncSettings()
                 ShortcutWheel.shared.sync()
+                CustomWheelLauncher.shared.sync()
             }
         }
         NotificationCenter.default.addObserver(forName: KeepAwake.changed, object: nil, queue: .main) { [weak self] _ in
@@ -115,7 +117,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.image = NSImage(systemSymbolName: !anyOn ? "circle.dashed" : KeepAwake.shared.isActive ? "circle.circle.fill" : "circle.circle",
                                            accessibilityDescription: "Swivel")
         statusItem.button?.appearsDisabled = !anyOn
-        let keys = WheelMode.allCases.map { "\(Prefs.key(for: $0).symbol) \($0.title)" }.joined(separator: " · ")
+        let keys = WheelMode.allCases.filter { Prefs.key(for: $0) != .off && ($0 != .custom || $0.isAvailable) }
+            .map { "\(Prefs.key(for: $0).symbol) \($0.title)" }.joined(separator: " · ")
         var tip: [String] = []
         if wheelOn { tip.append(L("Wheel: drag a file, then tap %@", keys)) }
         if ropeOn { tip.append(L("Clothesline: move to the top edge, or press ⌃⌥T")) }
@@ -147,6 +150,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let item = NSMenuItem(title: "\(Prefs.key(for: mode).title) — \(L(title))", action: nil, keyEquivalent: "")
                 item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
                 item.submenu = Self.guide(for: mode)
+                menu.addItem(item)
+            }
+            if !Prefs.customWheelItems.isEmpty {
+                let key = Prefs.key(for: .custom), shortcut = Prefs.customWheelShortcut.map { "  " + $0.title } ?? ""
+                let item = NSMenuItem(title: (key == .off ? L("My Wheel") : "\(key.title) — \(L("My Wheel"))") + shortcut,
+                                      action: #selector(showMyWheel), keyEquivalent: "")
+                item.target = self
+                item.image = NSImage(systemSymbolName: WheelMode.custom.symbol, accessibilityDescription: nil)
                 menu.addItem(item)
             }
             add(to: menu, L("Menu Style: %@…", Prefs.style.title), #selector(openStyle))
@@ -284,6 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func appActions() { AppWindow.shared.show(.appRouting) }
     @objc private func openDoctor() { DoctorWindow.present() }
     @objc private func openCodeLibrary() { QRLibraryWindow().show() }
+    @objc private func showMyWheel() { CustomWheelLauncher.shared.show() }
     @objc private func showToolWheel() { ShortcutWheel.shared.show() }
 
     @objc private func toggleLogin() {

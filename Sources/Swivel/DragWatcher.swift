@@ -4,7 +4,7 @@ import os
 let log = Logger(subsystem: "local.swivel.app", category: "drag")
 
 enum WheelMode: String, CaseIterable {
-    case convert, tools, actions, apps, codes
+    case convert, tools, actions, apps, codes, custom
 
     var id: String {
         rawValue
@@ -17,15 +17,27 @@ enum WheelMode: String, CaseIterable {
         case .actions: L("Actions")
         case .apps: L("App Actions")
         case .codes: L("QR Library")
+        case .custom: L("My Wheel")
         }
     }
 
     var symbol: String {
-        switch self { case .convert: "arrow.triangle.2.circlepath"; case .tools: "slider.horizontal.3"; case .actions: "bolt"; case .apps: "arrow.up.forward.app"; case .codes: "qrcode" }
+        switch self { case .convert: "arrow.triangle.2.circlepath"; case .tools: "slider.horizontal.3"; case .actions: "bolt"; case .apps: "arrow.up.forward.app"; case .codes: "qrcode"; case .custom: "star.circle" }
     }
 
     @MainActor var key: String { Prefs.key(for: self).symbol }
-    @MainActor var isAvailable: Bool { self == .apps ? Feature.appRouting.isOn : self == .codes ? Feature.qrCodes.isOn : true }
+    @MainActor var isAvailable: Bool {
+        switch self {
+        case .apps: Feature.appRouting.isOn
+        case .codes: Feature.qrCodes.isOn
+        case .custom: !Prefs.customWheelItems.isEmpty
+        default: true
+        }
+    }
+    /// The menu a key tap during a drag opens, if any.
+    @MainActor static func tapped(_ pressed: NSEvent.ModifierFlags) -> WheelMode? {
+        allCases.first { $0.isAvailable && Prefs.key(for: $0).isTapped(in: pressed) }
+    }
 }
 
 /// Notices when a file drag is in progress anywhere on screen and reports modifier-key taps during it.
@@ -133,7 +145,7 @@ final class DragWatcher {
             // Keys already held when the button went down don't count; one tapped since then (and still held) does.
             let early = earlyTaps.intersection(flags)
             earlyTaps = []
-            if let mode = WheelMode.allCases.first(where: { $0.isAvailable && early.contains(Prefs.key(for: $0).flag) }) {
+            if let mode = WheelMode.tapped(early) {
                 log.info("key tapped before the drag was recognised: \(early.rawValue)")
                 onKeyTap?(mode)
             }
@@ -142,7 +154,7 @@ final class DragWatcher {
 
         let pressed = flags.subtracting(lastFlags)
         if !pressed.isEmpty { log.info("key tap during drag: \(pressed.rawValue)") }
-        if let mode = WheelMode.allCases.first(where: { $0.isAvailable && pressed.contains(Prefs.key(for: $0).flag) }) {
+        if let mode = WheelMode.tapped(pressed) {
             onKeyTap?(mode)
         }
     }

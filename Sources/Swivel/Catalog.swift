@@ -124,6 +124,7 @@ enum Catalog {
     }
 
     static func defaultItems(for urls: [URL], mode: WheelMode) -> [WheelItem] {
+        if mode == .custom { return CustomWheel.items(for: urls) }
         if mode == .codes {
             guard Feature.qrCodes.isOn else { return [] }
             return [WheelItem(title: "QR Library") { _ in
@@ -153,7 +154,7 @@ enum Catalog {
         let multi = urls.count > 1
 
         switch mode {
-        case .apps, .codes: return [] // Handled above, including no-file shortcut wheels.
+        case .apps, .codes, .custom: return [] // Handled above, including no-file shortcut wheels.
         case .actions:
             var list = actions(multi: multi)
             if Feature.batchRename.isOn {
@@ -169,6 +170,7 @@ enum Catalog {
                     return ActionResult(message: urls.count == 1 ? L("Hung on the clothesline") : L("Hung %d images on the clothesline", urls.count))
                 }, at: 1)
             }
+            if kind == .document { list.append(each("Word Count", urls, Docs.wordCount)) }
             return Feature.shelf.isOn ? list : list.filter { $0.title != "Float" }
 
         case .convert:
@@ -269,7 +271,7 @@ enum Catalog {
                 if multi { list.insert(WheelItem(title: "Merge") { saved([try await PDFs.merge($0)]) }, at: 0) }
                 return list
             case .document:
-                return [each("Word Count", urls, Docs.wordCount)]
+                return []  // Word Count is in the Actions menu.
             case .archive, .folder, .other:
                 return Archives.compressItems
             }
