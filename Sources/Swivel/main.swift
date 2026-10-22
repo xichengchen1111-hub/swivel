@@ -135,6 +135,7 @@ MainActor.assumeIsolated {
                 case "edit": try AdjustEditor(source: url)
                 case "bg": try BackgroundEditor(source: url)
                 case "blur": try BlurBackgroundEditor(source: url)
+                case "retouch": try RetouchEditor(source: url)
                 case "redact": try RedactEditor(source: url)
                 case "metadata": try MetadataEditor(source: url)
                 case "annotate": try AnnotateEditor(source: url)

@@ -56,6 +56,15 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 /// English → [简体中文, 繁體中文, 日本語].
 enum Strings {
     static let table: [String: [String]] = [
+        // Retouch
+        "Retouch": ["修复", "修復", "修復"],
+        "Brush Size": ["画笔大小", "筆刷大小", "ブラシサイズ"],
+        "Show Original": ["查看原图", "檢視原圖", "元の画像を表示"],
+        "Paint over an object to repair the background.": ["涂抹物体，松手后自动修复背景。", "塗抹物體，放開後自動修復背景。", "物体を塗り、放すと背景を修復します。"],
+        "Couldn't repair this area.": ["无法修复此区域。", "無法修復此區域。", "この領域を修復できませんでした。"],
+        "Nothing to retouch. Paint over an object first.": ["尚未涂抹，请先涂抹要修复的物体。", "尚未塗抹，請先塗抹要修復的物體。", "修復する物体を先に塗ってください。"],
+        "Leave some background unpainted to repair this area.": ["请保留部分未涂抹的背景用于修复。", "請保留部分未塗抹的背景以供修復。", "修復に使う背景を一部残してください。"],
+
         // Keep Awake
         "Keep Awake": ["防休眠", "防止睡眠", "スリープ防止"],
         "Stop your Mac from going to sleep for a while: during a long copy, a download or a presentation.": ["让 Mac 暂时不进入睡眠：适合长时间拷贝、下载或演示。", "讓 Mac 暫時不進入睡眠：適合長時間拷貝、下載或簡報。", "長いコピーやダウンロード、プレゼンの間、Mac をスリープさせません。"],
