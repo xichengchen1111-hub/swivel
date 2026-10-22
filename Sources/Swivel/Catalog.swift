@@ -215,6 +215,7 @@ enum Catalog {
             case .image:
                 let editors: [WheelItem] = [
                     each("Crop", urls) { try await CropEditor(source: $0).present() },
+                    each("Upscale", urls) { try await UpscaleEditor(source: $0).present() },
                     WheelItem(title: "Resize…") { try await Images.resize($0) },
                     each("Compress", urls) { try await CompressEditor(source: $0).present() },
                     each("Edit", urls) { try await AdjustEditor(source: $0).present() },
@@ -255,6 +256,7 @@ enum Catalog {
                         option.title == "Compress" ? WheelItem(title: "Compress") { try await Video.compress($0) }
                             : each(option.title, urls, option.run)
                     }
+                list.insert(each("Upscale", urls) { try await UpscaleEditor(source: $0, video: true).present() }, at: 1)
                 if #available(macOS 26, *) {
                     list.insert(WheelItem(title: "Subtitles") { try await TranscriptionEditor.run($0, isVideo: true) }, at: 1)
                 }

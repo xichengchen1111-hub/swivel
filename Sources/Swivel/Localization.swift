@@ -57,6 +57,21 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 enum Strings {
     static let table: [String: [String]] = [
         "Open Trim → Subtitles to burn them into the video.": ["打开“剪辑 → 字幕”可将字幕烧录到视频。", "開啟「剪輯 → 字幕」可將字幕燒錄到影片。", "「トリム → 字幕」で動画に字幕を焼き込めます。"],
+        // Upscale
+        "Upscale": ["放大", "放大", "拡大"],
+        "Scale": ["倍率", "倍率", "倍率"],
+        "AI upscaling is not supported on this Mac.": ["此 Mac 不支持 AI 放大。", "此 Mac 不支援 AI 放大。", "この Mac は AI 拡大に対応していません。"],
+        "AI upscaling input is limited to %@. Choose a smaller file.": ["AI 放大的输入尺寸上限为 %@，请选择更小的文件。", "AI 放大的輸入尺寸上限為 %@，請選擇更小的檔案。", "AI 拡大の入力上限は %@ です。小さいファイルを選んでください。"],
+        "These dimensions or this scale are not supported by the system upscaler.": ["系统放大功能不支持此尺寸或倍率。", "系統放大功能不支援此尺寸或倍率。", "システムの拡大機能はこのサイズや倍率に対応していません。"],
+        "Upscaling resources are not installed.": ["尚未安装放大资源。", "尚未安裝放大資源。", "拡大リソースがインストールされていません。"],
+        "Couldn't allocate an upscaling frame.": ["无法分配放大处理所需的帧。", "無法配置放大處理所需的影格。", "拡大用フレームを確保できませんでした。"],
+        "The enlarged image would be too large.": ["放大后的图片过大。", "放大後的圖片過大。", "拡大後の画像が大きすぎます。"],
+        "Couldn't render": ["无法渲染", "無法算繪", "描画できませんでした"],
+        "AI upscaling uses Apple's on-device model.": ["AI 放大使用 Apple 的本机模型。", "AI 放大使用 Apple 的本機模型。", "AI 拡大には Apple のオンデバイスモデルを使います。"],
+        "Ordinary Lanczos enlargement. AI upscaling requires macOS 26.": ["普通 Lanczos 放大。AI 放大需要 macOS 26。", "一般 Lanczos 放大。AI 放大需要 macOS 26。", "通常の Lanczos 拡大です。AI 拡大には macOS 26 が必要です。"],
+        "Download upscaling resources?": ["下载放大资源？", "下載放大資源？", "拡大リソースをダウンロードしますか？"],
+        "Apple needs to download an upscaling model once. Your files stay on this Mac.": ["Apple 首次使用时需要下载放大模型，文件保留在本机。", "Apple 首次使用時需要下載放大模型，檔案保留在本機。", "初回のみ Apple の拡大モデルをダウンロードします。ファイルはこの Mac 上に残ります。"],
+
         // Local transcription and subtitles
         "Subtitles": ["字幕", "字幕", "字幕"],
         "Transcribe": ["转文字", "轉文字", "文字起こし"],

@@ -48,6 +48,16 @@ struct SubtitleTests {
         #expect(before == after && before != during)
         // Safe bottom margin is clear.
         #expect(Array(during.prefix(640 * 20 * 4)) == Array(before.prefix(640 * 20 * 4)))
+        let cjk = try #require(Subtitles.overlay(SubtitleCue(start: 0, end: 1, text: String(repeating: "你", count: 42)),
+                                                  size: CGSize(width: 640, height: 360)))
+        let glyphs = try Retouch.Raster(#require(context.createCGImage(cjk, from: cjk.extent)))
+        var whiteColumns: [Int] = []
+        for y in 0..<glyphs.height { for x in 0..<glyphs.width {
+            let i = (y * glyphs.width + x) * 4
+            if glyphs.bytes[i] > 200 && glyphs.bytes[i + 3] > 200 { whiteColumns.append(x) }
+        } }
+        #expect(!whiteColumns.isEmpty && (whiteColumns.min() ?? 0) >= 16 && (whiteColumns.max() ?? 640) < 624)
+
     }
 
     @Test @MainActor func menuPlacementAvailabilityAndTranslations() throws {

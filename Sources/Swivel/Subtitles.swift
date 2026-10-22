@@ -95,8 +95,16 @@ enum Subtitles {
         if let image = cache.object(forKey: key) { return CIImage(cgImage: image) }
         let w = Int(size.width), h = Int(size.height)
         guard w > 0, h > 0 else { return nil }
-        let fontSize = max(10, min(size.width * 0.034, size.height * 0.055))
+        var fontSize = max(10, min(size.width * 0.034, size.height * 0.055))
         let lines = Array(wrap(cue.text).split(separator: "\n").prefix(3))
+        // A 42-character CJK line is wider than an English one. Fit the actual glyphs to the safe width.
+        let measuringFont = CTFontCreateUIFontForLanguage(.system, fontSize, nil)!
+        let widest = lines.map {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: String($0), attributes: [
+                NSAttributedString.Key(kCTFontAttributeName as String): measuringFont]))
+            return CTLineGetTypographicBounds(line, nil, nil, nil)
+        }.max() ?? 0
+        if widest > size.width * 0.9 { fontSize *= size.width * 0.9 / widest }
         let lineHeight = fontSize * 1.35
         let height = min(h, Int(ceil(lineHeight * Double(lines.count) + fontSize)))
         guard let ctx = CGContext(data: nil, width: w, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -204,6 +212,7 @@ final class TranscriptionEditor: Editor {
         if !isVideo { addRow("", extraSRT) }
         progress.isIndeterminate = false
         progress.minValue = 0; progress.maxValue = 1
+        progress.widthAnchor.constraint(equalToConstant: 240).isActive = true
         addRow("", progress)
     }
     static func run(_ sources: [URL], isVideo: Bool) async throws -> ActionResult {
