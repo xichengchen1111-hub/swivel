@@ -447,6 +447,17 @@ struct SecurityTests {
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).allSatisfy { !$0.hasPrefix(".swivel-") })
 
+        // Most downloads hold loose files at the top, not one folder: they extract and keep the flag too.
+        let loose = dir.appendingPathComponent("notes.txt")
+        try "notes".write(to: loose, atomically: true, encoding: .utf8)
+        let zip = dir.appendingPathComponent("Loose.zip")
+        try await Shell.run("/usr/bin/zip", ["-q", zip.path, "notes.txt"], in: dir)
+        try FileManager.default.removeItem(at: loose)
+        #expect(setxattr(zip.path, "com.apple.quarantine", flag, flag.utf8.count, 0, 0) == 0)
+        let looseOutputs = try await Archives.extract(zip)
+        #expect(looseOutputs.map(\.lastPathComponent) == ["notes.txt"])
+        #expect(looseOutputs.allSatisfy { getxattr($0.path, "com.apple.quarantine", nil, 0, 0, 0) > 0 })
+
         // An encrypted ZIP under another extension goes through tar: a clear message, at once, no staging left behind.
         let secret = dir.appendingPathComponent("s.txt")
         try "secret".write(to: secret, atomically: true, encoding: .utf8)

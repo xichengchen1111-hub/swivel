@@ -115,6 +115,7 @@ enum Strings {
         "Stopped: extracting would fill the disk.": ["已停止：继续解压会占满磁盘。", "已停止：繼續解壓縮會佔滿磁碟。", "停止しました：展開を続けるとディスクがいっぱいになります。"],
         "This archive is password-protected. Swivel can't open encrypted archives yet.": ["此压缩包有密码保护，Swivel 暂时无法解压加密压缩包。", "此壓縮檔有密碼保護，Swivel 暫時無法解壓縮加密壓縮檔。", "このアーカイブはパスワードで保護されています。暗号化されたアーカイブはまだ展開できません。"],
         "Part %d of this archive is missing.": ["缺少此压缩包的第 %d 卷。", "缺少此壓縮檔的第 %d 卷。", "このアーカイブのパート %d が見つかりません。"],
+        "Can't write to the folder %@.": ["无法写入文件夹“%@”。", "無法寫入檔案夾「%@」。", "フォルダ“%@”に書き込めません。"],
         "Couldn't mark the extracted files as downloaded.": ["无法将解压出的文件标记为下载文件。", "無法將解壓縮的檔案標記為下載檔案。", "展開したファイルにダウンロード済みの印を付けられませんでした。"],
         "Couldn't remove all of the selected metadata from this file.": ["无法从此文件中移除全部所选元数据。", "無法從此檔案移除所有選取的中繼資料。", "選択したメタデータをこのファイルからすべて削除できませんでした。"],
         "This movie uses media from other files. Only self-contained files can be converted.": ["此影片引用了其他文件中的媒体，只能转换自包含的文件。", "此影片引用了其他檔案中的媒體，只能轉換自含式檔案。", "このムービーは他のファイルのメディアを参照しています。単体で完結したファイルのみ変換できます。"],

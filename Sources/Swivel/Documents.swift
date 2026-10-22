@@ -113,6 +113,11 @@ enum Docs {
         let used = view.layoutManager?.usedRect(for: view.textContainer!).height ?? 1
         view.setFrameSize(NSSize(width: width, height: max(used, 1)))
 
+        // Printing into a folder that can't be written never returns (the print session fails with -61 and the
+        // operation waits), so check first.
+        guard access(out.deletingLastPathComponent().path, W_OK) == 0 else {
+            throw ToolError(L("Can't write to the folder %@.", out.deletingLastPathComponent().lastPathComponent))
+        }
         let op = NSPrintOperation(view: view, printInfo: info)
         op.showsPrintPanel = false
         op.showsProgressPanel = false
@@ -423,6 +428,10 @@ enum Archives {
         var paths: [String] = [], walkFailed = false
         for item in items {
             paths.append(item.path)
+            // Only folders are walked: enumerating a plain file reports "Not a directory", which isn't a failure.
+            var info = stat()
+            guard lstat(item.path, &info) == 0 else { throw failed }
+            guard info.st_mode & S_IFMT == S_IFDIR else { continue }
             let walk = FileManager.default.enumerator(at: item, includingPropertiesForKeys: nil, options: []) { _, _ in
                 walkFailed = true
                 return false

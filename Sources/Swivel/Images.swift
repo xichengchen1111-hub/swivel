@@ -51,6 +51,7 @@ enum Images {
     static func makePDF(_ urls: [URL]) async throws -> [URL] {
         let doc = PDFDocument()
         for url in urls {
+            try refuseFlood(url)  // NSImage decodes at full size, like `load`
             guard let image = NSImage(contentsOf: url), let page = PDFPage(image: image) else {
                 throw ToolError("Couldn't read \(url.lastPathComponent)")
             }
@@ -67,6 +68,17 @@ enum Images {
 
     /// Full-size decodes above this many pixels are refused (about 300 MP, 1.2 GB of RGBA).
     static let maxDecodePixels = 300_000_000.0
+
+    /// Throws for a "pixel flood" file whose full-size decode would claim many gigabytes.
+    static func refuseFlood(_ url: URL) throws {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw ToolError("Couldn't read \(url.lastPathComponent)") }
+        let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
+        let width = props[kCGImagePropertyPixelWidth] as? Int ?? 4096
+        let height = props[kCGImagePropertyPixelHeight] as? Int ?? 4096
+        if Double(width) * Double(height) > maxDecodePixels {
+            throw ToolError("\(url.lastPathComponent) is too large to open (\(width) × \(height) px)")
+        }
+    }
 
     /// Decodes the image upright (EXIF orientation applied), optionally capped in size.
     static func load(_ url: URL, maxPixels: Int? = nil) throws -> CGImage {
