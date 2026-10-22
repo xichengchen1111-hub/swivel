@@ -54,6 +54,18 @@ final class TrimEditor: Editor {
     private var reduceNoise: NSButton!
     private var noiseStrength: DetentSlider!
     private var exportTask: Task<[URL], Error>?
+    private var musicURL: URL?
+    private var musicVolume: DetentSlider!
+    private var duckMusic: NSButton!
+    private var duckDB: DetentSlider!
+    private let musicName = NSTextField(labelWithString: "")
+    private let duckLabel = TrimEditor.valueLabel()
+    private let musicStatus = NSTextField(wrappingLabelWithString: "")
+    private lazy var musicPreview: MusicPreview = {
+        let preview = MusicPreview(master: player, view: playerView, source: source)
+        preview.onStatus = { [weak self] text in self?.musicStatus.stringValue = text }
+        return preview
+    }()
     private var fadeIn: DetentSlider!
     private var fadeOut: DetentSlider!
     private let fadeInLabel = TrimEditor.valueLabel()
@@ -121,6 +133,20 @@ final class TrimEditor: Editor {
         reduceNoise = checkbox("Reduce Noise", false)
         noiseStrength = slider(0, 1, 0.75)
         sound.append(makeRow("", [reduceNoise, noiseStrength]))
+        musicVolume = slider(0, 1, 0.4)
+        duckMusic = checkbox("Lower music when someone speaks", true)
+        duckDB = slider(-30, 0, -12)
+        musicName.lineBreakMode = .byTruncatingMiddle
+        musicName.setContentCompressionResistancePriority(.init(100), for: .horizontal)
+        musicStatus.font = .systemFont(ofSize: 10); musicStatus.textColor = .secondaryLabelColor
+        if !isAudio {
+            let chooseMusic = NSButton(title: L("Choose Music…"), target: self, action: #selector(chooseMusicClicked))
+            let clearMusic = NSButton(title: L("Remove Music"), target: self, action: #selector(removeMusicClicked))
+            for button in [chooseMusic, clearMusic] { button.bezelStyle = .push }
+            sound += [makeRow("Music", [chooseMusic, clearMusic, musicName]), makeRow("Music Volume", [musicVolume]),
+                      makeRow("", [duckMusic]), makeRow("Duck by", [duckDB, duckLabel]), makeRow("", [musicStatus])]
+            window.setContentSize(NSSize(width: 680, height: 860))
+        }
         pages["Sound"] = sound
 
         strip.onPick = { [weak self] index in
@@ -239,6 +265,10 @@ final class TrimEditor: Editor {
             s.ratio = VideoEdit.ratios[max(0, ratio.indexOfSelectedItem)].value
             s.position = position.doubleValue
             s.subtitles = burnSubtitles.state == .on ? subtitleCues : []
+            s.musicURL = musicURL
+            s.musicVolume = musicVolume.doubleValue
+            s.duckMusic = duckMusic.state == .on
+            s.duckDB = duckDB.doubleValue
             s.removeAudio = removeAudio.state == .on && removeAudio.isEnabled
             var color = PhotoSettings()
             for control in colorSliders { color[keyPath: control.key] = control.slider.doubleValue }
@@ -279,6 +309,11 @@ final class TrimEditor: Editor {
         position.isEnabled = s.ratio != nil && !isSaving
         volume.isEnabled = !s.removeAudio && audioTrack != nil && !isSaving
         noiseStrength.isEnabled = reduceNoise.state == .on && !s.removeAudio && audioTrack != nil && !isSaving
+        musicVolume.isEnabled = musicURL != nil && !isSaving
+        duckMusic.isEnabled = musicURL != nil && audioTrack != nil && !s.removeAudio && !isSaving
+        duckDB.isEnabled = duckMusic.isEnabled && s.duckMusic
+        duckLabel.stringValue = String(format: "%.0f dB", s.duckDB)
+        musicPreview.update(s)
         volumeLabel.stringValue = "\(Int((s.volume * 100).rounded()))%"
         fadeInLabel.stringValue = String(format: "%.1f s", s.fadeIn)
         fadeOutLabel.stringValue = String(format: "%.1f s", s.fadeOut)
@@ -314,6 +349,16 @@ final class TrimEditor: Editor {
             seek(to: endMoved && !startMoved ? s.end : s.start, exact: !isTracking)
         }
     }
+
+    @objc private func chooseMusicClicked() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            self.musicURL = url; self.musicName.stringValue = url.lastPathComponent; self.update()
+        }
+    }
+    @objc private func removeMusicClicked() { musicURL = nil; musicName.stringValue = ""; update() }
 
     @objc private func chooseSubtitlesClicked() {
         let panel = NSOpenPanel()
@@ -354,6 +399,7 @@ final class TrimEditor: Editor {
 
     /// Play starts from the beginning of the cut when the playhead is outside it (or sitting at its end).
     private func playbackChanged() {
+        musicPreview.playbackChanged()
         guard player.rate > 0, isLoaded else { return }
         let now = player.currentTime().seconds
         if now < start.doubleValue - 0.05 || now >= end.doubleValue - 0.05 {
@@ -370,6 +416,7 @@ final class TrimEditor: Editor {
         flip.state = .off
         speed.selectedSegment = VideoEdit.speeds.firstIndex(of: 1) ?? 0
         volume.doubleValue = 1
+        musicURL = nil; musicName.stringValue = ""; musicVolume.doubleValue = 0.4; duckMusic.state = .on; duckDB.doubleValue = -12
         removeAudio.state = .off
         reduceNoise.state = .off
         noiseStrength.doubleValue = 0.75
@@ -385,6 +432,7 @@ final class TrimEditor: Editor {
     override func cancelSaving() { exportTask?.cancel() }
     override func didClose() {
         exportTask?.cancel()
+        musicPreview.stop()
         rateObservation?.invalidate()
         rateObservation = nil
         player.pause()
@@ -392,6 +440,7 @@ final class TrimEditor: Editor {
 
     override func apply() async throws -> [URL] {
         player.pause()
+        musicPreview.playbackChanged()
         let source = self.source, settings = self.settings, audio = isAudio
         let task = Task { [try await VideoEdit.export(source, settings, isAudio: audio)] }
         exportTask = task

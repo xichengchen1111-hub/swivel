@@ -57,6 +57,17 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 enum Strings {
     static let table: [String: [String]] = [
         "Open Trim → Subtitles to burn them into the video.": ["打开“剪辑 → 字幕”可将字幕烧录到视频。", "開啟「剪輯 → 字幕」可將字幕燒錄到影片。", "「トリム → 字幕」で動画に字幕を焼き込めます。"],
+        // Music and speech ducking
+        "Music": ["配乐", "配樂", "BGM"],
+        "Music Volume": ["配乐音量", "配樂音量", "BGM 音量"],
+        "Choose Music…": ["选择配乐…", "選擇配樂…", "BGM を選択…"],
+        "Remove Music": ["移除配乐", "移除配樂", "BGM を削除"],
+        "Lower music when someone speaks": ["有人说话时压低音乐", "有人說話時壓低音樂", "話している間 BGM を下げる"],
+        "Duck by": ["压低幅度", "壓低幅度", "下げる量"],
+        "The music is empty or too short to loop this many times. Choose a longer recording.": ["配乐为空或太短，循环次数过多，请选择较长的音频。", "配樂為空或太短，循環次數過多，請選擇較長的音訊。", "BGM が空か、短すぎて繰り返し回数が多すぎます。長い音声を選んでください。"],
+        "Preparing music preview…": ["正在准备配乐预览…", "正在準備配樂預覽…", "BGM のプレビューを準備中…"],
+        "Analyzing speech for music preview…": ["正在检测人声，准备配乐预览…", "正在偵測人聲，準備配樂預覽…", "音声を検出して BGM プレビューを準備中…"],
+
         // ID Photo
         "ID Photo": ["证件照", "證件照", "証明写真"],
         "One inch (295 × 413)": ["一寸（295 × 413）", "一寸（295 × 413）", "一寸（295 × 413）"],

@@ -217,7 +217,7 @@ final class IDPhotoEditor: Editor {
             settings.width = max(1, Int((Double(settings.width) * scale).rounded()))
             settings.height = max(1, Int((Double(settings.height) * scale).rounded()))
             renderer.cancel()
-            renderer.request { Result { try IDPhoto.render(small, mask: mask, face: face, settings: settings) } }
+            renderer.request { [settings] in Result { try IDPhoto.render(small, mask: mask, face: face, settings: settings) } }
         } catch { renderer.cancel(); status.stringValue = error.localizedDescription }
     }
     override func reset() {

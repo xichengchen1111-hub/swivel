@@ -16,6 +16,10 @@ struct VideoSettings: Equatable, Sendable {
     var volume = 1.0
     var removeAudio = false
     var noiseReduction = 0.0
+    var musicURL: URL?
+    var musicVolume = 0.4
+    var duckMusic = true
+    var duckDB = -12.0
     /// Seconds of the result, picture and sound together.
     var fadeIn = 0.0, fadeOut = 0.0
     var color = PhotoSettings()
@@ -26,7 +30,7 @@ struct VideoSettings: Equatable, Sendable {
     var changesGeometry: Bool { quarterTurns % 4 != 0 || flip || ratio != nil }
     /// Only the cut differs from the file (the output is then called "trimmed").
     var isTrimOnly: Bool {
-        noiseReduction == 0 && subtitles.isEmpty && speed == 1 && !changesGeometry && color.isNeutral && fadeIn == 0 && fadeOut == 0 && volume == 1 && !removeAudio
+        musicURL == nil && noiseReduction == 0 && subtitles.isEmpty && speed == 1 && !changesGeometry && color.isNeutral && fadeIn == 0 && fadeOut == 0 && volume == 1 && !removeAudio
     }
 }
 
@@ -184,6 +188,15 @@ enum VideoEdit {
                                        toDuration: CMTimeMultiplyByFloat64(range.duration, multiplier: 1 / s.speed))
         }
 
+        var musicTrack: AVMutableCompositionTrack?
+        var speech: [SpeechInterval] = []
+        if let music = s.musicURL {
+            musicTrack = try await Music.addTrack(to: composition, source: music, length: s.outputLength)
+            if s.duckMusic, !s.removeAudio, s.volume > 0, audioTrack != nil {
+                speech = try await SpeechActivity.detect(source).intervals
+            }
+        }
+
         let ext = source.pathExtension.lowercased()
         let (preset, type, outExt): (String, AVFileType, String)
         if !hasVideo {
@@ -202,9 +215,12 @@ enum VideoEdit {
             let lock = OSAllocatedUnfairLock(initialState: s)
             session.videoComposition = try await videoComposition(for: composition, settings: lock, preview: false, upright: upright)
         }
-        if let audioTrack, s.volume != 1 || s.fadeIn > 0 || s.fadeOut > 0 {
-            session.audioMix = audioMix(for: audioTrack, s, preview: false)
+        var parameters: [AVAudioMixInputParameters] = []
+        if let audioTrack, s.volume != 1 || s.fadeIn > 0 || s.fadeOut > 0 || musicTrack != nil {
+            parameters += audioMix(for: audioTrack, s, preview: false).inputParameters
         }
+        if let musicTrack { parameters.append(Music.parameters(track: musicTrack, settings: s, speech: speech)) }
+        if !parameters.isEmpty { let mix = AVMutableAudioMix(); mix.inputParameters = parameters; session.audioMix = mix }
         return try await Paths.produce(Paths.preferred(for: source, ext: outExt, suffix: s.isTrimOnly ? " trimmed" : " edited")) {
             let target = $0
             try await withTaskCancellationHandler {

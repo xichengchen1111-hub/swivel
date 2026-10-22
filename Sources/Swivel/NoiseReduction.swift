@@ -162,7 +162,7 @@ final class NoiseReductionEditor: Editor {
     override func apply() async throws -> [URL] {
         player.pause()
         let source = self.source, strength = strength.doubleValue
-        let task = Task { [try await NoiseReduction.save(source, strength: strength) { [weak self] value in
+        let task = Task { [weak self] in [try await NoiseReduction.save(source, strength: strength) { [weak self] value in
             Task { @MainActor in self?.progress.doubleValue = value }
         }] }
         self.task = task
