@@ -15,6 +15,7 @@ struct VideoSettings: Equatable, Sendable {
     var position = 0.5
     var volume = 1.0
     var removeAudio = false
+    var noiseReduction = 0.0
     /// Seconds of the result, picture and sound together.
     var fadeIn = 0.0, fadeOut = 0.0
     var color = PhotoSettings()
@@ -25,7 +26,7 @@ struct VideoSettings: Equatable, Sendable {
     var changesGeometry: Bool { quarterTurns % 4 != 0 || flip || ratio != nil }
     /// Only the cut differs from the file (the output is then called "trimmed").
     var isTrimOnly: Bool {
-        subtitles.isEmpty && speed == 1 && !changesGeometry && color.isNeutral && fadeIn == 0 && fadeOut == 0 && volume == 1 && !removeAudio
+        noiseReduction == 0 && subtitles.isEmpty && speed == 1 && !changesGeometry && color.isNeutral && fadeIn == 0 && fadeOut == 0 && volume == 1 && !removeAudio
     }
 }
 
@@ -163,8 +164,16 @@ enum VideoEdit {
             upright = try await uprightSize(of: video)
             hasVideo = true
         }
+        var cleanedAudio: URL?
+        defer { if let cleanedAudio { Paths.discard(cleanedAudio) } }
+        let audioAsset: AVAsset
+        if s.noiseReduction > 0, !s.removeAudio || isAudio {
+            let url = try await NoiseReduction.cleanedPCM(source, strength: s.noiseReduction)
+            cleanedAudio = url
+            audioAsset = Video.openAsset(url)
+        } else { audioAsset = asset }
         var audioTrack: AVMutableCompositionTrack?
-        if !s.removeAudio || isAudio, let audio = try await asset.loadTracks(withMediaType: .audio).first {
+        if !s.removeAudio || isAudio, let audio = try await audioAsset.loadTracks(withMediaType: .audio).first {
             let track = try requireTrack(composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid))
             try track.insertTimeRange(range, of: audio, at: .zero)
             audioTrack = track
@@ -186,6 +195,7 @@ enum VideoEdit {
                                       ext == "mp4" || ext == "m4v" ? ext : "mov")
         }
         guard let session = AVAssetExportSession(asset: composition, presetName: preset) else { throw ToolError("Can't trim this file") }
+        session.timeRange = CMTimeRange(start: .zero, duration: CMTime(seconds: s.outputLength, preferredTimescale: 600))
         session.audioTimePitchAlgorithm = .spectral
         if hasVideo {
             // Always drawn through the composition, which also makes the export decode and re-encode.
@@ -196,7 +206,10 @@ enum VideoEdit {
             session.audioMix = audioMix(for: audioTrack, s, preview: false)
         }
         return try await Paths.produce(Paths.preferred(for: source, ext: outExt, suffix: s.isTrimOnly ? " trimmed" : " edited")) {
-            try await session.export(to: $0, as: type)
+            let target = $0
+            try await withTaskCancellationHandler {
+                try Task.checkCancellation(); try await session.export(to: target, as: type); try Task.checkCancellation()
+            } onCancel: { session.cancelExport() }
         }
     }
 

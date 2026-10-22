@@ -263,7 +263,8 @@ enum Catalog {
                 if multi { list.insert(WheelItem(title: "Merge") { saved([try await Video.merge($0, audioOnly: false)]) }, at: 0) }
                 return list
             case .audio:
-                var list = [each("Trim", urls) { try await TrimEditor(source: $0).present() }]
+                var list = [each("Trim", urls) { try await TrimEditor(source: $0).present() },
+                            each("Reduce Noise", urls) { try await NoiseReductionEditor(source: $0).present() }]
                     + Audio.toolItems.map { option in each(option.title, urls, option.run) }
                 if #available(macOS 26, *) {
                     list.insert(WheelItem(title: "Transcribe") { try await TranscriptionEditor.run($0, isVideo: false) }, at: 1)

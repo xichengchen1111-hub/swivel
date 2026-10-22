@@ -57,6 +57,12 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 enum Strings {
     static let table: [String: [String]] = [
         "Open Trim → Subtitles to burn them into the video.": ["打开“剪辑 → 字幕”可将字幕烧录到视频。", "開啟「剪輯 → 字幕」可將字幕燒錄到影片。", "「トリム → 字幕」で動画に字幕を焼き込めます。"],
+        // Voice noise reduction
+        "Reduce Noise": ["降噪", "降噪", "ノイズを低減"],
+        "This audio format or duration is not supported.": ["不支持此音频格式或时长（最长 24 小时）。", "不支援此音訊格式或長度（最長 24 小時）。", "この音声形式または長さは未対応です（最長 24 時間）。"],
+        "Invalid audio timing.": ["音频时间信息无效。", "音訊時間資訊無效。", "音声の時間情報が無効です。"],
+        "For voice recordings. Preview plays the original; noise reduction is applied when saving.": ["适合人声录音。预览播放原音，保存时应用降噪。", "適合人聲錄音。預覽播放原音，儲存時套用降噪。", "音声録音向け。プレビューは元の音声で、保存時にノイズを低減します。"],
+
         // Upscale
         "Upscale": ["放大", "放大", "拡大"],
         "Scale": ["倍率", "倍率", "倍率"],

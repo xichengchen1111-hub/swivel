@@ -51,6 +51,9 @@ final class TrimEditor: Editor {
     private var volume: DetentSlider!
     private let volumeLabel = TrimEditor.valueLabel()
     private var removeAudio: NSButton!
+    private var reduceNoise: NSButton!
+    private var noiseStrength: DetentSlider!
+    private var exportTask: Task<[URL], Error>?
     private var fadeIn: DetentSlider!
     private var fadeOut: DetentSlider!
     private let fadeInLabel = TrimEditor.valueLabel()
@@ -115,6 +118,9 @@ final class TrimEditor: Editor {
         var sound = [makeRow("Volume", [volume, volumeLabel])]
         if !isAudio { sound.append(makeRow("", [removeAudio])) }
         sound += [makeRow("Fade in", [fadeIn, fadeInLabel]), makeRow("Fade out", [fadeOut, fadeOutLabel])]
+        reduceNoise = checkbox("Reduce Noise", false)
+        noiseStrength = slider(0, 1, 0.75)
+        sound.append(makeRow("", [reduceNoise, noiseStrength]))
         pages["Sound"] = sound
 
         strip.onPick = { [weak self] index in
@@ -238,6 +244,7 @@ final class TrimEditor: Editor {
             for control in colorSliders { color[keyPath: control.key] = control.slider.doubleValue }
             s.color = color.adding(PhotoLook.all[look].settings, amount: strength.doubleValue)
         }
+        s.noiseReduction = reduceNoise.state == .on ? noiseStrength.doubleValue : 0
         s.volume = volume.doubleValue
         s.fadeIn = fadeIn.doubleValue
         s.fadeOut = fadeOut.doubleValue
@@ -271,6 +278,7 @@ final class TrimEditor: Editor {
         lengthLabel.stringValue = time(s.outputLength)
         position.isEnabled = s.ratio != nil && !isSaving
         volume.isEnabled = !s.removeAudio && audioTrack != nil && !isSaving
+        noiseStrength.isEnabled = reduceNoise.state == .on && !s.removeAudio && audioTrack != nil && !isSaving
         volumeLabel.stringValue = "\(Int((s.volume * 100).rounded()))%"
         fadeInLabel.stringValue = String(format: "%.1f s", s.fadeIn)
         fadeOutLabel.stringValue = String(format: "%.1f s", s.fadeOut)
@@ -363,6 +371,8 @@ final class TrimEditor: Editor {
         speed.selectedSegment = VideoEdit.speeds.firstIndex(of: 1) ?? 0
         volume.doubleValue = 1
         removeAudio.state = .off
+        reduceNoise.state = .off
+        noiseStrength.doubleValue = 0.75
         burnSubtitles.state = .off
         fadeIn.doubleValue = 0
         fadeOut.doubleValue = 0
@@ -371,7 +381,10 @@ final class TrimEditor: Editor {
         for control in colorSliders { control.slider.doubleValue = 0 }
     }
 
+    override var canCancelSaving: Bool { true }
+    override func cancelSaving() { exportTask?.cancel() }
     override func didClose() {
+        exportTask?.cancel()
         rateObservation?.invalidate()
         rateObservation = nil
         player.pause()
@@ -379,7 +392,11 @@ final class TrimEditor: Editor {
 
     override func apply() async throws -> [URL] {
         player.pause()
-        return [try await VideoEdit.export(source, settings, isAudio: isAudio)]
+        let source = self.source, settings = self.settings, audio = isAudio
+        let task = Task { [try await VideoEdit.export(source, settings, isAudio: audio)] }
+        exportTask = task
+        defer { exportTask = nil }
+        return try await task.value
     }
 }
 
