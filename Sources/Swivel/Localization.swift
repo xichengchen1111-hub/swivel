@@ -56,6 +56,28 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 /// English → [简体中文, 繁體中文, 日本語].
 enum Strings {
     static let table: [String: [String]] = [
+        "Open Trim → Subtitles to burn them into the video.": ["打开“剪辑 → 字幕”可将字幕烧录到视频。", "開啟「剪輯 → 字幕」可將字幕燒錄到影片。", "「トリム → 字幕」で動画に字幕を焼き込めます。"],
+        // Local transcription and subtitles
+        "Subtitles": ["字幕", "字幕", "字幕"],
+        "Transcribe": ["转文字", "轉文字", "文字起こし"],
+        "Transcription Language": ["转写语言", "轉寫語言", "文字起こしの言語"],
+        "Follow App Language": ["跟随 App 语言", "跟隨 App 語言", "アプリの言語に合わせる"],
+        "Also save SRT": ["同时保存 SRT", "同時儲存 SRT", "SRT も保存"],
+        "Transcription stays on this Mac. Open Trim to burn an SRT file into a video.": ["转写在本机完成。完成后可打开“剪辑”，将 SRT 字幕烧录到视频。", "轉寫在本機完成。完成後可開啟「剪輯」，將 SRT 字幕燒錄到影片。", "文字起こしはこの Mac 上で行います。「トリム」で SRT 字幕を動画に焼き込めます。"],
+        "This subtitle file is too large.": ["字幕文件过大。", "字幕檔案過大。", "字幕ファイルが大きすぎます。"],
+        "Language resources are not installed.": ["尚未安装语言资源。", "尚未安裝語言資源。", "言語リソースがインストールされていません。"],
+        "This file has no audio.": ["此文件没有音轨。", "此檔案沒有音軌。", "このファイルに音声がありません。"],
+        "Couldn't encode audio.": ["无法编码音频。", "無法編碼音訊。", "音声をエンコードできませんでした。"],
+        "This transcription language is not supported on this Mac.": ["此 Mac 不支持该转写语言。", "此 Mac 不支援此轉寫語言。", "この Mac はこの言語の文字起こしに対応していません。"],
+        "Download language resources?": ["下载语言资源？", "下載語言資源？", "言語リソースをダウンロードしますか？"],
+        "Apple needs to download this language once. Only system resources are downloaded; your audio stays on this Mac.": ["Apple 首次使用时需要下载此语言资源。仅下载系统资源，音频保留在本机。", "Apple 首次使用時需要下載此語言資源。僅下載系統資源，音訊保留在本機。", "初回のみ Apple の言語リソースをダウンロードします。音声はこの Mac 上に残ります。"],
+        "Downloading language resources…": ["正在下载语言资源…", "正在下載語言資源…", "言語リソースをダウンロード中…"],
+        "Transcribing on this Mac…": ["正在本机转写…", "正在本機轉寫…", "この Mac 上で文字起こし中…"],
+        "No speech was found.": ["没有检测到语音。", "沒有偵測到語音。", "音声が検出されませんでした。"],
+        "Burn subtitles": ["烧录字幕", "燒錄字幕", "字幕を焼き込む"],
+        "Choose SRT…": ["选择 SRT…", "選擇 SRT…", "SRT を選択…"],
+        "No subtitles were found in this file.": ["此文件没有有效字幕。", "此檔案沒有有效字幕。", "このファイルに有効な字幕がありません。"],
+
         // Retouch
         "Retouch": ["修复", "修復", "修復"],
         "Brush Size": ["画笔大小", "筆刷大小", "ブラシサイズ"],

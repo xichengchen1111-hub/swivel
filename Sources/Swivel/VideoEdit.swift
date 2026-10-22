@@ -18,13 +18,14 @@ struct VideoSettings: Equatable, Sendable {
     /// Seconds of the result, picture and sound together.
     var fadeIn = 0.0, fadeOut = 0.0
     var color = PhotoSettings()
+    var subtitles: [SubtitleCue] = []
 
     /// How long the result plays.
     var outputLength: Double { max(0, end - start) / speed }
     var changesGeometry: Bool { quarterTurns % 4 != 0 || flip || ratio != nil }
     /// Only the cut differs from the file (the output is then called "trimmed").
     var isTrimOnly: Bool {
-        speed == 1 && !changesGeometry && color.isNeutral && fadeIn == 0 && fadeOut == 0 && volume == 1 && !removeAudio
+        subtitles.isEmpty && speed == 1 && !changesGeometry && color.isNeutral && fadeIn == 0 && fadeOut == 0 && volume == 1 && !removeAudio
     }
 }
 
@@ -86,6 +87,11 @@ enum VideoEdit {
                 "inputRVector": CIVector(x: l, y: 0, z: 0, w: 0), "inputGVector": CIVector(x: 0, y: l, z: 0, w: 0),
                 "inputBVector": CIVector(x: 0, y: 0, z: l, w: 0),
             ])
+        }
+        let sourceTime = s.start + outputTime * s.speed
+        if let cue = s.subtitles.first(where: { $0.start <= sourceTime && sourceTime < $0.end }),
+           let text = Subtitles.overlay(cue, size: crop.size) {
+            image = text.transformed(by: CGAffineTransform(translationX: 0, y: crop.height * 0.08)).composited(over: image)
         }
         return image.cropped(to: CGRect(origin: .zero, size: crop.size))
     }

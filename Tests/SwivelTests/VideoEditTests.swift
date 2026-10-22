@@ -239,6 +239,6 @@ struct VideoEditTests {
             }
             return nil
         }
-        #expect(segments(editor.controls)?.segmentCount == 5)
+        #expect(segments(editor.controls)?.segmentCount == 6)
     }
 }

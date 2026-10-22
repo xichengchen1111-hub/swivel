@@ -42,6 +42,9 @@ final class TrimEditor: Editor {
     private var position: DetentSlider!
     private var turns: NSSegmentedControl!
     private var flip: NSButton!
+    private var burnSubtitles: NSButton!
+    private var subtitleCues: [SubtitleCue] = []
+    private let subtitleName = NSTextField(labelWithString: "")
     // Speed
     private var speed: NSSegmentedControl!
     // Sound
@@ -130,7 +133,12 @@ final class TrimEditor: Editor {
         }
         pages["Color"] = color
 
-        sections = isAudio ? ["Trim", "Speed", "Sound"] : ["Trim", "Picture", "Speed", "Sound", "Color"]
+        burnSubtitles = checkbox("Burn subtitles", false)
+        let chooseSubtitles = NSButton(title: L("Choose SRT…"), target: self, action: #selector(chooseSubtitlesClicked))
+        chooseSubtitles.bezelStyle = .push
+        subtitleName.lineBreakMode = .byTruncatingMiddle
+        pages["Subtitles"] = [makeRow("", [burnSubtitles]), makeRow("", [chooseSubtitles, subtitleName])]
+        sections = isAudio ? ["Trim", "Speed", "Sound"] : ["Trim", "Picture", "Speed", "Sound", "Color", "Subtitles"]
         section = segments(sections)
         controls.addArrangedSubview(section)
         // Every section is laid over the others in one box as tall as the tallest, so switching sections never
@@ -224,6 +232,7 @@ final class TrimEditor: Editor {
             s.flip = flip.state == .on
             s.ratio = VideoEdit.ratios[max(0, ratio.indexOfSelectedItem)].value
             s.position = position.doubleValue
+            s.subtitles = burnSubtitles.state == .on ? subtitleCues : []
             s.removeAudio = removeAudio.state == .on && removeAudio.isEnabled
             var color = PhotoSettings()
             for control in colorSliders { color[keyPath: control.key] = control.slider.doubleValue }
@@ -298,6 +307,21 @@ final class TrimEditor: Editor {
         }
     }
 
+    @objc private func chooseSubtitlesClicked() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "srt") ?? .plainText]
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .OK, let url = panel.url else { return }
+            do {
+                self.subtitleCues = try Subtitles.read(url)
+                guard !self.subtitleCues.isEmpty else { throw ToolError(L("No subtitles were found in this file.")) }
+                self.subtitleName.stringValue = url.lastPathComponent
+                self.burnSubtitles.state = .on
+                self.update()
+            } catch { NSAlert(error: error).beginSheetModal(for: self.window) }
+        }
+    }
+
     override func trackingEnded() { seek(to: seekTarget, exact: true) }
 
     private func seek(to seconds: Double, exact: Bool) {
@@ -339,6 +363,7 @@ final class TrimEditor: Editor {
         speed.selectedSegment = VideoEdit.speeds.firstIndex(of: 1) ?? 0
         volume.doubleValue = 1
         removeAudio.state = .off
+        burnSubtitles.state = .off
         fadeIn.doubleValue = 0
         fadeOut.doubleValue = 0
         look = 0

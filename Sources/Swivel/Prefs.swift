@@ -86,6 +86,17 @@ enum Prefs {
         set { defaults.set(newValue, forKey: "videoCompress.target"); post() }
     }
 
+    static let transcriptionLanguages = ["app", "zh-CN", "en-US", "ja-JP"]
+    static let transcriptionLanguageTitles = ["Follow App Language", "简体中文", "English", "日本語"]
+    static var transcriptionLanguage: String {
+        get { let value = defaults.string(forKey: "speech.language") ?? "app"; return transcriptionLanguages.contains(value) ? value : "app" }
+        set { defaults.set(transcriptionLanguages.contains(newValue) ? newValue : "app", forKey: "speech.language"); post() }
+    }
+    static var transcriptionLocale: Locale {
+        if transcriptionLanguage != "app" { return Locale(identifier: transcriptionLanguage) }
+        return Locale(identifier: Language.resolved == .ja ? "ja-JP" : [.zhHans, .zhHant].contains(Language.resolved) ? "zh-CN" : "en-US")
+    }
+
     /// Resize…'s last answer: how it measured, the number, and whether smaller images could grow.
     static var resizeMode: String {
         get { defaults.string(forKey: "resize.mode") ?? "longEdge" }

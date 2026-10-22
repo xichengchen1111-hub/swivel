@@ -382,7 +382,7 @@ final class GeneralPane: Pane {
     private var loginPending = 0
     private nonisolated static let loginQueue = DispatchQueue(label: "local.swivel.login")
 
-    init() { super.init(size: NSSize(width: 680, height: 640)) }
+    init() { super.init(size: NSSize(width: 680, height: 680)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func build() {
@@ -421,6 +421,15 @@ final class GeneralPane: Pane {
         languages.target = self
         languages.action = #selector(languageChanged(_:))
         stack.addArrangedSubview(row("Language", languages))
+        if #available(macOS 26, *) {
+            let speech = NSPopUpButton(frame: .zero, pullsDown: false)
+            speech.addItems(withTitles: Prefs.transcriptionLanguageTitles.map { L($0) })
+            speech.selectItem(at: Prefs.transcriptionLanguages.firstIndex(of: Prefs.transcriptionLanguage) ?? 0)
+            speech.target = self
+            speech.action = #selector(speechLanguageChanged(_:))
+            stack.addArrangedSubview(row("Transcription Language", speech))
+        }
+
 
         let steps = label("""
             1.  Start dragging any file in Finder and keep holding the mouse button.
@@ -485,6 +494,10 @@ final class GeneralPane: Pane {
                 if let window = self.view.window { alert.beginSheetModal(for: window, completionHandler: nil) } else { alert.runModal() }
             }
         }
+    }
+
+    @objc private func speechLanguageChanged(_ sender: NSPopUpButton) {
+        Prefs.transcriptionLanguage = Prefs.transcriptionLanguages[sender.indexOfSelectedItem]
     }
 
     @objc private func languageChanged(_ sender: NSPopUpButton) {
