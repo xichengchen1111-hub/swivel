@@ -12,7 +12,7 @@ MainActor.assumeIsolated {
     // Isolated preview: no screenshot takeover or background watchers. Uses the executable's defaults domain.
     if args.count >= 3, args[1] == "--tool" {
         if let directory = ProcessInfo.processInfo.environment["SWIVEL_QR_LIBRARY_DIR"] { QRLibraryStore.previewDirectory = URL(fileURLWithPath: directory, isDirectory: true) }
-        for feature in [Feature.textCapture, .shelf, .imagePresets, .quickActions, .batchRename, .pdfPages, .qrCodes, .appRouting] { Prefs.setFeatureEnabled(feature, true) }
+        for feature in [Feature.textCapture, .shelf, .imagePresets, .quickActions, .batchRename, .pdfPages, .qrCodes, .appRouting, .doctor] { Prefs.setFeatureEnabled(feature, true) }
         app.setActivationPolicy(.regular)
         app.mainMenu = AppWindow.mainMenu()
         if let appearance = ProcessInfo.processInfo.environment["SWIVEL_PREVIEW_APPEARANCE"] {
@@ -45,6 +45,9 @@ MainActor.assumeIsolated {
             else { AppWindow.shared.show(.qrCodes) }
         case "apps": AppWindow.shared.show(.appRouting)
         case "library": QRLibraryWindow().show()
+        case "doctor":
+            if args.count > 3 { DoctorWindow.present(app: URL(fileURLWithPath: args[3])) } else { DoctorWindow.present() }
+        case "doctorsettings": AppWindow.shared.show(.doctor)
         case "launcher": Prefs.shortcutWheelEnabled = true; Prefs.isEnabled = true; ShortcutWheel.shared.sync(); ShortcutWheel.shared.show()
         default: AppWindow.shared.show()
         }

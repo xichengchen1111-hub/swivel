@@ -431,7 +431,7 @@ enum TemporaryItems {
 
 enum Shell {
     /// Stops every running tool (Swivel is quitting): children would otherwise keep writing after it's gone.
-    static func stopAll() { ShellRun.stopAll() }
+    static func stopAll() { ShellRun.stopAll(); ShellCapture.stopAll() }
 
     /// Runs a command-line tool and throws its stderr on failure.
     ///

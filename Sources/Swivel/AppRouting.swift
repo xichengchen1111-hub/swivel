@@ -63,7 +63,7 @@ enum AssistantDraft {
         return out + "\""
     }
 
-    private static func isHidden(_ scalar: Unicode.Scalar) -> Bool {
+    static func isHidden(_ scalar: Unicode.Scalar) -> Bool {
         let p = scalar.properties
         switch p.generalCategory {
         case .control, .format, .privateUse, .unassigned, .lineSeparator, .paragraphSeparator, .surrogate: return true

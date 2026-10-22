@@ -8,6 +8,9 @@ import Security
 /// Sent per request: the words typed, the titles and IDs of the actions on offer (saved QR codes excluded), and the
 /// number and kinds of chosen files (for example "2 images: jpg, png"). Never file names, paths or contents. A reply naming anything other than
 /// one of the offered actions is treated as "no action fits".
+///
+/// Mac Doctor can also use the same service (DoctorAssistant.swift), only when its own switch is on and only with a
+/// report the user has read in full first: facts and counts, no file names, paths or contents.
 enum Assistant {
     enum Provider: String, CaseIterable, Codable, Sendable {
         case anthropic, openAICompatible
@@ -66,8 +69,10 @@ enum Assistant {
     static let toolName = "choose_action"
 
     /// Ready to ask: Quick Actions is on and the chosen service has a key (a local server needs none).
-    @MainActor static var isReady: Bool {
-        guard Feature.quickActions.isOn else { return false }
+    @MainActor static var isReady: Bool { Feature.quickActions.isOn && isConfigured }
+
+    /// The chosen service has a model and a key (a local server needs none), whichever tool asks.
+    @MainActor static var isConfigured: Bool {
         let settings = Prefs.assistant
         guard let account = account(settings), !settings.model.isEmpty else { return false }
         // Only whether a key exists: reading the secret itself could ask for keychain access on every keystroke.
@@ -78,12 +83,18 @@ enum Assistant {
         let settings = Prefs.assistant
         let key = account(settings).flatMap(Keychain.read)
         let urlRequest = try makeRequest(settings, key: key, request: request, choices: choices, files: summary(of: files))
+        let data = try await send(urlRequest)
+        return try parse(data, provider: settings.provider, allowed: Set(choices.map(\.id)))
+    }
+
+    /// Sends a request on `session` and returns the body of a 2xx reply; anything else becomes a readable Failure.
+    @MainActor static func send(_ urlRequest: URLRequest, using transport: URLSession? = nil) async throws -> Data {
         let (data, response): (Data, URLResponse)
-        do { (data, response) = try await session.data(for: urlRequest) }
+        do { (data, response) = try await (transport ?? session).data(for: urlRequest) }
         catch { throw Failure(message: L("Couldn't reach %@: %@", urlRequest.url?.host() ?? "", error.localizedDescription)) }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw failure(status: status, data: data) }
-        return try parse(data, provider: settings.provider, allowed: Set(choices.map(\.id)))
+        return data
     }
 
     // MARK: Requests
@@ -132,11 +143,11 @@ enum Assistant {
     }
 
     /// Models on the Claude API that accept `fallbacks: "default"` (a declined request is retried on another model).
-    private static let fallbackModels: Set<String> = ["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]
+    static let fallbackModels: Set<String> = ["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]
     /// Models that accept `output_config.effort`.
-    private static let effortModels: Set<String> = ["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-fable-5",
-                                                    "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-5-5",
-                                                    "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"]
+    static let effortModels: Set<String> = ["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-fable-5",
+                                            "claude-sonnet-5-5", "claude-sonnet-5", "claude-haiku-5-5",
+                                            "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6"]
 
     static func makeRequest(_ settings: Settings, key: String?, request: String, choices: [Choice], files: String) throws -> URLRequest {
         guard !choices.isEmpty else { throw Failure(message: L("No actions are available for these files.")) }
