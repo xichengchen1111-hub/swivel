@@ -250,10 +250,10 @@ enum MCPStdio {
             }
             DispatchQueue.main.async { MainActor.assumeIsolated { session.endOfInput() } }
         }
-        let app = NSApplication.shared
-        app.setActivationPolicy(.prohibited)
-        app.run()
-        exit(0)
+        // No NSApplication: creating one checks this process in with Launch Services as an instance of Swivel, and
+        // then `open` (Finder, Dock, login items) only "activates" the running --mcp child instead of starting the
+        // menu-bar app while a host keeps a server open. The main run loop also serves the main queue.
+        while true { CFRunLoopRun() }
     }
 
     nonisolated(unsafe) private static var signalSources: [DispatchSourceSignal] = []
