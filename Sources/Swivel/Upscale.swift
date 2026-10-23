@@ -29,6 +29,16 @@ enum Upscale {
         }
         return CGSize(width: width * factor, height: height * factor)
     }
+    /// A 2× video must stay within what the HEVC encoder writes (8192 × 4320); larger frames would be scaled back down.
+    static func videoFits(_ size: CGSize) -> Bool {
+        size.width.isFinite && size.height.isFinite && size.width > 0 && size.height > 0
+            && max(size.width, size.height) <= 4096 && min(size.width, size.height) <= 2160
+    }
+    /// H.264 tops out near 4K, and the HighestQuality preset quietly shrinks anything larger to 3840 × 2160.
+    static func videoPreset(for output: CGSize) -> String {
+        max(output.width, output.height) <= 3840 && min(output.width, output.height) <= 2160
+            ? AVAssetExportPresetHighestQuality : AVAssetExportPresetHEVCHighestQuality
+    }
     /// Read metadata and decode through the same ImageIO source, with a hard thumbnail bound even if the source changes.
     static func loadStill(_ source: URL, factor: Int) throws -> CGImage {
         try Task.checkCancellation()
@@ -91,10 +101,7 @@ enum Upscale {
         guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw ToolError(L("No video track")) }
         let size = try await VideoEdit.uprightSize(of: track)
         let factor = 2
-        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0,
-              size.width * size.height <= 16_000_000 else {
-            throw ToolError(L("This video is too large to upscale. Use frames up to 16 megapixels."))
-        }
+        guard videoFits(size) else { throw ToolError(L("This video is too large to upscale. Use video up to 4096 × 2160.")) }
         let outputSize = try dimensions(width: Int(size.width), height: Int(size.height), factor: factor)
         let work = UpscaleVideoWork(engine: engine)
         defer { work.cancel() }
@@ -110,7 +117,7 @@ enum Upscale {
             }
         }
         composition.renderSize = outputSize
-        guard let session = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else { throw ToolError(L("Couldn't encode video.")) }
+        guard let session = AVAssetExportSession(asset: asset, presetName: videoPreset(for: outputSize)) else { throw ToolError(L("Couldn't encode video.")) }
         session.videoComposition = composition
         session.timeRange = CMTimeRange(start: .zero, duration: try await asset.load(.duration))
         let monitor = Task {
@@ -129,6 +136,11 @@ enum Upscale {
                 // Always join this worker before Paths.produce removes its temporary, even if already cancelled.
                 try await exporter.value
                 try Task.checkCancellation()
+                // Never publish "2x" for a file the encoder resized on its own.
+                let written = try await AVURLAsset(url: temporary).loadTracks(withMediaType: .video).first
+                guard let written, try await VideoEdit.uprightSize(of: written) == outputSize else {
+                    throw ToolError(L("Couldn't encode video."))
+                }
             } onCancel: { work.cancel(); exporter.cancel() }
         }
     }
@@ -180,10 +192,7 @@ final class UpscaleEditor: Editor {
             let asset = try await Video.safeAsset(source)
             guard let track = try await asset.loadTracks(withMediaType: .video).first else { throw ToolError(L("No video track")) }
             sourceSize = try await VideoEdit.uprightSize(of: track)
-            guard sourceSize.width.isFinite, sourceSize.height.isFinite, sourceSize.width > 0, sourceSize.height > 0,
-                  max(sourceSize.width, sourceSize.height) <= 8192, sourceSize.width * sourceSize.height <= 16_000_000 else {
-                throw ToolError(L("This video is too large to upscale. Use frames up to 16 megapixels."))
-            }
+            guard Upscale.videoFits(sourceSize) else { throw ToolError(L("This video is too large to upscale. Use video up to 4096 × 2160.")) }
             let generator = AVAssetImageGenerator(asset: asset)
             generator.appliesPreferredTrackTransform = true; generator.maximumSize = CGSize(width: 1400, height: 1400)
             preview.image = try await generator.image(at: .zero).image

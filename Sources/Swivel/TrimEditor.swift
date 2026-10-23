@@ -29,6 +29,10 @@ final class TrimEditor: Editor {
     private var pinned = false
     // Seeking chases the newest target with one seek in flight at a time (Apple QA1820), so scrubbing never queues up.
     private var seekTarget = 0.0
+    /// Opening or Reset shows the first frame once; other controls never move the playhead.
+    private var showsFirstFrame = true
+    /// A trim handle (not a volume or colour slider) is being dragged, so letting go lands exactly on it.
+    private var scrubbingHandle = false
     private var seekExact = true
     private var seeking = false
     private var rateObservation: NSKeyValueObservation?
@@ -298,7 +302,9 @@ final class TrimEditor: Editor {
         // The handles meeting is a hard stop: one tap as they touch, none while held there.
         if meeting, !pinned, isTracking { Haptics.tick(.alignment) }
         pinned = meeting
-        let firstShow = lastEnd == duration && lastStart == 0 && !startMoved && !endMoved
+        let firstShow = showsFirstFrame && isLoaded
+        if firstShow { showsFirstFrame = false }
+        if (startMoved || endMoved) && isTracking { scrubbingHandle = true }
         lastStart = start.doubleValue
         lastEnd = end.doubleValue
 
@@ -376,7 +382,11 @@ final class TrimEditor: Editor {
         }
     }
 
-    override func trackingEnded() { seek(to: seekTarget, exact: true) }
+    override func trackingEnded() {
+        guard scrubbingHandle else { return }
+        scrubbingHandle = false
+        seek(to: seekTarget, exact: true)
+    }
 
     private func seek(to seconds: Double, exact: Bool) {
         seekTarget = seconds
@@ -409,6 +419,7 @@ final class TrimEditor: Editor {
     }
 
     override func reset() {
+        showsFirstFrame = true
         start.doubleValue = 0
         end.doubleValue = duration
         ratio.selectItem(at: 0)

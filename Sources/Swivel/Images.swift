@@ -125,10 +125,17 @@ enum Images {
         // Orientations 5–8 are turned a quarter: the upright picture is the other way round.
         if let orientation = props[kCGImagePropertyOrientation] as? Int, orientation >= 5 { swap(&width, &height) }
         guard let size = resizedSize(width: width, height: height, mode: mode, value: value, enlarge: enlarge) else { return nil }
+        // Only the asked-for side is bounded by the form; the other follows the aspect ratio. An enlargement past
+        // this would need gigabytes of memory.
+        guard size.width <= 20_000, size.height <= 20_000, Double(size.width) * Double(size.height) <= 120_000_000 else {
+            throw ToolError(L("That size is too large. Use at most 20,000 px per side and 120 megapixels."))
+        }
         // Shrinking decodes straight at the new size (ImageIO's resampling, and no full-size decode); growing, or
         // a size ImageIO rounded the other way, is drawn exactly.
         var image = try load(url, maxPixels: size.width > width || size.height > height ? nil : max(size.width, size.height))
         if image.width != size.width || image.height != size.height { image = image.scaled(width: size.width, height: size.height) }
+        // `scaled` hands back the original when drawing fails; never save that under the new size's name.
+        guard image.width == size.width, image.height == size.height else { throw ToolError(L("Couldn't render")) }
         let (type, ext) = writableType(for: url)
         return try save(image, as: Paths.preferred(for: url, ext: ext, suffix: " \(size.width)×\(size.height)"), type: type, quality: 0.92)
     }

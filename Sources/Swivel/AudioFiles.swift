@@ -10,6 +10,17 @@ enum AudioFiles {
         let gate = OSAllocatedUnfairLock(initialState: (started: false, cancelled: false))
         init(reader: AVAssetReader, output: AVAssetReaderTrackOutput) { self.reader = reader; self.output = output }
     }
+    /// The standard format only covers mono and stereo; 5.1 and other multichannel tracks keep their channels in order.
+    static func pcmFormat(rate: Double, channels: Int) -> AVAudioFormat? {
+        if channels <= 2 { return AVAudioFormat(standardFormatWithSampleRate: rate, channels: AVAudioChannelCount(channels)) }
+        guard let layout = AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | UInt32(channels)) else { return nil }
+        return AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, interleaved: false, channelLayout: layout)
+    }
+    private static func layoutData(_ channels: Int) -> Data {
+        var layout = AudioChannelLayout()
+        layout.mChannelLayoutTag = kAudioChannelLayoutTag_DiscreteInOrder | UInt32(channels)
+        return Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size)
+    }
     static func decode(_ source: URL) async throws -> URL {
         let asset = try await Video.safeAsset(source)
         guard let track = try await asset.loadTracks(withMediaType: .audio).first,
@@ -21,7 +32,7 @@ enum AudioFiles {
         let duration = try await asset.load(.duration).seconds
         guard rate.isFinite, rate >= 8000, rate <= 384000, (1...16).contains(channels),
               duration.isFinite, duration > 0, duration <= 86400,
-              let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: AVAudioChannelCount(channels)) else {
+              let format = pcmFormat(rate: rate, channels: channels) else {
             throw ToolError(L("This audio format or duration is not supported."))
         }
         let storage = try MediaTemporaryFiles.pcmBudget(rate: rate, channels: channels, duration: duration)
@@ -29,7 +40,8 @@ enum AudioFiles {
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [AVFormatIDKey: kAudioFormatLinearPCM,
             AVSampleRateKey: rate, AVNumberOfChannelsKey: channels, AVLinearPCMBitDepthKey: 32,
-            AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false, AVLinearPCMIsBigEndianKey: false])
+            AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false, AVLinearPCMIsBigEndianKey: false]
+            .merging(channels > 2 ? [AVChannelLayoutKey: layoutData(channels)] : [:]) { _, new in new })
         guard reader.canAdd(output) else { throw ToolError(L("Couldn't encode audio.")) }
         reader.add(output)
         let state = DecoderState(reader: reader, output: output)

@@ -277,6 +277,11 @@ struct PhotoEditTests {
         let big = try Images.load(grown)
         #expect(big.width == 800 && big.height == 600)
         #expect(try Images.load(url).width == 400)
+        // Enlarging is bounded on both sides and in total, not just on the side that was typed.
+        let before = try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted()
+        #expect(throws: ToolError.self) { try Images.resizeFile(url, mode: .height, value: 20_000, enlarge: true) }  // 26,667 wide
+        #expect(throws: ToolError.self) { try Images.resizeFile(url, mode: .width, value: 20_000, enlarge: true) }   // 300 MP
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).sorted() == before)
     }
 
     @Test func resizeMeasuresTheUprightPhoto() throws {

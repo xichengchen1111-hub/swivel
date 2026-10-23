@@ -11,7 +11,7 @@ enum MediaBatchFixtures {
         return folder
     }
     static func tone(in folder: URL, seconds: Double = 1, frequency: Double = 440, channels: Int = 1) throws -> URL {
-        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 44100, channels: AVAudioChannelCount(channels)))
+        let format = try #require(AudioFiles.pcmFormat(rate: 44100, channels: channels))
         let count = AVAudioFrameCount((seconds * 44100).rounded())
         let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: count))
         buffer.frameLength = count
@@ -21,14 +21,14 @@ enum MediaBatchFixtures {
             try file.write(from: buffer)
         }
     }
-    static func video(in folder: URL, seconds: Double = 1, audio: URL? = nil) async throws -> URL {
+    static func video(in folder: URL, seconds: Double = 1, audio: URL? = nil, width: Int = 320, height: Int = 240) async throws -> URL {
         let silent = try await Paths.produce(folder.appendingPathComponent("silent.mov")) { target in
             let writer = try AVAssetWriter(outputURL: target, fileType: .mov)
             let input = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
-                AVVideoWidthKey: 320, AVVideoHeightKey: 240])
+                AVVideoWidthKey: width, AVVideoHeightKey: height])
             let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: 320, kCVPixelBufferHeightKey as String: 240])
+                kCVPixelBufferWidthKey as String: width, kCVPixelBufferHeightKey as String: height])
             writer.add(input)
             guard writer.startWriting() else { throw writer.error ?? ToolError("Fixture failed") }
             writer.startSession(atSourceTime: .zero)
@@ -40,7 +40,7 @@ enum MediaBatchFixtures {
                 CVPixelBufferLockBaseAddress(buffer, [])
                 let base = try #require(CVPixelBufferGetBaseAddress(buffer)).assumingMemoryBound(to: UInt8.self)
                 let stride = CVPixelBufferGetBytesPerRow(buffer)
-                for y in 0..<240 { for x in 0..<320 {
+                for y in 0..<height { for x in 0..<width {
                     let i = y * stride + x * 4
                     base[i] = 80; base[i + 1] = UInt8(y % 256); base[i + 2] = UInt8(x % 256); base[i + 3] = 255
                 } }

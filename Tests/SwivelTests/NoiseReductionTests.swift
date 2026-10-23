@@ -192,6 +192,23 @@ struct NoiseReductionTests {
         #expect(after[0].count == before[0].count && after.count == before.count)
         #expect(zip(before[0], after[0]).allSatisfy { abs($0 - $1) < 0.000001 })
     }
+    @Test func multichannelAudioDecodesDenoisesAndExportsWithDuckedMusic() async throws {
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let surround = try MediaBatchFixtures.tone(in: folder, seconds: 2, channels: 6)
+        let pcm = try await AudioFiles.decode(surround)
+        defer { MediaTemporaryFiles.discard(pcm) }
+        let decoded = try AVAudioFile(forReading: pcm)
+        #expect(decoded.processingFormat.channelCount == 6 && abs(Double(decoded.length) - 88200) <= 1)
+        _ = try await SpeechActivity.detect(surround)
+        let cleaned = try await NoiseReduction.cleanedPCM(surround, strength: 1)
+        defer { MediaTemporaryFiles.discard(cleaned) }
+        #expect(try AVAudioFile(forReading: cleaned).processingFormat.channelCount == 6)
+        let music = try MediaBatchFixtures.tone(in: folder, seconds: 1, frequency: 880)
+        var settings = VideoSettings(); settings.end = 2; settings.musicURL = music; settings.noiseReduction = 1
+        let output = try await VideoEdit.export(surround, settings, isAudio: true)
+        #expect(try await abs(Video.safeAsset(output).load(.duration).seconds - 2) < 0.05)
+    }
     @Test func decodedAndSavedAudioKeepsChannelsDurationNamesAndInput() async throws {
         let folder = try MediaBatchFixtures.folder()
         defer { try? FileManager.default.removeItem(at: folder) }

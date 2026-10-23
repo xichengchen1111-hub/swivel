@@ -26,6 +26,12 @@ struct UpscaleTests {
         #expect(throws: (any Error).self) { try Upscale.dimensions(width: 50000, height: 50000, factor: 4) }
         #expect(throws: (any Error).self) { try Upscale.dimensions(width: 8193, height: 1, factor: 2) }
         #expect(throws: (any Error).self) { try Upscale.dimensions(width: 4001, height: 4000, factor: 2) }
+        // Video: H.264 above 4K is silently shrunk to 3840 × 2160, so larger 2× output switches to HEVC.
+        #expect(Upscale.videoFits(CGSize(width: 3840, height: 2160)) && Upscale.videoFits(CGSize(width: 2160, height: 4096)))
+        #expect(!Upscale.videoFits(CGSize(width: 4097, height: 2160)) && !Upscale.videoFits(CGSize(width: 3000, height: 3000)))
+        #expect(Upscale.videoPreset(for: CGSize(width: 3840, height: 2160)) == AVAssetExportPresetHighestQuality)
+        #expect(Upscale.videoPreset(for: CGSize(width: 4800, height: 2700)) == AVAssetExportPresetHEVCHighestQuality)
+        #expect(Upscale.videoPreset(for: CGSize(width: 2160, height: 3840)) == AVAssetExportPresetHighestQuality)
     }
     @Test @MainActor func menusKeepImageAndVideoActionsNearResizeAndCompression() throws {
         let image = URL(fileURLWithPath: "/nonexistent/photo.png"), video = URL(fileURLWithPath: "/nonexistent/clip.mov")
@@ -35,6 +41,14 @@ struct UpscaleTests {
         #expect(try #require(movies.firstIndex(of: "Upscale")) + 1 == #require(movies.firstIndex(of: "Compress")))
         for source in [image, video] { #expect(!MCPCatalog.actions(for: [source]).contains { $0.id == "tools.Upscale" }) }
         #expect(Strings.table["Upscale"]?.count == 3)
+    }
+    @Test func videoLargerThanFullHDKeepsItsDoubledSize() async throws {
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = try await MediaBatchFixtures.video(in: folder, seconds: 0.25, width: 2400, height: 1350)
+        let output = try await Upscale.video(source, engine: UpscaleProcessor(render: { image, _ in Upscale.lanczos(image, factor: 2) })) { _ in }
+        let track = try #require(try await AVURLAsset(url: output).loadTracks(withMediaType: .video).first)
+        #expect(try await VideoEdit.uprightSize(of: track) == CGSize(width: 4800, height: 2700))
     }
     @Test func cancellingAVideoEnlargementLeavesNoPartialOutput() async throws {
         let folder = try MediaBatchFixtures.folder()
@@ -146,7 +160,7 @@ struct UpscaleTests {
         }
         for key in ["Real-ESRGAN processes files on this Mac. Fine details may be reconstructed.",
                     "This image is too large to upscale. Use an image up to 16 megapixels.",
-                    "This video is too large to upscale. Use frames up to 16 megapixels."] {
+                    "This video is too large to upscale. Use video up to 4096 × 2160."] {
             let values = try #require(Strings.table[key]); #expect(values.count == 3 && values.allSatisfy { !$0.isEmpty })
         }
     }
