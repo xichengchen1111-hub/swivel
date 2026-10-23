@@ -46,9 +46,14 @@ final class TrimEditor: Editor {
     private var position: DetentSlider!
     private var turns: NSSegmentedControl!
     private var flip: NSButton!
-    private var burnSubtitles: NSButton!
-    private var subtitleCues: [SubtitleCue] = []
+    private(set) var burnSubtitles: NSButton!
+    private(set) var subtitleCues: [SubtitleCue] = []
     private let subtitleName = NSTextField(labelWithString: "")
+    private let subtitleStatus = NSTextField(wrappingLabelWithString: "")
+    private let subtitleProgress = NSProgressIndicator()
+    private var generateSubtitles: NSButton?
+    private var subtitleLanguage: NSPopUpButton?
+    private var generating: Task<Void, Never>?
     // Speed
     private var speed: NSSegmentedControl!
     // Sound
@@ -169,11 +174,32 @@ final class TrimEditor: Editor {
         }
         pages["Color"] = color
 
-        burnSubtitles = checkbox("Burn subtitles", false)
-        let chooseSubtitles = NSButton(title: L("Choose SRT…"), target: self, action: #selector(chooseSubtitlesClicked))
+        // Where subtitles come from first (speech on this Mac, or an SRT file), then whether to draw them in.
+        let explanation = NSTextField(wrappingLabelWithString: L("Make subtitles from the video's speech on this Mac, or use an SRT subtitle file. Embedded subtitles are drawn into the picture, so they show in every player."))
+        explanation.textColor = .secondaryLabelColor
+        explanation.preferredMaxLayoutWidth = 500
+        var subtitles: [NSView] = [makeRow("", [explanation])]
+        if #available(macOS 26, *) {
+            let generate = NSButton(title: L("Generate from Speech"), target: self, action: #selector(generateSubtitlesClicked))
+            generate.bezelStyle = .push
+            let language = popup(Prefs.transcriptionLanguageTitles)
+            language.selectItem(at: Prefs.transcriptionLanguages.firstIndex(of: Prefs.transcriptionLanguage) ?? 0)
+            generateSubtitles = generate; subtitleLanguage = language
+            subtitles.append(makeRow("", [generate, language]))
+        }
+        let chooseSubtitles = NSButton(title: L("Choose Subtitle File (.srt)…"), target: self, action: #selector(chooseSubtitlesClicked))
         chooseSubtitles.bezelStyle = .push
         subtitleName.lineBreakMode = .byTruncatingMiddle
-        pages["Subtitles"] = [makeRow("", [burnSubtitles]), makeRow("", [chooseSubtitles, subtitleName])]
+        subtitleName.setContentCompressionResistancePriority(.init(100), for: .horizontal)
+        subtitleStatus.font = .systemFont(ofSize: 11); subtitleStatus.textColor = .secondaryLabelColor
+        subtitleStatus.preferredMaxLayoutWidth = 500
+        subtitleProgress.style = .bar; subtitleProgress.minValue = 0; subtitleProgress.maxValue = 1
+        subtitleProgress.widthAnchor.constraint(equalToConstant: 200).isActive = true
+        subtitleProgress.isHidden = true
+        burnSubtitles = checkbox("Embed subtitles in the video (hard subtitles)", false)
+        subtitles += [makeRow("", [chooseSubtitles, subtitleName]), makeRow("", [subtitleProgress, subtitleStatus]),
+                      makeRow("", [burnSubtitles])]
+        pages["Subtitles"] = subtitles
         sections = isAudio ? ["Trim", "Speed", "Sound"] : ["Trim", "Picture", "Speed", "Sound", "Color", "Subtitles"]
         section = segments(sections)
         controls.addArrangedSubview(section)
@@ -239,6 +265,7 @@ final class TrimEditor: Editor {
         lastEnd = seconds
         audioTrack = try await asset.loadTracks(withMediaType: .audio).first
         if audioTrack == nil { removeAudio.isEnabled = false }
+        if !isAudio { loadSiblingSubtitles() }
         let initial = settings
         live.withLock { $0 = initial }
         guard let video else { return }
@@ -321,6 +348,9 @@ final class TrimEditor: Editor {
         duckDB.isEnabled = duckMusic.isEnabled && s.duckMusic
         duckLabel.stringValue = String(format: "%.0f dB", s.duckDB)
         musicPreview.update(s)
+        if subtitleCues.isEmpty { burnSubtitles.state = .off }
+        burnSubtitles.isEnabled = !subtitleCues.isEmpty && generating == nil && !isSaving
+        generateSubtitles?.isEnabled = audioTrack != nil && generating == nil && !isSaving
         volumeLabel.stringValue = "\(Int((s.volume * 100).rounded()))%"
         fadeInLabel.stringValue = String(format: "%.1f s", s.fadeIn)
         fadeOutLabel.stringValue = String(format: "%.1f s", s.fadeOut)
@@ -376,10 +406,61 @@ final class TrimEditor: Editor {
                 self.subtitleCues = try Subtitles.read(url)
                 guard !self.subtitleCues.isEmpty else { throw ToolError(L("No subtitles were found in this file.")) }
                 self.subtitleName.stringValue = url.lastPathComponent
+                self.subtitleStatus.stringValue = L("%d subtitles ready.", self.subtitleCues.count)
                 self.burnSubtitles.state = .on
                 self.update()
             } catch { NSAlert(error: error).beginSheetModal(for: self.window) }
         }
+    }
+
+    /// The Subtitles action saves "clip.srt" beside "clip.mp4"; pick it up so it's one tick away. Not ticked: a plain
+    /// trim shouldn't gain captions just because a file sits next to the video.
+    private func loadSiblingSubtitles() {
+        let srt = source.deletingPathExtension().appendingPathExtension("srt")
+        guard let cues = try? Subtitles.read(srt), !cues.isEmpty else { return }
+        subtitleCues = cues
+        subtitleName.stringValue = srt.lastPathComponent
+        subtitleStatus.stringValue = L("Found %@ next to the video.", srt.lastPathComponent)
+    }
+
+    @available(macOS 26, *)
+    @objc private func generateSubtitlesClicked() {
+        guard generating == nil, isLoaded, !isSaving else { return }
+        if let subtitleLanguage {
+            Prefs.transcriptionLanguage = Prefs.transcriptionLanguages[max(0, subtitleLanguage.indexOfSelectedItem)]
+        }
+        let source = self.source
+        subtitleProgress.isHidden = false
+        generating = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let locale = try await SpeechResources.prepare(Prefs.transcriptionLocale, window: window) { [weak self] value in
+                    self?.subtitleStatus.stringValue = L("Downloading language resources…")
+                    self?.subtitleProgress.isIndeterminate = false
+                    self?.subtitleProgress.doubleValue = value
+                }
+                subtitleStatus.stringValue = L("Recognizing speech on this Mac…")
+                subtitleProgress.isIndeterminate = true; subtitleProgress.startAnimation(nil)
+                let words = try await LocalTranscription.recognize(source, locale: locale)
+                try Task.checkCancellation()
+                guard !words.isEmpty else { throw ToolError(L("No speech was found.")) }
+                subtitleCues = Subtitles.cues(words)
+                subtitleName.stringValue = L("Generated from speech")
+                subtitleStatus.stringValue = L("%d subtitles ready.", subtitleCues.count)
+                burnSubtitles.state = .on
+            } catch is CancellationError {
+                subtitleStatus.stringValue = ""
+            } catch is Cancelled {
+                subtitleStatus.stringValue = ""
+            } catch {
+                subtitleStatus.stringValue = ""
+                if !Task.isCancelled { NSAlert(error: error).beginSheetModal(for: window, completionHandler: nil) }
+            }
+            subtitleProgress.stopAnimation(nil); subtitleProgress.isHidden = true
+            generating = nil
+            update()
+        }
+        update()
     }
 
     override func trackingEnded() {
@@ -444,6 +525,7 @@ final class TrimEditor: Editor {
     override func cancelSaving() { exportTask?.cancel() }
     override func didClose() {
         exportTask?.cancel()
+        generating?.cancel()
         musicPreview.stop()
         rateObservation?.invalidate()
         rateObservation = nil
@@ -451,6 +533,7 @@ final class TrimEditor: Editor {
     }
 
     override func apply() async throws -> [URL] {
+        guard generating == nil else { throw ToolError(L("Subtitles are still being generated.")) }
         player.pause()
         musicPreview.playbackChanged()
         let source = self.source, settings = self.settings, audio = isAudio

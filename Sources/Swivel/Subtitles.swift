@@ -294,13 +294,48 @@ enum LocalTranscription {
     }
 }
 
+/// Speech resources for one language. A first download is asked for on the window and shows its progress; never silent.
+@available(macOS 26, *)
+enum SpeechResources {
+    @MainActor static func prepare(_ requested: Locale, window: NSWindow,
+                                   downloading: @escaping @MainActor @Sendable (Double) -> Void) async throws -> Locale {
+        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: requested) else {
+            throw ToolError(L("This transcription language is not supported on this Mac."))
+        }
+        let module = SpeechTranscriber(locale: locale, preset: .transcription)
+        _ = try await AssetInventory.reserve(locale: locale)
+        guard await AssetInventory.status(forModules: [module]) != .installed else { return locale }
+        let alert = NSAlert()
+        alert.messageText = L("Download language resources?")
+        alert.informativeText = L("Apple needs to download this language once. Only system resources are downloaded; your audio stays on this Mac.")
+        alert.addButton(withTitle: L("Download")); alert.addButton(withTitle: L("Cancel"))
+        let answer = await withCheckedContinuation { continuation in
+            alert.beginSheetModal(for: window) { continuation.resume(returning: $0) }
+        }
+        guard answer == .alertFirstButtonReturn else { throw Cancelled() }
+        try Task.checkCancellation()
+        if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
+            downloading(0)
+            let observation = request.progress.observe(\.fractionCompleted, options: [.new]) { p, _ in
+                let value = p.fractionCompleted
+                Task { @MainActor in downloading(value) }
+            }
+            defer { observation.invalidate() }
+            try await withTaskCancellationHandler {
+                try await request.downloadAndInstall()
+            } onCancel: { request.progress.cancel() }
+        }
+        try Task.checkCancellation()
+        return locale
+    }
+}
+
 @available(macOS 26, *)
 final class TranscriptionEditor: Editor {
-    private let message = NSTextField(wrappingLabelWithString: L("Transcription stays on this Mac. Open Trim to burn an SRT file into a video."))
+    private let message = NSTextField(wrappingLabelWithString: L("Transcription stays on this Mac. Open Trim → Subtitles to embed the SRT in the video; it is picked up automatically."))
     private var language: NSPopUpButton!
     private var extraSRT: NSButton!
     private let progress = NSProgressIndicator()
-    private var observation: NSKeyValueObservation?
     private var task: Task<[URL], Error>?
     private let isVideo: Bool
 
@@ -327,45 +362,24 @@ final class TranscriptionEditor: Editor {
         var outputs: [URL] = []
         for source in sources { outputs += try await TranscriptionEditor(source: source, isVideo: isVideo).present() }
         var result = Catalog.saved(outputs)
-        if isVideo { result.message += "\n" + L("Open Trim → Subtitles to burn them into the video.") }
+        if isVideo { result.message += "\n" + L("Open Trim → Subtitles to embed them in the video.") }
         return result
     }
     override var canCancelSaving: Bool { true }
     override func cancelSaving() { task?.cancel() }
-    override func didClose() { task?.cancel(); observation?.invalidate() }
+    override func didClose() { task?.cancel() }
     override func apply() async throws -> [URL] {
         Prefs.transcriptionLanguage = Prefs.transcriptionLanguages[max(0, language.indexOfSelectedItem)]
-        let locale = Prefs.transcriptionLocale
-        guard let locale = await SpeechTranscriber.supportedLocale(equivalentTo: locale) else {
-            throw ToolError(L("This transcription language is not supported on this Mac."))
-        }
-        let module = SpeechTranscriber(locale: locale, preset: .transcription)
         let source = self.source, isVideo = self.isVideo, extra = extraSRT.state == .on
         let task = Task { [self] () throws -> [URL] in
-            _ = try await AssetInventory.reserve(locale: locale)
-            if await AssetInventory.status(forModules: [module]) != .installed {
-                let alert = NSAlert()
-                alert.messageText = L("Download language resources?")
-                alert.informativeText = L("Apple needs to download this language once. Only system resources are downloaded; your audio stays on this Mac.")
-                alert.addButton(withTitle: L("Download")); alert.addButton(withTitle: L("Cancel"))
-                let answer = await withCheckedContinuation { continuation in
-                    alert.beginSheetModal(for: window) { continuation.resume(returning: $0) }
-                }
-                guard answer == .alertFirstButtonReturn else { throw Cancelled() }
-                try Task.checkCancellation()
-                if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
-                    observation = request.progress.observe(\.fractionCompleted, options: [.initial, .new]) { [weak self] p, _ in
-                        let value = p.fractionCompleted
-                        Task { @MainActor in self?.progress.doubleValue = value }
-                    }
-                    message.stringValue = L("Downloading language resources…")
-                    try await withTaskCancellationHandler {
-                        try await request.downloadAndInstall()
-                    } onCancel: { request.progress.cancel() }
-                }
+            let locale = try await SpeechResources.prepare(Prefs.transcriptionLocale, window: window) { [weak self] value in
+                self?.message.stringValue = L("Downloading language resources…")
+                self?.progress.doubleValue = value
             }
             try Task.checkCancellation()
             message.stringValue = L("Transcribing on this Mac…")
+            progress.isIndeterminate = true; progress.startAnimation(nil)
+            defer { progress.stopAnimation(nil); progress.isIndeterminate = false }
             let words = try await LocalTranscription.recognize(source, locale: locale)
             guard !words.isEmpty else { throw ToolError(L("No speech was found.")) }
             try Task.checkCancellation()
@@ -384,7 +398,7 @@ final class TranscriptionEditor: Editor {
             }
         }
         self.task = task
-        defer { self.task = nil; observation?.invalidate(); observation = nil }
+        defer { self.task = nil }
         return try await task.value
     }
 }

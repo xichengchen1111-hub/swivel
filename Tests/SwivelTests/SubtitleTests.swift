@@ -142,6 +142,26 @@ struct SubtitleTests {
         #expect(Subtitles.overlayBitmap(finalA, size: CGSize(width: CGFloat.infinity, height: 360)) == nil)
     }
 
+    @Test @MainActor func trimPicksUpTheSRTBesideTheVideoWithoutTickingIt() async throws {
+        _ = NSApplication.shared
+        let folder = try MediaBatchFixtures.folder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let movie = try await MediaBatchFixtures.video(in: folder)
+        let srt = movie.deletingPathExtension().appendingPathExtension("srt")
+        try Subtitles.srt([SubtitleCue(start: 0.1, end: 0.8, text: "Hello")]).write(to: srt, atomically: true, encoding: .utf8)
+        let editor = try await TrimEditor(source: movie)
+        defer { editor.didClose() }
+        try await editor.load()
+        #expect(editor.subtitleCues.map(\.text) == ["Hello"])
+        #expect(editor.burnSubtitles.state == .off)
+        // Without a file beside it, nothing is loaded and embedding can't be ticked.
+        try FileManager.default.removeItem(at: srt)
+        let plain = try await TrimEditor(source: movie)
+        defer { plain.didClose() }
+        try await plain.load()
+        plain.update()
+        #expect(plain.subtitleCues.isEmpty && !plain.burnSubtitles.isEnabled)
+    }
     @Test @MainActor func menuPlacementAvailabilityAndTranslations() throws {
         for (ext, title) in [("mp4", "Subtitles"), ("m4a", "Transcribe")] {
             let url = URL(fileURLWithPath: "/nonexistent/clip.\(ext)")
@@ -153,7 +173,9 @@ struct SubtitleTests {
             } else { #expect(!titles.contains(title)) }
             #expect(!MCPCatalog.actions(for: [url]).contains { $0.id == "tools.\(title)" })
         }
-        for key in ["Subtitles", "Transcribe", "Transcription Language", "Follow App Language", "Burn subtitles", "Choose SRT…", "Also save SRT"] {
+        for key in ["Subtitles", "Transcribe", "Transcription Language", "Follow App Language", "Also save SRT", "Embed subtitles in the video (hard subtitles)",
+                    "Choose Subtitle File (.srt)…", "Generate from Speech", "Found %@ next to the video.", "Recognizing speech on this Mac…",
+                    "%d subtitles ready.", "Generated from speech", "Subtitles are still being generated."] {
             #expect(Strings.table[key]?.count == 3)
         }
     }
