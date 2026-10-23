@@ -143,6 +143,7 @@ MainActor.assumeIsolated {
                 case "idphoto": IDPhotoEditor(source: url)
                 case "noise": NoiseReductionEditor(source: url)
                 case "trim": try await TrimEditor(source: url)
+                case "folder": try FolderStyleEditor(folders: args[3...].map { URL(fileURLWithPath: $0) })
                 default: try CropEditor(source: url)
                 }
                 print("OK", try await editor.present().map(\.path))

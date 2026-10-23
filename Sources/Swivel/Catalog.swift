@@ -284,7 +284,16 @@ enum Catalog {
                 return list
             case .document:
                 return []  // Word Count is in the Actions menu.
-            case .folder, .archive, .other:
+            case .folder:
+                return [WheelItem(title: "Change Style") { folders in
+                    let editor = try FolderStyleEditor(folders: folders)
+                    let changed = try await editor.present()
+                    let message = editor.restoredDefault
+                        ? (changed.count == 1 ? L("Restored the default folder icon") : L("Restored %d folder icons", changed.count))
+                        : (changed.count == 1 ? L("Restyled %@", changed[0].lastPathComponent) : L("Restyled %d folders", changed.count))
+                    return ActionResult(message: message)
+                }] + Archives.compressItems
+            case .archive, .other:
                 return Archives.compressItems
             }
         }

@@ -123,6 +123,12 @@ enum Prefs {
         set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "assistant.v1"); post() }
     }
 
+    /// Folder styles applied lately, newest first (Change Style's Recent row).
+    static var folderStyleRecents: [FolderStyle] {
+        get { defaults.data(forKey: "folderStyle.recents.v1").flatMap { try? JSONDecoder().decode([FolderStyle].self, from: $0) } ?? [] }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "folderStyle.recents.v1"); post() }
+    }
+
     private static func post() { NotificationCenter.default.post(name: changed, object: nil) }
 
     private static var interactionCache: InteractionSettings = {
