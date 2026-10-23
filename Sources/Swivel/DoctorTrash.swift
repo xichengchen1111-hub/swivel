@@ -11,7 +11,8 @@ import DoctorCatalog
 /// Trash shows one recognisable item per cache and the cache folder itself stays. A single file (a leftover launch
 /// agent) is moved as it is. Nothing is ever deleted: everything stays in the Trash until the user empties it.
 struct DoctorTrashPlan: Sendable {
-    enum Mode: Sendable { case contents, item }
+    /// A cache's contents (the folder stays), one regular file, or one whole folder.
+    enum Mode: Sendable { case contents, item, folder }
 
     struct Entry: Sendable, Equatable {
         let url: URL
@@ -64,12 +65,22 @@ enum DoctorTrash {
     // MARK: What may be moved
 
     /// Cache folders may only be emptied when they are vendored catalogue entries; single files only when they are
-    /// property lists directly inside ~/Library/LaunchAgents. Nothing else, whatever a row says.
+    /// property lists directly inside ~/Library/LaunchAgents, or files the large-file search found in Downloads,
+    /// Desktop or Documents (with the identity they had then). Nothing else, whatever a row says.
     static func isAllowed(_ target: DoctorTrashTarget, catalogue: [CacheEntry] = ClearDiskCatalog.entries) -> Bool {
+        switch target.origin {
+        case .standard: break
+        case .duplicate, .similar: return DoctorDuplicates.isAllowed(target)
+        case .build: return DoctorProjects.isAllowed(target)
+        case .leftover: return DoctorUninstall.isAllowedLeftover(target)
+        }
         switch target.mode {
+        case .folder:
+            return false
         case .contents:
             return catalogue.contains { $0.path == target.path }
         case .item:
+            if DoctorLargeFiles.isAllowed(target) { return true }
             let prefix = "~/Library/LaunchAgents/"
             guard target.path.hasPrefix(prefix) else { return false }
             let name = target.path.dropFirst(prefix.count)
@@ -175,6 +186,27 @@ enum DoctorTrash {
                                name: file.url.deletingPathExtension().lastPathComponent)
     }
 
+    /// Plans moving one whole folder (`~/…`, never a link) to the Trash. With `expected`, the folder must still be
+    /// the one the check looked at.
+    static func planFolder(_ homeRelative: String, home: URL, expected: FileIdentity? = nil) throws -> DoctorTrashPlan {
+        let chain = try chain(homeRelative, home: home, expect: S_IFDIR)
+        let folder = chain.last!
+        if let expected, folder.identity != expected {
+            throw ToolError(L("Files changed since the check. Run the check again."))
+        }
+        return DoctorTrashPlan(mode: .folder, target: folder.url, chain: chain, items: [folder], skipped: 0,
+                               name: folder.url.lastPathComponent)
+    }
+
+    /// The plan for a target of any mode.
+    static func plan(_ target: DoctorTrashTarget, name: String, home: URL) throws -> DoctorTrashPlan {
+        switch target.mode {
+        case .contents: try planContents(of: target.path, name: name, home: home)
+        case .item: try planItem(target.path, home: home, expected: target.identity)
+        case .folder: try planFolder(target.path, home: home, expected: target.identity)
+        }
+    }
+
     // MARK: Moving
 
     /// Moves the planned items to the Trash. Every folder on the way is checked again first, and an item that
@@ -184,8 +216,8 @@ enum DoctorTrash {
             throw ToolError(L("Files changed since the check. Run the check again."))
         }
         var receipt = DoctorTrashReceipt()
-        let parents = plan.mode == .item ? Array(plan.chain.dropLast()) : plan.chain
-        if plan.mode == .item {
+        let parents = plan.mode == .contents ? plan.chain : Array(plan.chain.dropLast())
+        if plan.mode != .contents {
             let file = plan.items[0]
             do {
                 let trashed = try move(file.url)

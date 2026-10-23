@@ -295,45 +295,36 @@ enum DoctorStorage {
             return result
         }
         var grand: Int64 = 0
+        let home = FileManager.default.homeDirectoryForCurrentUser
         for (number, folder) in folders.enumerated() {
             if Task.isCancelled { break }
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            let all = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil, options: [])) ?? []
-            let children = all.filter { !DoctorPrivacy.shouldSkip($0, below: folder, home: home) }
-            var sized: [(URL, Size)] = []
-            var unreadable = 0, skipped = all.count - children.count, inCloud = 0
-            for child in children {
-                if Task.isCancelled { break }
-                var info = stat()
-                guard lstat(child.path, &info) == 0, info.st_mode & S_IFMT != S_IFLNK else { continue }
-                let size = await scan(child, home: home)
-                unreadable += size.unreadable
-                skipped += size.skipped
-                inCloud += size.inCloud
-                sized.append((child, size))
-            }
-            let total = sized.reduce(Int64(0)) { $0 + $1.1.bytes }
+            // One walk per folder gives both the list and the space map.
+            let map = await Task.detached(priority: .utility) { DoctorSpaceMap.build(folder, home: home) }.value
+            if Task.isCancelled { break }
+            result.maps.append(map.root)
+            let total = map.root.bytes
             grand += total
             result.rows.append(DoctorRow(id: "folder.\(number)", title: DoctorText.visible(folder.lastPathComponent),
                                          value: DoctorFormat.bytes(total), detail: DoctorFormat.path(folder),
                                          severity: .info, bytes: total, location: folder))
-            for (child, size) in sized.sorted(by: { $0.1.bytes > $1.1.bytes }).prefix(8) where size.bytes > 0 {
-                result.rows.append(DoctorRow(id: "folder.\(number).\(child.lastPathComponent)",
-                                             title: DoctorText.visible(child.lastPathComponent), value: DoctorFormat.bytes(size.bytes),
-                                             detail: DoctorFormat.path(child), severity: .info, bytes: size.bytes,
-                                             location: child, level: 1))
+            for child in map.root.children.prefix(8) where child.bytes > 0 {
+                result.rows.append(DoctorRow(id: "folder.\(number).\(child.name)", title: child.name,
+                                             value: DoctorFormat.bytes(child.bytes), detail: child.url.map(DoctorFormat.path) ?? "",
+                                             severity: .info, bytes: child.bytes, location: child.url, level: 1))
             }
             let shown = DoctorText.visible(folder.lastPathComponent)
-            if unreadable > 0 { result.notes.append(L("Some items in %@ couldn’t be read and aren’t counted.", shown)) }
-            if skipped > 0 {
-                result.notes.append(L("%d protected places in %@ (such as Documents, Mail or other apps’ data) were skipped, so macOS doesn’t ask for access.", skipped, shown))
+            let size = map.size
+            if size.unreadable > 0 { result.notes.append(L("Some items in %@ couldn’t be read and aren’t counted.", shown)) }
+            if size.skipped > 0 {
+                result.notes.append(L("%d protected places in %@ (such as Documents, Mail or other apps’ data) were skipped, so macOS doesn’t ask for access.", size.skipped, shown))
             }
-            if inCloud > 0 { result.notes.append(L("%d items in %@ are in the cloud, not on this Mac, and use no space here.", inCloud, shown)) }
+            if size.inCloud > 0 { result.notes.append(L("%d items in %@ are in the cloud, not on this Mac, and use no space here.", size.inCloud, shown)) }
+            if size.cancelled { result.notes.append(L("The search stopped before it finished.")) }
             result.report.append(L("Chosen folder %d: %@ in %d items; largest item %@.", number + 1, DoctorFormat.bytes(total),
-                                   children.count, DoctorFormat.bytes(sized.map(\.1.bytes).max() ?? 0)))
+                                   map.root.children.count, DoctorFormat.bytes(map.root.children.first?.bytes ?? 0)))
         }
         result.badge = DoctorFormat.bytes(grand)
-        result.headline = L("The chosen folders use %@. Select an item and choose Show in Finder to decide what to keep.",
+        result.headline = L("The chosen folders use %@. Click a box in the map to look inside it; select an item and choose Show in Finder to decide what to keep.",
                             DoctorFormat.bytes(grand))
         return result
     }

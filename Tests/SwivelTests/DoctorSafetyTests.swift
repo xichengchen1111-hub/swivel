@@ -1,4 +1,5 @@
-import Foundation
+import AppKit
+import ImageIO
 import Testing
 import DoctorCatalog
 @testable import Swivel
@@ -533,5 +534,425 @@ struct DoctorSafetyTests {
         #expect(withVerdict.signer == .unidentified)
         withVerdict.assessment = .init(verdict: .accepted, source: "Apple System")
         #expect(withVerdict.signer == .apple)
+    }
+}
+
+/// The storage cleanup and memory tools: what the large-file search may offer, how those files move, and which
+/// apps may be asked to quit.
+extension DoctorSafetyTests {
+    @Suite(.serialized)
+    @MainActor
+    struct DoctorCleanupTests {
+        private func temporaryHome() throws -> URL {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("SwivelDoctorCleanup-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            return try DoctorTrash.realHome(url)
+        }
+
+        private func file(_ url: URL, bytes: Int) throws {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(repeating: 7, count: bytes).write(to: url)
+        }
+
+        @Test func theSearchOffersInstallersAndLargeFilesButNeverLinksPackagesHiddenFoldersOrHardLinks() throws {
+            let home = try temporaryHome()
+            defer { try? FileManager.default.removeItem(at: home) }
+            try file(home.appendingPathComponent("Downloads/Setup.dmg"), bytes: 1_200_000)
+            try file(home.appendingPathComponent("Downloads/tiny.pkg"), bytes: 20_000)
+            try file(home.appendingPathComponent("Documents/Film/cut.mov"), bytes: 2_500_000)
+            try file(home.appendingPathComponent("Documents/notes.txt"), bytes: 50_000)
+            try file(home.appendingPathComponent("Desktop/Tool.app/Contents/Resources/big.bin"), bytes: 2_500_000)
+            try file(home.appendingPathComponent("Documents/Repo/.git/objects/pack.bin"), bytes: 2_500_000)
+            try file(home.appendingPathComponent("Documents/Site/node_modules/dep/blob.bin"), bytes: 2_500_000)
+            try file(home.appendingPathComponent("Documents/shared.bin"), bytes: 2_500_000)
+            try FileManager.default.linkItem(at: home.appendingPathComponent("Documents/shared.bin"),
+                                             to: home.appendingPathComponent("Documents/shared copy.bin"))
+            try FileManager.default.createSymbolicLink(at: home.appendingPathComponent("Desktop/alias.dmg"),
+                                                       withDestinationURL: home.appendingPathComponent("Downloads/Setup.dmg"))
+            let outcome = DoctorLargeFiles.scan(home: home, large: 2_000_000, installer: 1_000_000)
+            #expect(Set(outcome.files.map(\.url.lastPathComponent)) == ["Setup.dmg", "cut.mov"])
+            #expect(outcome.files.first?.url.lastPathComponent == "cut.mov" && outcome.unreadable.isEmpty)
+            #expect(outcome.files.first { $0.url.lastPathComponent == "Setup.dmg" }?.installer == true)
+
+            let result = DoctorLargeFiles.merge(nil, outcome, home: home)
+            let rows = result.rows.filter { $0.trash != nil }
+            #expect(rows.count == 2 && rows.allSatisfy { DoctorTrash.isAllowed($0.trash!) && $0.trash?.identity != nil })
+            #expect(rows.allSatisfy { $0.trash!.path.hasPrefix("~/Downloads/") || $0.trash!.path.hasPrefix("~/Documents/") })
+            // Names stay on the Mac: the assistant report only has counts.
+            #expect(!result.report.joined().contains("cut.mov") && result.names.isEmpty)
+        }
+
+        @Test func onlyFilesTheSearchFoundInTheThreeFoldersCanBeMoved() {
+            let identity = FileIdentity(device: 1, inode: 2)
+            #expect(DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Downloads/Setup.dmg", mode: .item, identity: identity)))
+            #expect(DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Documents/Film/cut.mov", mode: .item, identity: identity)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Downloads/Setup.dmg", mode: .item)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Downloads", mode: .contents)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Library/Preferences/x.plist", mode: .item, identity: identity)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Documents/../Library/x", mode: .item, identity: identity)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Pictures/big.mov", mode: .item, identity: identity)))
+        }
+
+        @Test func aFoundFileMovesAndComesBackButAReplacedOneStays() async throws {
+            let defaults = UserDefaults.standard, before = defaults.object(forKey: "feature.doctor")
+            defer { if let before { defaults.set(before, forKey: "feature.doctor") } else { defaults.removeObject(forKey: "feature.doctor") } }
+            Prefs.setFeatureEnabled(.doctor, true)
+            let home = try temporaryHome()
+            defer { try? FileManager.default.removeItem(at: home) }
+            let setup = home.appendingPathComponent("Downloads/Setup.dmg")
+            let movie = home.appendingPathComponent("Documents/cut.mov")
+            try file(setup, bytes: 1_200_000)
+            try file(movie, bytes: 2_500_000)
+            let outcome = DoctorLargeFiles.scan(home: home, large: 2_000_000, installer: 1_000_000)
+            let rows = DoctorLargeFiles.merge(nil, outcome, home: home).rows.filter { $0.trash != nil }
+            // The movie is replaced by a different file under the same name after the search.
+            try FileManager.default.removeItem(at: movie)
+            try file(movie, bytes: 10)
+            let trash = home.appendingPathComponent("FakeTrash")
+            try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+            let center = DoctorCenter.shared
+            let saved = center.environment
+            defer { center.environment = saved }
+            center.environment.home = home
+            center.environment.trash = { url in
+                let target = trash.appendingPathComponent(url.lastPathComponent)
+                try FileManager.default.moveItem(at: url, to: target)
+                return target
+            }
+            let receipt = try await center.moveToTrash(rows)
+            #expect(receipt.moved.count == 1 && receipt.failures.count == 1)
+            #expect(!FileManager.default.fileExists(atPath: setup.path) && FileManager.default.fileExists(atPath: trash.appendingPathComponent("Setup.dmg").path))
+            #expect((try Data(contentsOf: movie)).count == 10)
+            #expect(DoctorTrash.undo(receipt).restored == 1 && FileManager.default.fileExists(atPath: setup.path))
+            center.cancelAll()
+        }
+
+        @Test func essentialAppsAndSwivelAreNeverOfferedAndChangedAppsAreNeverAsked() {
+            #expect(!DoctorApps.quittable("com.apple.finder", own: "local.swivel.app"))
+            #expect(!DoctorApps.quittable("com.apple.dock", own: "local.swivel.app"))
+            #expect(!DoctorApps.quittable("local.swivel.app", own: "local.swivel.app"))
+            #expect(!DoctorApps.quittable("local.swivel.app.mcp", own: "local.swivel.app"))
+            #expect(DoctorApps.quittable("com.google.Chrome", own: "local.swivel.app"))
+            #expect(DoctorApps.quittable("com.google.Chrome", own: ""))
+            // No such process, and this test process under a made-up identity: neither is asked to quit.
+            let outcome = DoctorApps.quit([DoctorQuitTarget(pid: 999_999, bundleID: "com.example.gone", launched: nil),
+                                           DoctorQuitTarget(pid: getpid(), bundleID: "com.example.other", launched: nil)])
+            #expect(outcome.asked.isEmpty && outcome.skipped.count == 2)
+            let rows = DoctorApps.rows([DoctorApps.Usage(app: .init(pid: 42, bundleID: "com.example.big", name: "Big\u{202E}App",
+                                                                     bundlePath: "/Applications/Big.app", launched: nil), bytes: 3_000_000_000)])
+            #expect(rows.count == 2 && rows[1].quit?.pid == 42 && rows[1].level == 1 && rows[1].severity == .review)
+            #expect(rows[1].title.contains("\\u{202E}"))
+            #expect(DoctorApps.usage([]).isEmpty)
+        }
+
+        @Test func liveReadingsAreSaneAndTheChartsTakeThem() {
+            var live = DoctorLive()
+            #expect(live.cpu() == nil)
+            usleep(50_000)
+            if let cpu = live.cpu() { #expect((0...1).contains(cpu)) }
+            let memory = DoctorLive.memory()
+            #expect(memory != nil && memory!.used > 0 && (0...1).contains(memory!.fraction))
+            let disk = DoctorChartPanel(.disk)
+            disk.showDisk(DoctorStorage.Space(total: 1_000, available: 300, important: 400), selected: 50, inTrash: true)
+            disk.showDisk(nil, selected: 0, inTrash: true)
+            let panel = DoctorChartPanel(.memory)
+            panel.showMemory(memory, pressure: 2, swap: 1_000, selected: 10)
+            panel.showHistory(cpu: [0.1, 0.5, 2], memory: [0.4, 0.45])
+            panel.view.layoutSubtreeIfNeeded()
+            #expect(panel.view.fittingSize.width > 300)
+            let caches = DoctorChartPanel(.caches)
+            caches.showCaches([], selected: [])
+            let rows = (0..<9).map { DoctorRow(id: "cache.\($0)", title: "Cache \($0)", value: "", detail: "", severity: .info,
+                                               bytes: Int64(9 - $0) * 100_000_000) }
+            caches.showCaches(rows, selected: ["cache.0"])
+            caches.showCaches(rows, selected: [])
+            caches.view.layoutSubtreeIfNeeded()
+            #expect(caches.view.fittingSize.height > 150)
+        }
+    }
+}
+
+/// Space map, duplicate files, project build folders and uninstalling (ideas from MangoDisk, reimplemented).
+extension DoctorSafetyTests {
+    @Suite(.serialized)
+    @MainActor
+    struct DoctorExploreTests {
+        private func temporaryHome() throws -> URL {
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("SwivelDoctorExplore-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            return try DoctorTrash.realHome(url)
+        }
+
+        private func file(_ url: URL, _ data: Data) throws {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url)
+        }
+
+        private func withDoctor(_ body: () async throws -> Void) async rethrows {
+            let defaults = UserDefaults.standard, before = defaults.object(forKey: "feature.doctor")
+            defer { if let before { defaults.set(before, forKey: "feature.doctor") } else { defaults.removeObject(forKey: "feature.doctor") } }
+            Prefs.setFeatureEnabled(.doctor, true)
+            try await body()
+        }
+
+        private func fakeTrash(_ home: URL) throws -> DoctorTrash.Mover {
+            let trash = home.appendingPathComponent("FakeTrash")
+            try FileManager.default.createDirectory(at: trash, withIntermediateDirectories: true)
+            return { url in
+                let target = trash.appendingPathComponent(url.lastPathComponent + "-" + UUID().uuidString.prefix(4))
+                try FileManager.default.moveItem(at: url, to: target)
+                return target
+            }
+        }
+
+        @Test func theSpaceMapAddsUpFoldersAndTheTreemapFillsItsBox() throws {
+            let home = try temporaryHome()
+            defer { try? FileManager.default.removeItem(at: home) }
+            let root = home.appendingPathComponent("Stuff")
+            try file(root.appendingPathComponent("Video/a.mov"), Data(count: 400_000))
+            try file(root.appendingPathComponent("Video/Old/b.mov"), Data(count: 200_000))
+            try file(root.appendingPathComponent("notes.txt"), Data(count: 50_000))
+            try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("link"), withDestinationURL: URL(fileURLWithPath: "/System"))
+            let map = DoctorSpaceMap.build(root, home: home)
+            let video = try #require(map.root.children.first { $0.name == "Video" })
+            #expect(video.isFolder && video.children.contains { $0.name == "Old" })
+            #expect(map.root.bytes == map.root.children.reduce(0) { $0 + $1.bytes } && map.root.bytes == map.size.bytes)
+            #expect(video.bytes > 590_000 && map.root.children.first?.name == "Video")
+            let rect = NSRect(x: 0, y: 0, width: 400, height: 300)
+            let boxes = DoctorTreemap.squarify(map.root.children, in: rect)
+            let area = boxes.reduce(0.0) { $0 + Double($1.0.width * $1.0.height) }
+            #expect(abs(area - 120_000) < 1 && boxes.allSatisfy { rect.insetBy(dx: -0.5, dy: -0.5).contains($0.0) })
+        }
+
+        @Test func duplicatesAreFoundByContentAndTheLastCopyNeverMoves() async throws {
+            try await withDoctor {
+                let home = try temporaryHome()
+                defer { try? FileManager.default.removeItem(at: home) }
+                let same = Data((0..<1_500_000).map { UInt8($0 % 251) })
+                var other = same; other[700_000] ^= 1  // same size and ends, different middle
+                try file(home.appendingPathComponent("Pictures/a.jpg"), same)
+                try file(home.appendingPathComponent("Pictures/Copy/a copy.jpg"), same)
+                try file(home.appendingPathComponent("Pictures/near.jpg"), other)
+                try file(home.appendingPathComponent("Pictures/.hidden/a.jpg"), same)
+                try FileManager.default.linkItem(at: home.appendingPathComponent("Pictures/a.jpg"), to: home.appendingPathComponent("Pictures/hard.jpg"))
+                let outcome = DoctorDuplicates.find([home.appendingPathComponent("Pictures")], home: home)
+                #expect(outcome.groups.count == 1 && outcome.groups[0].copies.count == 2)
+                #expect(Set(outcome.groups[0].copies.map(\.url.lastPathComponent)) == ["a copy.jpg", "a.jpg"] || Set(outcome.groups[0].copies.map(\.url.lastPathComponent)) == ["a copy.jpg", "hard.jpg"])
+                let result = DoctorDuplicates.result(outcome, roots: [], home: home)
+                let copies = result.rows.filter { $0.level == 1 }
+                #expect(copies.count == 2 && copies.allSatisfy { $0.trash?.origin == .duplicate })
+                #expect(!result.report.joined().contains("a.jpg"))
+
+                let center = DoctorCenter.shared
+                let saved = center.environment
+                defer { center.environment = saved; center.cancelAll() }
+                center.environment.home = home
+                center.environment.trash = try fakeTrash(home)
+                center.record(result)
+                // Both copies selected: refused, nothing moves.
+                await #expect(throws: ToolError.self) { _ = try await center.moveToTrash(copies) }
+                #expect(copies.allSatisfy { FileManager.default.fileExists(atPath: $0.location!.path) })
+                // The kept copy changed after the search: the other stays too.
+                let kept = copies[0].location!, extra = copies[1]
+                try other.write(to: kept)
+                let refused = try await center.moveToTrash([extra])
+                #expect(refused.moved.isEmpty && FileManager.default.fileExists(atPath: extra.location!.path))
+                try same.write(to: kept)
+                let receipt = try await center.moveToTrash([extra])
+                #expect(receipt.moved.count == 1 && !FileManager.default.fileExists(atPath: extra.location!.path))
+                #expect(FileManager.default.fileExists(atPath: kept.path))
+            }
+        }
+
+        /// A test picture: soft shapes on a gradient, drawn at `size`, saved as `type`.
+        private func picture(_ url: URL, size: Int, seed: Int, type: CFString, quality: Double = 0.9) throws {
+            let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            for y in stride(from: 0, to: size, by: 4) {
+                context.setFillColor(red: CGFloat(y) / CGFloat(size), green: 0.4, blue: CGFloat(seed % 3) / 3, alpha: 1)
+                context.fill(CGRect(x: 0, y: y, width: size, height: 4))
+            }
+            for i in 0..<6 {
+                let v = CGFloat((seed * 37 + i * 53) % 100) / 100
+                context.setFillColor(red: 1 - v, green: v, blue: 0.2, alpha: 1)
+                context.fillEllipse(in: CGRect(x: CGFloat(size) * v * 0.7, y: CGFloat(size) * CGFloat(i) / 7, width: CGFloat(size) / 4, height: CGFloat(size) / 5))
+            }
+            // Noise so the file is big enough to be compared, without changing how it looks.
+            var rng = SystemRandomNumberGenerator()
+            for _ in 0..<(size * 4) {
+                context.setFillColor(gray: CGFloat.random(in: 0...1, using: &rng), alpha: 0.08)
+                context.fill(CGRect(x: Int.random(in: 0..<size, using: &rng), y: Int.random(in: 0..<size, using: &rng), width: 1, height: 1))
+            }
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let destination = CGImageDestinationCreateWithURL(url as CFURL, type, 1, nil)!
+            CGImageDestinationAddImage(destination, context.makeImage()!, [kCGImageDestinationLossyCompressionQuality: quality] as CFDictionary)
+            #expect(CGImageDestinationFinalize(destination))
+        }
+
+        @Test func nearlyIdenticalPhotosAndTextsAreGroupedWithHowAlikeTheyAreAndNeverPreselected() async throws {
+            try await withDoctor {
+                let home = try temporaryHome()
+                defer { try? FileManager.default.removeItem(at: home) }
+                let pictures = home.appendingPathComponent("Pictures")
+                try picture(pictures.appendingPathComponent("beach.png"), size: 800, seed: 1, type: "public.png" as CFString)
+                try picture(pictures.appendingPathComponent("beach small.jpg"), size: 500, seed: 1, type: "public.jpeg" as CFString, quality: 0.6)
+                try picture(pictures.appendingPathComponent("forest.png"), size: 800, seed: 2, type: "public.png" as CFString)
+                let lines = (0..<30).map { "Line \($0): the quick brown fox number \($0 * 7) jumps." }
+                var edited = lines; edited[3] = "Line 3 was rewritten entirely."; edited[20] = "A new line 20."
+                try file(home.appendingPathComponent("Documents/notes.md"), Data(lines.joined(separator: "\n").utf8))
+                try file(home.appendingPathComponent("Documents/notes old.md"), Data(edited.joined(separator: "\n").utf8))
+                try file(home.appendingPathComponent("Documents/other.md"), Data((0..<30).map { "Unrelated \($0 * 13)" }.joined(separator: "\n").utf8))
+                let outcome = DoctorDuplicates.find([pictures, home.appendingPathComponent("Documents")], home: home)
+                #expect(outcome.groups.isEmpty)
+                let photo = try #require(outcome.similar.first { $0.kind == .photo })
+                #expect(Set(photo.copies.map(\.url.lastPathComponent)) == ["beach.png", "beach small.jpg"])
+                #expect(photo.similarity[0] == 1 && photo.similarity[1] >= 0.9)
+                let text = try #require(outcome.similar.first { $0.kind == .text })
+                #expect(Set(text.copies.map(\.url.lastPathComponent)) == ["notes.md", "notes old.md"])
+                #expect(text.similarity[1] >= 0.8 && text.similarity[1] < 1)
+                #expect(outcome.similar.count == 2)
+
+                let result = DoctorDuplicates.result(outcome, roots: [], home: home)
+                let rows = result.rows.filter { $0.trash?.origin == .similar }
+                #expect(rows.count == 4 && rows.allSatisfy { $0.value.contains("%") || $0.value.contains("·") })
+                #expect(!result.report.joined().contains("beach"))
+                // A whole group selected is refused; one of them may go while the other stays.
+                let center = DoctorCenter.shared
+                let saved = center.environment
+                defer { center.environment = saved; center.cancelAll() }
+                center.environment.home = home
+                center.environment.trash = try fakeTrash(home)
+                center.record(result)
+                let group = rows.filter { $0.group == rows[0].group }
+                await #expect(throws: ToolError.self) { _ = try await center.moveToTrash(group) }
+                let receipt = try await center.moveToTrash([group[1]])
+                #expect(receipt.moved.count == 1 && FileManager.default.fileExists(atPath: group[0].location!.path))
+            }
+        }
+
+        @Test func reviewFindingsStayFixed() async throws {
+            try await withDoctor {
+                let home = try temporaryHome()
+                defer { try? FileManager.default.removeItem(at: home) }
+                // 1. A file with identical copies never also sits in a similar group, so it can't be both kept and moved.
+                let lines = (0..<30).map { "Row \($0) of the shared notes, item \($0 * 11)." }
+                var edited = lines; edited[5] = "Changed row."
+                let text = Data(lines.joined(separator: "\n").utf8)
+                let docs = home.appendingPathComponent("Documents")
+                try file(docs.appendingPathComponent("a.md"), text)
+                try file(docs.appendingPathComponent("b.md"), text)
+                try file(docs.appendingPathComponent("c.md"), Data(edited.joined(separator: "\n").utf8))
+                let outcome = DoctorDuplicates.find([docs], home: home, smallest: 1)
+                #expect(outcome.groups.count == 1)
+                let exact = Set(outcome.groups.flatMap { $0.copies.map(\.url.path) })
+                #expect(outcome.similar.allSatisfy { Set($0.copies.map(\.url.path)).isDisjoint(with: exact) })
+                // A batch that includes every copy of a group is refused even when the rows come from different groups.
+                let result = DoctorDuplicates.result(outcome, roots: [], home: home)
+                let center = DoctorCenter.shared
+                let saved = center.environment
+                defer { center.environment = saved; center.cancelAll() }
+                center.environment.home = home
+                center.environment.trash = try fakeTrash(home)
+                center.record(result)
+                let copies = result.rows.filter { $0.trash?.origin == .duplicate }
+                await #expect(throws: ToolError.self) { _ = try await center.moveToTrash(copies) }
+
+                // 3. Leftovers of a longer identifier are shown but not preselected.
+                let app = home.appendingPathComponent("Applications/Tidy.app")
+                try file(app.appendingPathComponent("Contents/Info.plist"), try PropertyListSerialization.data(fromPropertyList: [
+                    "CFBundleIdentifier": "com.example.tidy", "CFBundleName": "Tidy", "CFBundlePackageType": "APPL"], format: .xml, options: 0))
+                try file(home.appendingPathComponent("Library/Caches/com.example.tidy/x"), Data(count: 10))
+                try file(home.appendingPathComponent("Library/Caches/com.example.tidy.canary/x"), Data(count: 10))
+                try file(home.appendingPathComponent("Library/Preferences/com.example.tidy.plist"), Data("x".utf8))
+                let info = try #require(DoctorUninstall.inspect(app, home: home))
+                #expect(info.leftovers.first { $0.url.lastPathComponent == "com.example.tidy.canary" }?.byName == true)
+                #expect(info.leftovers.filter { !$0.byName }.map(\.url.lastPathComponent).sorted() == ["com.example.tidy", "com.example.tidy.plist"])
+
+                // 4. Editor extensions and globally installed tools aren't projects.
+                let ext = home.appendingPathComponent(".vscode/extensions/some.ext")
+                try file(ext.appendingPathComponent("package.json"), Data("{}".utf8))
+                try file(ext.appendingPathComponent("node_modules/dep/index.js"), Data(count: 100))
+                let global = home.appendingPathComponent(".nvm/versions/node/v20/lib/node_modules/tool")
+                try file(global.appendingPathComponent("package.json"), Data("{}".utf8))
+                try file(global.appendingPathComponent("node_modules/dep/index.js"), Data(count: 100))
+                #expect(DoctorProjects.find([home], home: home, smallest: 1).found.isEmpty)
+                #expect(DoctorProjects.kind(of: ext.appendingPathComponent("node_modules")) == nil)
+            }
+        }
+
+        @Test func onlyRecognisedProjectFoldersAreOfferedAndMovedWhole() async throws {
+            try await withDoctor {
+                let home = try temporaryHome()
+                defer { try? FileManager.default.removeItem(at: home) }
+                let code = home.appendingPathComponent("Developer")
+                try file(code.appendingPathComponent("web/package.json"), Data("{}".utf8))
+                try file(code.appendingPathComponent("web/node_modules/dep/index.js"), Data(count: 300_000))
+                try file(code.appendingPathComponent("web/node_modules/dep/node_modules/x/y.js"), Data(count: 10))
+                try file(code.appendingPathComponent("rusty/Cargo.toml"), Data())
+                try file(code.appendingPathComponent("rusty/target/debug/app"), Data(count: 200_000))
+                try file(code.appendingPathComponent("photos/target/keep.jpg"), Data(count: 200_000))  // no Cargo.toml: not a build
+                try file(code.appendingPathComponent("cmake/CMakeLists.txt"), Data())
+                try file(code.appendingPathComponent("cmake/build/notes.txt"), Data(count: 200_000))  // no CMakeCache.txt
+                let found = DoctorProjects.find([code], home: home, smallest: 1)
+                #expect(Set(found.found.map { $0.url.deletingLastPathComponent().lastPathComponent + "/" + $0.url.lastPathComponent }) == ["web/node_modules", "rusty/target"])
+                let result = DoctorProjects.result(found.found, cancelled: false, home: home)
+                #expect(result.rows.allSatisfy { $0.trash?.mode == .folder && $0.trash?.origin == .build })
+                #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Developer/photos", mode: .folder, identity: FileIdentity(device: 1, inode: 1), origin: .build)))
+                #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Library/x/node_modules", mode: .folder, identity: FileIdentity(device: 1, inode: 1), origin: .build)))
+
+                let center = DoctorCenter.shared
+                let saved = center.environment
+                defer { center.environment = saved; center.cancelAll() }
+                center.environment.home = home
+                center.environment.trash = try fakeTrash(home)
+                center.record(result)
+                // The project file went away after the search: the folder stays.
+                let rust = try #require(result.rows.first { $0.title.hasPrefix("rusty") })
+                try FileManager.default.removeItem(at: code.appendingPathComponent("rusty/Cargo.toml"))
+                let web = try #require(result.rows.first { $0.title.hasPrefix("web") })
+                let receipt = try await center.moveToTrash([rust, web])
+                #expect(receipt.moved.count == 1 && receipt.failures.count == 1)
+                #expect(!FileManager.default.fileExists(atPath: code.appendingPathComponent("web/node_modules").path))
+                #expect(FileManager.default.fileExists(atPath: code.appendingPathComponent("web/package.json").path))
+                #expect(FileManager.default.fileExists(atPath: code.appendingPathComponent("rusty/target").path))
+                #expect(DoctorTrash.undo(receipt).restored == 1 && FileManager.default.fileExists(atPath: code.appendingPathComponent("web/node_modules/dep/index.js").path))
+            }
+        }
+
+        @Test func uninstallFindsTheAppsOwnFilesAndRefusesAppleApps() throws {
+            let home = try temporaryHome()
+            defer { try? FileManager.default.removeItem(at: home) }
+            let app = home.appendingPathComponent("Applications/Tidy Notes.app")
+            try file(app.appendingPathComponent("Contents/Info.plist"), try PropertyListSerialization.data(fromPropertyList: [
+                "CFBundleIdentifier": "com.example.tidynotes", "CFBundleName": "Tidy Notes", "CFBundleShortVersionString": "2.1",
+                "CFBundlePackageType": "APPL"], format: .xml, options: 0))
+            try file(home.appendingPathComponent("Library/Caches/com.example.tidynotes/blob"), Data(count: 5000))
+            try file(home.appendingPathComponent("Library/Preferences/com.example.tidynotes.plist"), Data("x".utf8))
+            try file(home.appendingPathComponent("Library/Application Support/Tidy Notes/db"), Data(count: 1000))
+            try file(home.appendingPathComponent("Library/Application Support/com.example.tidynotesextra/db"), Data(count: 10))
+            try file(home.appendingPathComponent("Library/Application Support/Google/x"), Data(count: 10))
+            try file(home.appendingPathComponent("Library/Containers/com.example.tidynotes/x"), Data(count: 10))
+            let info = try #require(DoctorUninstall.inspect(app, home: home))
+            #expect(info.bundleID == "com.example.tidynotes" && info.name == "Tidy Notes")
+            let names = Set(info.leftovers.map { $0.url.lastPathComponent })
+            #expect(names == ["com.example.tidynotes", "com.example.tidynotes.plist", "Tidy Notes"])
+            #expect(info.leftovers.first { $0.url.lastPathComponent == "Tidy Notes" }?.byName == true)
+            let result = DoctorUninstall.result(info, home: home)
+            #expect(result.rows.filter { $0.trash?.origin == .leftover }.count == 3)
+            #expect(DoctorUninstall.refusal(bundleID: "com.apple.Safari", url: URL(fileURLWithPath: "/Applications/Safari.app")) != nil)
+            #expect(DoctorUninstall.refusal(bundleID: "com.example.x", url: URL(fileURLWithPath: "/Users/Shared/X.app")) != nil)
+            #expect(DoctorUninstall.refusal(bundleID: "com.example.x", url: URL(fileURLWithPath: "/Applications/X.app")) == nil)
+            let id = FileIdentity(device: 1, inode: 1)
+            #expect(DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Library/Caches/com.example.x", mode: .folder, identity: id, origin: .leftover)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Library/Caches/com.apple.Safari", mode: .folder, identity: id, origin: .leftover)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Library/Caches", mode: .folder, identity: id, origin: .leftover)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Library/Caches/a/b", mode: .folder, identity: id, origin: .leftover)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Documents/com.example.x", mode: .folder, identity: id, origin: .leftover)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Library/Caches/com.example.x", mode: .folder, origin: .leftover)))
+            // The app itself moves only while it is the very bundle that was inspected.
+            #expect(throws: ToolError.self) {
+                _ = try DoctorUninstall.trashApp(app, identity: FileIdentity(device: 0, inode: 0), bundleID: info.bundleID, move: { $0 })
+            }
+        }
     }
 }

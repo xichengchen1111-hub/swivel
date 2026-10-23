@@ -18,17 +18,27 @@ final class DoctorCenter {
     private var stored: [DoctorSection: DoctorResult] = [:]
     /// The latest speed test, kept apart from the DNS result so either can be checked again on its own.
     private var speed: DoctorNetwork.SpeedOutcome?
+    /// The latest large-file search, shown under Storage. Kept apart so "Check This Mac" never repeats it.
+    private var largeFiles: DoctorLargeFiles.Outcome?
     private var language = Language.resolved
     /// Every section's latest result; Network shows the DNS check with the latest speed test on top.
     var results: [DoctorSection: DoctorResult] {
         var all = stored
         if let speed { all[.network] = DoctorNetwork.withSpeed(stored[.network], speed) }
+        if let largeFiles { all[.storage] = DoctorLargeFiles.merge(stored[.storage], largeFiles, home: environment.home) }
         return all
     }
     private(set) var running: Set<DoctorSection> = []
     private(set) var testingSpeed = false
+    private(set) var searchingFiles = false
+    private var filesTask: Task<Void, Never>?
     /// Chosen in this session only; nothing about them is saved.
     private(set) var folders: [URL] = []
+    private(set) var duplicateFolders: [URL] = []
+    private(set) var projectFolders: [URL] = []
+    /// The app chosen on Uninstall Apps, and what was found for it.
+    private(set) var uninstallApp: URL?
+    private var uninstallInfo: DoctorUninstall.App?
     /// The app App Check last looked at, also for this session only.
     private(set) var app: URL?
     /// One receipt per Move to Trash, newest last, until Swivel quits.
@@ -44,7 +54,7 @@ final class DoctorCenter {
         }
     }
 
-    var isBusy: Bool { !running.isEmpty || testingSpeed }
+    var isBusy: Bool { !running.isEmpty || testingSpeed || searchingFiles }
 
     private func preferencesChanged() {
         if !Feature.doctor.isOn { cancelAll() }
@@ -54,6 +64,7 @@ final class DoctorCenter {
             cancelAll()
             stored = [:]
             speed = nil
+            largeFiles = nil
             post()
         }
     }
@@ -83,6 +94,9 @@ final class DoctorCenter {
         post()
         let env = environment
         let folders = folders
+        let duplicateFolders = duplicateFolders
+        let projectFolders = projectFolders
+        let uninstallApp = uninstallApp
         let app = app
         tasks[section] = Task { [weak self] in
             let result: DoctorResult? = switch section {
@@ -90,6 +104,16 @@ final class DoctorCenter {
             case .storage: await DoctorStorage.checkStorage(env)
             case .caches: await DoctorStorage.checkCaches(env)
             case .folders: await DoctorStorage.checkFolders(folders)
+            case .duplicates:
+                await Task.detached(priority: .utility) {
+                    DoctorDuplicates.result(DoctorDuplicates.find(duplicateFolders, home: env.home), roots: duplicateFolders, home: env.home)
+                }.value
+            case .projects:
+                await Task.detached(priority: .utility) {
+                    let found = DoctorProjects.find(projectFolders, home: env.home)
+                    return DoctorProjects.result(found.found, cancelled: found.cancelled, home: env.home)
+                }.value
+            case .uninstall: await self?.inspectUninstall(uninstallApp, home: env.home)
             case .performance: await Self.performance(env)
             case .power: await Self.power()
             case .network: await DoctorNetwork.check(dns: try? env.run(.dnsConfiguration), proxy: try? env.run(.proxySettings))
@@ -129,7 +153,52 @@ final class DoctorCenter {
         speedTask?.cancel()
         speedTask = nil
         testingSpeed = false
+        filesTask?.cancel()
+        filesTask = nil
+        searchingFiles = false
         post()
+    }
+
+    // MARK: Large files
+
+    /// Searches Downloads, Desktop and Documents for large files and installers. Only from its own button: macOS may
+    /// ask the user to allow access to these folders. Checks Storage too when it hasn't run yet.
+    func searchLargeFiles() {
+        guard Feature.doctor.isOn, !searchingFiles else { return }
+        searchingFiles = true
+        if stored[.storage] == nil, !running.contains(.storage) { run(.storage) }
+        post()
+        let home = environment.home
+        filesTask = Task { [weak self] in
+            let outcome = await DoctorLargeFiles.scanDetached(home: home)
+            guard let self, !Task.isCancelled else { return }
+            largeFiles = outcome
+            searchingFiles = false
+            filesTask = nil
+            Feedback.done()
+            post()
+        }
+    }
+
+    func stopFileSearch() {
+        filesTask?.cancel()
+        filesTask = nil
+        searchingFiles = false
+        post()
+    }
+
+    /// Asks the apps in these rows to quit, as their own Quit command would; checks memory again a moment later.
+    func quitApps(_ rows: [DoctorRow]) -> (asked: [String], skipped: [String]) {
+        guard Feature.doctor.isOn else { return ([], []) }
+        let outcome = DoctorApps.quit(rows.compactMap(\.quit))
+        if !outcome.asked.isEmpty {
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard let self, Feature.doctor.isOn else { return }
+                run(.performance)
+            }
+        }
+        return outcome
     }
 
     /// Apple's network quality test: about 20 seconds of test traffic to Apple's servers.
@@ -164,6 +233,54 @@ final class DoctorCenter {
         run(.folders)
     }
 
+    /// Adds folders to Duplicate Files or Project Builds and searches them.
+    func addFolders(_ urls: [URL], to section: DoctorSection) {
+        let picked = urls.map(\.standardizedFileURL)
+        switch section {
+        case .duplicates: duplicateFolders += picked.filter { !duplicateFolders.contains($0) }
+        case .projects: projectFolders += picked.filter { !projectFolders.contains($0) }
+        default: return
+        }
+        run(section)
+    }
+
+    /// The folders where duplicates usually are, as real folders on the home volume.
+    static let commonFolders = ["Downloads", "Desktop", "Documents", "Pictures", "Movies", "Music"]
+
+    /// Searches the common folders for duplicate and similar files, replacing the chosen folders.
+    func scanCommonFolders() {
+        duplicateFolders = Self.commonFolders.compactMap { DoctorLargeFiles.folder($0, home: environment.home) }
+        run(.duplicates)
+    }
+
+    func clearFolders(_ section: DoctorSection) {
+        switch section {
+        case .duplicates: duplicateFolders = []
+        case .projects: projectFolders = []
+        case .folders: folders = []
+        default: return
+        }
+        cancel(section)
+        stored[section] = nil
+        post()
+    }
+
+    /// The app to uninstall. Returns false when it isn't an app bundle with a plain path.
+    @discardableResult
+    func chooseUninstall(_ url: URL) -> Bool {
+        guard let app = DoctorCommand.validatedApp(url) else { return false }
+        uninstallApp = app
+        run(.uninstall)
+        return true
+    }
+
+    private func inspectUninstall(_ app: URL?, home: URL) async -> DoctorResult? {
+        guard let app else { return nil }
+        let info = await Task.detached(priority: .userInitiated) { DoctorUninstall.inspect(app, home: home) }.value
+        if !Task.isCancelled { uninstallInfo = info }
+        return DoctorUninstall.result(info, home: home)
+    }
+
     func removeFolders() {
         folders = []
         cancel(.folders)
@@ -176,34 +293,102 @@ final class DoctorCenter {
     /// Plans and moves the given rows to the Trash. Rows are re-checked here: only catalogue caches and your own
     /// leftover launch agents can be moved, and never while their app runs. Blocking file work runs off the main thread.
     func moveToTrash(_ rows: [DoctorRow]) async throws -> DoctorTrashReceipt {
+        try await move(rows, app: nil)
+    }
+
+    /// Moves the inspected app and the chosen leftover rows to the Trash, as one step Undo can reverse.
+    func uninstall(_ rows: [DoctorRow]) async throws -> DoctorTrashReceipt {
+        guard let app = uninstallApp, let inspected = uninstallInfo, inspected.url == app, inspected.refusal == nil else {
+            throw ToolError(L("Choose the app again."))
+        }
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: inspected.bundleID)
+        guard running.isEmpty else { throw ToolError(L("Quit %@ first", inspected.name)) }
+        // A leftover named after a longer identifier may belong to another app that is running (Chrome Canary).
+        let busy = NSWorkspace.shared.runningApplications.filter { app in
+            guard let id = app.bundleIdentifier?.lowercased() else { return false }
+            return rows.contains { row in
+                let name = (row.location?.lastPathComponent.lowercased() ?? "")
+                return name == id || name.hasPrefix(id + ".")
+            }
+        }
+        guard busy.isEmpty else { throw ToolError(L("Quit %@ first", busy.compactMap(\.localizedName).joined(separator: ", "))) }
+        let receipt = try await move(rows.filter { $0.trash?.origin == .leftover }, app: inspected)
+        if receipt.moved.contains(where: { $0.original == app }) {
+            uninstallApp = nil
+            uninstallInfo = nil
+            stored[.uninstall] = nil
+        }
+        post()
+        return receipt
+    }
+
+    /// Plans and moves rows to the Trash. Rows are re-checked here, each by the rule of the check that offered it:
+    /// only catalogue caches, your own leftover launch agents, files the searches found (still the same files),
+    /// rebuildable project folders whose project file is still there, extra copies whose kept copy still has the
+    /// same content, and a removed app's own Library items. Never while an owning app runs. Off the main thread.
+    private func move(_ rows: [DoctorRow], app: DoctorUninstall.App?) async throws -> DoctorTrashReceipt {
         guard Feature.doctor.isOn else { throw ToolError(L("This feature is turned off.")) }
-        let owners = runningOwners(rows)
+        let owners = runningOwners(rows.filter { $0.trash?.origin == .standard })
         guard owners.isEmpty else { throw ToolError(L("Quit %@ first", owners.joined(separator: ", "))) }
         let env = environment
         let catalogue = ClearDiskCatalog.entries
-        let jobs = rows.compactMap { row -> (DoctorTrashTarget, String)? in
+        let keepers = try duplicateKeepers(rows)
+        let jobs = rows.compactMap { row -> (DoctorTrashTarget, String, URL?)? in
             guard let target = row.trash, DoctorTrash.isAllowed(target, catalogue: catalogue) else { return nil }
             let name = catalogue.first { $0.path == target.path }?.name ?? row.title
-            return (target, name)
+            return (target, name, row.group.flatMap { keepers[$0] })
         }
-        guard !jobs.isEmpty else { throw ToolError(L("Mac Doctor can’t move these items.")) }
-        let receipt = try await Images.detached { () -> DoctorTrashReceipt in
+        guard !jobs.isEmpty || app != nil else { throw ToolError(L("Mac Doctor can’t move these items.")) }
+        let receipt = try await Images.detached { () -> DoctorTrashReceipt in DoctorWalk.withoutDownloads {
             var total = DoctorTrashReceipt()
-            for (target, name) in jobs {
+            // Each kept copy is read once per move, however many of its copies go; nil when it can't be read.
+            var keptDigests: [URL: String?] = [:]
+            func digest(of keeper: URL) -> String? {
+                if let known = keptDigests[keeper] { return known }
+                let value = DoctorDuplicates.digest(keeper)
+                keptDigests[keeper] = value
+                return value
+            }
+            if let app {
                 do {
-                    let plan: DoctorTrashPlan
-                    if target.mode == .contents {
-                        plan = try DoctorTrash.planContents(of: target.path, name: name, home: env.home)
-                    } else {
+                    total.moved.append(try DoctorUninstall.trashApp(app.url, identity: app.identity, bundleID: app.bundleID, move: env.trash))
+                } catch {
+                    // Without the app, its files stay too: they may still be needed.
+                    total.failures.append(error.localizedDescription)
+                    return total
+                }
+            }
+            for (target, name, keeper) in jobs {
+                do {
+                    switch target.origin {
+                    case .duplicate:
+                        // The kept copy must still be there with the same content as the one being moved.
+                        let file = try DoctorTrash.resolve(target.path, home: env.home, expect: S_IFREG)
+                        guard let keeper, keeper.standardizedFileURL != file.standardizedFileURL,
+                              (try? FileIdentity.read(keeper)) != target.identity,
+                              let kept = digest(of: keeper), kept == DoctorDuplicates.digest(file) else {
+                            throw ToolError(L("%@ no longer has an identical copy to keep, so it was left in place.", DoctorTrash.displayPath(file)))
+                        }
+                    case .build:
+                        let folder = try DoctorTrash.resolve(target.path, home: env.home)
+                        guard DoctorProjects.kind(of: folder) != nil else {
+                            throw ToolError(L("Files changed since the check. Run the check again."))
+                        }
+                    case .standard where target.mode == .item && !DoctorLargeFiles.isAllowed(target):
                         // Still the same file, and still a leftover: a reinstalled app's agent is never moved.
                         let file = try DoctorTrash.resolve(target.path, home: env.home, expect: S_IFREG)
                         let item = DoctorBackground.read(file, place: .userAgents, home: env.home)
                         guard item.kind == .regular, item.status == .missing else {
                             throw ToolError(L("Files changed since the check. Run the check again."))
                         }
-                        plan = try DoctorTrash.planItem(target.path, home: env.home, expected: target.identity)
+                    case .similar:
+                        // Not the same content, but one file of the group must still be there.
+                        guard let keeper, FileManager.default.fileExists(atPath: keeper.path) else {
+                            throw ToolError(L("Keep at least one copy of each file: deselect one copy of “%@”.", DoctorTrash.displayPath(URL(fileURLWithPath: target.path))))
+                        }
+                    case .standard, .leftover: break
                     }
-                    let receipt = try DoctorTrash.execute(plan, move: env.trash)
+                    let receipt = try DoctorTrash.execute(try DoctorTrash.plan(target, name: name, home: env.home), move: env.trash)
                     total.moved += receipt.moved
                     total.failures += receipt.failures
                 } catch {
@@ -211,20 +396,70 @@ final class DoctorCenter {
                 }
             }
             return total
-        }
+        } }
         if !receipt.moved.isEmpty { receipts.append(receipt) }
-        for section in Set(rows.map { $0.id.hasPrefix("bg.") ? DoctorSection.background : .caches }) { run(section) }
+        let moved = Set(receipt.moved.map(\.original.path))
+        largeFiles?.files.removeAll { moved.contains($0.url.path) }
+        for section in Set(rows.map { DoctorCenter.section(of: $0) }) {
+            if [.duplicates, .projects, .uninstall].contains(section) { prune(section, moved: moved) } else { run(section) }
+        }
         post()
         return receipt
+    }
+
+    /// For each group of copies being moved, one copy that stays: a copy not among `rows`, still where it was found.
+    /// Refuses when every copy of a file was selected.
+    private func duplicateKeepers(_ rows: [DoctorRow]) throws -> [String: URL] {
+        // By path, not by row: one file can be listed in more than one group, and a file moved by this batch can never
+        // be the copy that stays.
+        let moving = Set(rows.compactMap { $0.trash != nil ? $0.location.map { DoctorPrivacy.location($0.path) } : nil })
+        var keepers: [String: URL] = [:]
+        for group in Set(rows.compactMap { [.duplicate, .similar].contains($0.trash?.origin) ? $0.group : nil }) {
+            let members = (stored[.duplicates]?.rows ?? []).filter { $0.group == group && $0.level == 1 }
+            guard let keep = members.first(where: { row in
+                guard let url = row.location else { return false }
+                return !moving.contains(DoctorPrivacy.location(url.path)) && FileManager.default.fileExists(atPath: url.path)
+            })?.location else {
+                throw ToolError(L("Keep at least one copy of each file: deselect one copy of “%@”.", members.first?.title ?? ""))
+            }
+            keepers[group] = keep
+        }
+        return keepers
+    }
+
+    /// Drops moved rows from a search's result without searching again; a group of copies with one left goes too.
+    private func prune(_ section: DoctorSection, moved: Set<String>) {
+        guard var result = stored[section] else { return }
+        result.rows.removeAll { $0.level == 1 && $0.location.map { moved.contains($0.path) } == true }
+        if section == .duplicates {
+            let counts = Dictionary(grouping: result.rows.filter { $0.level == 1 }, by: { $0.group ?? "" }).mapValues(\.count)
+            result.rows.removeAll { (counts[$0.group ?? ""] ?? 0) < 2 }
+        }
+        if section == .projects { result.rows.removeAll { $0.location.map { moved.contains($0.path) } == true } }
+        stored[section] = result
     }
 
     /// Puts the newest move back. Items whose place was taken again stay in the Trash.
     func undoLastMove() async -> (restored: Int, left: [URL]) {
         guard let receipt = receipts.popLast() else { return (0, []) }
         let outcome = await (try? Images.detached { DoctorTrash.undo(receipt) }) ?? (0, receipt.moved.map(\.trashed))
+        // Quick checks run again; the duplicate and project searches wait for Check Again (they can take minutes).
         for section in [DoctorSection.caches, .background] where results[section] != nil { run(section) }
+        if largeFiles != nil { searchLargeFiles() }
         post()
         return outcome
+    }
+
+    /// The section a movable row belongs to, to check it again after a move.
+    static func section(of row: DoctorRow) -> DoctorSection {
+        switch row.id.split(separator: ".").first.map(String.init) ?? "" {
+        case "bg": .background
+        case "file": .storage
+        case "dup", "sim": .duplicates
+        case "build": .projects
+        case "left": .uninstall
+        default: .caches
+        }
     }
 
     /// Names of running apps that own any of these rows.
@@ -261,6 +496,21 @@ final class DoctorCenter {
                                              thermal: ProcessInfo.processInfo.thermalState,
                                              uptime: DoctorPerformance.timeSinceRestart())
         result.ran = [DoctorCommand.processCPU.displayString, DoctorCommand.processMemory.displayString]
+        let apps = DoctorApps.candidates()
+        let usage = await Task.detached(priority: .utility) { DoctorApps.usage(apps) }.value
+        if !usage.isEmpty {
+            // Apps the user can quit first, then every busy or large process (macOS's own included) below a heading.
+            let processes = result.rows.map { row -> DoctorRow in var row = row; row.level = 1; return row }
+            result.rows = DoctorApps.rows(usage)
+            if !processes.isEmpty {
+                result.rows.append(DoctorRow(id: "processes", title: L("Busiest and largest processes, macOS included"), value: "",
+                                             detail: L("For reading only: macOS restarts its own processes when they are needed."),
+                                             severity: .info))
+                result.rows += processes
+            }
+            result.report.append(L("Apps that could be quit: %d, together using %@ of memory.", usage.count,
+                                   DoctorFormat.memory(usage.reduce(0) { $0 + $1.bytes })))
+        }
         return result
     }
 

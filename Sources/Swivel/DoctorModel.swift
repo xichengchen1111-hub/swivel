@@ -3,7 +3,7 @@ import ServiceManagement
 
 /// The areas Mac Doctor checks, in the order the window lists them: the summary, then by symptom.
 enum DoctorSection: String, CaseIterable, Sendable {
-    case summary, storage, caches, folders, performance, app, drives, network, background, power
+    case summary, storage, caches, folders, duplicates, projects, performance, app, uninstall, drives, network, background, power
 
     /// English; translated where shown.
     var title: String {
@@ -12,6 +12,9 @@ enum DoctorSection: String, CaseIterable, Sendable {
         case .storage: "Storage"
         case .caches: "Caches"
         case .folders: "Folder Sizes"
+        case .duplicates: "Duplicate Files"
+        case .projects: "Project Builds"
+        case .uninstall: "Uninstall Apps"
         case .performance: "Slow or Hot"
         case .app: "Apps That Won’t Open"
         case .drives: "External Drives"
@@ -27,6 +30,9 @@ enum DoctorSection: String, CaseIterable, Sendable {
         case .storage: "internaldrive"
         case .caches: "archivebox"
         case .folders: "folder"
+        case .duplicates: "doc.on.doc"
+        case .projects: "hammer"
+        case .uninstall: "trash.square"
         case .performance: "gauge.with.dots.needle.67percent"
         case .app: "app.badge.checkmark"
         case .drives: "externaldrive"
@@ -42,13 +48,19 @@ enum DoctorSection: String, CaseIterable, Sendable {
         case .summary:
             "Mac Doctor only reads. It needs no new permissions, and nothing changes until you choose a fix and confirm it. Only Test Speed, App Check and Ask the Assistant use the network."
         case .storage:
-            "How full the startup disk is, how much macOS can free by itself (purgeable space), and the local Time Machine snapshots that often make “System Data” look large. Nothing is changed."
+            "How full the startup disk is, how much macOS can free by itself (purgeable space), and the local Time Machine snapshots that often make “System Data” look large. Find Large Files lists big files and installers in Downloads, Desktop and Documents for you to choose from."
         case .caches:
-            "Caches that apps and developer tools rebuild or download again by themselves. You choose what to move to the Trash; Mac Doctor never deletes anything, and you can put items back."
+            "Caches that apps rebuild by themselves. They go to the Trash, and you can put them back."
         case .folders:
             "How much space a folder you choose uses, and which items inside it are largest. Mac Doctor only reads sizes; use Finder to decide what to remove. Folders are not remembered."
+        case .duplicates:
+            "Files with exactly the same content, and files that are nearly the same (similar photos, edited copies of a text), with how alike they are. Mac Doctor compares content, not names, and always keeps at least one of each."
+        case .projects:
+            "Folders that build tools recreate by themselves (node_modules, Rust target, Swift .build, Gradle build and others) in a folder you choose. Each is recognised by the project file next to it."
+        case .uninstall:
+            "Remove an app together with the caches, settings and support files it left in your Library. Everything goes to the Trash and can be put back."
         case .performance:
-            "Which apps and system processes use the most processor time and memory right now, and whether the Mac is short of memory or running hot."
+            "Which apps use the most memory and processor, and whether the Mac is short of memory or too hot."
         case .app:
             "Why an app says it is damaged or can’t be opened: its signature, Gatekeeper’s verdict and the “downloaded from the internet” flag. Gatekeeper may ask Apple whether the app is notarized. This is not a malware scan."
         case .drives:
@@ -56,14 +68,17 @@ enum DoctorSection: String, CaseIterable, Sendable {
         case .network:
             "Which DNS servers your Mac uses and whether a proxy app is active. Test Speed runs Apple’s network quality test, which sends test traffic to Apple for about 20 seconds."
         case .background:
-            "Programs set to start by themselves (launch agents and daemons), and leftovers whose app has been removed."
+            "Small programs that run by themselves after your Mac starts, and ones left behind by apps you removed."
         case .power:
             "Battery health, and which apps are keeping your Mac or its display awake right now."
         }
     }
 
     /// The checks "Check This Mac" runs: everything that reads only this Mac and needs nothing chosen.
-    var runsWithAll: Bool { ![.summary, .app, .folders].contains(self) }
+    var runsWithAll: Bool { ![.summary, .app, .folders, .duplicates, .projects, .uninstall].contains(self) }
+
+    /// Sections that look only at folders or an app the user picks.
+    var needsChoice: Bool { [.app, .folders, .duplicates, .projects, .uninstall].contains(self) }
 }
 
 /// How much a result asks for attention. Shown as a symbol and a word, never colour alone.
@@ -153,6 +168,10 @@ struct DoctorRow: Sendable, Identifiable {
     var trash: DoctorTrashTarget?
     /// Apps that must be quit before the row can be moved to the Trash.
     var bundleIDs: [String] = []
+    /// Set when the row is a running app that may be asked to quit.
+    var quit: DoctorQuitTarget?
+    /// Rows that belong together (copies of one file); a group always keeps at least one.
+    var group: String?
     /// 1 for an item listed under the row above it.
     var level = 0
     /// For a drive: the physical disk it is on; volumes on the same disk eject together.
@@ -164,6 +183,21 @@ struct DoctorTrashTarget: Sendable, Equatable {
     let mode: DoctorTrashPlan.Mode
     /// For a single file: the file as it was when the check ran. A different file in its place is never moved.
     var identity: FileIdentity? = nil
+    /// Which check offered it; each has its own narrow rule in `DoctorTrash.isAllowed`.
+    var origin: Origin = .standard
+
+    enum Origin: Sendable, Equatable {
+        /// Catalogue caches, leftover launch agents, files from the large-file search.
+        case standard
+        /// A copy from the duplicate search; another identical copy must stay.
+        case duplicate
+        /// A nearly identical file from the duplicate search; another file of its group must stay.
+        case similar
+        /// A project's rebuildable folder (node_modules, target, .build…).
+        case build
+        /// A removed app's file or folder in ~/Library.
+        case leftover
+    }
 }
 
 /// What one section found.
@@ -186,6 +220,8 @@ struct DoctorResult: Sendable {
     var names: [String] = []
     /// The latest speed test's facts, kept apart so a fresh DNS check doesn't drop them.
     var speedReport: [String] = []
+    /// Folder Sizes: one space map per chosen folder.
+    var maps: [DoctorSpaceNode] = []
     var checked = Date()
 }
 
@@ -210,6 +246,13 @@ enum DoctorFormat {
     static func bytes(_ count: Int64) -> String {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
+        return formatter.string(fromByteCount: count)
+    }
+
+    /// "16 GB" for memory (binary units, as Activity Monitor shows them).
+    static func memory(_ count: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .memory
         return formatter.string(fromByteCount: count)
     }
 

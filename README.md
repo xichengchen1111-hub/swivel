@@ -163,6 +163,7 @@ Quit the running app normally before replacing an installed build, so screenshot
 - Upscale uses [Real-ESRGAN x4plus](https://github.com/xinntao/Real-ESRGAN), Copyright (c) 2021 Xintao Wang, BSD-3-Clause. The included model runs through Apple Core ML on macOS 15+; it reconstructs textures and may change small details. Its provenance and reproducible conversion are in `ThirdParty/RealESRGAN/UPSTREAM.md`. Conversion-only RRDB code comes from BasicSR (Apache-2.0); conversion tools are not shipped. The model licences and notice ship inside the app.
 
 - Mac Doctor's cache list (paths and "removes / keeps / note" texts) comes from [ClearDisk](https://github.com/bysiber/cleardisk) by Kadir Can Ozden, MIT License, revision `fb5429c`. See `ThirdParty/ClearDisk/` (`LICENSE`, `UPSTREAM.md`); the licence also ships inside the app.
+- Mac Doctor's space map, duplicate files, project build folders and app uninstalling follow the feature ideas of [MangoDisk](https://github.com/harry0703/MangoDisk) by harry0703. MangoDisk is GPL-3.0, so only its feature list was used: Swivel's implementation is written from scratch, and none of its code, rules or artwork is included.
 
 Draft-link references: [Codex commands](https://learn.chatgpt.com/docs/reference/commands) and [Claude Desktop links](https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link).
 

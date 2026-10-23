@@ -12,6 +12,8 @@ enum DoctorText {
         for scalar in text.unicodeScalars {
             if out.count >= limit { return out + "…" }
             if scalar == "\n" || scalar == "\t" || scalar == "\r" { out += " "; continue }
+            // macOS itself puts these spaces in names (screenshots: "7.16.16 pm"): show a plain space, not a code.
+            if scalar == "\u{202F}" || scalar == "\u{00A0}" { out += " "; continue }
             if AssistantDraft.isHidden(scalar) || scalar.properties.generalCategory == .control {
                 out += String(format: "\\u{%04X}", scalar.value)
             } else {
@@ -754,7 +756,7 @@ enum DoctorBackground {
             case .regular:
                 switch item.status {
                 case .missing:
-                    state = L("Program missing")
+                    state = L("App removed")
                     severity = .review
                     notes.append(L("Its program is gone, so this is probably left over from an app you removed."))
                 case .managedByApp:
@@ -776,8 +778,14 @@ enum DoctorBackground {
                 notes.append(L("Its name says Apple, but Apple’s own items live in /System. Check where it came from."))
                 severity = .review
             }
-            var detail = place
-            if let app = item.app { detail += " · " + L("From %@", DoctorText.visible(app)) }
+            // People know apps, not labels: "iMazing helper", with the label in the details.
+            let title = item.app.map { L("%@ helper", DoctorText.visible($0)) } ?? label
+            var detail = place + (item.app != nil ? " · " + label : "")
+            if item.place != .userAgents, item.kind == .danglingLink || item.status == .missing {
+                // Mac Doctor can't move it: say so plainly instead of a warning the user can't act on here.
+                notes.append(L("A system item: removing it needs an administrator, so Mac Doctor only shows it."))
+                state = L("Needs an administrator")
+            }
             if let program = item.program { detail += " · " + DoctorText.visible(DoctorFormat.path(URL(fileURLWithPath: program))) }
             if !notes.isEmpty { detail += "\n" + notes.joined(separator: " ") }
             // Only your own leftovers can be moved by Mac Doctor; the others need an administrator.
@@ -787,7 +795,7 @@ enum DoctorBackground {
                 }
                 : nil
             if severity >= .review { leftovers += 1 }
-            result.rows.append(DoctorRow(id: "bg." + item.file.path, title: label, value: state, detail: detail,
+            result.rows.append(DoctorRow(id: "bg." + item.file.path, title: title, value: state, detail: detail,
                                          severity: severity, location: item.file, trash: trash))
         }
         result.rows.sort { ($0.severity > $1.severity) || ($0.severity == $1.severity && $0.title < $1.title) }

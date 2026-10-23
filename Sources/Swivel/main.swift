@@ -63,7 +63,20 @@ MainActor.assumeIsolated {
         case "mywheel": CustomizePane.open(.custom)
         case "library": QRLibraryWindow().show()
         case "doctor":
-            if args.count > 3 { DoctorWindow.present(app: URL(fileURLWithPath: args[3])) } else { DoctorWindow.present() }
+            // SWIVEL_DOCTOR_SECTION=<summary|storage|caches|performance|…> opens that page (for checking it in a real window).
+            let section = ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_SECTION"].flatMap(DoctorSection.init(rawValue:))
+            if args.count > 3 { DoctorWindow.present(app: URL(fileURLWithPath: args[3]), section: section) } else { DoctorWindow.present(section: section) }
+            // SWIVEL_DOCTOR_RUN=1 also runs that page's check, as its Check button would.
+            if let section, ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_RUN"] == "1" { DoctorCenter.shared.run(section) }
+            // SWIVEL_DOCTOR_PICK=<path> picks that folder (Folder Sizes, Duplicate Files, Project Builds) or app (Uninstall Apps).
+            if let section, let pick = ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_PICK"].map({ URL(fileURLWithPath: $0) }) {
+                switch section {
+                case .folders: DoctorCenter.shared.addFolder(pick)
+                case .duplicates, .projects: DoctorCenter.shared.addFolders([pick], to: section)
+                case .uninstall: DoctorCenter.shared.chooseUninstall(pick)
+                default: break
+                }
+            }
         case "doctorsettings": AppWindow.shared.show(.doctor)
         case "launcher": Prefs.shortcutWheelEnabled = true; Prefs.isEnabled = true; ShortcutWheel.shared.sync(); ShortcutWheel.shared.show()
         default: AppWindow.shared.show()
