@@ -39,11 +39,14 @@ enum Docs {
     static func read(_ url: URL) throws -> NSAttributedString {
         let ext = url.pathExtension.lowercased()
         if ext == "md" || ext == "markdown" {
-            let source = try String(contentsOf: url, encoding: .utf8)
+            guard let source = String(data: try FileSafety.read(url, limit: 64 * 1024 * 1024), encoding: .utf8) else {
+                throw ToolError(L("Couldn't read document text."))
+            }
             let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
             return NSAttributedString(try AttributedString(markdown: source, options: options))
         }
         if ext == "rtfd" {
+            try checkPackageBudget(url)
             // A package's attachments can be symlinks to any file, which the export would embed. Drop them first.
             let package = try FileWrapper(url: url, options: .immediate)
             removeSymlinks(in: package)
@@ -59,9 +62,22 @@ enum Docs {
             "txt": .plain, "text": .plain, "html": .html, "htm": .html,
         ]
         guard let type = types[ext] else { throw ToolError("Can't read \(url.lastPathComponent)") }
-        let text = try NSAttributedString(url: url, options: [.documentType: type], documentAttributes: nil)
+        let text = try NSAttributedString(data: FileSafety.read(url, limit: 64 * 1024 * 1024), options: [.documentType: type], documentAttributes: nil)
         // Images and frames in HTML are references to other files or the web: keep the text, never the fetched content.
         return type == .html ? withoutAttachments(text) : text
+    }
+
+    private static func checkPackageBudget(_ root: URL) throws {
+        var queue = [root], bytes: Int64 = 0, count = 0
+        while let item = queue.popLast() {
+            try Task.checkCancellation()
+            var info = stat()
+            guard lstat(item.path, &info) == 0 else { throw POSIXError(.EIO) }
+            count += 1
+            if info.st_mode & S_IFMT == S_IFREG { bytes += info.st_size }
+            guard count <= 10_000, bytes <= 64 * 1024 * 1024 else { throw ToolError(L("This file exceeds the safe reading limit.")) }
+            if info.st_mode & S_IFMT == S_IFDIR { queue += try FileManager.default.contentsOfDirectory(at: item, includingPropertiesForKeys: nil) }
+        }
     }
 
     private static func removeSymlinks(in wrapper: FileWrapper) {
@@ -152,8 +168,9 @@ enum PDFs {
     ]
 
     static func open(_ url: URL) throws -> PDFDocument {
-        guard let doc = PDFDocument(url: url) else { throw ToolError("Couldn't open \(url.lastPathComponent)") }
+        guard let doc = PDFDocument(data: try FileSafety.read(url, limit: 256 * 1024 * 1024)) else { throw ToolError("Couldn't open \(url.lastPathComponent)") }
         if doc.isLocked { throw ToolError("\(url.lastPathComponent) is password protected") }
+        guard doc.pageCount <= 2000 else { throw ToolError(L("Choose at most 2,000 PDF pages at a time.")) }
         return doc
     }
 
@@ -171,12 +188,13 @@ enum PDFs {
         try await Images.detached {
             let doc = try open(url)
             var outputs: [URL] = []
-            for index in 0..<doc.pageCount {
-                guard let page = doc.page(at: index) else { continue }
+            do { for index in 0..<doc.pageCount {
+                try Task.checkCancellation()
+                guard let page = doc.page(at: index) else { throw ToolError(L("Couldn't render page")) }
                 let suffix = doc.pageCount > 1 ? " \(index + 1)" : ""
                 outputs.append(try Images.save(try render(page, dpi: 300), as: Paths.preferred(for: url, ext: ext, suffix: suffix),
                                                type: type, quality: 0.92))
-            }
+            } } catch { throw PartialOutputError.wrapping(error, files: outputs) }
             return outputs
         }
     }
@@ -210,6 +228,7 @@ enum PDFs {
         let merged = PDFDocument()
         for url in urls {
             let doc = try open(url)
+            guard merged.pageCount + doc.pageCount <= 2000 else { throw ToolError(L("Choose at most 2,000 PDF pages at a time.")) }
             for i in 0..<doc.pageCount {
                 if let page = doc.page(at: i)?.copy() as? PDFPage { merged.insert(page, at: merged.pageCount) }
             }
@@ -227,12 +246,13 @@ enum PDFs {
     private static func split(_ url: URL) throws -> [URL] {
         let doc = try open(url)
         var outputs: [URL] = []
-        for i in 0..<doc.pageCount {
-            guard let page = doc.page(at: i)?.copy() as? PDFPage else { continue }
+        do { for i in 0..<doc.pageCount {
+            try Task.checkCancellation()
+            guard let page = doc.page(at: i)?.copy() as? PDFPage else { throw ToolError(L("Couldn't render page")) }
             let single = PDFDocument()
             single.insert(page, at: 0)
             outputs.append(try save(single, as: Paths.preferred(for: url, ext: "pdf", suffix: " \(i + 1)")))
-        }
+        } } catch { throw PartialOutputError.wrapping(error, files: outputs) }
         return outputs
     }
 
@@ -246,7 +266,8 @@ enum PDFs {
     /// (`PDFDocument.write` follows symlinks). Returns where it went.
     static func save(_ doc: PDFDocument, as preferred: URL, options: [PDFDocumentWriteOption: Any] = [:]) throws -> URL {
         let keyed = Dictionary(uniqueKeysWithValues: options.map { (AnyHashable($0.key.rawValue), $0.value) })
-        guard let data = doc.dataRepresentation(options: keyed) else { throw ToolError("Couldn't write PDF") }
+        guard let data = doc.dataRepresentation(options: keyed), let check = PDFDocument(data: data),
+              check.pageCount == doc.pageCount else { throw ToolError("Couldn't write PDF") }
         return try Paths.create(data, at: preferred)
     }
 }
@@ -269,7 +290,7 @@ enum Archives {
     /// Several files are archived by name from their folder, so they must share it (a name from another folder
     /// would be left out, or pick up a different file of the same name).
     private static func checkOneFolder(_ urls: [URL]) throws {
-        guard Set(urls.map { $0.deletingLastPathComponent().standardizedFileURL }).count == 1 else {
+        guard !urls.isEmpty, Set(urls.map { $0.deletingLastPathComponent().standardizedFileURL }).count == 1 else {
             throw ToolError(L("Choose files from one folder to archive them together."))
         }
     }
@@ -282,19 +303,64 @@ enum Archives {
             if urls.count == 1 {
                 try await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", urls[0].path, out.path])
             } else {
-                // "--" ends the options, so a file named like one ("-T") is archived instead of changing what zip does.
-                try await Shell.run("/usr/bin/zip", ["-r", "-q", "-y", out.path, "--"] + urls.map(\.lastPathComponent),
-                                    in: urls[0].deletingLastPathComponent())
+                // ditto preserves resource forks and extended attributes for a selection too.
+                let selection = out.deletingLastPathComponent().appendingPathComponent("selection")
+                try FileManager.default.createDirectory(at: selection, withIntermediateDirectories: false,
+                                                        attributes: [.posixPermissions: 0o700])
+                for url in urls {
+                    try Task.checkCancellation()
+                    try FileManager.default.copyItem(at: url, to: selection.appendingPathComponent(url.lastPathComponent))
+                }
+                try await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", selection.path, out.path])
             }
+            try await verify(out)
         }
     }
 
     static func tar(_ urls: [URL]) async throws -> URL {
         try checkOneFolder(urls)
+        try requirePortableMetadata(urls)
         return try await Paths.produce(archiveURL(for: urls, ext: "tar.gz")) { out in
-            try await Shell.run("/usr/bin/tar", ["-czf", out.path, "-C", urls[0].deletingLastPathComponent().path, "--"]
+            try await Shell.run("/usr/bin/tar", ["--no-mac-metadata", "-czf", out.path, "-C", urls[0].deletingLastPathComponent().path, "--"]
                                 + urls.map(\.lastPathComponent))
+            try await verify(out)
         }
+    }
+
+    /// Portable TAR cannot round-trip Mac resource forks through our metadata-isolated extractor.
+    /// Refuse that source instead of returning a silently incomplete archive.
+    static func requirePortableMetadata(_ urls: [URL]) throws {
+        var queue = urls, count = 0
+        while let url = queue.popLast() {
+            try Task.checkCancellation()
+            count += 1
+            guard count <= 100_000 else { throw ToolError(L("This archive contains too many items.")) }
+            var info = stat()
+            guard lstat(url.path, &info) == 0 else { throw POSIXError(.EIO) }
+            if info.st_mode & S_IFMT == S_IFLNK { continue }
+            let size = listxattr(url.path, nil, 0, XATTR_NOFOLLOW)
+            if size < 0, errno != ENOTSUP { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            if size > 0 {
+                var bytes = [CChar](repeating: 0, count: size)
+                guard listxattr(url.path, &bytes, size, XATTR_NOFOLLOW) == size else { throw POSIXError(.EIO) }
+                let names = bytes.split(separator: 0).map { String(decoding: $0.map { UInt8(bitPattern: $0) }, as: UTF8.self) }
+                if names.contains(where: { !["com.apple.quarantine", "com.apple.provenance", "com.apple.lastuseddate#PS"].contains($0) }) {
+                    throw ToolError(L("This file has Mac metadata that TAR cannot preserve here. Use ZIP instead."))
+                }
+            }
+            if info.st_mode & S_IFMT == S_IFDIR {
+                queue += try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+            }
+        }
+    }
+
+    /// ditto may succeed despite a bad ZIP CRC. libarchive must read every data byte before publication.
+    static func verify(_ archive: URL, watch: (@Sendable () -> String?)? = nil) async throws {
+        let start = Date()
+        try await Shell.run("/usr/bin/tar", ["-xOf", archive.path, "--no-mac-metadata", "--passphrase", noPassphrase], watch: {
+            if Date().timeIntervalSince(start) > 600 { return L("Archive processing took too long and was stopped.") }
+            return watch?()
+        })
     }
 
     /// Extensions the system's bsdtar (libarchive) can unpack, beyond what ditto does for ZIP.
@@ -312,23 +378,33 @@ enum Archives {
         guard isRegularFile(url) else { throw ToolError("Can't read \(url.lastPathComponent)") }
         let folder = parent.path
         guard freeSpace(folder) > reservedBytes else { throw ToolError(L("Not enough free disk space to extract.")) }
-        let staging = parent.appendingPathComponent(".swivel-\(UUID().uuidString)")
-        try fm.createDirectory(at: staging, withIntermediateDirectories: true)
-        TemporaryItems.register(staging)
-        defer { makeAccessible(staging); try? fm.removeItem(at: staging); TemporaryItems.unregister(staging) }
+        let workspace = try FileSafety.privateDirectory(beside: url)
+        defer { makeAccessible(workspace); Paths.discard(workspace) }
+        let staging = workspace.appendingPathComponent("contents")
+        try fm.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        var snapshots: [URL] = []
+        for (index, part) in parts.enumerated() {
+            let snapshot = workspace.appendingPathComponent("part-\(index)")
+            try await Images.detached { try FileSafety.snapshot(part, to: snapshot, reserve: reservedBytes) }
+            snapshots.append(snapshot)
+        }
+        let start = Date()
         let watch: @Sendable () -> String? = {
-            freeSpace(folder) < reservedBytes ? L("Stopped: extracting would fill the disk.") : nil
+            if Date().timeIntervalSince(start) > 600 { return L("Archive processing took too long and was stopped.") }
+            if freeSpace(folder) < reservedBytes { return L("Stopped: extracting would fill the disk.") }
+            return extractionBudgetError(staging)
         }
         do {
             if parts.count > 1 {
                 // A multi-part RAR reads as one stream; the first part alone would extract zero-filled files.
                 try await Shell.run("/usr/bin/tar", ["-xf", "-", "--no-mac-metadata", "--passphrase", noPassphrase, "-C", staging.path],
-                                    input: parts, watch: watch)
+                                    input: snapshots, watch: watch)
             } else if url.pathExtension.lowercased() == "zip" {
-                try await Shell.run("/usr/bin/ditto", ["-x", "-k", url.path, staging.path], watch: watch)
+                try await verify(snapshots[0], watch: watch)
+                try await Shell.run("/usr/bin/ditto", ["-x", "-k", snapshots[0].path, staging.path], watch: watch)
             } else {
                 // No AppleDouble metadata from the archive: it could replace the quarantine flag or lock its xattrs.
-                try await Shell.run("/usr/bin/tar", ["-xf", url.path, "--no-mac-metadata", "--passphrase", noPassphrase,
+                try await Shell.run("/usr/bin/tar", ["-xf", snapshots[0].path, "--no-mac-metadata", "--passphrase", noPassphrase,
                                                      "-C", staging.path], watch: watch)
             }
         } catch {
@@ -343,9 +419,65 @@ enum Archives {
         makeAccessible(staging)
         let contents = try fm.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)
             .filter { $0.lastPathComponent != "__MACOSX" }
-        try quarantine(contents, like: url)
+        try validateExtractedTree(staging, allowMacMetadata: url.pathExtension.lowercased() == "zip")
+        for snapshot in snapshots { try quarantine(contents, like: snapshot) }
         // Everything lands next to the archive, without an extra wrapping folder.
-        return try contents.map { try Paths.publish($0, as: parent.appendingPathComponent($0.lastPathComponent)) }
+        var outputs: [URL] = []
+        do {
+            for item in contents {
+                try Task.checkCancellation()
+                var info = stat()
+                guard lstat(item.path, &info) == 0 else { throw POSIXError(.EIO) }
+                if info.st_mode & S_IFMT != S_IFLNK {
+                    try FileSafety.makePrivate(item, directory: info.st_mode & S_IFMT == S_IFDIR, preserveExecutable: true)
+                }
+                outputs.append(try Paths.publish(item, as: parent.appendingPathComponent(item.lastPathComponent)))
+            }
+        } catch { throw PartialOutputError.wrapping(error, files: outputs) }
+        return outputs
+    }
+
+    static func validateExtractedTree(_ root: URL, allowMacMetadata: Bool) throws {
+        var queue = [root], count = 0, bytes: Int64 = 0
+        while let item = queue.popLast() {
+            try Task.checkCancellation()
+            count += 1
+            guard count <= 100_000 else { throw ToolError(L("This archive contains too many items.")) }
+            var info = stat()
+            guard lstat(item.path, &info) == 0 else { throw POSIXError(.EIO) }
+            switch info.st_mode & S_IFMT {
+            case S_IFDIR: queue += try FileManager.default.contentsOfDirectory(at: item, includingPropertiesForKeys: nil)
+            case S_IFREG:
+                bytes += max(0, info.st_size)
+                guard bytes <= 100_000_000_000 else { throw ToolError(L("The expanded archive exceeds the safety limit.")) }
+                if !allowMacMetadata, item.lastPathComponent.hasPrefix("._") {
+                    let handle = try FileHandle(forReadingFrom: item)
+                    defer { try? handle.close() }
+                    if try handle.read(upToCount: 4) == Data([0, 5, 22, 7]) {
+                        throw ToolError(L("This archive contains Mac metadata that this extractor cannot restore. Use Archive Utility to preserve it."))
+                    }
+                }
+            case S_IFLNK: break
+            default: throw ToolError(L("This archive contains an unsupported special file."))
+            }
+        }
+    }
+
+    private static func extractionBudgetError(_ root: URL) -> String? {
+        var queue = [root], count = 0, bytes: Int64 = 0
+        while let item = queue.popLast() {
+            count += 1
+            if count > 100_000 { return L("This archive contains too many items.") }
+            var info = stat()
+            guard lstat(item.path, &info) == 0 else { continue } // writer may be replacing its own staging entries
+            if info.st_mode & S_IFMT == S_IFDIR {
+                queue += (try? FileManager.default.contentsOfDirectory(at: item, includingPropertiesForKeys: nil)) ?? []
+            } else if info.st_mode & S_IFMT == S_IFREG {
+                bytes += max(0, info.st_size)
+                if bytes > 100_000_000_000 { return L("The expanded archive exceeds the safety limit.") }
+            }
+        }
+        return nil
     }
 
     /// A made-up passphrase: without one, bsdtar asks for it about ten thousand times on stderr.
@@ -354,7 +486,7 @@ enum Archives {
     /// Asked fresh every time (a URL's resource values are cached, so they would never change during an extract).
     private static func freeSpace(_ folder: String) -> Int64 {
         var info = statfs()
-        guard statfs(folder, &info) == 0 else { return .max }
+        guard statfs(folder, &info) == 0 else { return 0 }
         return Int64(info.f_bavail) * Int64(info.f_bsize)
     }
 
@@ -421,9 +553,10 @@ enum Archives {
     static func quarantine(_ items: [URL], like archive: URL) throws {
         let name = "com.apple.quarantine"
         let size = getxattr(archive.path, name, nil, 0, 0, 0)
+        if size < 0, errno != ENOATTR && errno != ENOTSUP { throw ToolError(L("Couldn't mark the extracted files as downloaded.")) }
         guard size > 0 else { return }
         var value = [UInt8](repeating: 0, count: size)
-        guard getxattr(archive.path, name, &value, size, 0, 0) == size else { return }
+        guard getxattr(archive.path, name, &value, size, 0, 0) == size else { throw ToolError(L("Couldn't mark the extracted files as downloaded.")) }
         let failed = ToolError(L("Couldn't mark the extracted files as downloaded."))
         var paths: [String] = [], walkFailed = false
         for item in items {
@@ -443,7 +576,6 @@ enum Archives {
             var info = stat()
             guard lstat(path, &info) == 0 else { throw failed }
             if info.st_mode & S_IFMT == S_IFLNK { continue }
-            if getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW) > 0 { continue }  // tar already set it
             if setxattr(path, name, value, size, 0, XATTR_NOFOLLOW) == 0 { continue }
             // Read-only items (0444 files, 0555 folders) need the owner's write bit for a moment.
             let mode = info.st_mode & 0o7777

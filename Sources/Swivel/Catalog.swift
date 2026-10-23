@@ -198,13 +198,12 @@ enum Catalog {
             case .archive:
                 return [WheelItem(title: "Extract") { urls in
                     // Dropping every part of a multi-part RAR extracts it once.
-                    var seen: Set<URL> = [], outputs: [URL] = []
-                    for url in urls {
+                    var seen: Set<URL> = []
+                    let selected = urls.filter { url in
                         let first = (try? Archives.volumes(of: url).first) ?? url
-                        guard seen.insert(first.standardizedFileURL).inserted else { continue }
-                        outputs += try await Archives.extract(url)
+                        return seen.insert(first.standardizedFileURL).inserted
                     }
-                    return saved(outputs)
+                    return try await each("Extract", selected, Archives.extract).run(selected)
                 }]
             case .folder, .other:
                 return Archives.compressItems
@@ -285,7 +284,7 @@ enum Catalog {
                 return list
             case .document:
                 return []  // Word Count is in the Actions menu.
-            case .archive, .folder, .other:
+            case .folder, .archive, .other:
                 return Archives.compressItems
             }
         }
@@ -295,8 +294,18 @@ enum Catalog {
     static func each(_ title: String, _ urls: [URL],
                      _ work: @escaping @MainActor (URL) async throws -> [URL]) -> WheelItem {
         WheelItem(title: title) { urls in
-            var outputs: [URL] = []
-            for url in urls { outputs += try await work(url) }
+            var outputs: [URL] = [], failures: [String] = []
+            for url in urls {
+                do { try Task.checkCancellation(); outputs += try await work(url) }
+                catch {
+                    if outputs.isEmpty, error is Info || error is Cancelled || error is CancellationError { throw error }
+                    let partial = PartialOutputError.wrapping(error, files: [])
+                    outputs += partial.files
+                    failures += partial.failures.map { "\(url.lastPathComponent): \($0)" }
+                    if error is CancellationError || error is Cancelled || Task.isCancelled { break }
+                }
+            }
+            if !failures.isEmpty { throw PartialOutputError(files: outputs, failures: failures) }
             return saved(outputs)
         }
     }
@@ -330,8 +339,7 @@ enum Catalog {
                 return ActionResult(message: multi ? L("Copied %d files", urls.count) : L("Copied %@", urls[0].lastPathComponent))
             },
             WheelItem(title: "Move") { urls in
-                let moved = try FileActions.move(urls)
-                return moved.isEmpty ? ActionResult(message: L("Move cancelled")) : saved(moved).renamed()
+                try FileActions.move(urls)
             },
             WheelItem(title: "Copy Path") { urls in
                 NSPasteboard.general.clearContents()
@@ -368,16 +376,29 @@ struct ToolError: LocalizedError {
 
 enum FileActions {
     @MainActor
-    static func move(_ urls: [URL]) throws -> [URL] {
+    static func move(_ urls: [URL]) throws -> ActionResult {
         NSApp.activate()
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = L("Move Here")
-        panel.message = "Choose where to move \(urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) files")"
-        guard panel.runModal() == .OK, let folder = panel.url else { return [] }
-        return try urls.map { try Paths.move($0, into: folder) }
+        panel.message = L("Files on another disk will be copied. Their originals are kept.")
+        guard panel.runModal() == .OK, let folder = panel.url else { throw Cancelled() }
+        var files: [URL] = [], messages: [String] = [], failures: [String] = []
+        for url in urls {
+            do {
+                do {
+                    let moved = try Paths.move(url, into: folder)
+                    files.append(moved); messages.append(L("Moved %@", moved.lastPathComponent))
+                } catch let error where Paths.crossesVolumes(error) {
+                    let copied = try Paths.copy(url, into: folder)
+                    files.append(copied); messages.append(L("Copied %@ to another disk; the original was kept.", copied.lastPathComponent))
+                }
+            } catch { failures.append("\(url.path): \(error.localizedDescription)") }
+        }
+        if !failures.isEmpty { throw PartialOutputError(files: files, failures: messages + failures) }
+        return ActionResult(message: messages.joined(separator: "\n"), files: files)
     }
 
     @MainActor
@@ -424,7 +445,7 @@ enum Paths {
     /// Writes `data` as a new file at `preferred`, or `name 2.ext`, `name 3.ext`…, and returns where it went.
     /// The write is exclusive (O_EXCL): a name another writer took after Swivel looked is skipped, never replaced.
     static func create(_ data: Data, at preferred: URL) throws -> URL {
-        try claim(preferred) { try data.write(to: $0, options: .withoutOverwriting) }
+        try produce(preferred) { try FileSafety.write(data, to: $0) }
     }
 
     /// Moves `item` (finished work in a temporary beside `preferred`) to `preferred` or the next free name, and returns
@@ -434,26 +455,11 @@ enum Paths {
     }
 
     /// Moves `item` into `folder` under its own name, or `name 2.ext`…, and returns where it went. The rename claims
-    /// the name, as `publish` does. A rename can't cross volumes (EXDEV), so there the item is copied into `folder`
-    /// first (see `copy`) and the original is removed only once the copy has its name. `rename` is for tests.
+    /// the name, as `publish` does. Cross-volume moves are refused: deleting a source by path after copying can
+    /// delete a newly saved version. The UI explicitly copies across disks and keeps originals instead.
     static func move(_ item: URL, into folder: URL,
                      rename: (URL, URL) throws -> Void = Paths.renameExclusively) throws -> URL {
-        do {
-            return try claim(folder.appendingPathComponent(item.lastPathComponent)) { try rename(item, $0) }
-        } catch let error where crossesVolumes(error) {
-            var info = stat()
-            let isFolder = lstat(item.path, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR
-            let moved = try copy(item, into: folder, rename: rename)
-            do {
-                try FileManager.default.removeItem(at: item)
-            } catch {
-                // A file that couldn't be removed is still whole, so its copy goes again and nothing has moved.
-                // A folder may be partly removed by now, so its copy stays as the one complete version.
-                if !isFolder { try? FileManager.default.removeItem(at: moved) }
-                throw error
-            }
-            return moved
-        }
+        try claim(folder.appendingPathComponent(item.lastPathComponent)) { try rename(item, $0) }
     }
 
     /// Copies `item` into `folder` under its own name, or `name 2.ext`…, and returns where it went. The copy is made
@@ -461,8 +467,9 @@ enum Paths {
     static func copy(_ item: URL, into folder: URL,
                      rename: (URL, URL) throws -> Void = Paths.renameExclusively) throws -> URL {
         let preferred = folder.appendingPathComponent(item.lastPathComponent)
-        let work = temporary(beside: preferred, ext: preferred.pathExtension)
-        defer { discard(work) }
+        let root = try FileSafety.privateDirectory(beside: preferred)
+        defer { discard(root) }
+        let work = root.appendingPathComponent(item.lastPathComponent)
         try FileManager.default.copyItem(at: item, to: work)
         return try claim(preferred) { try rename(work, $0) }
     }
@@ -475,19 +482,25 @@ enum Paths {
         return crossesVolumes(underlying)
     }
 
-    /// Lets `make` write an output (a file or a folder) into a hidden temporary beside `preferred`, then publishes it.
+    /// Lets `make` write an output file into a private directory beside `preferred`, then publishes it.
     /// Tools and exports that would replace an existing file only ever see the temporary, which never outlives the call.
     static func produce(_ preferred: URL, _ make: (URL) throws -> Void) throws -> URL {
-        let work = temporary(beside: preferred, ext: preferred.pathExtension)
-        defer { discard(work) }
+        let root = try FileSafety.privateDirectory(beside: preferred)
+        defer { discard(root) }
+        let work = root.appendingPathComponent("output").appendingPathExtension(preferred.pathExtension)
         try make(work)
+        try Task.checkCancellation()
+        try FileSafety.makePrivate(work)
         return try publish(work, as: preferred)
     }
 
     static func produce(_ preferred: URL, _ make: (URL) async throws -> Void) async throws -> URL {
-        let work = temporary(beside: preferred, ext: preferred.pathExtension)
-        defer { discard(work) }
+        let root = try FileSafety.privateDirectory(beside: preferred)
+        defer { discard(root) }
+        let work = root.appendingPathComponent("output").appendingPathExtension(preferred.pathExtension)
         try await make(work)
+        try Task.checkCancellation()
+        try FileSafety.makePrivate(work)
         return try publish(work, as: preferred)
     }
 
@@ -500,8 +513,14 @@ enum Paths {
     }
 
     static func discard(_ temporary: URL) {
-        try? FileManager.default.removeItem(at: temporary)
-        TemporaryItems.unregister(temporary)
+        Archives.makeAccessible(temporary)
+        do {
+            try FileManager.default.removeItem(at: temporary)
+            TemporaryItems.unregister(temporary)
+        } catch {
+            // A failed cleanup stays registered for the orderly shutdown retry.
+            if !taken(temporary) { TemporaryItems.unregister(temporary) }
+        }
     }
 
     /// Tries `attempt` at `preferred`, then `name 2.ext`, `name 3.ext`… `attempt` fails with "file exists" rather than
@@ -635,6 +654,7 @@ private final class ShellRun: @unchecked Sendable {
     static func stopAll() {
         let all = registry.withLock { Array(running.values) }
         for run in all { run.stop(L("Cancelled")) }
+        for run in all where run.process.isRunning { run.process.waitUntilExit() }
     }
     private static func track(_ run: ShellRun, _ active: Bool) {
         registry.withLock { running[ObjectIdentifier(run)] = active ? run : nil }
@@ -686,9 +706,15 @@ private final class ShellRun: @unchecked Sendable {
     /// Stops the tool; its run then throws `reason` (the first reason given wins).
     func stop(_ reason: String) {
         lock.lock()
-        if stopReason == nil { stopReason = reason }
+        let first = stopReason == nil
+        if first { stopReason = reason }
         lock.unlock()
         if process.isRunning { process.terminate() }
+        if first {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [self] in
+                if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            }
+        }
     }
 
     private func keep(_ data: Data) {
@@ -706,9 +732,15 @@ private final class ShellRun: @unchecked Sendable {
         Thread.detachNewThread {
             defer { try? handle.close() }
             for file in files {
-                guard let reader = try? FileHandle(forReadingFrom: file) else { return }
+                let reader: FileHandle
+                do { reader = try FileHandle(forReadingFrom: file) }
+                catch { self.stop(error.localizedDescription); return }
                 defer { try? reader.close() }
-                while let chunk = try? reader.read(upToCount: 1 << 20), !chunk.isEmpty {
+                while true {
+                    let chunk: Data
+                    do { chunk = try reader.read(upToCount: 1 << 20) ?? Data() }
+                    catch { self.stop(error.localizedDescription); return }
+                    if chunk.isEmpty { break }
                     do { try handle.write(contentsOf: chunk) } catch { return }
                 }
             }

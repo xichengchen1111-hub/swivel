@@ -9,24 +9,22 @@ enum Video {
     static func convertItems(sourceExt: Set<String>) -> [FileOption] {
         var list: [FileOption] = []
         if !sourceExt.contains("mp4") {
-            list.append(FileOption(title: "MP4") { try await export($0, AVAssetExportPresetHighestQuality, .mp4, "mp4") })
+            list.append(FileOption(title: "MP4") { try await recontainer($0, type: .mp4, ext: "mp4") })
         }
         if !sourceExt.contains("mov") {
-            list.append(FileOption(title: "MOV") { try await export($0, AVAssetExportPresetHighestQuality, .mov, "mov") })
+            list.append(FileOption(title: "MOV") { try await recontainer($0, type: .mov, ext: "mov") })
         }
         list += [
             FileOption(title: "HEVC") { try await export($0, AVAssetExportPresetHEVCHighestQuality, .mp4, "mp4", suffix: " hevc") },
-            FileOption(title: "M4V") { try await export($0, AVAssetExportPresetHighestQuality, .m4v, "m4v") },
+            FileOption(title: "M4V") { try await recontainer($0, type: .m4v, ext: "m4v") },
             FileOption(title: "GIF") { try await gif($0) },
             FileOption(title: "M4A") { try await export($0, AVAssetExportPresetAppleM4A, .m4a, "m4a") },
             FileOption(title: "WAV") { url in
-                let asset = try await safeAsset(url)
+                let pcm = try await AudioFiles.decode(url, preservePrecision: true)
+                defer { MediaTemporaryFiles.discard(pcm) }
                 return [try await Paths.produce(Paths.preferred(for: url, ext: "wav")) { wav in
-                    // The soundtrack goes through AAC first, in a temporary of its own that afconvert then reads.
-                    let m4a = Paths.temporary(beside: wav, ext: "m4a")
-                    defer { Paths.discard(m4a) }
-                    try await encode(asset, AVAssetExportPresetAppleM4A, .m4a, to: m4a)
-                    try await Shell.run("/usr/bin/afconvert", ["-f", "WAVE", "-d", "LEI16", m4a.path, wav.path])
+                    // Decode directly to PCM: no AAC generation loss, no forced 16-bit quantization.
+                    try await Shell.run("/usr/bin/afconvert", ["-f", "WAVE", "-d", "LEF32", pcm.path, wav.path])
                 }]
             },
             FileOption(title: "PNG Frame") { try await frame($0) },
@@ -62,7 +60,7 @@ enum Video {
         let target = Prefs.videoCompressTargets[popup.indexOfSelectedItem]
         Prefs.videoCompressTarget = target
         var files: [URL] = [], messages: [String] = []
-        for url in urls {
+        do { for url in urls {
             let out: URL
             if target == 0 { out = try await compressSmaller(url) }
             else { out = try await compressToTarget(url, maxBytes: target) }
@@ -71,13 +69,12 @@ enum Video {
             messages.append(target > 0 && size > target
                 ? L("Saved %@ (%@), but the target size was exceeded.", out.lastPathComponent, byteString(size))
                 : L("Saved %@ (%@)", out.lastPathComponent, byteString(size)))
-        }
+        } } catch { throw PartialOutputError.wrapping(error, files: files) }
         return ActionResult(message: messages.joined(separator: "\n"), files: files)
     }
 
     private static func compressSmaller(_ url: URL) async throws -> URL {
-        let temporary = Paths.temporary(beside: url, ext: "mp4")
-        defer { Paths.discard(temporary) }
+        return try await Paths.produce(Paths.preferred(for: url, ext: "mp4", suffix: " compressed")) { temporary in
         guard let session = AVAssetExportSession(asset: try await safeAsset(url), presetName: AVAssetExportPresetMediumQuality) else {
             throw ToolError(L("Couldn't encode video."))
         }
@@ -86,7 +83,7 @@ enum Video {
             try await session.export(to: temporary, as: .mp4)
             try Task.checkCancellation()
         } onCancel: { session.cancelExport() }
-        return try Paths.publish(temporary, as: Paths.preferred(for: url, ext: "mp4", suffix: " compressed"))
+        }
     }
 
     static func targetBitrates(maxBytes: Int, duration: Double, hasAudio: Bool) throws -> (video: Int, audio: Int) {
@@ -110,8 +107,7 @@ enum Video {
         let budget = try targetBitrates(maxBytes: maxBytes, duration: duration, hasAudio: audio != nil)
         var totalRate = Double(budget.video + budget.audio)
         let audioRate = budget.audio
-        let temporary = Paths.temporary(beside: url, ext: "mp4")
-        defer { Paths.discard(temporary) }
+        return try await Paths.produce(Paths.preferred(for: url, ext: "mp4", suffix: " compressed")) { temporary in
         for attempt in 0..<2 {
             try Task.checkCancellation()
             let videoRate = totalRate - Double(audioRate)
@@ -119,13 +115,14 @@ enum Video {
             try await encodeTarget(asset, audio: audio, to: temporary, videoRate: Int(videoRate), audioRate: audioRate)
             try Task.checkCancellation()
             let size = try temporary.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-            if size <= maxBytes || attempt == 1 { break }
+            if size <= maxBytes { return }
+            if attempt == 1 { throw ToolError(L("Target size cannot be reached. Smallest size: %@.", byteString(size))) }
             // Retry once, retaining the minimum supported video bitrate even when container overhead dominates.
             totalRate = max(Double(audioRate + 150_000), totalRate * Double(maxBytes) / Double(size) * 0.95)
             try FileManager.default.removeItem(at: temporary)
         }
         try Task.checkCancellation()
-        return try Paths.publish(temporary, as: Paths.preferred(for: url, ext: "mp4", suffix: " compressed"))
+        }
     }
 
     private static func encodeTarget(_ asset: AVAsset, audio: AVAssetTrack?, to out: URL,
@@ -238,6 +235,15 @@ enum Video {
         try await export(try await safeAsset(url), preset, type, as: Paths.preferred(for: url, ext: ext, suffix: suffix))
     }
 
+    /// A format change alone can copy the compressed samples. Editing, redaction and trimming never use this path.
+    static func recontainer(_ url: URL, type: AVFileType, ext: String) async throws -> [URL] {
+        let asset = try await safeAsset(url)
+        let compatible = await AVAssetExportSession.compatibility(ofExportPreset: AVAssetExportPresetPassthrough,
+                                                                  with: asset, outputFileType: type)
+        let preset = compatible ? AVAssetExportPresetPassthrough : AVAssetExportPresetHighestQuality
+        return try await export(asset, preset, type, as: Paths.preferred(for: url, ext: ext))
+    }
+
     /// Exports into a temporary beside `preferred`, then publishes it there or under the next free name.
     private static func export(_ asset: AVAsset, _ preset: String, _ type: AVFileType, as preferred: URL) async throws -> [URL] {
         [try await Paths.produce(preferred) { try await encode(asset, preset, type, to: $0) }]
@@ -248,7 +254,11 @@ enum Video {
         guard let session = AVAssetExportSession(asset: asset, presetName: preset) else {
             throw ToolError("This video can't be exported that way")
         }
-        try await session.export(to: out, as: type)
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try await session.export(to: out, as: type)
+            try Task.checkCancellation()
+        } onCancel: { session.cancelExport() }
     }
 
     private static func mute(_ url: URL) async throws -> [URL] {
@@ -279,9 +289,10 @@ enum Video {
 
     private static func gif(_ url: URL) async throws -> [URL] {
         let asset = try await safeAsset(url)
-        let duration = min(try await asset.load(.duration).seconds, 30)
+        let duration = try await asset.load(.duration).seconds
+        try validateGIFDuration(duration)
         let fps = 12.0
-        let count = max(Int(duration * fps), 1)
+        let count = max(Int((duration * fps).rounded(.up)), 1)
         let gen = generator(asset, maxSize: 540)
         gen.requestedTimeToleranceBefore = CMTime(seconds: 0.5 / fps, preferredTimescale: 600)
         gen.requestedTimeToleranceAfter = gen.requestedTimeToleranceBefore
@@ -294,11 +305,18 @@ enum Video {
             CGImageDestinationSetProperties(dest, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
             let frameProps = [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 1 / fps]] as CFDictionary
             for i in 0..<count {
+                try Task.checkCancellation()
                 let (image, _) = try await gen.image(at: CMTime(seconds: Double(i) / fps, preferredTimescale: 600))
                 CGImageDestinationAddImage(dest, image, frameProps)
             }
             guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save GIF") }
         }]
+    }
+
+    static func validateGIFDuration(_ duration: Double) throws {
+        guard duration.isFinite, duration > 0, duration <= 30 else {
+            throw ToolError(L("GIF export supports clips up to 30 seconds. Use Trim to choose the full segment first."))
+        }
     }
 }
 
@@ -333,13 +351,65 @@ enum Audio {
 
     static func convert(_ url: URL, to format: AudioFormat) async throws -> [URL] {
         let suffix = format.name == "ALAC" ? " lossless" : ""
-        return try await run(url, ext: format.ext, suffix: suffix, format.args)
+        var args = format.args
+        var validation: ((URL) throws -> Void)?
+        if ["WAV", "AIFF", "CAF", "FLAC", "ALAC"].contains(format.name) {
+            let source = try AVAudioFile(forReading: url)
+            let sourceFormat = source.fileFormat
+            let stream = sourceFormat.streamDescription.pointee
+            let sourcePrecision = precision(sourceFormat, url: url)
+            let exactFrames = [kAudioFormatLinearPCM, kAudioFormatAppleLossless, kAudioFormatFLAC].contains(stream.mFormatID) ? source.length : nil
+            validation = { output in
+                let result = try AVAudioFile(forReading: output)
+                let resultFormat = result.fileFormat
+                let description = resultFormat.streamDescription.pointee
+                guard description.mSampleRate == stream.mSampleRate, description.mChannelsPerFrame == stream.mChannelsPerFrame,
+                      sourcePrecision == 0 || precision(resultFormat, url: output) >= sourcePrecision,
+                      exactFrames == nil || result.length == exactFrames else {
+                    throw ToolError(L("The audio conversion could not preserve its precision, channels or duration."))
+                }
+            }
+            let floating = stream.mFormatID == kAudioFormatLinearPCM && stream.mFormatFlags & kAudioFormatFlagIsFloat != 0
+            if ["FLAC", "ALAC"].contains(format.name) {
+                guard !floating, stream.mBitsPerChannel <= 32 else {
+                    throw ToolError(L("This lossless format cannot preserve floating-point audio. Use WAV or CAF instead."))
+                }
+                if format.name == "ALAC", let flags = [16: 1, 20: 2, 24: 3, 32: 4][Int(stream.mBitsPerChannel)] {
+                    args[3] = "alac/\(flags)"
+                }
+            } else {
+                // Preserve integer precision and float samples. Compressed sources decode to float32.
+                let floatOutput = floating || stream.mFormatID != kAudioFormatLinearPCM
+                let bits = floatOutput ? max(32, Int(stream.mBitsPerChannel)) : max(16, Int(stream.mBitsPerChannel))
+                guard [16, 24, 32, 64].contains(bits) else { throw ToolError(L("This audio format or duration is not supported.")) }
+                // Floating AIFF is AIFF-C; the extension remains .aiff and Core Audio identifies it correctly.
+                if format.name == "AIFF", floatOutput { args[1] = "AIFC" }
+                args[3] = (format.name == "AIFF" ? "BE" : "LE") + (floatOutput ? "F" : "I") + String(bits)
+                if [kAudioFormatAppleLossless, kAudioFormatFLAC].contains(stream.mFormatID) { args[3] = "N" }
+            }
+        }
+        return try await run(url, ext: format.ext, suffix: suffix, args, validate: validation)
+    }
+
+    private static func precision(_ format: AVAudioFormat, url: URL) -> UInt32 {
+        let stream = format.streamDescription.pointee
+        if stream.mFormatID == kAudioFormatAppleLossless {
+            return [1: 16, 2: 20, 3: 24, 4: 32][stream.mFormatFlags] ?? 0
+        }
+        if stream.mBitsPerChannel > 0 { return stream.mBitsPerChannel }
+        // FLAC's compressed ASBD reports zero; the file property carries its original sample precision.
+        var file: AudioFileID?
+        guard AudioFileOpenURL(url as CFURL, .readPermission, 0, &file) == noErr, let file else { return 0 }
+        defer { AudioFileClose(file) }
+        var bits: UInt32 = 0, size = UInt32(MemoryLayout<UInt32>.size)
+        return AudioFileGetProperty(file, kAudioFilePropertySourceBitDepth, &size, &bits) == noErr ? bits : 0
     }
 
     /// afconvert replaces whatever is at its output path, so it only ever writes a temporary.
-    private static func run(_ url: URL, ext: String, suffix: String, _ args: [String]) async throws -> [URL] {
+    private static func run(_ url: URL, ext: String, suffix: String, _ args: [String], validate: ((URL) throws -> Void)? = nil) async throws -> [URL] {
         [try await Paths.produce(Paths.preferred(for: url, ext: ext, suffix: suffix)) { out in
             try await Shell.run("/usr/bin/afconvert", args + [url.path, out.path])
+            try validate?(out)
         }]
     }
 }

@@ -1072,6 +1072,8 @@ final class MetadataEditor: Editor {
         guard let src = CGImageSourceCreateWithURL(source as CFURL, nil), let type = CGImageSourceGetType(src) else {
             throw ToolError("Couldn't read \(source.lastPathComponent)")
         }
+        try Images.requireSingleImage(src)
+        try Images.validatePrecision(src)
         let metadata = CGImageSourceCopyMetadataAtIndex(src, 0, nil).flatMap { CGImageMetadataCreateMutableCopy($0) }
             ?? CGImageMetadataCreateMutable()
         var doomed: [String] = []

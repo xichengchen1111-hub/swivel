@@ -9,6 +9,10 @@ struct WheelItem {
     let title: String
     @MainActor var displayTitle: String { Catalog.displayTitle(title) }
     let run: @MainActor ([URL]) async throws -> ActionResult
+    @MainActor func perform(_ urls: [URL]) async throws -> ActionResult {
+        try ConversionNotice.confirm(title: title, urls: urls)
+        return try await run(urls)
+    }
 }
 
 /// Owns the wheel panel: opens it at the cursor on a key tap, pages it, and runs the dropped-on item.
@@ -150,7 +154,7 @@ final class WheelController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: busy)
         Task { @MainActor in
             do {
-                let result = try await item.run(urls)
+                let result = try await item.perform(urls)
                 busy.cancel()
                 if !result.files.isEmpty { Feedback.done() }
                 if result.message.isEmpty, result.files.isEmpty {

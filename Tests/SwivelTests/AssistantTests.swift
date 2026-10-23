@@ -28,6 +28,18 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
 @Suite(.serialized)
 @MainActor
 struct AssistantTests {
+    @Test func oversizedRepliesAreStoppedWithoutNetwork() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let old = StubProtocol.reply
+        defer { StubProtocol.reply = old }
+        StubProtocol.reply = (200, Data(repeating: 65, count: 2 * 1024 * 1024 + 1))
+        await #expect(throws: (any Error).self) {
+            try await Assistant.send(URLRequest(url: URL(string: "https://fixture.invalid/reply")!), using: session)
+        }
+    }
     private let choices = [Assistant.Choice(id: "tools.Compress", title: "Compress", group: "Tools"),
                            Assistant.Choice(id: "convert.PDF", title: "PDF", group: "Convert")]
     private let files = [URL(fileURLWithPath: "/Users/me/Secret Project/passport scan.jpg"),

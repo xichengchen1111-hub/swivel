@@ -21,12 +21,20 @@ enum AudioFiles {
         layout.mChannelLayoutTag = kAudioChannelLayoutTag_DiscreteInOrder | UInt32(channels)
         return Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size)
     }
-    static func decode(_ source: URL) async throws -> URL {
+    static func decode(_ source: URL, preservePrecision: Bool = false) async throws -> URL {
         let asset = try await Video.safeAsset(source)
         guard let track = try await asset.loadTracks(withMediaType: .audio).first,
               let description = try await track.load(.formatDescriptions).first,
               let stream = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee else {
             throw ToolError(L("This file has no audio."))
+        }
+        if preservePrecision {
+            let floating = stream.mFormatID == kAudioFormatLinearPCM && stream.mFormatFlags & kAudioFormatFlagIsFloat != 0
+            let bits = stream.mFormatID == kAudioFormatAppleLossless
+                ? ([1: UInt32(16), 2: 20, 3: 24, 4: 32][stream.mFormatFlags] ?? 0) : stream.mBitsPerChannel
+            guard floating ? bits <= 32 : bits <= 24 else {
+                throw ToolError(L("This soundtrack exceeds the precision supported by video-to-WAV export. Keep or export its original audio track."))
+            }
         }
         let rate = stream.mSampleRate, channels = Int(stream.mChannelsPerFrame)
         let duration = try await asset.load(.duration).seconds

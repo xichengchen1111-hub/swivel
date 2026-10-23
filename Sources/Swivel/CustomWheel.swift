@@ -85,7 +85,7 @@ enum CustomWheel {
             guard let item = Catalog.defaultItems(for: chosen, mode: ref.mode).first(where: { $0.title == ref.title }) else {
                 throw ToolError(L("“%@” can’t be used with these files.", Catalog.displayTitle(ref.title)))
             }
-            return try await item.run(chosen)
+            return try await item.perform(chosen)
         }
     }
 }

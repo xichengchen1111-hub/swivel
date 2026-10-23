@@ -224,64 +224,44 @@ struct SecurityTests {
         #expect(try fm.contentsOfDirectory(atPath: rope.path).isEmpty)
     }
 
-    @Test func aMoveToAnotherVolumeCopiesPublishesAndOnlyThenRemovesTheOriginal() throws {
+    @Test func crossVolumeCopyNeverDeletesAConcurrentlyReplacedSource() throws {
         let fm = FileManager.default
         let source = try folder(); defer { try? fm.removeItem(at: source) }
         let destination = try folder(); defer { try? fm.removeItem(at: destination) }
         let rope = try folder(); defer { try? fm.removeItem(at: rope) }
-
-        // A file is copied into a hidden temporary in the destination, published past a file saved there meanwhile,
-        // and only then removed from where it was. The copy keeps its attributes (a copied image stays marked).
         let shot = source.appendingPathComponent("Shot.png")
-        try Data("ours".utf8).write(to: shot)
+        try Data("old content".utf8).write(to: shot)
         markCopied(shot)
-        let moved = try Paths.move(shot, into: destination, rename: renaming(from: source, planting: theirs))
-        #expect(moved.lastPathComponent == "Shot 2.png")
-        #expect(try Data(contentsOf: moved) == Data("ours".utf8))
-        #expect(Clothesline.isCopiedImage(moved))
-        #expect(!fm.fileExists(atPath: shot.path))
-
-        // A folder moves whole.
-        let album = source.appendingPathComponent("Album", isDirectory: true)
-        try fm.createDirectory(at: album.appendingPathComponent("Inner"), withIntermediateDirectories: true)
-        try Data("deep".utf8).write(to: album.appendingPathComponent("Inner/deep.png"))
-        let movedAlbum = try Paths.move(album, into: destination, rename: renaming(from: source))
-        #expect(movedAlbum.lastPathComponent == "Album")
-        #expect(try Data(contentsOf: movedAlbum.appendingPathComponent("Inner/deep.png")) == Data("deep".utf8))
-        #expect(!fm.fileExists(atPath: album.path))
-
-        // An original that can't be removed (a read-only folder) stays whole, its copy goes again, and the move fails.
-        let locked = source.appendingPathComponent("Locked", isDirectory: true)
-        try fm.createDirectory(at: locked, withIntermediateDirectories: false)
-        let kept = locked.appendingPathComponent("Kept.png")
-        try Data("kept".utf8).write(to: kept)
-        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: locked.path)
-        defer { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked.path) }
-        #expect(throws: (any Error).self) { try Paths.move(kept, into: destination, rename: renaming(from: locked)) }
-        #expect(try Data(contentsOf: kept) == Data("kept".utf8))
-
-        // The screenshot card: saved across volumes past a file saved meanwhile; with the usual folder gone, it still
-        // hangs on the rope.
+        #expect(throws: (any Error).self) { try Paths.move(shot, into: destination, rename: renaming(from: source)) }
+        #expect(try Data(contentsOf: shot) == Data("old content".utf8))
+        #expect(try fm.contentsOfDirectory(atPath: destination.path).isEmpty)
+        let copied = try Paths.copy(shot, into: destination) { staged, final in
+            // An editor atomically saves a newer version just before publishing the already copied bytes.
+            try Data("new saved content".utf8).write(to: shot, options: .atomic)
+            try Paths.renameExclusively(staged, to: final)
+        }
+        #expect(try Data(contentsOf: copied) == Data("old content".utf8))
+        #expect(try Data(contentsOf: shot) == Data("new saved content".utf8))
+        #expect(Clothesline.isCopiedImage(copied))
+        let album = source.appendingPathComponent("Album")
+        try fm.createDirectory(at: album, withIntermediateDirectories: false)
+        try Data("child".utf8).write(to: album.appendingPathComponent("child"))
+        let copy = try Paths.copy(album, into: destination)
+        #expect(try Data(contentsOf: copy.appendingPathComponent("child")) == Data("child".utf8))
+        #expect(fm.fileExists(atPath: album.path))
         let card = source.appendingPathComponent("Card.png")
         try Data("card".utf8).write(to: card)
-        let saved = IncomingCard.save(card, to: destination, otherwise: rope, rename: renaming(from: source, planting: theirs))
-        #expect(saved?.path == destination.appendingPathComponent("Card 2.png").path)
-        let other = source.appendingPathComponent("Other.png")
-        try Data("other".utf8).write(to: other)
-        let gone = source.appendingPathComponent("Unplugged/Screenshots", isDirectory: true)
-        let rescued = IncomingCard.save(other, to: gone, otherwise: rope, rename: renaming(from: source))
-        #expect(rescued?.path == rope.appendingPathComponent("Other.png").path)
-        #expect(try Data(contentsOf: rope.appendingPathComponent("Other.png")) == Data("other".utf8))
-
-        // Nothing planted was replaced and no temporaries are left on either side.
-        #expect(try Data(contentsOf: destination.appendingPathComponent("Shot.png")) == Data("theirs".utf8))
-        #expect(try Data(contentsOf: destination.appendingPathComponent("Card.png")) == Data("theirs".utf8))
-        #expect(Set(try fm.contentsOfDirectory(atPath: destination.path)) == ["Shot.png", "Shot 2.png", "Album", "Card.png", "Card 2.png"])
-        #expect(try fm.contentsOfDirectory(atPath: source.path) == ["Locked"])
-        #expect(try fm.contentsOfDirectory(atPath: rope.path) == ["Other.png"])
+        let saved = IncomingCard.save(card, to: destination, otherwise: rope) { item, target in
+            if target.deletingLastPathComponent().path == destination.path { throw POSIXError(.EXDEV) }
+            try Paths.renameExclusively(item, to: target)
+        }
+        #expect(saved?.path == rope.appendingPathComponent("Card.png").path)
+        #expect(try Data(contentsOf: #require(saved)) == Data("card".utf8))
+        #expect(!fm.fileExists(atPath: card.path))
+        #expect(try fm.subpathsOfDirectory(atPath: destination.path).allSatisfy { !$0.contains(".swivel-") })
     }
 
-    @Test func movesWorkAcrossVolumesOntoExFAT() throws {
+    @Test func copiesAcrossVolumesAndMovesWithinExFATKeepOriginalsSafe() throws {
         let volume = try ScratchVolume.exFAT()
         defer { volume.detach() }
         #expect(volume.fileSystem == "exfat")
@@ -289,16 +269,16 @@ struct SecurityTests {
         let local = try folder(); defer { try? fm.removeItem(at: local) }
         let disk = volume.root
 
-        // Startup disk → exFAT: a real EXDEV, then the copy is published without RENAME_EXCL (ENOTSUP on exFAT).
+        // Startup disk → exFAT: explicit copy published without RENAME_EXCL (ENOTSUP on exFAT).
         try theirs(disk.appendingPathComponent("Shot.png"))
         let shot = local.appendingPathComponent("Shot.png")
         try Data("ours".utf8).write(to: shot)
         markCopied(shot)
-        let moved = try Paths.move(shot, into: disk)
+        let moved = try Paths.copy(shot, into: disk)
         #expect(moved.lastPathComponent == "Shot 2.png")
         #expect(try Data(contentsOf: moved) == Data("ours".utf8))
         #expect(Clothesline.isCopiedImage(moved))
-        #expect(!fm.fileExists(atPath: shot.path))
+        #expect(fm.fileExists(atPath: shot.path))
 
         // Within exFAT, then back to the startup disk, keeping the attribute all the way.
         let inner = disk.appendingPathComponent("Inner", isDirectory: true)
@@ -306,17 +286,17 @@ struct SecurityTests {
         try theirs(inner.appendingPathComponent("Shot 2.png"))
         let within = try Paths.move(moved, into: inner)
         #expect(within.lastPathComponent == "Shot 2 2.png")
-        let back = try Paths.move(within, into: local)
+        let back = try Paths.copy(within, into: local)
         #expect(back.path == local.appendingPathComponent("Shot 2 2.png").path)
         #expect(try Data(contentsOf: back) == Data("ours".utf8))
         #expect(Clothesline.isCopiedImage(back))
 
-        // A folder, and the screenshot card saving onto an exFAT drive.
+        // A folder copy, and a screenshot safely falling back to the local disk.
         try fm.createDirectory(at: disk.appendingPathComponent("Album"), withIntermediateDirectories: false)
         let album = local.appendingPathComponent("Album", isDirectory: true)
         try fm.createDirectory(at: album, withIntermediateDirectories: false)
         try Data("a".utf8).write(to: album.appendingPathComponent("a.png"))
-        let movedAlbum = try Paths.move(album, into: disk)
+        let movedAlbum = try Paths.copy(album, into: disk)
         #expect(movedAlbum.lastPathComponent == "Album 2")
         #expect(try Data(contentsOf: movedAlbum.appendingPathComponent("a.png")) == Data("a".utf8))
         let incoming = local.appendingPathComponent("Incoming", isDirectory: true)
@@ -324,7 +304,7 @@ struct SecurityTests {
         let card = incoming.appendingPathComponent("Card.png")
         try Data("card".utf8).write(to: card)
         let saved = IncomingCard.save(card, to: disk, otherwise: local)
-        #expect(saved?.path == disk.appendingPathComponent("Card.png").path)
+        #expect(saved?.path == local.appendingPathComponent("Card.png").path)
         #expect(try fm.contentsOfDirectory(atPath: incoming.path).isEmpty)
 
         // No temporaries (or their AppleDouble shadows) are left on the drive.

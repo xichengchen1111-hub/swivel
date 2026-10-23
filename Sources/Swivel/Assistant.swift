@@ -89,8 +89,25 @@ enum Assistant {
 
     /// Sends a request on `session` and returns the body of a 2xx reply; anything else becomes a readable Failure.
     @MainActor static func send(_ urlRequest: URLRequest, using transport: URLSession? = nil) async throws -> Data {
-        let (data, response): (Data, URLResponse)
-        do { (data, response) = try await (transport ?? session).data(for: urlRequest) }
+        let transport = transport ?? session
+        // Consume off the main actor: one actor hop per byte would stall even modest replies.
+        let worker = Task.detached(priority: .userInitiated) { () throws -> (Data, URLResponse) in
+            var data = Data()
+            let (bytes, reply) = try await transport.bytes(for: urlRequest)
+            defer { bytes.task.cancel() }
+            guard reply.expectedContentLength <= 2 * 1024 * 1024 else { throw Failure(message: L("The assistant response was too large.")) }
+            for try await byte in bytes {
+                guard data.count < 2 * 1024 * 1024 else { throw Failure(message: L("The assistant response was too large.")) }
+                data.append(byte)
+            }
+            return (data, reply)
+        }
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
+        }
+        catch is CancellationError { throw CancellationError() }
+        catch let failure as Failure { throw failure }
         catch { throw Failure(message: L("Couldn't reach %@: %@", urlRequest.url?.host() ?? "", error.localizedDescription)) }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw failure(status: status, data: data) }

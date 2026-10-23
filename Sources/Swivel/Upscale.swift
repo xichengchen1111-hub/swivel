@@ -49,6 +49,8 @@ enum Upscale {
               Double(width) * Double(height) <= 16_000_000 else {
             throw ToolError(L("This image is too large to upscale. Use an image up to 16 megapixels."))
         }
+        try Images.requireSingleImage(file)
+        try Images.validatePrecision(file)
         _ = try dimensions(width: width, height: height, factor: factor)
         let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceShouldCacheImmediately: true,

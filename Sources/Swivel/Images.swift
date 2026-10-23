@@ -44,8 +44,77 @@ enum Images {
 
     static func convert(_ url: URL, to format: ImageFormat) async throws -> [URL] {
         try await detached {
-            [try save(try load(url), as: Paths.preferred(for: url, ext: format.ext), type: format.type, quality: 0.92)]
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw ToolError(L("Couldn't decode image")) }
+            try requireComplete(source)
+            let count = CGImageSourceGetCount(source)
+            let pages = CGImageSourceGetType(source) as String? == UTType.tiff.identifier
+            guard count > 0, count <= 1000, count == 1 || pages else {
+                throw ToolError(L("This image contains animation or multiple images. This operation cannot preserve them."))
+            }
+            var outputs: [URL] = []
+            do {
+                for index in 0..<count {
+                    try Task.checkCancellation()
+                    let props = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
+                    try validatePrecision(source, index: index, target: format.type)
+                    let width = props[kCGImagePropertyPixelWidth] as? Int ?? 0, height = props[kCGImagePropertyPixelHeight] as? Int ?? 0
+                    guard width > 0, height > 0, Double(width) * Double(height) <= maxDecodePixels else { throw ToolError(L("Image too large")) }
+                    let preferred = Paths.preferred(for: url, ext: format.ext, suffix: count > 1 ? " \(index + 1)" : "")
+                    outputs.append(try Paths.produce(preferred) { out in
+                        guard let dest = CGImageDestinationCreateWithURL(out as CFURL, format.type.identifier as CFString, 1, nil) else {
+                            throw ToolError(L("Couldn't encode image"))
+                        }
+                        // ImageIO preserves source pixels, orientation, colour profile and supported metadata.
+                        // Avoid the 8-bit thumbnail path used for interactive previews.
+                        var properties = props
+                        properties[kCGImageDestinationLossyCompressionQuality] = 1.0
+                        if [.jpeg, .bmp].contains(format.type), props[kCGImagePropertyHasAlpha] as? Bool == true {
+                            guard let image = CGImageSourceCreateImageAtIndex(source, index, nil) else { throw ToolError(L("Couldn't decode image")) }
+                            CGImageDestinationAddImage(dest, image.flattened(), properties as CFDictionary)
+                        } else { CGImageDestinationAddImageFromSource(dest, source, index, properties as CFDictionary) }
+                        guard CGImageDestinationFinalize(dest), let check = CGImageSourceCreateWithURL(out as CFURL, nil),
+                              CGImageSourceGetCount(check) == 1, CGImageSourceGetStatus(check) == .statusComplete else {
+                            throw ToolError(L("Couldn't encode image"))
+                        }
+                        let result = CGImageSourceCopyPropertiesAtIndex(check, 0, nil) as? [CFString: Any] ?? [:]
+                        guard result[kCGImagePropertyPixelWidth] as? Int == width,
+                              result[kCGImagePropertyPixelHeight] as? Int == height,
+                              props[kCGImagePropertyIsFloat] as? Bool != true || result[kCGImagePropertyIsFloat] as? Bool == true,
+                              (result[kCGImagePropertyDepth] as? Int ?? 8) >= min(8, props[kCGImagePropertyDepth] as? Int ?? 8),
+                              (props[kCGImagePropertyDepth] as? Int ?? 8) <= 8 || (result[kCGImagePropertyDepth] as? Int ?? 8) >= (props[kCGImagePropertyDepth] as? Int ?? 8) else {
+                            throw ToolError(L("This conversion could not preserve the image dimensions or bit depth."))
+                        }
+                    })
+                }
+            } catch { throw PartialOutputError.wrapping(error, files: outputs) }
+            return outputs
         }
+    }
+
+    static func validatePrecision(_ source: CGImageSource, index: Int = 0, target: UTType? = nil) throws {
+        let props = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any] ?? [:]
+        let auxiliary = [kCGImageAuxiliaryDataTypeHDRGainMap, kCGImageAuxiliaryDataTypeDepth,
+                         kCGImageAuxiliaryDataTypeDisparity, kCGImageAuxiliaryDataTypePortraitEffectsMatte]
+        guard !auxiliary.contains(where: { CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, index, $0) != nil }) else {
+            throw ToolError(L("This image contains HDR or auxiliary data that this operation cannot preserve."))
+        }
+        if (props[kCGImagePropertyDepth] as? Int ?? 8) > 8, target != .png && target != .tiff {
+            throw ToolError(L("This image has more than 8 bits per channel. Convert to PNG or TIFF to preserve its precision."))
+        }
+        if props[kCGImagePropertyIsFloat] as? Bool == true, target != .tiff {
+            throw ToolError(L("This floating-point image requires TIFF to preserve its precision."))
+        }
+    }
+
+    static func requireSingleImage(_ source: CGImageSource) throws {
+        try requireComplete(source)
+        guard CGImageSourceGetCount(source) == 1 else {
+            throw ToolError(L("This image contains animation or multiple images. This operation cannot preserve them."))
+        }
+    }
+
+    static func requireComplete(_ source: CGImageSource) throws {
+        guard CGImageSourceGetStatus(source) == .statusComplete else { throw ToolError(L("The image is incomplete or damaged.")) }
     }
 
     // MARK: Resize
@@ -105,13 +174,13 @@ enum Images {
         Prefs.resizeValue = value
         Prefs.resizeEnlarge = enlarge
         var files: [URL] = [], unchanged = 0
-        for url in urls {
+        do { for url in urls {
             if let file = try await detached({ try resizeFile(url, mode: mode, value: value, enlarge: enlarge) }) {
                 files.append(file)
             } else {
                 unchanged += 1
             }
-        }
+        } } catch { throw PartialOutputError.wrapping(error, files: files) }
         if files.isEmpty { throw ToolError(L("Already at or below that size.")) }
         var result = Catalog.saved(files)
         if unchanged > 0 { result.message += "\n" + L("%d already at or below that size", unchanged) }
@@ -155,15 +224,18 @@ enum Images {
     // MARK: Helpers
 
     static func detached<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
-        try await Task.detached(priority: .userInitiated, operation: work).value
+        let worker = Task.detached(priority: .userInitiated) { try Task.checkCancellation(); return try work() }
+        return try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
     }
 
-    /// Full-size decodes above this many pixels are refused (about 300 MP, 1.2 GB of RGBA).
-    static let maxDecodePixels = 300_000_000.0
+    /// Leave room for decoder, colour conversion and editing copies, especially on machines with little RAM.
+    static let maxDecodePixels = min(120_000_000.0, Double(ProcessInfo.processInfo.physicalMemory) / 64)
 
     /// Throws for a "pixel flood" file whose full-size decode would claim many gigabytes.
     static func refuseFlood(_ url: URL) throws {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw ToolError("Couldn't read \(url.lastPathComponent)") }
+        try requireSingleImage(source)
+        try validatePrecision(source)
         let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
         let width = props[kCGImagePropertyPixelWidth] as? Int ?? 4096
         let height = props[kCGImagePropertyPixelHeight] as? Int ?? 4096
@@ -177,6 +249,8 @@ enum Images {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             throw ToolError("Couldn't read \(url.lastPathComponent)")
         }
+        try requireSingleImage(source)
+        try validatePrecision(source)
         let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
         let width = props[kCGImagePropertyPixelWidth] as? Int ?? 4096
         let height = props[kCGImagePropertyPixelHeight] as? Int ?? 4096
@@ -281,8 +355,12 @@ enum Images {
                                   _ change: (CGImage) throws -> CGImage = { $0 }) throws -> [URL] {
         var maxPixels: Int?
         if scale != 1 {
-            let full = try load(url)
-            maxPixels = Int(CGFloat(max(full.width, full.height)) * scale)
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = props[kCGImagePropertyPixelWidth] as? Int, let height = props[kCGImagePropertyPixelHeight] as? Int else {
+                throw ToolError(L("Couldn't decode image"))
+            }
+            maxPixels = max(1, Int(CGFloat(max(width, height)) * scale))
         }
         let image = try change(try load(url, maxPixels: maxPixels))
         let (type, ext) = writableType(for: url)
@@ -334,7 +412,7 @@ extension CGImage {
 
     private func redraw(width: Int, height: Int, space: CGColorSpace? = nil, background: CGColor? = nil,
                         bitmapInfo: UInt32? = nil, _ draw: (CGContext) -> Void) -> CGImage {
-        let space = space ?? CGColorSpace(name: CGColorSpace.sRGB)!
+        let space = space ?? (colorSpace?.model == .rgb ? colorSpace : nil) ?? CGColorSpace(name: CGColorSpace.sRGB)!
         let info = bitmapInfo ?? CGImageAlphaInfo.premultipliedLast.rawValue
         guard let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: space, bitmapInfo: info) else { return self }

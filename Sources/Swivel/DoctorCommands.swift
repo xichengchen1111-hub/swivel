@@ -247,6 +247,7 @@ final class ShellCapture: @unchecked Sendable {
     static func stopAll() {
         let all = registry.withLock { Array(running.values) }
         for run in all { run.cancel() }
+        for run in all where run.process.isRunning { run.process.waitUntilExit() }
     }
     private static func track(_ run: ShellCapture, _ active: Bool) {
         registry.withLock { running[ObjectIdentifier(run)] = active ? run : nil }

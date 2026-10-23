@@ -258,7 +258,7 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
             let items = Feature.wheel.isOn ? Catalog.items(for: files, mode: mode) : Catalog.standaloneItems(for: files, mode: mode)
             list += items.map { item in
                 QuickCommand(id: "\(mode.id).\(item.title)", title: item.displayTitle, detail: mode.title, symbol: mode.symbol) {
-                    try await item.run(files)
+                    try await item.perform(files)
                 }
             }
         }

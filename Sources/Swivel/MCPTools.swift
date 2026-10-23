@@ -179,7 +179,8 @@ final class MCPTools {
         let prediction = try MCPCatalog.predict(action.output, urls)
         let plan = MCPPlan(action: action.id, inputs: try urls.map { try MCPFingerprint.read($0) }, work: .action(action), predicted: prediction.files)
         var details: [String: Any] = ["title": action.title, "will_create": prediction.files.map(\.path)]
-        if let note = prediction.note { details["note"] = note }
+        let notes = [prediction.note].compactMap { $0 } + ConversionNotice.messages(title: action.title, urls: urls)
+        if !notes.isEmpty { details["note"] = notes.joined(separator: " ") }
         return planned(plan, details)
     }
 
@@ -189,7 +190,7 @@ final class MCPTools {
         let format = try args.string("format")?.lowercased()
         let formats: [String: (UTType, String)] = ["jpg": (.jpeg, "jpg"), "heic": (.heic, "heic"), "png": (.png, "png")]
         if let format, formats[format] == nil, format != "same" { throw ToolError("format must be same, jpg, heic or png") }
-        var jobs: [MCPPlan.Compression] = [], notes: [String] = [], reserved = Set<String>()
+        var jobs: [MCPPlan.Compression] = [], notes = ["Compression may reduce quality, resolution and metadata. Original files are kept unchanged."], reserved = Set<String>()
         for url in urls {
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             if size > 0, size <= target { notes.append("\(url.lastPathComponent) is already \(byteString(size)), under the target.") }
@@ -199,6 +200,8 @@ final class MCPTools {
                       let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
                     throw ToolError("Couldn't read \(url.lastPathComponent)")
                 }
+                try Images.requireSingleImage(source)
+                try Images.validatePrecision(source)
                 let ext = url.pathExtension.lowercased()
                 let lossy: Set<String> = ["jpg", "jpeg", "heic", "heif", "webp", "avif"]
                 let same = Images.writableType(for: url)
@@ -344,10 +347,16 @@ final class MCPTools {
                 for url in urls {
                     if Task.isCancelled { stopped = CancellationError(); break }
                     do { created += try await action.run([url]) }
-                    catch { failures.append(["path": url.path, "error": error.localizedDescription]) }
+                    catch {
+                        if let partial = error as? PartialOutputError { created += partial.files }
+                        failures.append(["path": url.path, "error": error.localizedDescription])
+                    }
                 }
             } else {
-                do { created = try await action.run(urls) } catch { stopped = error }
+                do { created = try await action.run(urls) } catch {
+                    if let partial = error as? PartialOutputError { created += partial.files }
+                    stopped = error
+                }
             }
         case .compress(let jobs, let target):
             for job in jobs {
@@ -612,19 +621,21 @@ enum MCPCatalog {
         case one(([URL]) -> URL)
         /// Every PDF page as an image: "name.ext", or "name 1.ext", "name 2.ext"… for more pages.
         case pages(ext: String)
+        case imagePages(ext: String)
         /// Every PDF page as its own PDF: "name 1.pdf"…
         case split
         /// An archive's contents.
         case extracted
 
         var perFile: Bool {
-            switch self { case .each, .pages, .split: true; case .one, .extracted: false }
+            switch self { case .each, .pages, .imagePages, .split: true; case .one, .extracted: false }
         }
         var summary: String {
             switch self {
             case .each: "one new file per input, next to it"
             case .one: "one new file for all inputs, next to the first"
             case .pages, .split: "one new file per PDF page, next to the PDF"
+            case .imagePages: "one new file per image or TIFF page, next to the input"
             case .extracted: "the archive's contents, next to it"
             }
         }
@@ -651,7 +662,8 @@ enum MCPCatalog {
                     // Directly, so a failure is reported to the agent rather than in an alert.
                     run = { urls in
                         var out: [URL] = []
-                        for url in urls { out.append(try await Images.detached { try preset.apply(to: url) }) }
+                        do { for url in urls { out.append(try await Images.detached { try preset.apply(to: url) }) } }
+                        catch { throw PartialOutputError.wrapping(error, files: out) }
                         return out
                     }
                 } else {
@@ -679,7 +691,7 @@ enum MCPCatalog {
         switch (mode, kind) {
         case (.convert, .image):
             if title == "PDF" { return firstPDF }
-            return Images.outputFormats.first { $0.name == title }.map { each("", $0.ext) }
+            return Images.outputFormats.first { $0.name == title }.map { .imagePages(ext: $0.ext) }
         case (.tools, .image):
             switch title {
             case "Remove BG": return each(" cutout", "png")
@@ -732,6 +744,17 @@ enum MCPCatalog {
         switch output {
         case .each(let suffix, let ext):
             return (urls.map { named($0, suffix, ext($0)) }, nil)
+        case .imagePages(let ext):
+            var files: [URL] = []
+            for url in urls {
+                guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw ToolError("Couldn't read image") }
+                let count = CGImageSourceGetCount(source)
+                if CGImageSourceGetType(source) as String? != UTType.tiff.identifier { try Images.requireSingleImage(source) }
+                guard count > 0, count <= 1000 else { throw ToolError("Too many image pages") }
+                for index in 0..<count { try Images.validatePrecision(source, index: index, target: UTType(filenameExtension: ext)) }
+                files += count == 1 ? [named(url, "", ext)] : (0..<count).map { named(url, " \($0 + 1)", ext) }
+            }
+            return (files, files.count > urls.count ? "Every TIFF page is exported separately; no pages are dropped." : nil)
         case .one(let place):
             // Archives take several files by name from one folder (Archives.zip/tar check this too, later).
             if ["zip", "gz"].contains(place(urls).pathExtension), Set(urls.map { $0.deletingLastPathComponent().path }).count > 1 {
