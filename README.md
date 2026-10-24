@@ -2,6 +2,8 @@
 
 A native, local file toolkit for macOS. Drag any file, tap a key, and drop it on the wheel that appears under your cursor.
 
+> **[⬇ Download Swivel for Mac · 下载 Mac 版](https://github.com/xichengchen1111-hub/swivel-mac/releases/latest/download/Swivel-mac.zip)** — macOS 15+, Apple silicon. Releases and the public source: [swivel-mac](https://github.com/xichengchen1111-hub/swivel-mac).
+
 | Key while dragging | Wheel |
 | --- | --- |
 | ⇧ Shift | **Convert** formats |
