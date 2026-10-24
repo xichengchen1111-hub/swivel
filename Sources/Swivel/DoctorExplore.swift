@@ -671,7 +671,10 @@ enum DoctorUninstall {
         do { trashed = try move(app) } catch {
             throw ToolError(L("macOS didn’t let Swivel move the app. Drag it to the Trash in Finder; it may ask for your password."))
         }
-        guard (try? FileIdentity.read(trashed)) == identity else { throw ToolError(L("%@ couldn’t be confirmed in the Trash.", DoctorTrash.displayPath(app))) }
+        guard (try? FileIdentity.read(trashed)) == identity else {
+            throw ToolError(L("%@ was moved to the Trash as “%@” but couldn’t be confirmed there; Undo won’t restore it. Check the Trash.",
+                              DoctorTrash.displayPath(app), trashed.lastPathComponent))
+        }
         return .init(original: app, trashed: trashed, identity: identity, parents: [], children: [])
     }
 }

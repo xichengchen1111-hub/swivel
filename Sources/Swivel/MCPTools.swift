@@ -13,8 +13,9 @@ import UniformTypeIdentifiers
 @MainActor
 final class MCPTools {
     let history: MCPHistory
-    /// Where undo sends files Swivel created. Tests pass a plain removal so they leave the user's Trash alone.
-    let trash: (URL) throws -> Void
+    /// Where undo sends files Swivel created, returning where it went (nil when it's gone). Tests pass a plain removal
+    /// so they leave the user's Trash alone.
+    let trash: (URL) throws -> URL?
     private var plans: [String: MCPPlan] = [:]
     /// The latest apply in line. Hosts may call tools in parallel; two conversions into one folder at once could
     /// both pick the same free name, so applies run one after another.
@@ -23,7 +24,11 @@ final class MCPTools {
     static let maxPlans = 100
 
     init(history: MCPHistory = MCPHistory(),
-         trash: @escaping (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }) {
+         trash: @escaping (URL) throws -> URL? = { url in
+             var result: NSURL?
+             try FileManager.default.trashItem(at: url, resultingItemURL: &result)
+             return result as URL?
+         }) {
         self.history = history
         self.trash = trash
     }
@@ -424,6 +429,17 @@ final class MCPTools {
     }
 
     private func undo(_ args: MCPArguments) throws -> [String: Any] {
+        do {
+            var result = try undoEntry(args)
+            if let warning = history.warning { result["warning"] = warning }
+            return result
+        } catch let error as ToolError {
+            guard let warning = history.warning else { throw error }
+            throw ToolError(error.message + " " + warning)
+        }
+    }
+
+    private func undoEntry(_ args: MCPArguments) throws -> [String: Any] {
         let requested = try args.string("entry_id")
         let dryRun = try args.bool("dry_run") ?? false
         return try history.update { entries in
@@ -464,7 +480,14 @@ final class MCPTools {
                         skipped.append(["path": move.to, "reason": "Something else now uses \(move.from)"]); movesLeft.insert(move, at: 0); continue
                     }
                     do {
-                        if !dryRun { try Paths.renameExclusively(now, to: original) }
+                        if !dryRun {
+                            try Paths.renameExclusively(now, to: original)
+                            // Swapped for something else between the check and the rename: put that back.
+                            guard (try? FileIdentity.read(original)) == FileIdentity(device: move.device, inode: move.inode) else {
+                                try? Paths.renameExclusively(original, to: now)
+                                skipped.append(["path": move.to, "reason": "Replaced while undoing; left as it is"]); movesLeft.insert(move, at: 0); continue
+                            }
+                        }
                         restored.append(["from": move.to, "to": move.from])
                     } catch { skipped.append(["path": move.to, "reason": error.localizedDescription]); movesLeft.insert(move, at: 0) }
                 }
@@ -476,7 +499,13 @@ final class MCPTools {
                     createdLeft.insert(file, at: 0); continue
                 }
                 do {
-                    if !dryRun { try trash(URL(fileURLWithPath: file.path)) }
+                    if !dryRun, let gone = try trash(URL(fileURLWithPath: file.path)),
+                       (try? FileIdentity.read(gone)) != FileIdentity(device: file.device, inode: file.inode) {
+                        // Something else took its place between the check and the move: bring that back.
+                        try? Paths.renameExclusively(gone, to: URL(fileURLWithPath: file.path))
+                        skipped.append(["path": file.path, "reason": "Replaced while undoing; left as it is"])
+                        createdLeft.insert(file, at: 0); continue
+                    }
                     trashed.append(file.path)
                 } catch { skipped.append(["path": file.path, "reason": error.localizedDescription]); createdLeft.insert(file, at: 0) }
             }
@@ -506,7 +535,9 @@ final class MCPTools {
             if let undone = entry.undone { row["undone"] = formatter.string(from: undone) }
             return row
         }
-        return ["entries": Array(entries)]
+        var result: [String: Any] = ["entries": Array(entries)]
+        if let warning = history.warning { result["warning"] = warning }
+        return result
     }
 
     // MARK: Definitions
@@ -1019,6 +1050,20 @@ final class MCPHistory: @unchecked Sendable {
     init(directory: URL = MCPHistory.defaultDirectory) { self.directory = directory }
 
     func entries() throws -> [Entry] { try locked { read() } }
+
+    /// Older logs that couldn't be read and were set aside: what they held can't be undone from here.
+    var setAside: [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [])
+            .filter { $0.hasPrefix("history (unreadable)") }.sorted()
+            .map { directory.appendingPathComponent($0).path }
+    }
+
+    /// Added to history and undo results while a log is set aside, so an agent can tell the user.
+    var warning: String? {
+        let files = setAside
+        return files.isEmpty ? nil
+            : "An earlier undo log couldn't be read and was set aside (\(files.joined(separator: ", "))). Changes recorded only there can't be undone with this tool."
+    }
 
     func update<T>(_ change: (inout [Entry]) throws -> T) throws -> T {
         try locked {

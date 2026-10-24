@@ -312,6 +312,7 @@ extension Strings {
         "The Trash didn’t say where the item went.": ["废纸篓没有返回项目移到的位置。", "垃圾桶沒有回報項目移到的位置。", "ゴミ箱から項目の移動先が返されませんでした。"],
         "Mac Doctor only moves items it can check: real folders inside your home folder, reached without links.": ["Mac 医生只移动它能核实的项目：位于你的个人文件夹内、无需经过链接即可到达的真实文件夹。", "Mac 醫生只會移動它能確認的項目：位於你的個人專屬資料夾內、不需經由連結就能到達的實際資料夾。", "Mac ドクターが移動するのは、確認できる項目（ホームフォルダ内にあり、リンクを経由せずにたどれる実際のフォルダ）だけです。"],
         "Files changed since the check. Run the check again.": ["检查后文件有变动。请重新检查。", "檢查後檔案有變動。請重新檢查。", "チェック後にファイルが変更されました。もう一度チェックしてください。"],
+        "%@ was moved to the Trash as “%@” but couldn’t be confirmed there; Undo won’t restore it. Check the Trash.": ["%@ 已作为“%@”移到废纸篓，但无法确认；撤销不会恢复它。请查看废纸篓。", "%@ 已作為「%@」移到垃圾桶，但無法確認；還原不會恢復它。請查看垃圾桶。", "%@ は「%@」としてゴミ箱に移動されましたが、確認できませんでした。取り消しでは元に戻りません。ゴミ箱を確認してください。"],
         "%@ couldn’t be confirmed in the Trash.": ["无法确认 %@ 已在废纸篓中。", "無法確認 %@ 已在垃圾桶中。", "%@ がゴミ箱にあることを確認できませんでした。"],
         "%@ changed since the check and was left in place.": ["%@ 在检查后有变动，已保留在原处。", "%@ 在檢查後有變動，已保留在原處。", "%@ はチェック後に変更されたため、そのまま残しました。"],
         "%@ cache (Mac Doctor)": ["%@ 缓存（Mac 医生）", "%@ 快取（Mac 醫生）", "%@ のキャッシュ（Mac ドクター）"],

@@ -126,6 +126,24 @@ enum AssistantDraft {
             return blanks.contains(scalar.value) || p.isDefaultIgnorableCodePoint || p.isVariationSelector || p.isNoncharacterCodePoint
         }
     }
+    /// A folder specific enough to hand an assistant as its workspace: at least two levels inside the home folder
+    /// (~/Desktop/Project, not ~/Desktop or ~/Library), a folder inside a volume or another user's home
+    /// (/Volumes/Disk/Project), or a folder two levels below the root elsewhere (/tmp/notes), after resolving links.
+    /// Never /, a top-level folder, a volume, iCloud Drive's root or a top-level home folder.
+    static func isNarrowWorkspace(_ directory: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
+        let parts = directory.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        let homeParts = home.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        if parts.starts(with: homeParts) {
+            let inside = Array(parts.dropFirst(homeParts.count))
+            // iCloud Drive: ~/Library/Mobile Documents/com~apple~CloudDocs counts as a top level of its own.
+            if inside.starts(with: ["Library", "Mobile Documents", "com~apple~CloudDocs"]) { return inside.count >= 4 }
+            return inside.count >= 2 && inside.first != "Library"
+        }
+        if homeParts.starts(with: parts) { return false }  // The home folder or above it.
+        let roots = ["Volumes", "Users", "System", "Library", "Applications", "private"]
+        return parts.count >= (parts.count > 1 && roots.contains(parts[1]) ? 4 : 3)
+    }
+
     static func url(for delivery: FileAppTarget.Delivery, files: [URL]) throws -> URL {
         guard !files.isEmpty, files.allSatisfy(\.isFileURL), [.codexDraft, .claudeCodeDraft].contains(delivery) else {
             throw ToolError(L("Choose files for this draft."))
@@ -141,10 +159,7 @@ enum AssistantDraft {
             (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true ? url : url.deletingLastPathComponent()
         })
         components.queryItems = [URLQueryItem(name: delivery == .codexDraft ? "prompt" : "q", value: text)]
-        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
-        let broad = Set(["/", home] + ["Desktop", "Documents", "Downloads"].map { home + "/" + $0 })
-        if directories.count == 1, let directory = directories.first, !broad.contains(directory.standardizedFileURL.path),
-           !directory.standardizedFileURL.path.hasPrefix("/Volumes/") || directory.standardizedFileURL.pathComponents.count > 3 {
+        if directories.count == 1, let directory = directories.first, isNarrowWorkspace(directory) {
             components.queryItems?.append(URLQueryItem(name: delivery == .codexDraft ? "path" : "folder", value: directory.path))
         }
         // URLComponents leaves "+" alone, but both apps decode queries as forms, where "+" means a space: a folder

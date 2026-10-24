@@ -26,7 +26,7 @@ struct MCPTests {
     /// A session whose undo log lives in `dir`, and whose undo removes files instead of using the user's Trash.
     private func session(_ dir: URL) -> MCPSession {
         let tools = MCPTools(history: MCPHistory(directory: dir.appendingPathComponent(".history")),
-                             trash: { try FileManager.default.removeItem(at: $0) })
+                             trash: { try FileManager.default.removeItem(at: $0); return nil })
         return MCPSession(tools: tools) { _ in }
     }
 
@@ -393,6 +393,18 @@ struct MCPTests {
         try "x".write(to: sub.appendingPathComponent("x.txt"), atomically: true, encoding: .utf8)
         #expect(try await call(session, "plan_move", ["paths": [sub.appendingPathComponent("x.txt").path], "destination": dir.path]).structured["can_apply"] as? Bool == true)
         #expect(try await call(session, "plan_move", ["paths": [sub.appendingPathComponent("x.txt").path], "destination": history.path]).text.contains("undo log"))
+    }
+
+    @Test func anUnreadableUndoLogIsSetAsideAndReported() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let history = dir.appendingPathComponent(".history")
+        try FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: history.appendingPathComponent("history.json"))
+        let session = try await initialized(dir)
+        let listed = try await call(session, "history", [:])
+        #expect((listed.structured["warning"] as? String)?.contains("set aside") == true, "\(listed.text)")
+        let undo = try await call(session, "undo", [:])
+        #expect(undo.isError && undo.text.contains("set aside"), "\(undo.text)")
     }
 
     @Test func trailingSlashesOnFilesAndInvisibleCharactersInNewNamesAreRefused() async throws {
