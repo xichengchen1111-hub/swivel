@@ -409,11 +409,11 @@ struct SecurityTests {
             try FileManager.default.createSymbolicLink(atPath: dir.appendingPathComponent("sub/link").path, withDestinationPath: target)
             return dir
         }
-        for good in ["real.txt", "../sub/real.txt", "missing.txt", "../sub"] {
+        for good in ["real.txt", "missing.txt", "."] {
             #expect(throws: Never.self) { try Archives.validateExtractedTree(try tree(good), allowMacMetadata: false) }
         }
         // The top, other top-level names (the user's files once published) and __MACOSX are outside the link's item.
-        for bad in ["/etc/passwd", "..", "../..", "../id_rsa", "../other/x", "../__MACOSX/x", "../../outside", "../../../../../Users"] {
+        for bad in ["/etc/passwd", "..", "../sub/real.txt", "../sub", "../..", "../id_rsa", "../other/x", "../__MACOSX/x", "../../outside", "../../../../../Users"] {
             #expect(throws: ToolError.self, "\(bad)") { try Archives.validateExtractedTree(try tree(bad), allowMacMetadata: false) }
         }
         // A chain: "up" is a link to the top, so "up/../x" climbs out on disk though it reads as staying inside.

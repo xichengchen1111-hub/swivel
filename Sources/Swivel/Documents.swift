@@ -482,7 +482,6 @@ enum Archives {
         }
         guard let top = real(root), var current = real(link.deletingLastPathComponent()),
               current.starts(with: top), current.count > top.count else { return false }
-        let item = current[top.count]
         guard let first = try? FileManager.default.destinationOfSymbolicLink(atPath: link.path) else { return false }
         var pending = Array(first.split(separator: "/", omittingEmptySubsequences: false).map(String.init))
         guard !first.hasPrefix("/") else { return false }
@@ -491,12 +490,12 @@ enum Archives {
             let part = pending.removeFirst()
             if part.isEmpty || part == "." { continue }
             if part == ".." {
-                guard current.count > top.count else { return false }
+                // Never back up to the top, not even to come back in: "../A/x" from inside "A" would read the user's
+                // own "A" once this one is published as "A 2".
+                guard current.count > top.count + 1 else { return false }
                 current.removeLast()
                 continue
             }
-            // Back at the top, only the link's own item may be entered again.
-            if current.count == top.count, part != item { return false }
             let next = current + [part]
             var info = stat()
             if lstat(NSString.path(withComponents: next), &info) == 0, info.st_mode & S_IFMT == S_IFLNK {
@@ -508,7 +507,7 @@ enum Archives {
                 current = next  // A folder, a file or nothing yet: none of them redirect.
             }
         }
-        return current.count > top.count
+        return true
     }
 
     private static func extractionBudgetError(_ root: URL) -> String? {
