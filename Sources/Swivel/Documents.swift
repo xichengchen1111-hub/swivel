@@ -469,9 +469,11 @@ enum Archives {
         }
     }
 
-    /// Follows `link` on disk one component at a time, through any further links, and says whether it never climbs
-    /// above `root` or points at an absolute path. Reading the target as text isn't enough: "up/../x" cancels "up"
-    /// even when "up" is itself a link to "..".
+    /// Follows `link` on disk one component at a time, through any further links, and says whether it stays inside
+    /// the top-level item it belongs to. Each top-level item is published on its own beside the archive, next to the
+    /// user's files (and may be renamed "A 2"), so a link that reaches the top or another item would then point at
+    /// the user's own files: "cute.png" -> "id_rsa". Top-level links and absolute targets are refused. Reading the
+    /// target as text isn't enough: "up/../x" cancels "up" even when "up" is itself a link to "..".
     static func linkStaysInside(_ link: URL, root: URL) -> Bool {
         func real(_ url: URL) -> [String]? {
             guard let path = realpath(url.path, nil) else { return nil }
@@ -479,7 +481,8 @@ enum Archives {
             return URL(fileURLWithPath: String(cString: path)).pathComponents
         }
         guard let top = real(root), var current = real(link.deletingLastPathComponent()),
-              current.starts(with: top) else { return false }
+              current.starts(with: top), current.count > top.count else { return false }
+        let item = current[top.count]
         guard let first = try? FileManager.default.destinationOfSymbolicLink(atPath: link.path) else { return false }
         var pending = Array(first.split(separator: "/", omittingEmptySubsequences: false).map(String.init))
         guard !first.hasPrefix("/") else { return false }
@@ -492,6 +495,8 @@ enum Archives {
                 current.removeLast()
                 continue
             }
+            // Back at the top, only the link's own item may be entered again.
+            if current.count == top.count, part != item { return false }
             let next = current + [part]
             var info = stat()
             if lstat(NSString.path(withComponents: next), &info) == 0, info.st_mode & S_IFMT == S_IFLNK {
@@ -503,7 +508,7 @@ enum Archives {
                 current = next  // A folder, a file or nothing yet: none of them redirect.
             }
         }
-        return true
+        return current.count > top.count
     }
 
     private static func extractionBudgetError(_ root: URL) -> String? {

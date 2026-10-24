@@ -409,10 +409,11 @@ struct SecurityTests {
             try FileManager.default.createSymbolicLink(atPath: dir.appendingPathComponent("sub/link").path, withDestinationPath: target)
             return dir
         }
-        for good in ["real.txt", "../sub/real.txt", ".."] {
+        for good in ["real.txt", "../sub/real.txt", "missing.txt", "../sub"] {
             #expect(throws: Never.self) { try Archives.validateExtractedTree(try tree(good), allowMacMetadata: false) }
         }
-        for bad in ["/etc/passwd", "../..", "../../outside", "../../../../../Users"] {
+        // The top, other top-level names (the user's files once published) and __MACOSX are outside the link's item.
+        for bad in ["/etc/passwd", "..", "../..", "../id_rsa", "../other/x", "../__MACOSX/x", "../../outside", "../../../../../Users"] {
             #expect(throws: ToolError.self, "\(bad)") { try Archives.validateExtractedTree(try tree(bad), allowMacMetadata: false) }
         }
         // A chain: "up" is a link to the top, so "up/../x" climbs out on disk though it reads as staying inside.
@@ -421,6 +422,11 @@ struct SecurityTests {
         try FileManager.default.createSymbolicLink(atPath: chain.appendingPathComponent("a/b/up").path, withDestinationPath: "../..")
         try FileManager.default.createSymbolicLink(atPath: chain.appendingPathComponent("esc").path, withDestinationPath: "a/b/up/../x")
         #expect(throws: ToolError.self) { try Archives.validateExtractedTree(chain, allowMacMetadata: false) }
+        // A top-level link would sit beside the user's own files once published.
+        let topLink = root.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: topLink.appendingPathComponent("A"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: topLink.appendingPathComponent("cute.png").path, withDestinationPath: "A")
+        #expect(throws: ToolError.self) { try Archives.validateExtractedTree(topLink, allowMacMetadata: false) }
         // Links that loop forever are refused too.
         let loop = root.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: loop, withIntermediateDirectories: true)
