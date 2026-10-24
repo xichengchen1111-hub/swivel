@@ -527,12 +527,15 @@ enum DoctorUninstall {
         var identity: FileIdentity
         var refusal: String?
         var leftovers: [Leftover]
+        /// Another copy of the app is installed, or the identifier isn't reverse-DNS: its files may not be this copy's
+        /// alone, so nothing is selected for you.
+        var sharedIdentifier = false
     }
 
     /// Why an app can't be uninstalled here, or nil.
     static func refusal(bundleID: String, url: URL) -> String? {
         let path = url.path
-        if bundleID.hasPrefix("com.apple.") || path.hasPrefix("/System/") { return L("Apps that come with macOS can’t be removed.") }
+        if bundleID.lowercased().hasPrefix("com.apple.") || path.hasPrefix("/System/") { return L("Apps that come with macOS can’t be removed.") }
         if let own = Bundle.main.bundleIdentifier, bundleID == own || bundleID.hasPrefix(own + ".") { return L("Swivel can’t remove itself.") }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         guard path.hasPrefix("/Applications/") || path.hasPrefix(home + "/Applications/") else {
@@ -543,7 +546,8 @@ enum DoctorUninstall {
 
     /// Reads the app and finds its files in ~/Library: names that are its bundle identifier (or start with it), and
     /// folders named exactly like the app (shown, never preselected). Containers are protected and never read.
-    static func inspect(_ app: URL, home: URL) -> App? {
+    static func inspect(_ app: URL, home: URL,
+                        installedCopies: (String) -> [URL] = { NSWorkspace.shared.urlsForApplications(withBundleIdentifier: $0) }) -> App? {
         guard let bundle = Bundle(url: app), let id = bundle.bundleIdentifier, DoctorCommand.isPlain(id),
               let identity = try? FileIdentity.read(app) else { return nil }
         let name = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
@@ -581,9 +585,13 @@ enum DoctorUninstall {
                                           byName: byName || longer))
             }
         }
+        let parts = lowerID.split(separator: ".", omittingEmptySubsequences: false)
+        let own = app.resolvingSymlinksInPath().standardizedFileURL.path
+        let otherCopy = installedCopies(id).contains { $0.resolvingSymlinksInPath().standardizedFileURL.path != own }
         return App(url: app, bundleID: id, name: name, version: version,
                    bytes: DoctorStorage.size(of: app, home: realHome).bytes, identity: identity,
-                   refusal: refusal(bundleID: id, url: app), leftovers: leftovers.sorted { $0.bytes > $1.bytes })
+                   refusal: refusal(bundleID: id, url: app), leftovers: leftovers.sorted { $0.bytes > $1.bytes },
+                   sharedIdentifier: otherCopy || parts.count < 2 || parts.contains { $0.isEmpty })
     }
 
     /// True when an installed app has this bundle identifier (or one of its dotted prefixes longer than the app's).
@@ -624,10 +632,13 @@ enum DoctorUninstall {
                                      bundleIDs: [app.bundleID]))
         for (index, item) in app.leftovers.enumerated() {
             let target = DoctorTrashTarget(path: item.path, mode: item.isFolder ? .folder : .item, identity: item.identity, origin: .leftover)
-            let why = item.byName ? L("Named like the app, not by its identifier: check it before selecting.") : L("Named after the app’s identifier.")
+            let unsure = item.byName || app.sharedIdentifier
+            let why = item.byName ? L("Named like the app, not by its identifier: check it before selecting.")
+                : app.sharedIdentifier ? L("Another copy of this app, or another app with the same identifier, may use this too: check it before selecting.")
+                : L("Named after the app’s identifier.")
             result.rows.append(DoctorRow(id: "left.\(index)", title: L(item.what) + " · " + DoctorText.visible(item.url.lastPathComponent),
                                          value: DoctorFormat.bytes(item.bytes), detail: DoctorFormat.path(item.url) + "\n" + why,
-                                         severity: item.byName ? .review : .info, bytes: item.bytes, location: item.url,
+                                         severity: unsure ? .review : .info, bytes: item.bytes, location: item.url,
                                          trash: DoctorTrash.isAllowed(target) ? target : nil, level: 1))
         }
         result.badge = DoctorFormat.bytes(app.bytes + leftoverBytes)
@@ -638,6 +649,9 @@ enum DoctorUninstall {
             result.headline = L("%@ uses %@, and %d related items in your Library use %@.", DoctorText.visible(app.name),
                                 DoctorFormat.bytes(app.bytes), app.leftovers.count, DoctorFormat.bytes(leftoverBytes))
             result.notes.append(L("Uninstall moves the app and the selected items to the Trash; items found by identifier are selected for you. Nothing is deleted until you empty the Trash, and Undo Last Move puts everything back."))
+            if app.sharedIdentifier {
+                result.notes.append(L("Another copy of this app is installed, or its identifier is unusual, so nothing is selected for you."))
+            }
         }
         result.notes.append(L("The app’s sandbox container, if it has one, is protected by macOS and isn’t read. Remove it in System Settings → General → Storage → Applications."))
         result.report.append(L("App to uninstall: %@ with %d related items using %@.", DoctorFormat.bytes(app.bytes), app.leftovers.count,

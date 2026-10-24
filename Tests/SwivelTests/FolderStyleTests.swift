@@ -151,7 +151,9 @@ struct FolderStyleTests {
         defer { try? FileManager.default.removeItem(at: dir) }
         let titles = Catalog.defaultItems(for: [dir], mode: .tools).map(\.title)
         #expect(titles.first == "Change Style")
-        #expect(titles.contains("ZIP") || titles.count > 1)
+        #expect(titles.contains("ZIP") && titles.contains("TAR.GZ"))
+        // Everything for folders is in one menu: the convert menu doesn't repeat compressing.
+        #expect(Catalog.defaultItems(for: [dir], mode: .convert).isEmpty)
         let file = dir.appendingPathComponent("x.unknownext")
         try Data().write(to: file)
         #expect(!Catalog.defaultItems(for: [file], mode: .tools).map(\.title).contains("Change Style"))

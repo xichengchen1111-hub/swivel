@@ -36,6 +36,24 @@ struct ClipboardTests {
         }
     }
 
+    /// A print that is a link (say, extracted from an archive) or not really an image puts only its reference on the
+    /// clipboard, never the bytes read through the link.
+    @Test func linkedOrFakePrintsCopyNoBytes() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("swivel-clipboard-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let secret = dir.appendingPathComponent("secret.txt")
+        try Data("PRIVATE KEY".utf8).write(to: secret)
+        let link = dir.appendingPathComponent("cute.png")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: secret)
+        let fake = dir.appendingPathComponent("fake.png")
+        try Data("PRIVATE KEY".utf8).write(to: fake)
+        for url in [link, fake] {
+            let item = Clothesline.pasteboardItem(for: url)
+            #expect(item.types == [.fileURL], "\(url.lastPathComponent)")
+        }
+    }
+
     /// Another app can put anything on the clipboard: an image too big to decode on the main thread isn't hung,
     /// read from its header before decoding; secrets copied from a QR code carry the concealed marker.
     @Test func hugeCopiedImagesAreLeftAloneAndSecretsAreConcealed() throws {

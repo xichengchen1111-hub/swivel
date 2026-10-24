@@ -77,6 +77,7 @@ enum Strings {
         "This file has Mac metadata that TAR cannot preserve here. Use ZIP instead.": ["此文件含有当前 TAR 流程无法保留的 Mac 元数据，请使用 ZIP。", "此檔案含有目前 TAR 流程無法保留的 Mac 中繼資料，請使用 ZIP。", "このファイルの Mac メタデータはこの TAR 処理で保持できません。ZIP を使用してください。"],
         "Archive processing took too long and was stopped.": ["压缩包处理耗时过长，已停止。", "壓縮檔處理耗時過長，已停止。", "アーカイブ処理に時間がかかりすぎたため停止しました。"],
         "This archive contains Mac metadata that this extractor cannot restore. Use Archive Utility to preserve it.": ["此压缩包含有当前解包功能无法恢复的 Mac 元数据，请使用系统“归档实用工具”以保留这些数据。", "此壓縮檔含有目前解壓功能無法還原的 Mac 中繼資料，請使用系統「封存工具程式」以保留這些資料。", "このアーカイブの Mac メタデータはこの展開機能で復元できません。アーカイブユーティリティを使用してください。"],
+        "This archive contains a link to a place outside it.": ["此压缩包包含指向其外部位置的链接。", "此壓縮檔包含指向其外部位置的連結。", "このアーカイブには、アーカイブの外を指すリンクが含まれています。"],
         "This archive contains an unsupported special file.": ["此压缩包包含不支持的特殊文件。", "此壓縮檔包含不支援的特殊檔案。", "このアーカイブには未対応の特殊ファイルが含まれています。"],
         "This image contains animation or multiple images. This operation cannot preserve them.": ["此文件包含动画或多张图片，当前操作无法完整保留，已停止处理。", "此檔案包含動畫或多張圖片，目前操作無法完整保留，已停止處理。", "このファイルにはアニメーションまたは複数の画像が含まれ、この操作では保持できません。"],
         "This conversion could not preserve the image dimensions or bit depth.": ["此转换无法保留图片尺寸或位深，未保存结果。", "此轉換無法保留圖片尺寸或位元深度，未儲存結果。", "画像の寸法またはビット深度を保持できないため、結果を保存しませんでした。"],

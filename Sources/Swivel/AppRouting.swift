@@ -141,7 +141,10 @@ enum AssistantDraft {
             (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true ? url : url.deletingLastPathComponent()
         })
         components.queryItems = [URLQueryItem(name: delivery == .codexDraft ? "prompt" : "q", value: text)]
-        if directories.count == 1, let directory = directories.first {
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        let broad = Set(["/", home] + ["Desktop", "Documents", "Downloads"].map { home + "/" + $0 })
+        if directories.count == 1, let directory = directories.first, !broad.contains(directory.standardizedFileURL.path),
+           !directory.standardizedFileURL.path.hasPrefix("/Volumes/") || directory.standardizedFileURL.pathComponents.count > 3 {
             components.queryItems?.append(URLQueryItem(name: delivery == .codexDraft ? "path" : "folder", value: directory.path))
         }
         // URLComponents leaves "+" alone, but both apps decode queries as forms, where "+" means a space: a folder

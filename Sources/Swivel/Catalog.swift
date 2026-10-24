@@ -205,7 +205,9 @@ enum Catalog {
                     }
                     return try await each("Extract", selected, Archives.extract).run(selected)
                 }]
-            case .folder, .other:
+            case .folder:
+                return []  // Change Style and compressing are in the Tools menu.
+            case .other:
                 return Archives.compressItems
             }
 

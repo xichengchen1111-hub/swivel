@@ -675,6 +675,8 @@ extension Strings {
         "Only apps in the Applications folder can be removed here.": ["这里只能移除“应用程序”文件夹中的应用。", "這裡只能移除「應用程式」檔案夾中的 App。", "ここで削除できるのは「アプリケーション」フォルダ内のアプリだけです。"],
         "That isn’t an app Mac Doctor can read.": ["Mac 医生无法读取这个应用。", "Mac 醫生無法讀取這個 App。", "Mac ドクターはこのアプリを読み取れません。"],
         "Named like the app, not by its identifier: check it before selecting.": ["名称与应用相同，但不是按应用标识符匹配的：选择前请确认。", "名稱與 App 相同，但不是依 App 識別碼比對的：選取前請確認。", "アプリと同じ名前ですが、識別子による一致ではありません。選ぶ前に確認してください。"],
+        "Another copy of this app, or another app with the same identifier, may use this too: check it before selecting.": ["此应用的另一个副本，或使用相同标识符的其他应用，可能也在用它：选中前请先确认。", "此 App 的另一個副本，或使用相同識別碼的其他 App，可能也在使用它：選取前請先確認。", "このアプリの別のコピー、または同じ識別子を持つ別のアプリも使っている可能性があります。選ぶ前に確認してください。"],
+        "Another copy of this app is installed, or its identifier is unusual, so nothing is selected for you.": ["已安装此应用的另一个副本，或其标识符不常见，因此不会替你预先选中任何项目。", "已安裝此 App 的另一個副本，或其識別碼不常見，因此不會替你預先選取任何項目。", "このアプリの別のコピーがインストールされているか、識別子が通常と異なるため、何も自動で選択していません。"],
         "Named after the app’s identifier.": ["以应用标识符命名。", "以 App 識別碼命名。", "アプリの識別子と同じ名前です。"],
         "%@ uses %@, and %d related items in your Library use %@.": ["%@ 占用 %@，资源库中有 %d 个相关项目，占用 %@。", "%@ 佔用 %@，資料庫中有 %d 個相關項目，佔用 %@。", "%@ は %@ を使用し、ライブラリ内の関連項目 %d 個が %@ を使用しています。"],
         "Uninstall moves the app and the selected items to the Trash; items found by identifier are selected for you. Nothing is deleted until you empty the Trash, and Undo Last Move puts everything back.": ["“卸载”会把应用和所选项目移到废纸篓；按标识符找到的项目已为你选好。在你清倒废纸篓之前不会删除任何东西，“撤销上次移动”可以全部放回。", "「解除安裝」會把 App 和所選項目丟到垃圾桶；依識別碼找到的項目已為你選好。在你清空垃圾桶之前不會刪除任何東西，「還原上次移動」可以全部放回。", "「アンインストール」はアプリと選んだ項目をゴミ箱に入れます。識別子で見つかった項目はあらかじめ選ばれています。ゴミ箱を空にするまで何も削除されず、「最後の移動を取り消す」ですべて元に戻せます。"],

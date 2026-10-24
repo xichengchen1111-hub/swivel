@@ -383,7 +383,8 @@ final class DoctorCenter {
                         }
                     case .similar:
                         // Not the same content, but one file of the group must still be there.
-                        guard let keeper, FileManager.default.fileExists(atPath: keeper.path) else {
+                        var kept = stat()
+                        guard let keeper, lstat(keeper.path, &kept) == 0, kept.st_mode & S_IFMT == S_IFREG else {
                             throw ToolError(L("Keep at least one copy of each file: deselect one copy of “%@”.", DoctorTrash.displayPath(URL(fileURLWithPath: target.path))))
                         }
                     case .standard, .leftover: break

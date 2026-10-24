@@ -45,6 +45,8 @@ final class MCPSession {
         self.send = send
     }
 
+    static let maxRunning = 16
+
     var busy: Bool { !running.isEmpty }
 
     /// One line from the host. Protocol requests are answered in order; tool calls run concurrently (a video export
@@ -70,6 +72,10 @@ final class MCPSession {
         switch prepare(message) {
         case .reply(let response): send(response)
         case .call(let name, let arguments, let modern):
+            // A host never needs many at once; without a cap a client could start hundreds of scans.
+            guard running.count < Self.maxRunning else {
+                return send(Self.failure(message["id"], -32000, "Too many tool calls in progress (at most \(Self.maxRunning)); wait for one to finish"))
+            }
             running[key] = Task { [weak self] in
                 guard let self else { return }
                 let response = Self.success(message["id"], Self.complete(await self.call(name, arguments), modern: modern))

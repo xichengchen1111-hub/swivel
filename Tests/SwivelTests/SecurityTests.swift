@@ -388,6 +388,52 @@ struct SecurityTests {
         }
     }
 
+    @Test func draftsNeverNameTheHomeFolderOrItsTopFoldersAsTheWorkspace() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        for folder in [home, home.appendingPathComponent("Desktop"), home.appendingPathComponent("Downloads")] {
+            let link = try AssistantDraft.url(for: .codexDraft, files: [folder.appendingPathComponent("a.txt")])
+            let names = URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems?.map(\.name) ?? []
+            #expect(!names.contains("path"), "\(folder.path)")
+        }
+        let deeper = try AssistantDraft.url(for: .codexDraft, files: [home.appendingPathComponent("Desktop/Project/a.txt")])
+        #expect(URLComponents(url: deeper, resolvingAgainstBaseURL: false)?.queryItems?.contains { $0.name == "path" } == true)
+    }
+
+    @Test func extractedLinksMustStayInsideTheArchive() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("swivel-links-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        func tree(_ target: String) throws -> URL {
+            let dir = root.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: dir.appendingPathComponent("sub"), withIntermediateDirectories: true)
+            try Data("x".utf8).write(to: dir.appendingPathComponent("sub/real.txt"))
+            try FileManager.default.createSymbolicLink(atPath: dir.appendingPathComponent("sub/link").path, withDestinationPath: target)
+            return dir
+        }
+        for good in ["real.txt", "../sub/real.txt", ".."] {
+            #expect(throws: Never.self) { try Archives.validateExtractedTree(try tree(good), allowMacMetadata: false) }
+        }
+        for bad in ["/etc/passwd", "../..", "../../outside", "../../../../../Users"] {
+            #expect(throws: ToolError.self, "\(bad)") { try Archives.validateExtractedTree(try tree(bad), allowMacMetadata: false) }
+        }
+    }
+
+    @Test func tarKeepsAFileNamedLikeAnArchiveInclusion() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("swivel-attar-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let odd = dir.appendingPathComponent("@notes.txt")
+        try Data("mine".utf8).write(to: odd)
+        let out = try await Archives.tar([odd])
+        let tar = Process(), pipe = Pipe()
+        tar.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        tar.arguments = ["-tzf", out.path]
+        tar.standardOutput = pipe
+        try tar.run()
+        let listing = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        tar.waitUntilExit()
+        #expect(tar.terminationStatus == 0 && listing.contains("@notes.txt"))
+    }
+
     @Test func archiveKindsCoverRarAnd7zButNotDiskImagesOrWebArchives() {
         func kind(_ name: String) -> FileKind { FileKind.of(URL(fileURLWithPath: "/nonexistent/" + name)) }
         for name in ["a.rar", "a.7z", "a.part2.rar", "a.r00", "a.tar.xz", "a.iso", "a.zip", "a.tgz"] { #expect(kind(name) == .archive, "\(name)") }

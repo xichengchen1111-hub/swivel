@@ -322,7 +322,8 @@ enum Archives {
         try requirePortableMetadata(urls)
         return try await Paths.produce(archiveURL(for: urls, ext: "tar.gz")) { out in
             try await Shell.run("/usr/bin/tar", ["--no-mac-metadata", "-czf", out.path, "-C", urls[0].deletingLastPathComponent().path, "--"]
-                                + urls.map(\.lastPathComponent))
+                                // "./": bsdtar reads a name starting with "@" as another archive to copy, even after "--".
+                                + urls.map { $0.lastPathComponent.hasPrefix("@") ? "./" + $0.lastPathComponent : $0.lastPathComponent })
             try await verify(out)
         }
     }
@@ -457,7 +458,16 @@ enum Archives {
                         throw ToolError(L("This archive contains Mac metadata that this extractor cannot restore. Use Archive Utility to preserve it."))
                     }
                 }
-            case S_IFLNK: break
+            case S_IFLNK:
+                // A link that leaves the extracted files (an absolute target, or ".." past the top) could later be read
+                // through, for example copying "cute.png" pointing at a private key.
+                let top = root.resolvingSymlinksInPath().standardized.path
+                guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: item.path), !target.hasPrefix("/"),
+                      case let resolved = item.deletingLastPathComponent().resolvingSymlinksInPath()
+                        .appendingPathComponent(target).standardized.path,
+                      resolved == top || resolved.hasPrefix(top + "/") else {
+                    throw ToolError(L("This archive contains a link to a place outside it."))
+                }
             default: throw ToolError(L("This archive contains an unsupported special file."))
             }
         }

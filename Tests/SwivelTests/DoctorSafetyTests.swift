@@ -939,6 +939,20 @@ extension DoctorSafetyTests {
             #expect(info.leftovers.first { $0.url.lastPathComponent == "Tidy Notes" }?.byName == true)
             let result = DoctorUninstall.result(info, home: home)
             #expect(result.rows.filter { $0.trash?.origin == .leftover }.count == 3)
+            #expect(!info.sharedIdentifier)
+            // Another installed copy with the same identifier: its files are shown, never selected for you.
+            let other = home.appendingPathComponent("Applications/Tidy Notes 2.app")
+            let shared = try #require(DoctorUninstall.inspect(app, home: home, installedCopies: { _ in [app, other] }))
+            #expect(shared.sharedIdentifier)
+            #expect(DoctorUninstall.result(shared, home: home).rows.filter { $0.trash != nil }.allSatisfy { $0.severity == .review })
+            // A dotless identifier such as "Google" is never trusted to name only this app's files.
+            let odd = home.appendingPathComponent("Applications/Odd.app")
+            try file(odd.appendingPathComponent("Contents/Info.plist"), try PropertyListSerialization.data(fromPropertyList: [
+                "CFBundleIdentifier": "Google", "CFBundleName": "Odd", "CFBundlePackageType": "APPL"], format: .xml, options: 0))
+            let oddInfo = try #require(DoctorUninstall.inspect(odd, home: home, installedCopies: { _ in [] }))
+            #expect(oddInfo.sharedIdentifier && oddInfo.leftovers.contains { $0.url.lastPathComponent == "Google" })
+            #expect(DoctorUninstall.result(oddInfo, home: home).rows.filter { $0.trash != nil }.allSatisfy { $0.severity == .review })
+            #expect(DoctorUninstall.refusal(bundleID: "COM.APPLE.Safari", url: URL(fileURLWithPath: "/Applications/Safari.app")) != nil)
             #expect(DoctorUninstall.refusal(bundleID: "com.apple.Safari", url: URL(fileURLWithPath: "/Applications/Safari.app")) != nil)
             #expect(DoctorUninstall.refusal(bundleID: "com.example.x", url: URL(fileURLWithPath: "/Users/Shared/X.app")) != nil)
             #expect(DoctorUninstall.refusal(bundleID: "com.example.x", url: URL(fileURLWithPath: "/Applications/X.app")) == nil)

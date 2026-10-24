@@ -382,7 +382,7 @@ struct MCPTests {
         if FileManager.default.fileExists(atPath: shouted) { above.append(shouted) }
         for path in above + [link.path] {
             for (tool, arguments) in [("plan_rename", ["paths": [path], "prefix": "x "]), ("plan_move", ["paths": [path], "destination": target.path]),
-                                      ("plan_action", ["paths": [path], "action": "convert.ZIP"])] as [(String, [String: Any])] {
+                                      ("plan_action", ["paths": [path], "action": "tools.ZIP"])] as [(String, [String: Any])] {
                 let result = try await call(session, tool, arguments)
                 #expect(result.isError && result.text.contains("undo log"), "\(tool) \(path): \(result.text)")
             }
@@ -405,7 +405,7 @@ struct MCPTests {
         // A folder may still be written with one.
         let sub = dir.appendingPathComponent("sub")
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: false)
-        #expect(!(try await call(session, "plan_action", ["action": "convert.ZIP", "paths": [sub.path + "/"]]).isError))
+        #expect(!(try await call(session, "plan_action", ["action": "tools.ZIP", "paths": [sub.path + "/"]]).isError))
 
         for hidden in ["\u{202E}gnp", "\u{2066}x", "a\u{200B}b", "\u{FEFF}", "a\u{202A}"] {
             let plan = try await call(session, "plan_rename", ["paths": [real.path], "base_name": "photo" + hidden])
