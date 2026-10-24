@@ -390,28 +390,6 @@ enum Images {
         }
         return [try save(image, as: Paths.preferred(for: url, ext: outExt, suffix: " compressed"), type: type, quality: 0.6)]
     }
-
-    private static func stripMetadata(_ url: URL) throws -> [URL] {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let type = CGImageSourceGetType(source) else {
-            throw ToolError("Couldn't read \(url.lastPathComponent)")
-        }
-        let data = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(data, type, 1, nil) else {
-            throw ToolError("Can't write this format")
-        }
-        let removed: [CFString: Any] = [
-            kCGImagePropertyExifDictionary: kCFNull!,
-            kCGImagePropertyGPSDictionary: kCFNull!,
-            kCGImagePropertyIPTCDictionary: kCFNull!,
-            kCGImagePropertyTIFFDictionary: kCFNull!,
-            kCGImagePropertyMakerAppleDictionary: kCFNull!,
-            kCGImageDestinationLossyCompressionQuality: 0.95,
-        ]
-        CGImageDestinationAddImageFromSource(dest, source, 0, removed as CFDictionary)
-        guard CGImageDestinationFinalize(dest) else { throw ToolError("Couldn't save") }
-        return [try Paths.create(data as Data, at: Paths.preferred(for: url, ext: url.pathExtension, suffix: " clean"))]
-    }
 }
 
 extension CGImage {
