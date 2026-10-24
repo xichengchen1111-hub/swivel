@@ -246,8 +246,11 @@ enum Images {
 
     /// The pixel count the file's header claims, read without decoding; nil when it isn't a readable image.
     static func claimedPixels(_ url: URL) -> Double? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+        CGImageSourceCreateWithURL(url as CFURL, nil).flatMap(claimedPixels)
+    }
+
+    static func claimedPixels(_ source: CGImageSource) -> Double? {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let width = props[kCGImagePropertyPixelWidth] as? Int, let height = props[kCGImagePropertyPixelHeight] as? Int
         else { return nil }
         return Double(width) * Double(height)

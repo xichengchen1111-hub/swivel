@@ -406,6 +406,14 @@ struct MCPTests {
         let session = try await initialized(dir)
         let listed = try await call(session, "history", [:])
         #expect(listed.isError && listed.text.contains("Couldn't read"), "\(listed.text)")
+        // An apply that couldn't be logged for undo changes nothing.
+        let image = dir.appendingPathComponent("p.png")
+        try png(image)
+        let plan = try await call(session, "plan_action", ["action": "convert.JPG", "paths": [image.path]])
+        let id = try #require(plan.structured["plan_id"] as? String)
+        let applied = try await call(session, "apply_plan", ["plan_id": id])
+        #expect(applied.isError && applied.text.contains("Nothing was changed"), "\(applied.text)")
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("p.jpg").path))
     }
 
     @Test func anUnreadableUndoLogIsSetAsideAndReported() async throws {

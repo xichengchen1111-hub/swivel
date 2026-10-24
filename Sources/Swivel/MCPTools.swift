@@ -329,6 +329,8 @@ final class MCPTools {
 
     private func apply(_ args: MCPArguments) async throws -> [String: Any] {
         let id = try args.string("plan_id", required: true)!
+        // Every apply is logged for undo: with a log that can't be read, change nothing (the plan stays usable).
+        do { _ = try history.entries() } catch { throw ToolError("Nothing was changed. \(error.localizedDescription)") }
         guard let plan = plans.removeValue(forKey: id) else {
             throw ToolError("No plan “\(MCPPaths.shown(id))”. A plan runs once and lasts an hour; make a new one with a plan_* tool.")
         }
@@ -1095,7 +1097,10 @@ final class MCPHistory: @unchecked Sendable {
     private func read() throws -> [Entry] {
         guard FileManager.default.fileExists(atPath: file.path) else { return [] }
         // There but unreadable: refuse, rather than start an empty log that the next change would write over it.
-        guard let data = try? Data(contentsOf: file) else { throw ToolError("Couldn't read Swivel's undo log at \(file.path)") }
+        let data: Data
+        do { data = try Data(contentsOf: file) } catch {
+            throw ToolError("Couldn't read Swivel's undo log at \(file.path) (\(error.localizedDescription)). Fix its permissions, or move it aside to start a new log, then retry.")
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         if let entries = try? decoder.decode([Entry].self, from: data) { return entries }

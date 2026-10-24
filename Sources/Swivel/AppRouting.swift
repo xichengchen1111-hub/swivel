@@ -137,8 +137,12 @@ enum AssistantDraft {
             let inside = Array(parts.dropFirst(homeParts.count))
             // Cloud drives count as a home of their own: iCloud Drive's root, or a provider's folder, is too broad.
             if inside.starts(with: ["Library", "Mobile Documents", "com~apple~CloudDocs"]) { return inside.count >= 4 }
-            if inside.starts(with: ["Library", "CloudStorage"]) { return inside.count >= 4 }
+            // Google Drive keeps its roots one level down ("GoogleDrive-…/My Drive", "…/Shared drives").
+            if inside.starts(with: ["Library", "CloudStorage"]) {
+                return inside.count >= (inside.count > 2 && inside[2].hasPrefix("GoogleDrive-") ? 5 : 4)
+            }
             guard let top = inside.first, top != "Library" else { return false }
+            if top.hasPrefix(".") { return inside.count >= 2 && !["ssh", "aws", "gnupg", "Trash"].contains(String(top.dropFirst())) }
             let shared = ["Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music", "Public", "Applications", "Sites"]
             return inside.count >= (shared.contains(top) ? 2 : 1)
         }

@@ -249,11 +249,15 @@ final class Clothesline: NSObject {
     }
 
     /// A small picture of an image or the first frame of a movie.
-    static func thumbnail(_ url: URL, maxPixels: Int, sourceLimit: Double = Images.maxDecodePixels) -> CGImage? {
+    /// Made on the main thread, so the picture is checked and scaled from one open source of at most `sourceLimit`
+    /// pixels (a 48 MP photo fits): a tiny file claiming a gigantic picture would take seconds or minutes to scale.
+    static func thumbnail(_ url: URL, maxPixels: Int, sourceLimit: Double = 60_000_000) -> CGImage? {
         guard ["mov", "mp4"].contains(url.pathExtension.lowercased()) else {
-            // Made on the main thread: a tiny file claiming a gigantic picture would take seconds or minutes to scale.
-            guard Images.claimedPixels(url).map({ $0 <= sourceLimit }) == true else { return nil }
-            return try? Images.load(url, maxPixels: maxPixels)
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  Images.claimedPixels(source).map({ $0 <= sourceLimit }) == true else { return nil }
+            return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true, kCGImageSourceThumbnailMaxPixelSize: maxPixels] as CFDictionary)
         }
         let generator = AVAssetImageGenerator(asset: Video.openAsset(url))
         generator.appliesPreferredTrackTransform = true
