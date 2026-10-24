@@ -173,7 +173,9 @@ final class MCPTools {
         let urls = try paths(args)
         let id = try args.string("action", required: true)!
         let actions = MCPCatalog.actions(for: urls)
-        guard let action = actions.first(where: { $0.id == id }) else {
+        // An item that moved from Convert to Tools (ZIP for folders) keeps its old id.
+        let moved = id.hasPrefix("convert.") ? "tools." + id.dropFirst("convert.".count) : id
+        guard let action = actions.first(where: { $0.id == id }) ?? actions.first(where: { $0.id == moved }) else {
             throw ToolError("“\(MCPPaths.shown(id))” isn't available for these files. Available: \(actions.map(\.id).joined(separator: ", ")). Call list_actions for details.")
         }
         let prediction = try MCPCatalog.predict(action.output, urls)
@@ -655,7 +657,7 @@ enum MCPCatalog {
         var result: [Action] = [], titles = Set<String>()
         for mode in [WheelMode.convert, .tools] {
             for item in Catalog.defaultItems(for: urls, mode: mode) {
-                // The same item in both menus (GIF for video, ZIP for folders) is listed once, under convert.
+                // The same item in both menus (GIF for video) is listed once, under convert.
                 guard let output = output(kind: kind, mode: mode, title: item.title), titles.insert(item.title).inserted else { continue }
                 let run: @MainActor ([URL]) async throws -> [URL]
                 if item.title.hasPrefix("preset."), let preset = Prefs.imagePresets.first(where: { $0.actionID == item.title }) {

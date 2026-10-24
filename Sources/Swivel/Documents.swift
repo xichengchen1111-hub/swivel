@@ -461,16 +461,49 @@ enum Archives {
             case S_IFLNK:
                 // A link that leaves the extracted files (an absolute target, or ".." past the top) could later be read
                 // through, for example copying "cute.png" pointing at a private key.
-                let top = root.resolvingSymlinksInPath().standardized.path
-                guard let target = try? FileManager.default.destinationOfSymbolicLink(atPath: item.path), !target.hasPrefix("/"),
-                      case let resolved = item.deletingLastPathComponent().resolvingSymlinksInPath()
-                        .appendingPathComponent(target).standardized.path,
-                      resolved == top || resolved.hasPrefix(top + "/") else {
+                guard linkStaysInside(item, root: root) else {
                     throw ToolError(L("This archive contains a link to a place outside it."))
                 }
             default: throw ToolError(L("This archive contains an unsupported special file."))
             }
         }
+    }
+
+    /// Follows `link` on disk one component at a time, through any further links, and says whether it never climbs
+    /// above `root` or points at an absolute path. Reading the target as text isn't enough: "up/../x" cancels "up"
+    /// even when "up" is itself a link to "..".
+    static func linkStaysInside(_ link: URL, root: URL) -> Bool {
+        func real(_ url: URL) -> [String]? {
+            guard let path = realpath(url.path, nil) else { return nil }
+            defer { free(path) }
+            return URL(fileURLWithPath: String(cString: path)).pathComponents
+        }
+        guard let top = real(root), var current = real(link.deletingLastPathComponent()),
+              current.starts(with: top) else { return false }
+        guard let first = try? FileManager.default.destinationOfSymbolicLink(atPath: link.path) else { return false }
+        var pending = Array(first.split(separator: "/", omittingEmptySubsequences: false).map(String.init))
+        guard !first.hasPrefix("/") else { return false }
+        var hops = 0
+        while !pending.isEmpty {
+            let part = pending.removeFirst()
+            if part.isEmpty || part == "." { continue }
+            if part == ".." {
+                guard current.count > top.count else { return false }
+                current.removeLast()
+                continue
+            }
+            let next = current + [part]
+            var info = stat()
+            if lstat(NSString.path(withComponents: next), &info) == 0, info.st_mode & S_IFMT == S_IFLNK {
+                hops += 1
+                guard hops <= 40, let target = try? FileManager.default.destinationOfSymbolicLink(atPath: NSString.path(withComponents: next)),
+                      !target.hasPrefix("/") else { return false }
+                pending = target.split(separator: "/", omittingEmptySubsequences: false).map(String.init) + pending
+            } else {
+                current = next  // A folder, a file or nothing yet: none of them redirect.
+            }
+        }
+        return true
     }
 
     private static func extractionBudgetError(_ root: URL) -> String? {

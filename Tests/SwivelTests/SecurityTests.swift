@@ -415,6 +415,18 @@ struct SecurityTests {
         for bad in ["/etc/passwd", "../..", "../../outside", "../../../../../Users"] {
             #expect(throws: ToolError.self, "\(bad)") { try Archives.validateExtractedTree(try tree(bad), allowMacMetadata: false) }
         }
+        // A chain: "up" is a link to the top, so "up/../x" climbs out on disk though it reads as staying inside.
+        let chain = root.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: chain.appendingPathComponent("a/b"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: chain.appendingPathComponent("a/b/up").path, withDestinationPath: "../..")
+        try FileManager.default.createSymbolicLink(atPath: chain.appendingPathComponent("esc").path, withDestinationPath: "a/b/up/../x")
+        #expect(throws: ToolError.self) { try Archives.validateExtractedTree(chain, allowMacMetadata: false) }
+        // Links that loop forever are refused too.
+        let loop = root.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: loop, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: loop.appendingPathComponent("p").path, withDestinationPath: "q")
+        try FileManager.default.createSymbolicLink(atPath: loop.appendingPathComponent("q").path, withDestinationPath: "p")
+        #expect(throws: ToolError.self) { try Archives.validateExtractedTree(loop, allowMacMetadata: false) }
     }
 
     @Test func tarKeepsAFileNamedLikeAnArchiveInclusion() async throws {

@@ -424,11 +424,14 @@ final class Clothesline: NSObject {
     nonisolated static func pasteboardItem(for url: URL) -> NSPasteboardItem {
         let item = NSPasteboardItem()
         item.setString(url.absoluteString, forType: .fileURL)
-        // Only the print's own regular file, never through a link, and not unbounded.
+        // Only the print's own regular file, never through a link, and not unbounded: checked and read on one descriptor.
+        guard let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image) else { return item }
+        let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard fd >= 0 else { return item }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
         var info = stat()
-        guard let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image),
-              lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_size <= 256_000_000,
-              let data = try? Data(contentsOf: url, options: .mappedIfSafe),
+        guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_size <= 256_000_000,
+              let data = try? handle.readToEnd(),
               CGImageSourceCreateWithData(data as CFData, nil).map({ CGImageSourceGetCount($0) > 0 }) == true else { return item }
         // The file's own bytes under its own type (a PNG screenshot is pasted as that PNG, not re-encoded).
         item.setData(data, forType: NSPasteboard.PasteboardType(type.identifier))

@@ -402,10 +402,10 @@ struct MCPTests {
         let session = try await initialized(dir)
         let slash = try await call(session, "plan_action", ["action": "convert.JPG", "paths": [real.path + "/"]])
         #expect(slash.isError && slash.text.contains("ends in /"), "\(slash.text)")
-        // A folder may still be written with one.
+        // A folder may still be written with one (and its ZIP keeps the id it had under Convert).
         let sub = dir.appendingPathComponent("sub")
         try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: false)
-        #expect(!(try await call(session, "plan_action", ["action": "tools.ZIP", "paths": [sub.path + "/"]]).isError))
+        #expect(!(try await call(session, "plan_action", ["action": "convert.ZIP", "paths": [sub.path + "/"]]).isError))
 
         for hidden in ["\u{202E}gnp", "\u{2066}x", "a\u{200B}b", "\u{FEFF}", "a\u{202A}"] {
             let plan = try await call(session, "plan_rename", ["paths": [real.path], "base_name": "photo" + hidden])
