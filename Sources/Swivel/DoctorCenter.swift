@@ -385,7 +385,7 @@ final class DoctorCenter {
                         // Not the same content, but one file of the group must still be there: the very file found.
                         var kept = stat()
                         guard let keeper, lstat(keeper.url.path, &kept) == 0, kept.st_mode & S_IFMT == S_IFREG,
-                              keeper.identity.map({ $0 == FileIdentity(device: kept.st_dev, inode: UInt64(kept.st_ino)) }) ?? true else {
+                              keeper.identity == FileIdentity(device: kept.st_dev, inode: UInt64(kept.st_ino)) else {
                             throw ToolError(L("Keep at least one copy of each file: deselect one copy of “%@”.", DoctorTrash.displayPath(URL(fileURLWithPath: target.path))))
                         }
                     case .standard, .leftover: break
@@ -411,7 +411,7 @@ final class DoctorCenter {
 
     /// For each group of copies being moved, one copy that stays: a copy not among `rows`, still where it was found.
     /// Refuses when every copy of a file was selected.
-    struct Keeper: Sendable { var url: URL; var identity: FileIdentity? }
+    struct Keeper: Sendable { var url: URL; var identity: FileIdentity }
 
     private func duplicateKeepers(_ rows: [DoctorRow]) throws -> [String: Keeper] {
         // By path, not by row: one file can be listed in more than one group, and a file moved by this batch can never
@@ -424,11 +424,11 @@ final class DoctorCenter {
             guard let row = members.first(where: { row in
                 guard let url = row.location, !moving.contains(DoctorPrivacy.location(url.path)),
                       let now = try? FileIdentity.read(url) else { return false }
-                return row.trash?.identity.map { $0 == now } ?? true
-            }), let url = row.location else {
+                return row.identity == now
+            }), let url = row.location, let identity = row.identity else {
                 throw ToolError(L("Keep at least one copy of each file: deselect one copy of “%@”.", members.first?.title ?? ""))
             }
-            keepers[group] = Keeper(url: url, identity: row.trash?.identity)
+            keepers[group] = Keeper(url: url, identity: identity)
         }
         return keepers
     }

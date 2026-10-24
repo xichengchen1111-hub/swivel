@@ -126,18 +126,21 @@ enum AssistantDraft {
             return blanks.contains(scalar.value) || p.isDefaultIgnorableCodePoint || p.isVariationSelector || p.isNoncharacterCodePoint
         }
     }
-    /// A folder specific enough to hand an assistant as its workspace: at least two levels inside the home folder
-    /// (~/Desktop/Project, not ~/Desktop or ~/Library), a folder inside a volume or another user's home
-    /// (/Volumes/Disk/Project), or a folder two levels below the root elsewhere (/tmp/notes), after resolving links.
-    /// Never /, a top-level folder, a volume, iCloud Drive's root or a top-level home folder.
+    /// A folder specific enough to hand an assistant as its workspace, after resolving links: a project in the home
+    /// folder (~/myrepo, ~/Desktop/Project, but not ~/Desktop, ~/Documents or anything in ~/Library), a folder in iCloud
+    /// Drive or another cloud drive, a folder inside a volume or another user's home (/Volumes/Disk/Project), or one
+    /// two levels below the root elsewhere (/tmp/notes). Never /, a top-level folder, a volume or the home folder.
     static func isNarrowWorkspace(_ directory: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Bool {
         let parts = directory.resolvingSymlinksInPath().standardizedFileURL.pathComponents
         let homeParts = home.resolvingSymlinksInPath().standardizedFileURL.pathComponents
         if parts.starts(with: homeParts) {
             let inside = Array(parts.dropFirst(homeParts.count))
-            // iCloud Drive: ~/Library/Mobile Documents/com~apple~CloudDocs counts as a top level of its own.
+            // Cloud drives count as a home of their own: iCloud Drive's root, or a provider's folder, is too broad.
             if inside.starts(with: ["Library", "Mobile Documents", "com~apple~CloudDocs"]) { return inside.count >= 4 }
-            return inside.count >= 2 && inside.first != "Library"
+            if inside.starts(with: ["Library", "CloudStorage"]) { return inside.count >= 4 }
+            guard let top = inside.first, top != "Library" else { return false }
+            let shared = ["Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music", "Public", "Applications", "Sites"]
+            return inside.count >= (shared.contains(top) ? 2 : 1)
         }
         if homeParts.starts(with: parts) { return false }  // The home folder or above it.
         let roots = ["Volumes", "Users", "System", "Library", "Applications", "private"]
@@ -218,7 +221,7 @@ enum FileAppRouting {
         if target.delivery == .copyAndOpenPage {
             // Web pages paste pictures, not Finder files, so images also carry their own bytes (one item each).
             pasteboard.clearContents()
-            guard pasteboard.writeObjects(files.map(Clothesline.pasteboardItem(for:))) else { throw ToolError(L("Could not copy the selected files.")) }
+            guard pasteboard.writeObjects(Clothesline.pasteboardItems(for: files)) else { throw ToolError(L("Could not copy the selected files.")) }
             // A page can't be handed files through its address; the card lets the user drop them into it.
             if open == nil { HandoffCard.shared.show(files, page: target.name) }
         }

@@ -400,11 +400,12 @@ struct SecurityTests {
         let fakeHome = URL(fileURLWithPath: "/Users/someone")
         func narrow(_ path: String) -> Bool { AssistantDraft.isNarrowWorkspace(URL(fileURLWithPath: path), home: fakeHome) }
         for broad in ["/", "/Users", "/Users/someone", "/Users/someone/Pictures", "/Users/someone/Library/Caches", "/Applications", "/tmp",
-                      "/Users/other", "/Library/Caches",
+                      "/Users/other", "/Library/Caches", "/Users/someone/Library/CloudStorage/Dropbox", "/Users/someone/Documents",
                       "/Volumes/Disk", "/Users/someone/Library/Mobile Documents/com~apple~CloudDocs"] {
             #expect(!narrow(broad), "\(broad)")
         }
-        for specific in ["/Users/someone/Pictures/Trip", "/Volumes/Disk/Project", "/tmp/notes", "/Users/other/Project", "/Users/someone/Library/Mobile Documents/com~apple~CloudDocs/Work"] {
+        for specific in ["/Users/someone/Pictures/Trip", "/Volumes/Disk/Project", "/tmp/notes", "/Users/other/Project",
+                         "/Users/someone/myrepo", "/Users/someone/Library/CloudStorage/Dropbox/Work", "/Users/someone/Library/Mobile Documents/com~apple~CloudDocs/Work"] {
             #expect(narrow(specific), "\(specific)")
         }
     }

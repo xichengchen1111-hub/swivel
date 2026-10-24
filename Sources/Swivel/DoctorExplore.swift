@@ -301,7 +301,7 @@ enum DoctorDuplicates {
                                              value: DoctorFormat.bytes(copy.bytes),
                                              detail: DoctorFormat.path(copy.url) + "\n" + L("Modified %@", DoctorFormat.date(copy.modified)) + "\n" + note,
                                              severity: .info, bytes: copy.bytes, location: copy.url, trash: target,
-                                             group: tag, level: 1))
+                                             group: tag, level: 1, identity: copy.identity))
             }
         }
         for (index, group) in outcome.similar.enumerated() {
@@ -324,7 +324,8 @@ enum DoctorDuplicates {
                     : L("%d%% alike · %@", percent, DoctorFormat.bytes(copy.bytes))
                 result.rows.append(DoctorRow(id: "\(id).\(number)", title: DoctorText.visible(copy.url.lastPathComponent), value: value,
                                              detail: DoctorFormat.path(copy.url) + "\n" + L("Modified %@", DoctorFormat.date(copy.modified)),
-                                             severity: .info, bytes: copy.bytes, location: copy.url, trash: target, group: tag, level: 1))
+                                             severity: .info, bytes: copy.bytes, location: copy.url, trash: target, group: tag, level: 1,
+                                             identity: copy.identity))
             }
         }
         let found = !outcome.groups.isEmpty || !outcome.similar.isEmpty
@@ -673,7 +674,7 @@ enum DoctorUninstall {
         }
         guard (try? FileIdentity.read(trashed)) == identity else {
             throw ToolError(L("%@ was moved to the Trash as “%@” but couldn’t be confirmed there; Undo won’t restore it. Check the Trash.",
-                              DoctorTrash.displayPath(app), trashed.lastPathComponent))
+                              DoctorTrash.displayPath(app), DoctorText.visible(trashed.lastPathComponent)))
         }
         return .init(original: app, trashed: trashed, identity: identity, parents: [], children: [])
     }

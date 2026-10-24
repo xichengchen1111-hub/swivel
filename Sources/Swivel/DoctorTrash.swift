@@ -227,7 +227,7 @@ enum DoctorTrash {
                 } else {
                     // It may well be in the Trash, but Undo can't be sure it is the same item: say where to look.
                     receipt.failures.append(L("%@ was moved to the Trash as “%@” but couldn’t be confirmed there; Undo won’t restore it. Check the Trash.",
-                                              displayPath(file.url), trashed.lastPathComponent))
+                                              displayPath(file.url), DoctorText.visible(trashed.lastPathComponent)))
                 }
             } catch {
                 receipt.failures.append(failure(file.url, error))
@@ -263,7 +263,7 @@ enum DoctorTrash {
                                            children: gathered))
             } else {
                 receipt.failures.append(L("%@ was moved to the Trash as “%@” but couldn’t be confirmed there; Undo won’t restore it. Check the Trash.",
-                                          displayPath(folder), trashed.lastPathComponent))
+                                          displayPath(folder), DoctorText.visible(trashed.lastPathComponent)))
             }
         } catch {
             // Put everything back where it was; nothing was moved.

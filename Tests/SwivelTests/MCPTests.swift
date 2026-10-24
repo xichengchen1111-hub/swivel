@@ -395,6 +395,19 @@ struct MCPTests {
         #expect(try await call(session, "plan_move", ["paths": [sub.appendingPathComponent("x.txt").path], "destination": history.path]).text.contains("undo log"))
     }
 
+    @Test func anUndoLogThatCantBeOpenedIsNeverWrittenOver() async throws {
+        let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
+        let history = dir.appendingPathComponent(".history")
+        try FileManager.default.createDirectory(at: history, withIntermediateDirectories: true)
+        let log = history.appendingPathComponent("history.json")
+        try Data("[]".utf8).write(to: log)
+        chmod(log.path, 0)
+        defer { chmod(log.path, 0o600) }
+        let session = try await initialized(dir)
+        let listed = try await call(session, "history", [:])
+        #expect(listed.isError && listed.text.contains("Couldn't read"), "\(listed.text)")
+    }
+
     @Test func anUnreadableUndoLogIsSetAsideAndReported() async throws {
         let dir = try folder(); defer { try? FileManager.default.removeItem(at: dir) }
         let history = dir.appendingPathComponent(".history")

@@ -244,6 +244,15 @@ enum Images {
         }
     }
 
+    /// The pixel count the file's header claims, read without decoding; nil when it isn't a readable image.
+    static func claimedPixels(_ url: URL) -> Double? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = props[kCGImagePropertyPixelWidth] as? Int, let height = props[kCGImagePropertyPixelHeight] as? Int
+        else { return nil }
+        return Double(width) * Double(height)
+    }
+
     /// Decodes the image upright (EXIF orientation applied), optionally capped in size.
     static func load(_ url: URL, maxPixels: Int? = nil) throws -> CGImage {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {

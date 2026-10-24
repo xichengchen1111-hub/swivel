@@ -484,8 +484,10 @@ final class MCPTools {
                             try Paths.renameExclusively(now, to: original)
                             // Swapped for something else between the check and the rename: put that back.
                             guard (try? FileIdentity.read(original)) == FileIdentity(device: move.device, inode: move.inode) else {
-                                try? Paths.renameExclusively(original, to: now)
-                                skipped.append(["path": move.to, "reason": "Replaced while undoing; left as it is"]); movesLeft.insert(move, at: 0); continue
+                                let back = (try? Paths.renameExclusively(original, to: now)) != nil
+                                skipped.append(["path": move.to, "reason": back ? "Replaced while undoing; left as it is"
+                                    : "Replaced while undoing; the replacement is now at \(move.from) and couldn't be put back"])
+                                movesLeft.insert(move, at: 0); continue
                             }
                         }
                         restored.append(["from": move.to, "to": move.from])
@@ -502,8 +504,9 @@ final class MCPTools {
                     if !dryRun, let gone = try trash(URL(fileURLWithPath: file.path)),
                        (try? FileIdentity.read(gone)) != FileIdentity(device: file.device, inode: file.inode) {
                         // Something else took its place between the check and the move: bring that back.
-                        try? Paths.renameExclusively(gone, to: URL(fileURLWithPath: file.path))
-                        skipped.append(["path": file.path, "reason": "Replaced while undoing; left as it is"])
+                        let back = (try? Paths.renameExclusively(gone, to: URL(fileURLWithPath: file.path))) != nil
+                        skipped.append(["path": file.path, "reason": back ? "Replaced while undoing; left as it is"
+                            : "Replaced while undoing; the replacement went to the Trash at \(gone.path) and couldn't be put back"])
                         createdLeft.insert(file, at: 0); continue
                     }
                     trashed.append(file.path)
@@ -1049,7 +1052,7 @@ final class MCPHistory: @unchecked Sendable {
 
     init(directory: URL = MCPHistory.defaultDirectory) { self.directory = directory }
 
-    func entries() throws -> [Entry] { try locked { read() } }
+    func entries() throws -> [Entry] { try locked { try read() } }
 
     /// Older logs that couldn't be read and were set aside: what they held can't be undone from here.
     var setAside: [String] {
@@ -1067,7 +1070,7 @@ final class MCPHistory: @unchecked Sendable {
 
     func update<T>(_ change: (inout [Entry]) throws -> T) throws -> T {
         try locked {
-            var all = read()
+            var all = try read()
             let result = try change(&all)
             if all.count > Self.limit { all.removeFirst(all.count - Self.limit) }
             let encoder = JSONEncoder()
@@ -1089,13 +1092,15 @@ final class MCPHistory: @unchecked Sendable {
         return try body()
     }
 
-    private func read() -> [Entry] {
-        guard let data = try? Data(contentsOf: file) else { return [] }
+    private func read() throws -> [Entry] {
+        guard FileManager.default.fileExists(atPath: file.path) else { return [] }
+        // There but unreadable: refuse, rather than start an empty log that the next change would write over it.
+        guard let data = try? Data(contentsOf: file) else { throw ToolError("Couldn't read Swivel's undo log at \(file.path)") }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         if let entries = try? decoder.decode([Entry].self, from: data) { return entries }
-        // Unreadable: keep it aside for inspection and start a fresh log rather than failing every change.
-        _ = try? Paths.publish(file, as: directory.appendingPathComponent("history (unreadable).json"))
+        // Not a log Swivel can read: keep it aside for inspection (reported in history and undo) and start a fresh one.
+        _ = try Paths.publish(file, as: directory.appendingPathComponent("history (unreadable).json"))
         return []
     }
 }
