@@ -294,17 +294,17 @@ struct DoctorTests {
 
     // MARK: What the assistant may see
 
-    private let context = DoctorRedaction.Context(home: "/Users/lizhi", names: ["lizhi", "Li Zhi", "Lizhi’s MacBook Pro", "Lizhis-MacBook-Pro", "li"])
+    private let context = DoctorRedaction.Context(home: "/Users/avery", names: ["avery", "Avery Lin", "Avery’s MacBook Pro", "Averys-MacBook-Pro", "li"])
 
     @Test func redactionRemovesWhatIdentifiesTheMacAndItsUser() {
         let text = """
-            Path /Users/lizhi/Library/Caches and /Users/other/x. User lizhi, full name Li Zhi on Lizhi’s MacBook Pro (Lizhis-MacBook-Pro.local).
+            Path /Users/avery/Library/Caches and /Users/other/x. User avery, full name Avery Lin on Avery’s MacBook Pro (Averys-MacBook-Pro.local).
             Servers 192.168.1.1, 2001:db8:85a3::8a2e:370:7334, fe80::1%en0; Wi-Fi 3c:22:fb:01:02:03; id 6F9619FF-8B86-D011-B42D-00C04FC964FF;
-            mail lizhi@example.com; serial C02XK0XXJGH5; team UBF8T346G9. A link will stay a link, and "li" is too short to touch.
+            mail avery@example.com; serial C02XK0XXJGH5; team UBF8T346G9. A link will stay a link, and "li" is too short to touch.
             Hidden\u{202E}text\u{200B}here at 10:30.
             """
         let out = DoctorRedaction.redact(text, context: context)
-        for secret in ["/Users/lizhi", "/Users/other", "lizhi", "Li Zhi", "MacBook", "192.168", "2001:db8", "fe80", "3c:22", "6F9619FF",
+        for secret in ["/Users/avery", "/Users/other", "avery", "Avery Lin", "MacBook", "192.168", "2001:db8", "fe80", "3c:22", "6F9619FF",
                        "example.com", "C02XK0XXJGH5", "UBF8T346G9", "\u{202E}", "\u{200B}"] {
             #expect(!out.contains(secret), "\(secret) survived in \(out)")
         }
