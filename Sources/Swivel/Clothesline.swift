@@ -1710,13 +1710,56 @@ enum RopeDropFeedback {
 
 // MARK: - Screenshot card
 
+/// What the window server and AppKit say about a panel that should be showing. `summary` names no files.
+struct CardVisibility {
+    var onScreen: Bool          // the window server lists it on screen
+    var visible: Bool           // AppKit's isVisible
+    var occluded: Bool
+    var activeSpace: Bool
+    var appHidden: Bool
+    var regularApp: Bool
+    var alpha: Double
+    var frame: NSRect
+    var screens: Int
+
+    var isShown: Bool { onScreen && visible }
+
+    @MainActor
+    init(_ panel: NSWindow) {
+        let number = CGWindowID(max(panel.windowNumber, 0))
+        let info = number == 0 ? [] : (CGWindowListCopyWindowInfo(.optionIncludingWindow, number) as? [[String: Any]] ?? [])
+        self.init(onScreen: info.first?[kCGWindowIsOnscreen as String] as? Bool ?? false,
+                  visible: panel.isVisible,
+                  occluded: !panel.occlusionState.contains(.visible),
+                  activeSpace: panel.isOnActiveSpace,
+                  appHidden: NSApp.isHidden,
+                  regularApp: NSApp.activationPolicy() == .regular,
+                  alpha: Double(panel.alphaValue),
+                  frame: panel.frame,
+                  screens: NSScreen.screens.count)
+    }
+
+    init(onScreen: Bool, visible: Bool, occluded: Bool, activeSpace: Bool, appHidden: Bool, regularApp: Bool,
+         alpha: Double, frame: NSRect, screens: Int) {
+        self.onScreen = onScreen; self.visible = visible; self.occluded = occluded; self.activeSpace = activeSpace
+        self.appHidden = appHidden; self.regularApp = regularApp; self.alpha = alpha; self.frame = frame
+        self.screens = screens
+    }
+
+    var summary: String {
+        "onScreen=\(onScreen) visible=\(visible) occluded=\(occluded) activeSpace=\(activeSpace) "
+            + "appHidden=\(appHidden) regularApp=\(regularApp) alpha=\(String(format: "%.2f", alpha)) "
+            + "frame=\(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height)) screens=\(screens)"
+    }
+}
+
 /// The new screenshot, waiting in the bottom-right corner like the system thumbnail. Drag it up to the rope or
 /// click it to hang it; drag it into an app or folder like any file; ignore it and it goes to the usual folder.
 @MainActor
 final class IncomingCard: NSObject, NSDraggingSource {
     static let shared = IncomingCard()
 
-    private let panel: NSPanel
+    private var panel: NSPanel
     private let view = IncomingView()
     private(set) var url: URL?
     private var dismissal: DispatchWorkItem?
@@ -1736,9 +1779,15 @@ final class IncomingCard: NSObject, NSDraggingSource {
     private static let resumeSeconds: TimeInterval = 1
 
     override init() {
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 170),
-                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = Self.makePanel()
         super.init()
+        panel.contentView = view
+        view.card = self
+    }
+
+    private static func makePanel() -> NSPanel {
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 170),
+                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -1747,8 +1796,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
-        panel.contentView = view
-        view.card = self
+        return panel
     }
 
     func present(_ url: URL) {
@@ -1782,6 +1830,48 @@ final class IncomingCard: NSObject, NSDraggingSource {
         panel.orderFrontRegardless()
         view.enter()
         scheduleDismissal()
+        confirmShown(presentation, rebuilt: false)
+    }
+
+    /// In a long session the window server once stopped putting this panel on screen (2026-10-24): it was ordered
+    /// front at the right frame and never appeared, so every screenshot went to the usual folder unseen until
+    /// Swivel was restarted. A moment after each presentation the card checks that it really is on screen; if not,
+    /// it logs what it found and shows itself again in a new window, once.
+    private func confirmShown(_ generation: Int, rebuilt: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.checkSeconds) { [weak self] in
+            guard let self, self.presentation == generation, self.url != nil, !self.dragging else { return }
+            let state = CardVisibility(self.panel)
+            if state.isShown {
+                if rebuilt { log.notice("Screenshot card recovered in a new window: \(state.summary, privacy: .public)") }
+                return
+            }
+            guard !rebuilt else {
+                log.fault("Screenshot card still not on screen after rebuilding its window: \(state.summary, privacy: .public)")
+                return
+            }
+            log.error("Screenshot card was not on screen; rebuilding its window: \(state.summary, privacy: .public)")
+            self.rebuildPanel()
+            self.confirmShown(generation, rebuilt: true)
+        }
+    }
+    private static let checkSeconds: TimeInterval = 0.4
+
+    /// Moves the card into a fresh panel at the same place and shows it there.
+    private func rebuildPanel() {
+        let old = panel
+        let frame = old.frame
+        view.halt()
+        old.orderOut(nil)
+        old.contentView = nil
+        panel = Self.makePanel()
+        panel.contentView = view
+        panel.setFrame(frame, display: false)
+        view.layoutCard()
+        view.resetInteraction(hovered: NSPointInRect(NSEvent.mouseLocation, view.cardScreenRect))
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+        view.enter()
+        old.close()
     }
 
     /// The card's thumbnail, for the rope to reuse instead of decoding the file again.
