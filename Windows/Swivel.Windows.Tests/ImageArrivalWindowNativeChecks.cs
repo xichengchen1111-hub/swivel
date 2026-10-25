@@ -38,7 +38,15 @@ internal static class ImageArrivalWindowNativeChecks
     private static Button Button(ImageArrivalWindow window, App app, string key) => Find<Button>(window).Single(button => Equals(button.Content, app.L(key)));
     private static void Click(ImageArrivalWindow window, App app, string key) => Button(window, app, key).RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
 
+    // Clicks raised directly from the test thread resume awaits on the dispatcher, as a real click does.
     internal static void Run(Action<bool, string> check, Action<Action, string> reject)
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try { RunCore(check, reject); }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+    }
+    private static void RunCore(Action<bool, string> check, Action<Action, string> reject)
     {
         var app = Application.Current as App ?? throw new InvalidOperationException("An isolated validation App is required.");
         if (!app.IsValidationHost) throw new InvalidOperationException("Do not run this fixture in a normal product App.");

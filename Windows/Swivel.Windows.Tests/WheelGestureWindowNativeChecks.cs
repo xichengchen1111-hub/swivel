@@ -37,7 +37,15 @@ internal static class WheelGestureWindowNativeChecks
     private static void Refresh(WheelGestureWindow window) => typeof(WheelGestureWindow).GetMethod("RefreshSession", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null);
     private static void Finish(WheelGestureWindow window) { Task done = window.FinishAsync(); Until(() => done.IsCompleted); done.GetAwaiter().GetResult(); window.Close(); Pump(); }
 
+    // Clicks raised directly from the test thread resume awaits on the dispatcher, as a real click does.
     internal static void Run(Action<bool, string> check, Action<Action, string> reject)
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try { RunCore(check, reject); }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+    }
+    private static void RunCore(Action<bool, string> check, Action<Action, string> reject)
     {
         var app = Application.Current as App ?? throw new InvalidOperationException("An isolated validation App is required.");
         if (!app.IsValidationHost) throw new InvalidOperationException("Do not run this fixture in a normal product App.");

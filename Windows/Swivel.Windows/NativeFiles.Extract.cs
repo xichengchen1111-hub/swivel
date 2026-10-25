@@ -134,15 +134,14 @@ public static partial class NativeFiles
         string directory = System.IO.Path.GetDirectoryName(destination)!;
         string temp = System.IO.Path.Combine(directory, ".swivel-" + Guid.NewGuid().ToString("N") + ".tmp");
         using var handle = Open(temp, GenericWrite | ReadAttributes | DeleteAccess, 0, 1, OpenReparse | 2 | 0x100);
+        // Disposing a FileStream closes its handle, which is still needed below; it lives as long as the handle.
+        using var stream = new FileStream(handle, FileAccess.Write, 65536, false);
         bool published = false;
         try
         {
             Check(handle, false);
-            using (var stream = new FileStream(handle, FileAccess.Write, 65536, false))
-            {
-                produce(stream);
-                stream.Flush(true);
-            }
+            produce(stream);
+            stream.Flush(true);
             token.ThrowIfCancellationRequested();
             // The main stream is held without sharing; this stream belongs to the same new file.
             using (var zoneHandle = Open(temp + ":Zone.Identifier", GenericWrite, 0, 1, 0))

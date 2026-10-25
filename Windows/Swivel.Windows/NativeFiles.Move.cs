@@ -130,7 +130,7 @@ public static partial class NativeFiles
                 start.Verify(); destination.Verify(); Check(handle, false);
                 if (ReadMoveIdentity(handle) != identity) throw new IOException("The held move identity changed.");
             }
-            if (!RenameMove(handle, directory.Handle, MoveRules.FileName(path), out int error)) throw new Win32Exception(error);
+            if (!RenameMove(handle, directory, MoveRules.FileName(path), out int error)) throw new Win32Exception(error);
             CurrentPath = path; CurrentDirectory = directory.Snapshot; VerifiedStamp = null;
             VerifiedStamp = ReadMoveStamp(handle);
             if (!restoring && (before is not { } previous || !MoveRules.SameRenameMetadata(previous, VerifiedStamp.Value)))
@@ -164,24 +164,17 @@ public static partial class NativeFiles
         if (!string.Equals(name.ToString(), "NTFS", StringComparison.Ordinal))
             throw new UserError("Move Files currently requires source and destination on the same NTFS volume. Nothing was copied or deleted.");
     }
-    private static bool RenameMove(SafeFileHandle source, SafeFileHandle directory, string fileName, out int error)
+    private static bool RenameMove(SafeFileHandle source, MoveDirectoryLease directory, string fileName, out int error)
     {
+        // Windows rejects FILE_RENAME_INFO with a RootDirectory handle (error 87), so the
+        // target is the held directory's own path plus one validated leaf name. Every
+        // ancestor is held without delete sharing and its identity rechecked here, so that
+        // path still names the held directory.
         WindowsPathPolicy.ValidateName(fileName);
-        byte[] name = Encoding.Unicode.GetBytes(fileName);
-        int lengthOffset = IntPtr.Size * 2, nameOffset = lengthOffset + 4;
-        int size = Math.Max(nameOffset + name.Length + 2, IntPtr.Size == 8 ? 24 : 16);
-        IntPtr buffer = Marshal.AllocHGlobal(size); bool retained = false;
-        try
-        {
-            directory.DangerousAddRef(ref retained);
-            Marshal.Copy(new byte[size], 0, buffer, size);
-            // FILE_RENAME_INFO: no replacement, and a held destination directory
-            // plus a single validated leaf name, not a re-resolved absolute path.
-            Marshal.WriteIntPtr(buffer, IntPtr.Size, directory.DangerousGetHandle());
-            Marshal.WriteInt32(buffer, lengthOffset, name.Length); Marshal.Copy(name, 0, buffer + nameOffset, name.Length);
-            bool ok = SetInfo(source, 3, buffer, (uint)size); error = ok ? 0 : Marshal.GetLastWin32Error(); return ok;
-        }
-        finally { if (retained) directory.DangerousRelease(); Marshal.FreeHGlobal(buffer); }
+        directory.Verify();
+        string target = directory.Snapshot.Path.TrimEnd('\\') + "\\" + fileName;
+        WindowsPathPolicy.Validate(target);
+        return Rename(source, target, out error);
     }
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll", EntryPoint = "GetVolumeInformationByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
