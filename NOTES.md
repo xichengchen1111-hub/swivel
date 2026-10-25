@@ -82,3 +82,4 @@
 - AI模型例外（2026-10-25用户批准）：Windows的C10抠图/证件照、C11超分、D06转写「允许打包定版模型」——本机处理、不联网下载，经Windows自带DirectML/Windows ML运行已批准Real-ESRGAN，并可加MIT/BSD/Apache许可的抠图与语音识别模型；记录来源/许可/哈希。仅限这三项。
 - 保存方式：「每批都 push」——每批独立复核通过后commit并push到Windows分支codex/windows-preview-081，不动Mac main。
 - 0.82（本会话）：B08普通ZIP安全解压已实现（Swivel.Core/ZipExtract.cs、Swivel.Windows/NativeFiles.Extract.cs、ZipExtractDialog.cs、archive.extract），核心4,518,871通过、native编译0/0；版本五处已改0.82.0；README/PORTING/PROGRESS已写，52项22/24/4/2普通28。独立agent复核进行中，通过后写TESTING、打包、commit+push codex/windows-preview-081。本会话开始fetch：origin/main仍6cbfdc1无新Mac。IU delegate按历史记录无可用agent，未再尝试。
+- 0.82已push 57fb715；0.83 Copy to Folder（file.copyto，FileMoves下，CopyFile2+创建身份核对）已push 43c15d3。两批均独立复核无未解决P1/P2，包/BUILD-REPORT在build/windows/。52项仍22/24/4/2普通28。AGENTS.md的一行重复删除不是本会话改动，未提交。待问用户：发朋友测试的包是否做成MSIX（OCR/PDF需MSIX身份）。
