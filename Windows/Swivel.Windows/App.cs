@@ -785,6 +785,22 @@ public sealed partial class App : Application
                 report(L("Processing…")); result = new BatchResult();
                 result.Outputs.Add(await OnSta(() => pdf.Save(order,settings,token)));
             }
+            else if (action.Id == "archive.extract")
+            {
+                report(L("Reading archive…"));
+                using var archive = await Task.Run(() => ZipExtractWork.Open(files[0], token), token);
+                token.ThrowIfCancellationRequested();
+                if (!ShowOperationDialog(new ZipExtractDialog(this, archive), owner, token)) return;
+                report(L("Processing…"));
+                var outcome = await Task.Run(() => archive.Extract(token, (done, total) =>
+                    Dispatcher.InvokeAsync(() => report(string.Format(L("Extracting file {0} of {1}…"), done, total)))), token);
+                string summary = string.Format(L("Extracted {0} of {1} file(s) into a new folder beside the archive."), outcome.FilesWritten, outcome.FileCount);
+                if (outcome.Cancelled) summary += " " + L("Cancelled. Completed files were kept.");
+                else if (outcome.Error is not null) summary += " " + L("Extraction stopped. Files already extracted were kept; nothing was overwritten.");
+                report(summary); Home.ShowResults(new[] { outcome.Folder! }, summary);
+                if (outcome.Error is not null && !exiting) ShowError(outcome.Error);
+                return;
+            }
             else if (action.Id.StartsWith("archive.", StringComparison.Ordinal))
             {
                 var format = action.Id switch { "archive.zip" => ArchiveFormat.Zip, "archive.tar" => ArchiveFormat.Tar, _ => ArchiveFormat.GZip };

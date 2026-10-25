@@ -33,6 +33,34 @@ public sealed class ArchiveWork : IDisposable
     public void Dispose() { foreach (var input in inputs) input.Dispose(); inputs.Clear(); }
 }
 
+/// One held .zip: its handle (and folder ancestors) stay open from planning through
+/// extraction, so the members reviewed are the members written.
+public sealed class ZipExtractWork : IDisposable
+{
+    private readonly NativeFiles.Input input;
+    public ZipPlan Plan { get; }
+    public int Zone { get; }
+    public string Path => input.Path;
+    private ZipExtractWork(NativeFiles.Input input, ZipPlan plan, int zone) { this.input = input; Plan = plan; Zone = zone; }
+    public static ZipExtractWork Open(string path, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (!string.Equals(System.IO.Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase)) throw new UserError("Choose a .zip file to extract.");
+        var input = NativeFiles.OpenRead(path);
+        try
+        {
+            var plan = ZipExtract.Read(input.Stream, token);
+            NativeFiles.CheckExtractionTarget(input, plan);
+            int zone = ZipExtract.TargetZone(NativeFiles.ReadZoneIdentifier(input));
+            token.ThrowIfCancellationRequested();
+            return new(input, plan, zone);
+        }
+        catch { input.Dispose(); throw; }
+    }
+    public ZipOutcome Extract(CancellationToken token, Action<int, int>? progress) => NativeFiles.ExtractZip(input, Plan, Zone, token, progress);
+    public void Dispose() => input.Dispose();
+}
+
 public sealed class SubtitleFile : IDisposable
 {
     private readonly NativeFiles.Input input;

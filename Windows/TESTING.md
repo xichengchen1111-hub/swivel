@@ -2,6 +2,14 @@
 
 验证状态不能混用：**核心规则在 Mac 上可运行**；**原生检查必须在 Windows 上运行**；**编译原生测试不等于测试通过**。CI 的一个 x64 作业也不能证明 ARM64、多屏或实际拖拽已经验收。
 
+## 0.82 验证记录
+
+第九批开始 `git fetch` 后 origin/main 仍为 Mac 1.12.7／`6cbfdc1`，无新 Mac 改动。常规核心 **4,518,882 项通过**（含新增 `ZipExtractChecks`：BCL 与 Swivel 自身 ZIP 往返、Store/Deflate／空文件／空文件夹／Unicode 名称，及各类名称、重名、链接、加密、ZIP64、布局、大小／CRC、炸弹、取消与 Web 标记规则）。Windows 完整应用与原生套件交叉编译 **0 警告／0 错误**；新增 `ZipExtractNativeChecks`（新编号文件夹不复用已有、精确内容、空文件夹、每文件 `Zone.Identifier`、普通属性、修改时间、无暂存残留、CRC 失败保留先前文件、取消保留已完成、MAX_PATH 预检拒绝且不留文件夹）**仅编译，未在 Windows 执行**。
+
+独立 agent 复核：首轮 111 项断言 + 16 项探测，无 P1；确认 2 项 P2（预检未计 `:Zone.Identifier` 后缀致超 MAX_PATH 中途失败并留空文件夹；新建文件夹仅属性句柄不参与共享检查，根级文件间隙可被同用户改名替换）和 5 项 P3（8.3 短名碰撞误导错误、macOS host 19 链接未拒、UTF-16／CR-only 区域文件把 4 读成 3、中央目录一次性整块读入、目录注释含 `PK\x06\x07` 误判 ZIP64）。全部修复并加回归后复查 143 项断言（2 项为探测自身夹具错误），用 Python `force_zip64`、7 万条目 Python 与 6.6 万条目 BCL ZIP64、手工无标记 ZIP64 结束记录验证拒绝，无遗留或新增 P1/P2/P3。保留的 `DirectoryLease` 属性句柄不构成解压缺口：祖先下始终有打开的压缩包，由 NTFS 拒绝改名（推理，未在 Windows 运行）。49 个新 key／147 译值核对通过。
+
+Windows 待验：真实 NTFS 下解压、Web 标记被 Explorer／SmartScreen 识别、句柄持有与改名拒绝、8.3 短名开启的卷、大小写敏感目录、低空间、长路径、2 GB／10,000 项性能、取消与关闭窗口、四语言界面／Narrator／DPI、x64 与 ARM64。固定 52 项 22／24／4／2，普通剩余 28。
+
 ## 0.81 验证记录
 
 第八批先pull仍Already up to date，Mac1.12.7／`6cbfdc1`。统一常规核心 **4,518,659项通过**；Windows完整应用与原生套件交叉编译 **0警告／0错误**。新增真实WPF PNG／NativeFiles lease和窗口fixtures仅编译，未在Mac执行Windows套件；托管替身与跨平台核心不代表Windows验收。

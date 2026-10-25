@@ -73,3 +73,12 @@
 - 0.81.0两架构最终ZIP/sha256/已审五docs/四DLL实际0.81.0.0 metadata验证通过，BUILD-REPORT-0.81.0.json已写；156旧ZIP与Mac118hash保持。第九批0.82开始pull仍Already up to date6cbfdc1，继续B08ZIP安全解压，源ZoneId4不降级（固定有界ADS只取数字，目标max(3,sourceZoneId)），不是所有源ADS保真。
 
 - 用户最新要求原话：「保存一次啊先现在已经做到然后push到Github上然后说一下还需要做什么也放到GitHub上」。先保存0.81已完成快照、源码与剩余进度，0.82仅设计未实施，停止本次继续实施；push到独立Windows分支，不改Mac main。
+
+- 2026-10-25 新会话一问一答：Windows 版主要「发给别人用」——更看重稳定、安装体验、说明及真 Windows 验收。
+- 实机验收方式：「我会发给我朋友进行测试」——由朋友在 Windows 上测试。
+- 测试朋友技术水平「不确定」：两种都准备（普通用户解压即用+中文试用步骤+一键问题报告；懂技术的另给自动测试脚本），以普通用户体验为主。
+- 顺序：「先补功能再测」——继续补剩余功能，补到一定程度再发朋友测试。
+- 发布线：「补完全部 28 项」能兼容的都补齐（含AI类和MCP）再发朋友测试。
+- AI模型例外（2026-10-25用户批准）：Windows的C10抠图/证件照、C11超分、D06转写「允许打包定版模型」——本机处理、不联网下载，经Windows自带DirectML/Windows ML运行已批准Real-ESRGAN，并可加MIT/BSD/Apache许可的抠图与语音识别模型；记录来源/许可/哈希。仅限这三项。
+- 保存方式：「每批都 push」——每批独立复核通过后commit并push到Windows分支codex/windows-preview-081，不动Mac main。
+- 0.82（本会话）：B08普通ZIP安全解压已实现（Swivel.Core/ZipExtract.cs、Swivel.Windows/NativeFiles.Extract.cs、ZipExtractDialog.cs、archive.extract），核心4,518,871通过、native编译0/0；版本五处已改0.82.0；README/PORTING/PROGRESS已写，52项22/24/4/2普通28。独立agent复核进行中，通过后写TESTING、打包、commit+push codex/windows-preview-081。本会话开始fetch：origin/main仍6cbfdc1无新Mac。IU delegate按历史记录无可用agent，未再尝试。

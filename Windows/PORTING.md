@@ -4,6 +4,20 @@
 
 当前固定52项的状态、剩余数量和Mac新增差距见 [PROGRESS.md](PROGRESS.md)。
 
+## 0.82 已实现：普通 ZIP 安全解压
+
+第九批开始先 `git fetch`，origin/main 仍为 Mac 1.12.7／`6cbfdc1`，没有新的 Mac 改动。在默认关闭的 Archives 下追加单文件动作 `archive.extract`（仅 `.zip`），无新 Feature／Prefs 字段／schema／第三方依赖；原 ZIP／TAR／GZip 创建不变。
+
+`ZipExtract.Read` 是原创 ZIP32 读取：结束记录须唯一且注释恰到文件尾，ZIP64 定位器／标记、分卷、加密（含强加密与 AES 额外字段）、版本需要 >2.0、非 Store/Deflate 一律拒绝；中央目录须恰好结束于结束记录。名称只接受 UTF-8 标志或纯 ASCII，旧式代码页及非 UTF-8 时的 0x7075 额外字段拒绝；`/` 分隔，每段过 `WindowsPathPolicy.ValidateName`，拒绝 `\`、开头 `/`、空段、>255 段长和 >32 层。Unix 链接／FIFO／设备、DOS 重解析属性拒绝。重名按 OrdinalIgnoreCase 与 NFC 等价检查，文件与文件夹同名拒绝；大小写不同的同一文件夹合并。规划阶段即读取每个本地头核对名称、方法、标志及（无数据描述符时）CRC／大小，并要求成员范围互不重叠且在目录之前。上限 10,000 项、解压后 2 GB、压缩包 2 GB。
+
+`Extract` 每个成员单独定位，Deflate 使用 BCL `DeflateStream` 读取限定的压缩字节片，输出超过声明大小立即停止（防压缩炸弹），不足、CRC-32 不符或压缩数据损坏都拒绝。
+
+原生 `NativeFiles.ExtractZip`：先检查 NTFS、最终路径 ≤240 字符（按最坏序号预留）、暂存路径 <260 及可用空间（数据 + 每项 4 KiB + 64 MiB）。`CreateDirectoryW` 独占创建新根（已存在则下一个序号），之后每个新建文件夹以不允许删除共享的句柄持有并核对非重解析、同卷；子文件夹意外已存在即停止。每个文件 CREATE_NEW 隐藏暂存、无共享写入，核对后写 `Zone.Identifier`（max(3, 源 ZoneId 0–4)，源 ADS 只读前 4 KiB），设普通属性和 DOS 修改时间，再以 ReplaceIfExists=false 重命名到确切名称；失败时以同一句柄删除暂存。压缩包句柄（仅共享读）与祖先在规划、对话框、解压期间一直持有。
+
+不是事务：首个错误或取消即停止，`ZipOutcome` 保留新文件夹、已写数量和错误，App 显示汇总并弹出错误。原生对话框列出全部路径、数量、大小与 Web 标记说明，固定 Extract／Cancel，沿用工作区／DPI 适配。
+
+B08 部分实现：TAR／GZip／7z／RAR 解压、ZIP64、加密、文件夹树归档及 ADS／ACL 还原仍待做。52 项 22／24／4／2，普通剩余 28。复核记录见 [TESTING](TESTING.md#082-验证记录)。真实 Windows NTFS／ADS／界面／x64 与 ARM64 未执行。
+
 ## 0.81 已实现：显式平面二维码数据恢复
 
 第八批开始先pull，仍Already up to date，Mac1.12.7／`6cbfdc1`。复用默认关闭QR功能，新增独立无文件动作`qr.recoverflat`与自身文件选择器；不读取无关已选文件，无新Feature／Prefs字段／schema／第三方依赖。严格`QrFlatRead.Read`／`QrCode.ReadCleanGrid`及旧`qr.readflat`不自动fallback，旧encoder输出不改。

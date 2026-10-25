@@ -2124,11 +2124,6 @@
     "產生最多105位元組的UTF-8 QR碼，複製/儲存PNG，分組管理32項本地庫，匯入匯出JSON備份前可預覽。圖片掃碼、其他條碼、更長內容和3D場景仍待實作。",
     "105バイト以内のUTF-8 QRを生成し、PNGコピー／保存、32件のグループ管理、JSONバックアップの確認付き入出力に対応。画像読取、他のバーコード、長文、3Dは未実装です。"
   ],
-  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extraction, folder trees and metadata preservation are still planned.": [
-    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；解压、文件夹树和元数据保留仍待实现。",
-    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；解壓縮、資料夾樹和中繼資料保留仍待實作。",
-    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。展開、フォルダー構造、メタデータ保持は実装予定です。"
-  ],
   "Create ZIP…": [
     "创建 ZIP…",
     "建立 ZIP…",
@@ -11393,5 +11388,250 @@
     "此文本含有 U+0000。Windows Unicode 文本剪贴板将此字符视为文本结束，因此已停用“复制读取的原文”，以免截断内容。上方仍显示完整解码文本，并将隐藏字符标为 [U+XXXX]；文本本身也可能包含这种记法。不会自动打开、运行、保存、加入库或发送任何内容。",
     "此文字含有 U+0000。Windows Unicode 文字剪貼簿將此字元視為文字結束，因此已停用「複製讀取的原文」，以免截斷內容。上方仍顯示完整解碼文字，並將隱藏字元標為 [U+XXXX]；文字本身也可能包含這種記法。不會自動開啟、執行、儲存、加入資料庫或傳送任何內容。",
     "このテキストには U+0000 が含まれています。Windows の Unicode テキストクリップボードではこの文字がテキストの終端になるため、切り捨てを避けるために「読み取った原文をコピー」を無効にしています。上にはデコードしたテキスト全体を表示し、不可視文字を [U+XXXX] で示しています。テキスト自体に同じ表記が含まれる場合もあります。自動的に開く、実行する、保存する、ライブラリへ追加する、送信する操作は行いません。"
+  ],
+  "A ZIP entry failed its CRC check and was not extracted.": [
+    "一个 ZIP 条目未通过 CRC 校验，未解压。",
+    "一個 ZIP 項目未通過 CRC 檢查，未解壓縮。",
+    "ZIP 内の項目が CRC チェックに失敗したため、展開しませんでした。"
+  ],
+  "A ZIP entry is larger than its directory says and was not extracted.": [
+    "一个 ZIP 条目比目录记载的更大，未解压。",
+    "一個 ZIP 項目比目錄記載的更大，未解壓縮。",
+    "ZIP 内の項目がディレクトリの記載より大きいため、展開しませんでした。"
+  ],
+  "A ZIP entry is shorter than its directory says and was not extracted.": [
+    "一个 ZIP 条目比目录记载的更短，未解压。",
+    "一個 ZIP 項目比目錄記載的更短，未解壓縮。",
+    "ZIP 内の項目がディレクトリの記載より短いため、展開しませんでした。"
+  ],
+  "A ZIP entry's compressed data is damaged and was not extracted.": [
+    "一个 ZIP 条目的压缩数据已损坏，未解压。",
+    "一個 ZIP 項目的壓縮資料已損毀，未解壓縮。",
+    "ZIP 内の項目の圧縮データが壊れているため、展開しませんでした。"
+  ],
+  "Choose a .zip file to extract.": [
+    "请选择要解压的 .zip 文件。",
+    "請選擇要解壓縮的 .zip 檔案。",
+    "展開する .zip ファイルを選んでください。"
+  ],
+  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP archives (Store/Deflate, up to 2 GB and 10,000 entries) into a new folder on NTFS. TAR/GZip/7z/RAR extraction, ZIP64, encryption and archiving folder trees are still planned.": [
+    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP（存储/Deflate，最多 2 GB、10,000 个条目）解压到新文件夹。TAR/GZip/7z/RAR 解压、ZIP64、加密及文件夹树归档仍待实现。",
+    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP（儲存/Deflate，最多 2 GB、10,000 個項目）解壓縮到新資料夾。TAR/GZip/7z/RAR 解壓縮、ZIP64、加密及資料夾樹封存仍待實作。",
+    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP（格納/Deflate、2 GB・10,000 項目まで）を新しいフォルダーに展開できます。TAR/GZip/7z/RAR の展開、ZIP64、暗号化、フォルダー構造のアーカイブは実装予定です。"
+  ],
+  "Encrypted ZIP archives are not supported.": [
+    "不支持加密的 ZIP 压缩包。",
+    "不支援加密的 ZIP 壓縮檔。",
+    "暗号化された ZIP アーカイブには対応していません。"
+  ],
+  "Every extracted file is marked as downloaded from the Internet (Mark of the Web), even if the archive itself was not.": [
+    "每个解压出的文件都会标记为来自互联网（Web 标记），即使压缩包本身没有这个标记。",
+    "每個解壓縮出的檔案都會標記為來自網際網路（Web 標記），即使壓縮檔本身沒有這個標記。",
+    "展開したすべてのファイルに、インターネットから取得したことを示すマーク（Mark of the Web）を付けます。アーカイブ自体にマークがない場合も同じです。"
+  ],
+  "Extract": [
+    "解压",
+    "解壓縮",
+    "展開"
+  ],
+  "Extract ZIP…": [
+    "解压 ZIP…",
+    "解壓縮 ZIP…",
+    "ZIP を展開…"
+  ],
+  "Extracted paths would be longer than 240 characters. Move the archive to a shorter folder first.": [
+    "解压后的路径会超过 240 个字符。请先把压缩包移到路径更短的文件夹。",
+    "解壓縮後的路徑會超過 240 個字元。請先把壓縮檔移到路徑更短的資料夾。",
+    "展開後のパスが 240 文字を超えます。先にアーカイブをより短いパスのフォルダーへ移動してください。"
+  ],
+  "Extracted {0} of {1} file(s) into a new folder beside the archive.": [
+    "已将 {1} 个文件中的 {0} 个解压到压缩包旁的新文件夹。",
+    "已將 {1} 個檔案中的 {0} 個解壓縮到壓縮檔旁的新資料夾。",
+    "{1} 個中 {0} 個のファイルを、アーカイブの横の新しいフォルダーに展開しました。"
+  ],
+  "Extracting file {0} of {1}…": [
+    "正在解压第 {0} 个文件，共 {1} 个…",
+    "正在解壓縮第 {0} 個檔案，共 {1} 個…",
+    "{1} 個中 {0} 個目のファイルを展開しています…"
+  ],
+  "Extraction stopped. Files already extracted were kept; nothing was overwritten.": [
+    "解压已停止。已解压的文件被保留，没有覆盖任何内容。",
+    "解壓縮已停止。已解壓縮的檔案已保留，沒有覆寫任何內容。",
+    "展開を中止しました。展開済みのファイルは残しています。上書きは一切していません。"
+  ],
+  "Files are extracted into a new folder beside the archive, named after it. Existing files and folders are never overwritten. Each file is checked against its size and CRC-32 before it appears.": [
+    "文件会解压到压缩包旁一个以它命名的新文件夹中，绝不覆盖已有的文件或文件夹。每个文件在出现前都会核对大小和 CRC-32。",
+    "檔案會解壓縮到壓縮檔旁一個以它命名的新資料夾中，絕不覆寫已有的檔案或資料夾。每個檔案在出現前都會核對大小和 CRC-32。",
+    "ファイルはアーカイブの横に作る、同じ名前の新しいフォルダーに展開します。既存のファイルやフォルダーは上書きしません。各ファイルはサイズと CRC-32 を確認してから表示されます。"
+  ],
+  "Modified times from the archive are kept. Permissions, attributes, comments and other data stored in the archive are not restored. If extraction stops, files already extracted stay in the new folder; it is not removed automatically.": [
+    "保留压缩包里的修改时间。不会还原压缩包中保存的权限、属性、注释等其他数据。如果解压中途停止，已解压的文件会留在新文件夹中，不会自动删除。",
+    "保留壓縮檔裡的修改時間。不會還原壓縮檔中儲存的權限、屬性、註解等其他資料。如果解壓縮中途停止，已解壓縮的檔案會留在新資料夾中，不會自動刪除。",
+    "アーカイブ内の更新日時は保持します。アーカイブに保存された権限、属性、コメントなどのデータは復元しません。展開が途中で止まった場合、展開済みのファイルは新しいフォルダーに残り、自動では削除しません。"
+  ],
+  "Paths in the new folder": [
+    "新文件夹中的路径",
+    "新資料夾中的路徑",
+    "新しいフォルダー内のパス"
+  ],
+  "Reading archive…": [
+    "正在读取压缩包…",
+    "正在讀取壓縮檔…",
+    "アーカイブを読み込んでいます…"
+  ],
+  "Something else changed the new folder while extracting. Nothing was overwritten.": [
+    "解压期间有其他程序改动了新文件夹。没有覆盖任何内容。",
+    "解壓縮期間有其他程式變更了新資料夾。沒有覆寫任何內容。",
+    "展開中に別のプログラムが新しいフォルダーを変更しました。上書きは一切していません。"
+  ],
+  "Split or multi-disk ZIP archives are not supported.": [
+    "不支持分卷或多磁盘 ZIP 压缩包。",
+    "不支援分割或多磁碟 ZIP 壓縮檔。",
+    "分割または複数ディスクの ZIP アーカイブには対応していません。"
+  ],
+  "The archive is marked as Restricted, so every extracted file is marked Restricted too.": [
+    "压缩包被标记为受限制区域，因此每个解压出的文件也会标记为受限制。",
+    "壓縮檔被標記為受限制區域，因此每個解壓縮出的檔案也會標記為受限制。",
+    "アーカイブが制限付きゾーンとしてマークされているため、展開したすべてのファイルも制限付きとしてマークします。"
+  ],
+  "There is not enough free space to extract this archive.": [
+    "没有足够的可用空间来解压此压缩包。",
+    "沒有足夠的可用空間來解壓縮此壓縮檔。",
+    "このアーカイブを展開するための空き容量が足りません。"
+  ],
+  "This ZIP archive contains an entry without a name.": [
+    "此 ZIP 压缩包包含没有名称的条目。",
+    "此 ZIP 壓縮檔包含沒有名稱的項目。",
+    "この ZIP アーカイブには名前のない項目があります。"
+  ],
+  "This ZIP archive contains duplicate names (letter case is ignored on Windows) and was not extracted.": [
+    "此 ZIP 压缩包包含重复名称（Windows 不区分大小写），未解压。",
+    "此 ZIP 壓縮檔包含重複名稱（Windows 不區分大小寫），未解壓縮。",
+    "この ZIP アーカイブには重複する名前があるため（Windows では大文字と小文字を区別しません）、展開しませんでした。"
+  ],
+  "This ZIP archive contains invalid Unicode names.": [
+    "此 ZIP 压缩包包含无效的 Unicode 名称。",
+    "此 ZIP 壓縮檔包含無效的 Unicode 名稱。",
+    "この ZIP アーカイブには無効な Unicode の名前があります。"
+  ],
+  "This ZIP archive contains names Windows cannot use safely and was not extracted.": [
+    "此 ZIP 压缩包包含 Windows 无法安全使用的名称，未解压。",
+    "此 ZIP 壓縮檔包含 Windows 無法安全使用的名稱，未解壓縮。",
+    "この ZIP アーカイブには Windows で安全に使えない名前があるため、展開しませんでした。"
+  ],
+  "This ZIP archive contains names that look identical and was not extracted.": [
+    "此 ZIP 压缩包包含看起来完全相同的名称，未解压。",
+    "此 ZIP 壓縮檔包含看起來完全相同的名稱，未解壓縮。",
+    "この ZIP アーカイブには見た目が同じ名前があるため、展開しませんでした。"
+  ],
+  "This ZIP archive contains special files and was not extracted.": [
+    "此 ZIP 压缩包包含特殊文件，未解压。",
+    "此 ZIP 壓縮檔包含特殊檔案，未解壓縮。",
+    "この ZIP アーカイブには特殊なファイルがあるため、展開しませんでした。"
+  ],
+  "This ZIP archive contains unsafe paths and was not extracted.": [
+    "此 ZIP 压缩包包含不安全的路径，未解压。",
+    "此 ZIP 壓縮檔包含不安全的路徑，未解壓縮。",
+    "この ZIP アーカイブには安全でないパスがあるため、展開しませんでした。"
+  ],
+  "This ZIP archive ends early.": [
+    "此 ZIP 压缩包提前结束。",
+    "此 ZIP 壓縮檔提前結束。",
+    "この ZIP アーカイブは途中で終わっています。"
+  ],
+  "This ZIP archive has an ambiguous end record and was not extracted.": [
+    "此 ZIP 压缩包的结束记录有歧义，未解压。",
+    "此 ZIP 壓縮檔的結束記錄有歧義，未解壓縮。",
+    "この ZIP アーカイブの終端レコードがあいまいなため、展開しませんでした。"
+  ],
+  "This ZIP archive has unexpected data around its directory and was not extracted.": [
+    "此 ZIP 压缩包的目录周围有意外的数据，未解压。",
+    "此 ZIP 壓縮檔的目錄周圍有非預期的資料，未解壓縮。",
+    "この ZIP アーカイブのディレクトリ周辺に予期しないデータがあるため、展開しませんでした。"
+  ],
+  "This ZIP archive is empty.": [
+    "此 ZIP 压缩包是空的。",
+    "此 ZIP 壓縮檔是空的。",
+    "この ZIP アーカイブは空です。"
+  ],
+  "This ZIP archive needs features beyond ZIP 2.0 and was not extracted.": [
+    "此 ZIP 压缩包需要 ZIP 2.0 以外的功能，未解压。",
+    "此 ZIP 壓縮檔需要 ZIP 2.0 以外的功能，未解壓縮。",
+    "この ZIP アーカイブは ZIP 2.0 を超える機能が必要なため、展開しませんでした。"
+  ],
+  "This ZIP archive nests folders more than 32 levels deep.": [
+    "此 ZIP 压缩包的文件夹嵌套超过 32 层。",
+    "此 ZIP 壓縮檔的資料夾巢狀超過 32 層。",
+    "この ZIP アーカイブはフォルダーの階層が 32 段を超えています。"
+  ],
+  "This ZIP archive reuses data between entries and was not extracted.": [
+    "此 ZIP 压缩包的多个条目共用数据，未解压。",
+    "此 ZIP 壓縮檔的多個項目共用資料，未解壓縮。",
+    "この ZIP アーカイブは複数の項目でデータを共有しているため、展開しませんでした。"
+  ],
+  "This ZIP archive uses a compression method other than Store or Deflate.": [
+    "此 ZIP 压缩包使用了存储或 Deflate 以外的压缩方式。",
+    "此 ZIP 壓縮檔使用了儲存或 Deflate 以外的壓縮方式。",
+    "この ZIP アーカイブは格納/Deflate 以外の圧縮方式を使っています。"
+  ],
+  "This ZIP archive uses legacy non-Unicode names. Re-create it with Unicode (UTF-8) names.": [
+    "此 ZIP 压缩包使用旧式非 Unicode 名称。请用 Unicode（UTF-8）名称重新创建。",
+    "此 ZIP 壓縮檔使用舊式非 Unicode 名稱。請用 Unicode（UTF-8）名稱重新建立。",
+    "この ZIP アーカイブは古い非 Unicode の名前を使っています。Unicode（UTF-8）の名前で作り直してください。"
+  ],
+  "This ZIP archive uses one name for both a file and a folder and was not extracted.": [
+    "此 ZIP 压缩包中同一个名称既是文件又是文件夹，未解压。",
+    "此 ZIP 壓縮檔中同一個名稱既是檔案又是資料夾，未解壓縮。",
+    "この ZIP アーカイブでは同じ名前がファイルとフォルダーの両方に使われているため、展開しませんでした。"
+  ],
+  "This ZIP archive's directory is damaged.": [
+    "此 ZIP 压缩包的目录已损坏。",
+    "此 ZIP 壓縮檔的目錄已損毀。",
+    "この ZIP アーカイブのディレクトリが壊れています。"
+  ],
+  "This file is not a supported ZIP archive.": [
+    "此文件不是受支持的 ZIP 压缩包。",
+    "此檔案不是支援的 ZIP 壓縮檔。",
+    "このファイルは対応している ZIP アーカイブではありません。"
+  ],
+  "ZIP archives containing links are not extracted.": [
+    "不解压包含链接的 ZIP 压缩包。",
+    "不解壓縮包含連結的 ZIP 壓縮檔。",
+    "リンクを含む ZIP アーカイブは展開しません。"
+  ],
+  "ZIP extraction currently requires an NTFS drive, so extracted files can keep their download warning.": [
+    "ZIP 解压目前需要 NTFS 磁盘，以便解压出的文件保留下载警告。",
+    "ZIP 解壓縮目前需要 NTFS 磁碟，以便解壓縮出的檔案保留下載警告。",
+    "展開したファイルにダウンロードの警告を残すため、ZIP の展開には現在 NTFS ドライブが必要です。"
+  ],
+  "ZIP extraction is limited to 10,000 entries.": [
+    "ZIP 解压最多 10,000 个条目。",
+    "ZIP 解壓縮最多 10,000 個項目。",
+    "ZIP の展開は 10,000 項目までです。"
+  ],
+  "ZIP extraction is limited to 2 GB of extracted data.": [
+    "ZIP 解压后的数据上限为 2 GB。",
+    "ZIP 解壓縮後的資料上限為 2 GB。",
+    "ZIP の展開後のデータは 2 GB までです。"
+  ],
+  "ZIP extraction is limited to archives of 2 GB.": [
+    "ZIP 解压仅支持 2 GB 以内的压缩包。",
+    "ZIP 解壓縮僅支援 2 GB 以內的壓縮檔。",
+    "ZIP の展開は 2 GB までのアーカイブに対応しています。"
+  ],
+  "ZIP64 archives are not supported in the Windows preview yet.": [
+    "Windows 预览版暂不支持 ZIP64 压缩包。",
+    "Windows 預覽版暫不支援 ZIP64 壓縮檔。",
+    "Windows プレビュー版は ZIP64 アーカイブにまだ対応していません。"
+  ],
+  "{0} file(s) and {1} folder(s), {2} MB after extraction.": [
+    "{0} 个文件和 {1} 个文件夹，解压后 {2} MB。",
+    "{0} 個檔案和 {1} 個資料夾，解壓縮後 {2} MB。",
+    "{0} 個のファイルと {1} 個のフォルダー、展開後 {2} MB。"
+  ],
+  "This ZIP archive contains names in the Windows short-name form (such as NAME~1) and was not extracted.": [
+    "此 ZIP 压缩包包含 Windows 短文件名形式的名称（例如 NAME~1），未解压。",
+    "此 ZIP 壓縮檔包含 Windows 短檔名形式的名稱（例如 NAME~1），未解壓縮。",
+    "この ZIP アーカイブには Windows の短い名前の形式（NAME~1 など）の名前があるため、展開しませんでした。"
   ]
 }
