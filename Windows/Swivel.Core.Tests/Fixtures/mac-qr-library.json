@@ -1,0 +1,20 @@
+[
+  {
+    "collection" : "工作",
+    "created" : 800000000.125,
+    "id" : "11111111-2222-4333-8444-555555555555",
+    "name" : "链接 🦜",
+    "season" : "autumn",
+    "template" : "island",
+    "value" : "https:\/\/example.com\/中文?x=🦜\r\nline"
+  },
+  {
+    "collection" : "",
+    "created" : 800000000,
+    "id" : "99999999-2222-4333-8444-555555555555",
+    "name" : "长文字",
+    "season" : "summer",
+    "template" : "tree",
+    "value" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+]
