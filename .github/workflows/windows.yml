@@ -3,12 +3,15 @@ on:
   workflow_dispatch:
   pull_request:
     paths: ['Windows/**', '.github/workflows/windows.yml']
+  push:
+    branches: ['codex/windows-preview-081']
+    paths: ['Windows/**', '.github/workflows/windows.yml']
 permissions:
   contents: read
 jobs:
   windows:
     runs-on: windows-2025
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -22,8 +25,25 @@ jobs:
       - name: Cross-publish ARM64 (not runtime-tested here)
         shell: pwsh
         run: ./Windows/build.ps1 -Runtime win-arm64 -SkipTests
+      - name: Pack MSIX (x64 and ARM64)
+        shell: pwsh
+        run: |
+          ./Windows/Packaging/build-msix.ps1 -Runtime win-x64
+          ./Windows/Packaging/build-msix.ps1 -Runtime win-arm64
+      # Self-signed test certificate for friends' sideload testing only. The private key
+      # lives only in repository secrets; without them the packages stay unsigned.
+      - name: Sign MSIX with the test certificate
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.SWIVEL_TEST_CERT_PFX_BASE64 }}
+          PFX_PASSWORD: ${{ secrets.SWIVEL_TEST_CERT_PASSWORD }}
+        run: ./Windows/Packaging/sign-msix.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: Swivel-Windows-preview
-          path: build/windows/*.zip
+          path: |
+            build/windows/*.zip
+            build/windows/*.msix
+            build/windows/*.cer
+            Windows/Packaging/测试安装说明.md
           if-no-files-found: error
