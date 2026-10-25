@@ -18,7 +18,8 @@ internal static class Program
     // A failed check is reported and the run continues, so one Windows run lists every failure.
     private static void Check(bool condition, string name) { if (!condition) { failures.Add(name); Console.Error.WriteLine("FAIL: " + name); return; } checks++; }
     // An unexpected exception fails its group only; later groups still run and report.
-    private static void Group(string name, Action run) { try { run(); } catch (Exception error) { failures.Add(name + " threw " + error.GetType().Name + ": " + error.Message); Console.Error.WriteLine(name + " threw: " + error); } }
+    // Groups run on the STA test thread like the app's UI thread: awaits resume on the dispatcher, as they do after a real click.
+    private static void Group(string name, Action run) { var previous = SynchronizationContext.Current; SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher)); try { run(); } catch (Exception error) { failures.Add(name + " threw " + error.GetType().Name + ": " + error.Message); Console.Error.WriteLine(name + " threw: " + error); } finally { SynchronizationContext.SetSynchronizationContext(previous); } }
     private static void Reject(Action action, string name) { bool failed = false; try { action(); } catch { failed = true; } Check(failed, name); }
     [STAThread]
     public static int Main()

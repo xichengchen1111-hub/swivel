@@ -36,7 +36,7 @@ internal static class ZipExtractNativeChecks
             outcome = work.Extract(default, null);
         }
         string folder = Path.Combine(root, "photos 2");
-        check(outcome.Folder == folder && outcome.FilesWritten == 2 && outcome.Error is null && !outcome.Cancelled, "Native ZIP extracts into a new numbered folder");
+        check(outcome.Folder == folder && outcome.FilesWritten == 2 && outcome.Error is null && !outcome.Cancelled, "Native ZIP extracts into a new numbered folder: " + outcome.Folder + " written " + outcome.FilesWritten + " " + outcome.Error);
         check(File.ReadAllText(Path.Combine(root, "photos", "note.txt")) == "keep", "Native ZIP never touches an existing folder");
         string extracted = Path.Combine(folder, "假期", "海 🦜.dat");
         check(File.ReadAllBytes(extracted).SequenceEqual(body) && File.ReadAllText(Path.Combine(folder, "note.txt")) == "hi", "Native ZIP exact contents");

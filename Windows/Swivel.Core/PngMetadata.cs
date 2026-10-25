@@ -70,7 +70,7 @@ public static class PngMetadata
         catch(EndOfStreamException){throw new UserError(Invalid);}
         token.ThrowIfCancellationRequested();
         if(!bytes.AsSpan(0,8).SequenceEqual(Signature))throw new UserError(Invalid);
-        var chunks=new List<Chunk>();int offset=8,width=0,height=0,palette=0,color=-1,depth=0;
+        var chunks=new List<Chunk>();int offset=8,width=0,height=0,palette=0,color=-1,depth=0,interlace=0;
         bool data=false,dataEnded=false,end=false;long dataBytes=0;
         while(offset<bytes.Length)
         {
@@ -96,7 +96,7 @@ public static class PngMetadata
                 if(chunks.Count!=0||payload!=13)throw new UserError(Invalid);
                 uint w=BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset+8,4)),h=BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset+12,4));
                 if(w==0||h==0||w>16384||h>16384||(long)w*h>ImageRules.MaxPixels)throw new UserError(Invalid);
-                width=(int)w;height=(int)h;depth=bytes[offset+16];color=bytes[offset+17];
+                width=(int)w;height=(int)h;depth=bytes[offset+16];color=bytes[offset+17];interlace=bytes[offset+20];
                 bool supported=color is 0 or 3?depth is 1 or 2 or 4 or 8:color is 2 or 4 or 6&&depth==8;
                 if(!supported||bytes[offset+18]!=0||bytes[offset+19]!=0||bytes[offset+20]>1)throw new UserError(Invalid);
             }
@@ -124,7 +124,51 @@ public static class PngMetadata
             chunks.Add(new(type,offset,total,type is "tEXt" or "zTXt" or "iTXt" or "eXIf" or "tIME"));offset+=total;
         }
         if(!end)throw new UserError(Invalid);
+        VerifyImageData(bytes,chunks,width,height,depth,color,interlace,token);
         token.ThrowIfCancellationRequested();return Plan.Create(bytes,chunks.ToArray(),width,height);
+    }
+    // Some system decoders accept damaged image data. Retained IDAT bytes are copied
+    // unchanged, so they must at least inflate (zlib checksum included) to exactly the
+    // filtered size IHDR implies, with a valid filter type starting every row. Pixels
+    // are not unfiltered or decoded here.
+    private static void VerifyImageData(byte[] bytes,List<Chunk> chunks,int width,int height,int depth,int color,int interlace,CancellationToken token)
+    {
+        int channels=color switch{0=>1,2=>3,3=>1,4=>2,_=>4};long bits=(long)channels*depth;
+        var rows=new List<(long Rows,long Bytes)>();
+        if(interlace==0)rows.Add((height,1+(width*bits+7)/8));
+        else
+        {
+            int[] x0={0,4,0,2,0,1,0},dx={8,8,4,4,2,2,1},y0={0,0,4,0,2,0,1},dy={8,8,8,4,4,2,2};
+            for(int pass=0;pass<7;pass++)
+            {
+                long w=width>x0[pass]?(width-x0[pass]+dx[pass]-1)/dx[pass]:0,h=height>y0[pass]?(height-y0[pass]+dy[pass]-1)/dy[pass]:0;
+                if(w>0&&h>0)rows.Add((h,1+(w*bits+7)/8));
+            }
+        }
+        var data=new MemoryStream();
+        foreach(var chunk in chunks)if(chunk.Type=="IDAT")data.Write(bytes,chunk.Offset+8,chunk.Length-12);
+        data.Position=0;
+        using var inflate=new System.IO.Compression.ZLibStream(data,System.IO.Compression.CompressionMode.Decompress);
+        var buffer=new byte[65536];int group=0;long rowLeft=0,rowsLeft=rows.Count>0?rows[0].Rows:0;
+        try
+        {
+            for(int read;(read=inflate.Read(buffer,0,buffer.Length))>0;)
+            {
+                token.ThrowIfCancellationRequested();
+                for(int i=0;i<read;)
+                {
+                    if(rowLeft==0)
+                    {
+                        while(group<rows.Count&&rowsLeft==0){group++;if(group<rows.Count)rowsLeft=rows[group].Rows;}
+                        if(group>=rows.Count||buffer[i]>4)throw new UserError(Invalid);
+                        rowLeft=rows[group].Bytes;rowsLeft--;
+                    }
+                    int take=(int)Math.Min(rowLeft,read-i);rowLeft-=take;i+=take;
+                }
+            }
+        }
+        catch(InvalidDataException){throw new UserError(Invalid);}
+        if(rowLeft!=0||rowsLeft!=0||rows.Skip(group+1).Any())throw new UserError(Invalid);
     }
     private static uint[] MakeCrcTable()
     {

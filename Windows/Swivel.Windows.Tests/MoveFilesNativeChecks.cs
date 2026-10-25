@@ -29,7 +29,7 @@ internal static class MoveFilesNativeChecks
             reject(() => Directory.Move(root, root + " displaced"), "Native shared ancestor held throughout preview");
             reject(() => File.AppendAllText(first, "changed"), "Native move source rejects default-stream writers during preview");
             moved = session.Execute(default);
-            check(moved.Error is null && moved.Remaining.Count == 3 && moved.Locations.All(x => x.Stamp is { } after && x.BeforeStamp is { } before && after.Identity == before.Identity), "Native same-volume move preserves full object identities");
+            check(moved.Error is null && moved.Remaining.Count == 3 && moved.Locations.All(x => x.Stamp is { } after && x.BeforeStamp is { } before && after.Identity == before.Identity), "Native same-volume move preserves full object identities: remaining " + moved.Remaining.Count + " " + moved.Error);
             check(moved.Locations.All(x => x.CurrentDirectory.Ancestors.Count >= 3 && x.OriginalDirectory.Ancestors.Count >= 3), "Native receipt records both full ancestor identity chains");
             reject(() => session.Execute(default), "Native move session executes at most once");
         }

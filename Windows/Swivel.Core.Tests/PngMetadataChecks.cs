@@ -20,6 +20,16 @@ internal static class PngMetadataChecks
     internal static byte[] Header(int width=3,int height=2,int depth=8,int color=6,int interlace=0)
     {var h=new byte[13];BinaryPrimitives.WriteUInt32BigEndian(h,(uint)width);BinaryPrimitives.WriteUInt32BigEndian(h.AsSpan(4),(uint)height);h[8]=(byte)depth;h[9]=(byte)color;h[12]=(byte)interlace;return Chunk("IHDR",h);}
     internal static byte[] Png(params byte[][] chunks)=>new byte[]{137,80,78,71,13,10,26,10}.Concat(chunks.SelectMany(c=>c)).ToArray();
+    // Zero-filled filter-0 rows matching an IHDR; interlaced data sums the seven Adam7 passes.
+    internal static byte[] ImageData(int width,int height,int depth,int color,bool interlaced=false,byte filter=0,int extra=0)
+    {
+        int channels=color switch{0=>1,2=>3,3=>1,4=>2,_=>4};var raw=new MemoryStream();
+        void Pass(int w,int h){if(w<=0||h<=0)return;int row=(w*channels*depth+7)/8;for(int y=0;y<h;y++){raw.WriteByte(filter);raw.Write(new byte[row]);}}
+        if(!interlaced)Pass(width,height);
+        else{int[] x0={0,4,0,2,0,1,0},dx={8,8,4,4,2,2,1},y0={0,0,4,0,2,0,1},dy={8,8,8,4,4,2,2};for(int p=0;p<7;p++)Pass((width-x0[p]+dx[p]-1)/dx[p],(height-y0[p]+dy[p]-1)/dy[p]);}
+        raw.Write(new byte[extra]);
+        using var target=new MemoryStream();using(var z=new ZLibStream(target,CompressionLevel.Optimal,true))z.Write(raw.ToArray());return target.ToArray();
+    }
     internal static byte[] ImageData()
     {
         using var target=new MemoryStream();using(var z=new ZLibStream(target,CompressionLevel.SmallestSize,true))z.Write(Enumerable.Range(0,26).Select(i=>(byte)(i is 0 or 13?0:i*7)).ToArray());return target.ToArray();
@@ -55,11 +65,14 @@ internal static class PngMetadataChecks
         var trailing=plain.Concat(new byte[]{0}).ToArray();reject(()=>PngMetadata.Read(new MemoryStream(trailing),default),"Trailing bytes not silently copied or discarded");
         foreach(int color in new[]{0,2,3,4,6})foreach(int depth in new[]{1,2,4,8,16})
         {
-            var candidate=color==3?Png(Header(depth:depth,color:color),Chunk("PLTE",new byte[]{0,0,0}),idat,end):Png(Header(depth:depth,color:color),idat,end);
+            var fitting=depth<=8?Chunk("IDAT",ImageData(3,2,depth,color)):idat;var candidate=color==3?Png(Header(depth:depth,color:color),Chunk("PLTE",new byte[]{0,0,0}),fitting,end):Png(Header(depth:depth,color:color),fitting,end);
             bool supported=color is 0 or 3?depth<=8:depth==8;
             if(supported)check(PngMetadata.Read(new MemoryStream(candidate),default).Width==3,"Allowed SDR header subset; native decoder still validates actual pixels");
             else reject(()=>PngMetadata.Read(new MemoryStream(candidate),default),"Invalid or high-precision color/depth pairing refused");
         }
+        check(PngMetadata.Read(new MemoryStream(Png(Header(9,10,interlace:1),Chunk("IDAT",ImageData(9,10,8,6,interlaced:true)),end)),default).Width==9,"Interlaced image data inflates to the exact Adam7 size");
+        foreach(var damaged in new[]{new byte[]{1,2,3},ImageData(3,2,8,6)[..^4].Concat(new byte[4]).ToArray(),ImageData(3,3,8,6),ImageData(3,2,8,6,extra:1),ImageData(3,2,8,6,filter:5),ImageData(3,2,8,6,interlaced:true)})
+            reject(()=>PngMetadata.Read(new MemoryStream(Png(Header(),Chunk("IDAT",damaged),end)),default),"Damaged, checksum-failing, short, long, bad-filter or wrongly interlaced image data refused before any system decoder");
         foreach(var h in new[]{Header(0),Header(height:0),Header(16385),Header(4001,4000),Header(interlace:2),Header(color:1)})reject(()=>PngMetadata.Read(new MemoryStream(Png(h,idat,end)),default),"Dimension/pixel/interlace/unknown color bounds");
         foreach(var chunks in new[]{new[]{Header(color:3),idat,end},new[]{Header(color:0),Chunk("PLTE",new byte[]{0,0,0}),idat,end},new[]{Header(),idat,Chunk("PLTE",new byte[]{0,0,0}),end},new[]{Header(),Chunk("PLTE",new byte[]{0}),idat,end},new[]{Header(depth:1,color:3),Chunk("PLTE",new byte[9]),idat,end},new[]{Header(),Chunk("tRNS",new byte[1]),idat,end}})
             reject(()=>PngMetadata.Read(new MemoryStream(Png(chunks)),default),"Palette/transparency structural bounds");
