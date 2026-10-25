@@ -60,7 +60,7 @@ internal static class CommonSimilarityNativeChecks
             var baseResult=CommonSimilarityReader.Read(CommonSimilarityKind.Text,choices.Take(1).ToArray(),default);var sources=new Dictionary<string,CommonDuplicateFileRef>(StringComparer.Ordinal);var many=new List<DuplicateIssue>();
             for(int i=0;i<20000;i++){string relative=new string('x',235)+i.ToString("D5")+".txt",key="0\\"+relative;sources.Add(key,new(CommonFolderKind.Desktop,relative,1));many.Add(new(key,"Unavailable or unsupported"));}
             var driveRoot=baseResult.Roots[0] with{Choice=CommonFolderChoice.FromReported(CommonFolderKind.Desktop,@"D:\")};var driveResult=baseResult with{Roots=Array.AsReadOnly(new[]{driveRoot})};var driveDialog=new CommonSimilarityDialog(app,driveResult);
-            check(driveDialog.CurrentReport.Contains(@"D:\same.png")&&!driveDialog.CurrentReport.Contains(@"D:\\same.png"),"Native drive-root report joins child names with exactly one separator");driveDialog.Close();
+            check(driveRoot.Choice.Path is null&&driveRoot.Choice.Issue is not null&&driveDialog.CurrentReport.Contains(@"D:\"),"Drive root is refused by the path policy and still shown as reported without a crash");driveDialog.Close();
             var huge=baseResult with{Sources=new ReadOnlyDictionary<string,CommonDuplicateFileRef>(sources),Text=baseResult.Text! with{Issues=many.AsReadOnly()}};var oversized=new CommonSimilarityDialog(app,huge);reject(()=>_ = oversized.CurrentReport,"Native complete report over 4Mi UTF16 is refused, never silently truncated");oversized.Close();
             reject(()=>CommonSimilarityReader.Read((CommonSimilarityKind)9,choices,default),"Unknown native similarity mode refused");
         }

@@ -156,7 +156,7 @@ internal sealed class CommonSimilarityDialog : Window
     private string FullPath(string key) { if (!result.Sources.TryGetValue(key, out var source)) throw new UserError("Unavailable or unsupported"); return DisplayPath(source.Kind, source.RelativePath); }
     private string DisplayPath(CommonFolderKind kind, string relative)
     {
-        string path = roots[kind].Choice.Path!;
+        var choice = roots[kind].Choice; string path = choice.Path ?? choice.ReportedPath; // a refused location is still shown as reported
         return relative.Length == 0 ? CacheLocations.VisiblePath(path) : CacheLocations.VisiblePath(path.TrimEnd('\\')) + "\\" + string.Join("\\", relative.Split('\\').Select(CacheLocations.VisiblePath));
     }
     private string PairText(PairRow row) => (row.Bits is int bits ? string.Format(app.L("Grid comparison agreement: {0}% · different bits: {1} of 64"), row.Score, bits) : string.Format(app.L("Similarity: {0}% · shared distinct lines: {1} · union: {2}"), row.Score, row.Common, row.Union)) + Environment.NewLine + row.First + Environment.NewLine + row.Second;
