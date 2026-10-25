@@ -106,13 +106,16 @@ public static partial class NativeFiles
         }
         finally
         {
-            if (!published)
+            try
             {
-                byte delete = 1;
-                // Never delete by path: a cleanup targets only the object this call created.
-                if (!SetDisposition(handle, 4, ref delete, 1)) ThrowLast();
+                if (!published)
+                {
+                    byte delete = 1;
+                    // Never delete by path: a cleanup targets only the object this call created.
+                    if (!SetDisposition(handle, 4, ref delete, 1)) ThrowLast();
+                }
             }
-            stream?.Dispose(); // closes the handle, so only after the disposition
+            finally { stream?.Dispose(); } // closes the handle, so only after the disposition
         }
     }
 
@@ -185,7 +188,8 @@ public static partial class NativeFiles
     {
         WindowsPathPolicy.ValidateName(leaf);
         byte[] name = Encoding.Unicode.GetBytes(leaf);
-        int lengthOffset = IntPtr.Size * 2, nameOffset = lengthOffset + 4, size = nameOffset + name.Length;
+        int lengthOffset = IntPtr.Size * 2, nameOffset = lengthOffset + 4;
+        int size = Math.Max(nameOffset + name.Length, IntPtr.Size == 8 ? 24 : 16); // never below sizeof(FILE_RENAME_INFORMATION), even for a one-character name
         IntPtr buffer = Marshal.AllocHGlobal(size); bool retained = false;
         try
         {

@@ -13,7 +13,8 @@
   5. PNG 元数据工具：WIC 接受损坏的 IDAT；核心新增 zlib 解压精确尺寸（含 Adam7）与过滤字节校验，不解码像素。
   6. 常用文件夹相似结果窗口遇被路径规则拒绝的位置（如盘符根）不再崩溃。
 - 测试自身问题（非产品）：QR 取消计时、GIF 预设应拒绝、透明像素隐藏 RGB、QR 底部按钮数、Mac 导出诊断、两个 UI fixture 需 Dispatcher 同步上下文、反射重载歧义、合成拖放参数缺 RoutedEvent。测试框架改为失败后继续并汇总、每组打印名称；全局 Dispatcher 上下文曾导致卡死，已仅限两个 UI fixture。
-- 上述产品修复的独立 agent 复核见下一条记录。
+- 独立 agent 复核：首轮无 P1，P2 为本轮 Move 改用路径改名后可被“空文件夹在检查与改名之间被设为挂载点”重定向（QR 输出与 ZIP 子文件夹为既有同类问题）；改为 ntdll NtSetInformationFile(FileRenameInformation) 以持有的目录句柄为 RootDirectory、仅叶名、不替换（kernelbase 会把名称改写为完整路径，即先前错误 87 的原因）。P3 已修：租约仅 Traverse（不需列目录权限，仍阻止改名/删除）；PNG 自行比对 Adler-32（拒绝截断与追加字节）；staging 流在 try 内创建、无缓冲、处置后再关句柄。复审发现 RenameInto 缓冲小于结构体最小值使单字符名失败（P2），已改为不小于 sizeof(FILE_RENAME_INFORMATION) 并加单字符移动 native 测试。复审无其他未解决 P1/P2。
+- 行为说明：图片到达监视会话期间，所监视文件夹及其上级文件夹现在确实无法被改名或删除（此前持有无效），停止监视后恢复。
 
 ## 0.83 验证记录
 

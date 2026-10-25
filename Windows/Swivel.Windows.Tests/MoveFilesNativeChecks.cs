@@ -40,6 +40,10 @@ internal static class MoveFilesNativeChecks
         check(undone.Error is null && MoveReceipts.AfterUndo(moved.Remaining, undone).Count == 0 && File.ReadAllBytes(first + ":Zone.Identifier").SequenceEqual(zone), "Native undo restores original object and Zone.Identifier");
         using (var session = MoveSession.Open(selected, a, default))
         { var same = session.Execute(default); check(session.Plan.All(p => !p.Changed) && same.Error is null && same.Remaining.Count == 0, "Native same-directory identity produces visible noops"); }
+        string single = Path.Combine(a, "x"); File.WriteAllText(single, "one");
+        using (var session = MoveSession.Open(new[] { single }, c, default))
+        { var one = session.Execute(default); check(one.Error is null && File.ReadAllText(Path.Combine(c, "x")) == "one" && !File.Exists(single), "Native move of a one-character name meets the minimum rename buffer: " + one.Error); }
+        File.Delete(Path.Combine(c, "x"));
         string alias = a[..^1] + "A";
         if (Directory.Exists(alias))
             using (var session = MoveSession.Open(selected, alias, default)) check(session.Plan.All(p => !p.Changed), "Native case alias of the same held directory also produces noops");
