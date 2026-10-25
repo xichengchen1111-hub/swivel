@@ -73,6 +73,14 @@ internal static class ImageRecipeChecks
         string id = "preset." + Guid.NewGuid().ToString("N");
         foreach (string format in ImageRecipe.Formats)
         {
+            if (format == "gif")
+            {
+                // Random colors and resampled alpha edges exceed GIF's 256 colors/binary alpha: refused, never flattened.
+                int before = Directory.GetFiles(directory, "*.gif").Length;
+                reject(() => ImageTools.Run(path, id, 1920, CancellationToken.None, new ImageRecipe(format, 32, 44)), "GIF preset refuses partial alpha and too many colors");
+                check(Directory.GetFiles(directory, "*.gif").Length == before, "Refused GIF preset leaves no output");
+                continue;
+            }
             string output = ImageTools.Run(path, id, 1920, CancellationToken.None, new ImageRecipe(format, 32, 44));
             var image = Decode(output);
             check(image.PixelWidth == 32 && image.PixelHeight == 24 && Path.GetExtension(output) == "." + format, "Preset format and fitted dimensions: " + format);
