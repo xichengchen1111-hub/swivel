@@ -215,7 +215,10 @@ public static partial class NativeFiles
         }
         private void Add(string path)
         {
-            var handle = NativeFiles.Open(path, ReadAttributes, 1, 3, OpenReparse | BackupSemantics);
+            // List/traverse access takes part in share checks (attribute-only opens do not), so
+            // without delete sharing the folder cannot be renamed or removed while held. Write
+            // sharing stays on: publishing a child opens its parent for write data.
+            var handle = NativeFiles.Open(path, ReadAttributes | 0x1 | 0x20, 3, 3, OpenReparse | BackupSemantics);
             handles.Add(handle);
             Check(handle, true);
         }

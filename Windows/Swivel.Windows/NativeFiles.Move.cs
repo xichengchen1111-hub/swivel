@@ -33,7 +33,7 @@ public static partial class NativeFiles
                 void Add(string current)
                 {
                     token.ThrowIfCancellationRequested();
-                    var handle = NativeFiles.Open(current, ReadAttributes, 1, 3, OpenReparse | BackupSemantics);
+                    var handle = NativeFiles.Open(current, ReadAttributes | 0x1 | 0x20, 3, 3, OpenReparse | BackupSemantics); // held like DirectoryLease
                     lease.handles.Add(handle); Check(handle, true);
                     entries.Add(new(current, ReadMoveIdentity(handle)));
                 }
