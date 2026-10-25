@@ -91,7 +91,7 @@ internal static class ImageRecipeChecks
         check(Pixels(Decode(neutral)).SequenceEqual(Pixels(Decode(unchangedSize))),"Neutral photo preset preserves every normalized pixel");
         string mono = ImageTools.Run(path,id,1920,CancellationToken.None,new("png",Adjustments:new(Saturation:-1)));
         var monochrome = Pixels(Decode(mono)); var baseline = Pixels(Decode(unchangedSize)); bool grayscale = true, alpha = true;
-        for (int i = 0; i < monochrome.Length; i+=4) { grayscale &= monochrome[i] == monochrome[i+1] && monochrome[i] == monochrome[i+2]; alpha &= monochrome[i+3] == baseline[i+3]; }
+        for (int i = 0; i < monochrome.Length; i+=4) { grayscale &= baseline[i+3] == 0 ? monochrome.AsSpan(i,3).SequenceEqual(baseline.AsSpan(i,3)) : monochrome[i] == monochrome[i+1] && monochrome[i] == monochrome[i+2]; alpha &= monochrome[i+3] == baseline[i+3]; } // Fully transparent pixels keep their hidden RGB by design.
         check(grayscale && alpha,"Photo recipe runs adjustments while preserving alpha");
         string smallMono = ImageTools.Run(path,id,1920,CancellationToken.None,new("jpg",32,80,new(Saturation:-1)));
         check(Decode(smallMono).PixelWidth == 32 && Decode(smallMono).PixelHeight == 24,"Photo recipe combines adjustments resize and output format");
