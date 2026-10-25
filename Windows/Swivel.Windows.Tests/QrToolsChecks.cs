@@ -98,7 +98,7 @@ internal static class QrToolsChecks
             field.Text=new string('x',QrCode.MaxBytes);
             check(actions.All(x=>x.IsEnabled)&&preview.Source is not null&&preview.Width==370&&preview.Height==370,"Maximum valid input has full raster with bounded integer-module native preview");
             var footer=((DockPanel)dialog.Content).Children.OfType<WrapPanel>().Single();
-            check(DockPanel.GetDock(footer)==Dock.Bottom&&footer.Children.OfType<Button>().Count()==3,"QR Copy/Save/Close remain in fixed native footer");
+            check(DockPanel.GetDock(footer)==Dock.Bottom&&footer.Children.OfType<Button>().Select(x=>x.Content).SequenceEqual(new object[]{app.L("Open 3D Garden…"),app.L("Copy Image"),app.L("Save PNG…"),app.L("Close")}),"QR 3D Garden/Copy/Save/Close remain in fixed native footer");
             var correction=nodes.OfType<ComboBox>().Single(x=>AutomationProperties.GetName(x)==app.L("QR Error Correction"));
             check(correction.SelectedIndex==0,"New QR defaults to existing L behavior");
             correction.SelectedIndex=1;
