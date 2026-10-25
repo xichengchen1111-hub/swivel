@@ -110,6 +110,7 @@ internal static class Program
             MoveFilesDialogNativeChecks.Run(Check,Reject);
             MoveFilesNativeChecks.Run(directory,Check,Reject);
             ZipExtractNativeChecks.Run(directory,Check,Reject);
+            CopyFilesNativeChecks.Run(directory,Check,Reject);
             ImageArrivalNativeChecks.Run(directory,Check,Reject);
             ImageArrivalWindowNativeChecks.Run(Check,Reject);
             WheelGestureNativeChecks.Run(Check,Reject);

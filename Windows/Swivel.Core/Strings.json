@@ -2989,11 +2989,6 @@
     "明確觸發的傳統桌面程式唯讀安裝記錄，來自目前使用者/電腦的四個固定登錄視圖。每視圖最多 1,024 項、每文字欄位 1,024 個 UTF-16 單元、約 10 秒。這不是完整或同時的已安裝應用程式清單：登錄資料可能變化、過期、重複，或由任意安裝程式提供。阻塞的系統呼叫可在軟時限後傳回。",
     "現在のユーザーとマシンの固定された 4 つのレジストリビューから、明示的な操作で従来のデスクトップアプリのインストール記録を読み取ります。各ビュー 1,024 件、各テキスト 1,024 UTF-16 単位、約 10 秒までです。完全または同時点のインストール済みアプリ一覧ではありません。データは変化、陳腐化、重複する場合があり、任意のインストーラーが書き込めます。ブロックしたシステム呼び出しは制限時間後に戻る場合があります。"
   ],
-  "Explicitly move ordinary files within one NTFS volume after a full path preview. No overwriting; the same file objects retain attached data and original permissions. Failed moves attempt rollback, with exact recovery paths and up to 20 session Undo records checked against recorded identities and metadata. Content changes are not fully detected. Copies, cross-volume moves, folders, hard links, read-only files and cloud links remain unavailable; real Windows acceptance is pending.": [
-    "完整路径预览后，明确在同一 NTFS 卷内移动普通文件。不覆盖，原文件对象保留附带数据及原权限。失败时尝试回滚，记录准确恢复路径，并提供最多 20 批会话撤销，核对已记录的身份及元数据；不能检测所有内容变化。暂不支持复制、跨卷、文件夹、硬链接、只读文件及云链接；真实 Windows 验收仍待执行。",
-    "完整路徑預覽後，明確在同一 NTFS 磁碟區內移動一般檔案。不覆寫，原檔案物件保留附帶資料及原權限。失敗時嘗試復原，記錄準確恢復路徑，並提供最多 20 批工作階段復原，核對已記錄的身分及中繼資料；不能偵測所有內容變更。暫不支援複製、跨磁碟區、資料夾、硬連結、唯讀檔案及雲端連結；真實 Windows 驗收仍待執行。",
-    "完全なパスを確認後、同じ NTFS ボリューム内で通常ファイルを明示的に移動します。上書きせず、同じファイルが付随データと元の権限を保持します。失敗時は復元を試み、正確な復旧パスと最大 20 回分のセッション取り消し履歴を記録します。識別情報と記録済みメタデータを照合しますが、すべての内容変更を検出できません。コピー、ボリューム間移動、フォルダー、ハードリンク、読み取り専用ファイル、クラウドリンクは未対応です。Windows 実機検証は未実施です。"
-  ],
   "Export Image Presets…": [
     "导出图片预设…",
     "匯出圖片預設…",
@@ -5003,11 +4998,6 @@
     "移动历史仅保留在本次会话，最多 20 批。若恢复不完整，请以记录的当前位置为准。退出 Swivel 或清除历史会删除这些撤销记录。",
     "移動記錄僅保留在本次工作階段，最多 20 批。若復原不完整，請以記錄的目前位置為準。結束 Swivel 或清除記錄會刪除這些復原記錄。",
     "移動履歴はこのセッション内で最大 20 回分保存されます。復元が不完全な場合は記録された現在のパスを確認してください。Swivel の終了または履歴の消去で取り消し記録が失われます。"
-  ],
-  "Move original files to another folder on the same NTFS volume. Review every source and destination before confirming. Copies and moves across volumes are not available yet.": [
-    "将原文件移动到同一 NTFS 卷内的另一个文件夹。确认前请核对每个来源及目标。暂不支持复制及跨卷移动。",
-    "將原檔案移動到同一 NTFS 磁碟區內的另一個資料夾。確認前請核對每個來源及目標。暫不支援複製及跨磁碟區移動。",
-    "元のファイルを同じ NTFS ボリューム内の別のフォルダーに移動します。確認前にすべての移動元と移動先を確認してください。コピーとボリュームをまたぐ移動は未対応です。"
   ],
   "Move the listed original files to the displayed destinations. This is a move of the same file objects, not a copy. A move requires an unoccupied destination; files are never overwritten or automatically renamed to avoid a conflict.": [
     "将列表中的原始文件移动到所示目标位置。这会移动同一文件对象，不会创建副本。执行移动的目标位置必须空闲；不会覆盖文件，也不会自动改名来避开冲突。",
@@ -11633,5 +11623,100 @@
     "此 ZIP 压缩包包含 Windows 短文件名形式的名称（例如 NAME~1），未解压。",
     "此 ZIP 壓縮檔包含 Windows 短檔名形式的名稱（例如 NAME~1），未解壓縮。",
     "この ZIP アーカイブには Windows の短い名前の形式（NAME~1 など）の名前があるため、展開しませんでした。"
+  ],
+  "Copy to Folder…": [
+    "复制到文件夹…",
+    "複製到資料夾…",
+    "フォルダーにコピー…"
+  ],
+  "Choose Files to Copy…": [
+    "选择要复制的文件…",
+    "選擇要複製的檔案…",
+    "コピーするファイルを選択…"
+  ],
+  "Choose 1–100 distinct files to copy.": [
+    "请选择 1–100 个不同的文件来复制。",
+    "請選擇 1–100 個不同的檔案來複製。",
+    "コピーする異なるファイルを 1～100 個選んでください。"
+  ],
+  "Copying file {0} of {1}…": [
+    "正在复制第 {0} 个文件，共 {1} 个…",
+    "正在複製第 {0} 個檔案，共 {1} 個…",
+    "{1} 個中 {0} 個目のファイルをコピーしています…"
+  ],
+  "Copied {0} of {1} file(s). Originals were not changed.": [
+    "已复制 {1} 个文件中的 {0} 个。原文件未改动。",
+    "已複製 {1} 個檔案中的 {0} 個。原始檔案未變更。",
+    "{1} 個中 {0} 個のファイルをコピーしました。元のファイルは変更していません。"
+  ],
+  "{0} file(s), {1} MB, into:": [
+    "{0} 个文件，{1} MB，复制到：",
+    "{0} 個檔案，{1} MB，複製到：",
+    "{0} 個のファイル（{1} MB）のコピー先："
+  ],
+  "Originals stay where they are. Each copy keeps its name; if that name is already taken, Swivel adds a number (photo 2.jpg). Nothing is overwritten.": [
+    "原文件留在原处。副本保留原名；如果名称已被占用，Swivel 会加上编号（photo 2.jpg）。不会覆盖任何文件。",
+    "原始檔案留在原處。副本保留原名；如果名稱已被使用，Swivel 會加上編號（photo 2.jpg）。不會覆寫任何檔案。",
+    "元のファイルはそのまま残ります。コピーは元の名前を使い、その名前が使われている場合は番号を付けます（photo 2.jpg）。上書きは一切しません。"
+  ],
+  "Files to copy": [
+    "要复制的文件",
+    "要複製的檔案",
+    "コピーするファイル"
+  ],
+  "Copy to Folder currently requires an NTFS destination, so every data stream and the download warning can be kept.": [
+    "复制到文件夹目前需要 NTFS 目标位置，以便保留所有数据流和下载警告。",
+    "複製到資料夾目前需要 NTFS 目標位置，以便保留所有資料流和下載警告。",
+    "すべてのデータストリームとダウンロードの警告を残すため、フォルダーへのコピーには現在 NTFS のコピー先が必要です。"
+  ],
+  "There is not enough free space in the destination folder.": [
+    "目标文件夹没有足够的可用空间。",
+    "目標資料夾沒有足夠的可用空間。",
+    "コピー先フォルダーの空き容量が足りません。"
+  ],
+  "A copy did not match its original and could not be removed. Check the destination folder. The original is unchanged.": [
+    "一个副本与原文件不一致，且无法删除。请检查目标文件夹。原文件未改动。",
+    "一個副本與原始檔案不一致，且無法刪除。請檢查目標資料夾。原始檔案未變更。",
+    "コピーが元のファイルと一致せず、削除もできませんでした。コピー先フォルダーを確認してください。元のファイルは変更していません。"
+  ],
+  "A copy did not match its original and was removed. The original is unchanged.": [
+    "一个副本与原文件不一致，已删除。原文件未改动。",
+    "一個副本與原始檔案不一致，已刪除。原始檔案未變更。",
+    "コピーが元のファイルと一致しなかったため削除しました。元のファイルは変更していません。"
+  ],
+  "The copy could not be verified.": [
+    "无法核对副本。",
+    "無法核對副本。",
+    "コピーを確認できませんでした。"
+  ],
+  "Move original files to another folder on the same NTFS volume, or copy files to any local NTFS folder. Review every source and destination before confirming. Moves across volumes are not available yet.": [
+    "可把原文件移动到同一 NTFS 卷上的另一个文件夹，或把文件复制到任意本地 NTFS 文件夹。确认前请检查每个来源和目标。跨卷移动暂不可用。",
+    "可把原始檔案移動到同一 NTFS 磁碟區上的另一個資料夾，或把檔案複製到任意本機 NTFS 資料夾。確認前請檢查每個來源和目標。跨磁碟區移動暫不可用。",
+    "元のファイルを同じ NTFS ボリューム上の別のフォルダーへ移動するか、任意のローカル NTFS フォルダーにコピーできます。確定する前に、すべてのコピー元と宛先を確認してください。ボリュームをまたぐ移動はまだ使えません。"
+  ],
+  "Copies keep every data stream, including the download warning (Mark of the Web), plus attributes and the modified time; the creation time is new. Permissions follow the destination folder. Each copy's stream names and sizes are checked against the original (not every byte). If copying stops, completed copies stay.": [
+    "副本保留所有数据流，包括下载警告（Web 标记），以及属性和修改时间；创建时间为新的。权限沿用目标文件夹。每个副本的数据流名称和大小都会与原文件核对（不逐字节比较）。如果复制中途停止，已完成的副本会保留。",
+    "副本保留所有資料流，包括下載警告（Web 標記），以及屬性和修改時間；建立時間為新的。權限沿用目標資料夾。每個副本的資料流名稱和大小都會與原始檔案核對（不逐位元組比較）。如果複製中途停止，已完成的副本會保留。",
+    "コピーにはダウンロードの警告（Mark of the Web）を含むすべてのデータストリーム、属性、更新日時が残ります。作成日時は新しくなります。アクセス許可はコピー先フォルダーに従います。各コピーのストリーム名とサイズを元のファイルと照合します（全バイトの比較ではありません）。途中で止まった場合、完了したコピーは残ります。"
+  ],
+  "Explicitly move ordinary files within one NTFS volume after a full path preview. No overwriting; the same file objects retain attached data and original permissions. Failed moves attempt rollback, with exact recovery paths and up to 20 session Undo records checked against recorded identities and metadata. Content changes are not fully detected. Copy to Folder copies 1–100 files to a local NTFS folder with every data stream, the download warning, attributes and the modified time, never overwriting; each copy's stream names and sizes are checked against the original. Moving across volumes, and moving folders, hard links, read-only files or cloud links, remain unavailable; real Windows acceptance is pending.": [
+    "完整路径预览后，明确在同一 NTFS 卷内移动普通文件。不覆盖，原文件对象保留附带数据及原权限。失败时尝试回滚，记录准确恢复路径，并提供最多 20 批会话撤销，核对已记录的身份及元数据；不能检测所有内容变化。复制到文件夹可把 1–100 个文件复制到本地 NTFS 文件夹，保留所有数据流、下载警告、属性和修改时间，绝不覆盖，并核对每个副本的数据流名称和大小。暂不支持跨卷移动，以及移动文件夹、硬链接、只读文件或云链接；真实 Windows 验收仍待执行。",
+    "完整路徑預覽後，明確在同一 NTFS 磁碟區內移動一般檔案。不覆寫，原檔案物件保留附帶資料及原權限。失敗時嘗試復原，記錄準確恢復路徑，並提供最多 20 批工作階段復原，核對已記錄的身分及中繼資料；不能偵測所有內容變更。複製到資料夾可把 1–100 個檔案複製到本機 NTFS 資料夾，保留所有資料流、下載警告、屬性和修改時間，絕不覆寫，並核對每個副本的資料流名稱和大小。暫不支援跨磁碟區移動，以及移動資料夾、硬連結、唯讀檔案或雲端連結；真實 Windows 驗收仍待執行。",
+    "完全なパスを確認後、同じ NTFS ボリューム内で通常ファイルを明示的に移動します。上書きせず、同じファイルが付随データと元の権限を保持します。失敗時は復元を試み、正確な復旧パスと最大 20 回分のセッション取り消し履歴を記録します。識別情報と記録済みメタデータを照合しますが、すべての内容変更を検出できません。フォルダーへのコピーでは 1～100 個のファイルをローカル NTFS フォルダーにコピーし、すべてのデータストリーム、ダウンロードの警告、属性、更新日時を残し、上書きせず、各コピーのストリーム名とサイズを照合します。ボリューム間の移動や、フォルダー・ハードリンク・読み取り専用ファイル・クラウドリンクの移動は未対応です。Windows 実機検証は未実施です。"
+  ],
+  "A copy was made but could not be verified. Check it in the destination folder before relying on it.": [
+    "副本已创建，但无法核对。请在使用前到目标文件夹检查它。",
+    "副本已建立，但無法核對。請在使用前到目標資料夾檢查它。",
+    "コピーは作成しましたが確認できませんでした。使う前にコピー先フォルダーで確認してください。"
+  ],
+  "A copy was moved or replaced by another app before it could be verified. Swivel left it alone; check the destination folder.": [
+    "副本在核对前被其他应用移动或替换。Swivel 没有动它，请检查目标文件夹。",
+    "副本在核對前被其他應用程式移動或取代。Swivel 沒有動它，請檢查目標資料夾。",
+    "確認する前に、コピーが別のアプリによって移動または置き換えられました。Swivel は触れていません。コピー先フォルダーを確認してください。"
+  ],
+  "This file has too many alternate data streams to copy safely.": [
+    "此文件的附加数据流过多，无法安全复制。",
+    "此檔案的附加資料流過多，無法安全複製。",
+    "このファイルは代替データストリームが多すぎるため、安全にコピーできません。"
   ]
 }

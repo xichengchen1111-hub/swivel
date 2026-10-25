@@ -643,6 +643,15 @@ public sealed partial class App : Application
                 foreach (string path in files) WindowsPathPolicy.Validate(path);
                 await RunMoveAsync(files, owner, report, token, false); return;
             }
+            if (action.Id == "file.copyto")
+            {
+                if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
+                workFeature = Feature.FileMoves;
+                files = files.ToArray();
+                if (files.Length is < 1 or > CopyRules.MaxFiles) throw new UserError("Choose 1–100 distinct files to copy.");
+                foreach (string path in files) WindowsPathPolicy.Validate(path);
+                await RunCopyAsync(files, owner, report, token); return;
+            }
             if (action.Id == "file.undoMove")
             {
                 if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
@@ -1128,6 +1137,29 @@ public sealed partial class App : Application
             finished.SetResult();
         }
     }
+    private async Task RunCopyAsync(string[] files, Window owner, Action<string> report, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        var picker = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose Destination Folder…"), Multiselect = false };
+        if (picker.ShowDialog(owner) != true) return;
+        token.ThrowIfCancellationRequested(); string directory = picker.FolderName;
+        CopyOutcome outcome;
+        using (var session = await Task.Run(() => CopySession.Open(files, directory, token), token))
+        {
+            token.ThrowIfCancellationRequested();
+            if (!ShowOperationDialog(new CopyFilesDialog(this, session), owner, token)) return;
+            token.ThrowIfCancellationRequested();
+            if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
+            report(L("Processing…"));
+            outcome = await Task.Run(() => session.Execute(token, (done, total) =>
+                Dispatcher.InvokeAsync(() => report(string.Format(L("Copying file {0} of {1}…"), done, total)))));
+        }
+        string summary = string.Format(L("Copied {0} of {1} file(s). Originals were not changed."), outcome.Copied.Count, outcome.Total);
+        if (outcome.Cancelled) summary += " " + L("Cancelled. Completed files were kept.");
+        report(summary); Home.ShowResults(outcome.Copied.Select(x => x.Destination), summary);
+        if (outcome.Error is not null && !exiting) ShowError(outcome.Error);
+    }
+
     private async Task RunMoveAsync(string[] files, Window owner, Action<string> report, CancellationToken token, bool undo)
     {
         if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");

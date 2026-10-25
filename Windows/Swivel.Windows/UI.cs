@@ -244,7 +244,7 @@ public sealed class MainWindow : Window
     private UIElement MovePage()
     {
         var page = Page(); page.Children.Add(UI.Text(app.L("Move Files"), 22));
-        page.Children.Add(UI.Text(app.L("Move original files to another folder on the same NTFS volume. Review every source and destination before confirming. Copies and moves across volumes are not available yet.")));
+        page.Children.Add(UI.Text(app.L("Move original files to another folder on the same NTFS volume, or copy files to any local NTFS folder. Review every source and destination before confirming. Moves across volumes are not available yet.")));
         page.Children.Add(UI.Text(app.L("Move history lasts only for this session, with up to 20 batches. If recovery was incomplete, use the recorded current paths. Closing Swivel or forgetting history removes its Undo records.")));
         bool enabled = app.Prefs.IsOn(Feature.FileMoves);
         if (!enabled) page.Children.Add(UI.Text(app.L("Enable Move Files in Settings first.")));
@@ -255,6 +255,12 @@ public sealed class MainWindow : Window
             catch (Exception error) { app.ShowError(error); }
         });
         choose.IsEnabled = enabled; row.Children.Add(choose);
+        var copy = UI.Button(app.L("Choose Files to Copy…"), async () =>
+        {
+            try { var paths = UI.Pick(this); if (paths.Length > 0) await app.RunActionAsync(new("file.copyto", "Copy to Folder…", Feature.FileMoves), paths, this, SetStatus); }
+            catch (Exception error) { app.ShowError(error); }
+        });
+        copy.IsEnabled = enabled; row.Children.Add(copy);
         var undo = UI.Button(app.L("Undo File Move"), async () => await app.RunActionAsync(new("file.undoMove", "Undo File Move", Feature.FileMoves), Array.Empty<string>(), this, SetStatus));
         undo.IsEnabled = enabled && app.MoveHistory.Count > 0; row.Children.Add(undo);
         row.Children.Add(UI.Button(app.L("Forget Move History"), () => { if (app.Busy) return; app.MoveHistory.Clear(); Refresh(); })); page.Children.Add(row);

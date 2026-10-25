@@ -4,6 +4,16 @@
 
 当前固定52项的状态、剩余数量和Mac新增差距见 [PROGRESS.md](PROGRESS.md)。
 
+## 0.83 已实现：复制到文件夹
+
+开始 `git fetch`，origin/main 仍为 `6cbfdc1`，无新 Mac 改动。在默认关闭的 FileMoves 下追加 `file.copyto`（与 `file.move` 共用开关和页面），无新 Feature／Prefs 字段／依赖。
+
+`CopyRules`：1–100 个不同（忽略大小写）普通路径、目标目录过 `MoveRules.DirectoryPath`；名称 `stem N.ext`（点开头文件整体作 stem）。`CopySession.Open` 先持有目标祖先，要求 NTFS 与可用空间（主数据流＋每项 4 KiB＋64 MiB），再以 `NativeFiles.OpenRead` 持有每个源（仅共享读）。
+
+`CopyInto` 调用 System32 `CopyFile2`（FAIL_IF_EXISTS|COPY_SYMLINK、pfCancel），80／183 换下一个序号，1235 为取消，非 Win32 HRESULT 经 `GetExceptionForHR`。进度回调在 STREAM_STARTED（流 1）从 `hDestinationFile` 记下卷号与文件索引；`Verify` 以共享 7 重新打开，身份不同则不动并报错；相同才比较 `FileStreamInfo` 的名称与大小，不一致用 `FileDispositionInfoEx`（DELETE|POSIX|IGNORE_READONLY）删除该对象。打开失败或未取得身份返回“未核对”警告，副本仍计入结果。首个错误／取消即停止。
+
+B06 仍部分：跨卷移动、文件夹树、副本撤销待做。复核见 [TESTING](TESTING.md#083-验证记录)。真实 Windows NTFS／ADS／EFS／界面／x64 与 ARM64 未执行。
+
 ## 0.82 已实现：普通 ZIP 安全解压
 
 第九批开始先 `git fetch`，origin/main 仍为 Mac 1.12.7／`6cbfdc1`，没有新的 Mac 改动。在默认关闭的 Archives 下追加单文件动作 `archive.extract`（仅 `.zip`），无新 Feature／Prefs 字段／schema／第三方依赖；原 ZIP／TAR／GZip 创建不变。

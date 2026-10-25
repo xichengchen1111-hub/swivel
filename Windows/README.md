@@ -1,6 +1,14 @@
-# Swivel for Windows — 0.82 preview
+# Swivel for Windows — 0.83 preview
 
 Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批功能扩展预览，尚未与 Mac 功能齐全对等，也未完成 Windows 实机验收。** 剩余进度见 [52项功能进度表](PROGRESS.md)，逐批记录见 [PORTING.md](PORTING.md)，差异见 [兼容调研](../reports/Windows与macOS兼容调研.md)，验收步骤见 [TESTING.md](TESTING.md)。Mac 源码、构建、设置和安装保持独立。
+
+## 0.83 新增：复制到文件夹
+
+启用 Move Files 后，页面上有 **Choose Files to Copy…**，也可把 **Copy to Folder…** 放进 Wheel／My Wheel。选 1–100 个文件和一个本地 NTFS 目标文件夹，确认完整列表后复制；原文件不动。副本使用原名，已被占用时依次改用 `名称 2`、`名称 3`…，绝不覆盖。
+
+使用 Windows 自带的 CopyFile2：保留所有数据流（含下载警告 Web 标记）、属性和修改时间；创建时间为新，权限沿用目标文件夹。CopyFile2 创建副本时就记下其文件身份，复制后只核对这个对象，数据流名称和大小必须与原文件一致（不逐字节比较），不一致就通过该句柄删除；若名称已被其他应用移走或替换，Swivel 不碰它并提示。无法核对时副本仍列出并提醒检查。失败或取消立即停止，已完成的副本保留。
+
+B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
 ## 0.82 新增：安全解压普通 ZIP
 
