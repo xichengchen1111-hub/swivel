@@ -14,7 +14,9 @@ using Swivel.Windows;
 internal static class Program
 {
     private static int checks;
-    private static void Check(bool condition, string name) { if (!condition) throw new Exception(name); checks++; }
+    private static readonly System.Collections.Generic.List<string> failures = new();
+    // A failed check is reported and the run continues, so one Windows run lists every failure.
+    private static void Check(bool condition, string name) { if (!condition) { failures.Add(name); Console.Error.WriteLine("FAIL: " + name); return; } checks++; }
     private static void Reject(Action action, string name) { bool failed = false; try { action(); } catch { failed = true; } Check(failed, name); }
     [STAThread]
     public static int Main()
@@ -179,10 +181,11 @@ internal static class Program
                 foreach (var fact in facts) Check(Strings.Table.ContainsKey(fact.Title) && Strings.Table.ContainsKey(fact.Format), "Live doctor labels translated");
             }
             else Console.WriteLine("SKIP: set SWIVEL_DOCTOR_LIVE=1 for explicit read-only system checks.");
+            if (failures.Count > 0) { Console.Error.WriteLine($"{failures.Count} native check(s) failed, {checks} passed:"); foreach (string failure in failures) Console.Error.WriteLine("  " + failure); return 1; }
             Console.WriteLine($"PASS: {checks} Windows native checks. Explorer interaction/DPI/accessibility remain manual.");
             return 0;
         }
-        catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+        catch (Exception error) { Console.Error.WriteLine(error); foreach (string failure in failures) Console.Error.WriteLine("Earlier FAIL: " + failure); return 1; }
         finally { try { Directory.Delete(directory, true); } finally { validationApp.Shutdown(); } }
     }
     private static BitmapFrame Decode(string path)

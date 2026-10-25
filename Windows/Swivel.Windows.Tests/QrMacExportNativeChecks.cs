@@ -22,7 +22,7 @@ internal static class QrMacExportNativeChecks
             progressCalls++;
             reject(() => Directory.Move(folder, folder + " moved"), "Mac PNG export keeps the selected directory pinned for its entire batch");
         });
-        check(result.All(row => row.State == BatchState.Saved) && result.Count == 3 && progressCalls == 3, "Mac PNG native batch publishes each compatible entry");
+        check(result.All(row => row.State == BatchState.Saved) && result.Count == 3 && progressCalls == 3, "Mac PNG native batch publishes each compatible entry: " + string.Join("; ", result.Select(row => row.State + " " + row.Error?.GetType().Name + " " + row.Error?.Message)) + " progress " + progressCalls);
         check(result[0].Output == Path.Combine(folder, plan.Rows[0].Stem + " 2.png") && File.ReadAllBytes(occupied).SequenceEqual(sentinel), "Mac PNG native export never replaces an existing filename");
         for (int i = 0; i < result.Count; i++)
         {
