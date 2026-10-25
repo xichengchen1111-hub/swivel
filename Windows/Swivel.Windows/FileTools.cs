@@ -40,24 +40,36 @@ public sealed class ZipExtractWork : IDisposable
     private readonly NativeFiles.Input input;
     public ZipPlan Plan { get; }
     public int Zone { get; }
+    /// Null for ZIP; otherwise the TAR or gzip kind.
+    public TarKind? Tar { get; }
     public string Path => input.Path;
-    private ZipExtractWork(NativeFiles.Input input, ZipPlan plan, int zone) { this.input = input; Plan = plan; Zone = zone; }
+    private readonly string stem;
+    private ZipExtractWork(NativeFiles.Input input, ZipPlan plan, int zone, TarKind? tar, string stem) { this.input = input; Plan = plan; Zone = zone; Tar = tar; this.stem = stem; }
     public static ZipExtractWork Open(string path, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (!string.Equals(System.IO.Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase)) throw new UserError("Choose a .zip file to extract.");
+        string name = System.IO.Path.GetFileName(path);
+        bool zip = string.Equals(System.IO.Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase);
+        TarKind? tar = zip ? null : TarExtract.KindFor(name);
+        if (!zip && tar is null) throw new UserError("Choose a .zip, .tar, .tar.gz, .tgz or .gz file to extract.");
         var input = NativeFiles.OpenRead(path);
         try
         {
-            var plan = ZipExtract.Read(input.Stream, token);
-            NativeFiles.CheckExtractionTarget(input, plan);
+            var plan = tar is TarKind kind ? TarExtract.Read(input.Stream, kind, name, token) : ZipExtract.Read(input.Stream, token);
+            string stem = tar is TarKind folderKind ? TarExtract.FolderStem(name, folderKind) : ZipExtract.FolderStem(name);
+            NativeFiles.CheckExtractionTarget(input, plan, stem);
             int zone = ZipExtract.TargetZone(NativeFiles.ReadZoneIdentifier(input));
             token.ThrowIfCancellationRequested();
-            return new(input, plan, zone);
+            return new(input, plan, zone, tar, stem);
         }
         catch { input.Dispose(); throw; }
     }
-    public ZipOutcome Extract(CancellationToken token, Action<int, int>? progress) => NativeFiles.ExtractZip(input, Plan, Zone, token, progress);
+    public ZipOutcome Extract(CancellationToken token, Action<int, int>? progress)
+    {
+        if (Tar is not TarKind kind) return NativeFiles.ExtractZip(input, Plan, Zone, token, progress);
+        using var source = TarExtract.OpenSource(input.Stream, kind, token);
+        return NativeFiles.ExtractArchive(input, Plan, stem, Zone, (member, output) => source.Extract(member, output, token), token, progress);
+    }
     public void Dispose() => input.Dispose();
 }
 

@@ -42,13 +42,12 @@ public static partial class NativeFiles
 
     /// Everything that can be checked before the new folder exists: NTFS (for Mark of the
     /// Web), path lengths and free space with a margin. Refusals here leave no trace.
-    public static void CheckExtractionTarget(Input input, ZipPlan plan)
+    public static void CheckExtractionTarget(Input input, ZipPlan plan, string stem)
     {
         string parent = System.IO.Path.GetDirectoryName(input.Path)!;
         var fileSystem = new StringBuilder(64);
         if (!GetVolumeInformation(parent[..3], null, 0, out _, out _, out _, fileSystem, fileSystem.Capacity)) ThrowLast();
-        if (fileSystem.ToString() != "NTFS") throw new UserError("ZIP extraction currently requires an NTFS drive, so extracted files can keep their download warning.");
-        string stem = ZipExtract.FolderStem(System.IO.Path.GetFileName(input.Path));
+        if (fileSystem.ToString() != "NTFS") throw new UserError("Archive extraction currently requires an NTFS drive, so extracted files can keep their download warning.");
         int root = parent.TrimEnd('\\').Length + 1 + stem.Length + 6; // worst case " 10000"
         int deepestFolder = plan.Files.Select(file => System.IO.Path.GetDirectoryName(file.Path)!.Length).DefaultIfEmpty(0).Max();
         // Staging files also get a ":Zone.Identifier" stream; paths stay below MAX_PATH without long-path support.
@@ -63,9 +62,14 @@ public static partial class NativeFiles
     /// file exclusively after its size and CRC-32 check. Not a transaction: on a failure or
     /// cancellation, files already published stay and are reported.
     public static ZipOutcome ExtractZip(Input input, ZipPlan plan, int zone, CancellationToken token, Action<int, int>? progress = null)
+        => ExtractArchive(input, plan, ZipExtract.FolderStem(System.IO.Path.GetFileName(input.Path)), zone,
+            (member, output) => ZipExtract.Extract(input.Stream, member, output, token), token, progress);
+
+    /// Any reviewed plan (ZIP or TAR): write copies one member's exact bytes, in plan order.
+    public static ZipOutcome ExtractArchive(Input input, ZipPlan plan, string stem, int zone, Action<ZipMember, Stream> write, CancellationToken token, Action<int, int>? progress = null)
     {
         token.ThrowIfCancellationRequested();
-        CheckExtractionTarget(input, plan);
+        CheckExtractionTarget(input, plan, stem);
         byte[] zoneData = ZipExtract.ZoneIdentifier(zone);
         string parent = System.IO.Path.GetDirectoryName(input.Path)!.TrimEnd('\\');
         if (!GetFileInformationByHandle(input.Stream.SafeFileHandle, out var source)) ThrowLast();
@@ -74,7 +78,6 @@ public static partial class NativeFiles
         var folders = new Dictionary<string, SafeFileHandle>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            string stem = ZipExtract.FolderStem(System.IO.Path.GetFileName(input.Path));
             string? root = null;
             for (int i = 1; i <= 10000 && root is null; i++)
             {
@@ -107,7 +110,7 @@ public static partial class NativeFiles
                 var file = plan.Files[i];
                 string destination = System.IO.Path.Combine(root, file.Path);
                 WindowsPathPolicy.Validate(destination);
-                PublishExactly(folders[System.IO.Path.GetDirectoryName(file.Path) ?? ""], destination, output => ZipExtract.Extract(input.Stream, file, output, token), zoneData, file.Modified, token);
+                PublishExactly(folders[System.IO.Path.GetDirectoryName(file.Path) ?? ""], destination, output => write(file, output), zoneData, file.Modified, token);
                 outcome.FilesWritten++;
                 progress?.Invoke(i + 1, plan.Files.Count);
             }

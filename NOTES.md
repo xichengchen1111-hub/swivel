@@ -85,3 +85,11 @@
 - 0.82已push 57fb715；0.83 Copy to Folder（file.copyto，FileMoves下，CopyFile2+创建身份核对）已push 43c15d3。两批均独立复核无未解决P1/P2，包/BUILD-REPORT在build/windows/。52项仍22/24/4/2普通28。AGENTS.md的一行重复删除不是本会话改动，未提交。待问用户：发朋友测试的包是否做成MSIX（OCR/PDF需MSIX身份）。
 - 2026-10-25用户：「测试包做成可安装的 MSIX，让 OCR 和 PDF 也能测；签名证书的事你先告诉我需要我做什么。」
 - 签名方案：「自签名+Actions (推荐)」——我生成自签名测试证书（私钥仅在git忽略的build/），加GitHub Actions工作流打包签名MSIX并跑原生测试；两个secret由用户自己添加。
+
+- 2026-10-25 CI（windows-2025真机）：核心4,518,956通过。native逐个暴露测试自身问题：QR取消计时、GIF预设应拒绝、单色检查未排除alpha0隐藏RGB（产品按设计保留）；均为测试修复，未发现产品bug。签名两个secret待用户添加。
+- 2026-10-25 CI真机发现首个产品bug：DirectoryLease/Move祖先只用ReadAttributes句柄，不参与共享检查，持有的文件夹仍可被改名。已改为ReadAttributes|List|Traverse、share读写不含删除（发布子文件需父目录写共享）。需独立复核；native测试框架改为失败后继续并汇总。
+- 2026-10-26 CI真机再发现并修复：ZIP解压FileStream using提前关闭staging句柄（0.82引入）；Move用FILE_RENAME_INFO RootDirectory句柄被Windows拒（87），改为已持有并复核身份的目录路径+叶名；PNG元数据工具新增IDAT zlib精确尺寸/过滤字节校验（WIC容忍损坏数据）；相似对话框遇被拒位置不再崩溃。全局DispatcherSynchronizationContext曾致CI卡死45分钟，已改为仅两UI fixture。所有产品修复待独立复核。
+- 2026-10-26 CI运行40201005306首次全绿：核心4,518,962、native 5,067在真Windows x64通过，产出ZIP与未签名MSIX（secret仍未加）。产品修复独立复核进行中，结果记TESTING.md。
+- 2026-10-26 复核修复后CI 40202056707全绿（核心4,518,966/native5,068）。独立复核两轮：P2路径改名可被挂载点重定向→改NtSetInformationFile相对持有目录句柄；P2单字符名缓冲过小已修；无未解决P1/P2。MSIX仍未签名，等用户加两个secret。
+- 2026-10-26 用户：「两个 secret 已经加好了，请重新跑 CI 生成签名的 MSIX，然后继续下一批功能。」但gh secret list和API均看不到仓库Actions secrets，重跑仍未签名；需用户确认位置/名称（Repository secrets：SWIVEL_TEST_CERT_PFX_BASE64、SWIVEL_TEST_CERT_PASSWORD）。
+- 0.84：B08加TAR/.tar.gz/.tgz/单文件.gz安全解压（Swivel.Core/TarExtract.cs，archive.extract标题改Extract Archive…，ID不变）。独立复核无确定P1/P2，4个P3已修复加回归，核心4,519,131通过、native编译0/0。

@@ -26,7 +26,7 @@ B06 仍部分：跨卷移动、文件夹树、副本撤销待做。复核见 [TE
 
 不是事务：首个错误或取消即停止，`ZipOutcome` 保留新文件夹、已写数量和错误，App 显示汇总并弹出错误。原生对话框列出全部路径、数量、大小与 Web 标记说明，固定 Extract／Cancel，沿用工作区／DPI 适配。
 
-B08 部分实现：TAR／GZip／7z／RAR 解压、ZIP64、加密、文件夹树归档及 ADS／ACL 还原仍待做。52 项 22／24／4／2，普通剩余 28。复核记录见 [TESTING](TESTING.md#082-验证记录)。真实 Windows NTFS／ADS／界面／x64 与 ARM64 未执行。
+B08 部分实现：0.84 加 TAR／.tar.gz／.tgz／单文件 .gz 解压（`Swivel.Core/TarExtract.cs` 把整个归档审查成同一 `ZipPlan`，记录每个文件 CRC-32；`NativeFiles.ExtractArchive` 接受 stem 与写入回调，ZIP 走原路径）。7z／RAR 解压、ZIP64、加密、文件夹树归档及 ADS／ACL 还原仍待做。52 项 22／24／4／2，普通剩余 28。复核记录见 [TESTING](TESTING.md#082-验证记录)。真实 Windows NTFS／ADS／界面／x64 与 ARM64 未执行。
 
 ## 0.81 已实现：显式平面二维码数据恢复
 

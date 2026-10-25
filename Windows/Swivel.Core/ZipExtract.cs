@@ -22,6 +22,8 @@ public sealed class ZipPlan
     public required IReadOnlyList<string> Directories { get; init; }
     public long TotalBytes { get; init; }
     public int LongestPath { get; init; }
+    /// macOS AppleDouble "._name" attribute files (TAR) that were recognised and left out.
+    public int SkippedAppleDouble { get; init; }
 }
 
 /// Original ZIP32 reader for extraction: Store and Deflate only, central directory first,
@@ -280,7 +282,7 @@ public static class ZipExtract
         return parts;
     }
 
-    private static readonly System.Text.RegularExpressions.Regex ShortName = new(@"^[^.~]{0,7}~[0-9]+(\.[^.]{0,3})?$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+    internal static readonly System.Text.RegularExpressions.Regex ShortName = new(@"^[^.~]{0,7}~[0-9]+(\.[^.]{0,3})?$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private static void CheckExtra(ReadOnlySpan<byte> extra, bool utf8)
     {

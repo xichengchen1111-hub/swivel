@@ -7,8 +7,8 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
 Push-Location $PSScriptRoot
 try {
-    $output = Join-Path $PSScriptRoot "../build/windows/0.83.0/$Runtime"
-    $zip = Join-Path $PSScriptRoot "../build/windows/Swivel-Windows-0.83.0-$Runtime.zip"
+    $output = Join-Path $PSScriptRoot "../build/windows/0.84.0/$Runtime"
+    $zip = Join-Path $PSScriptRoot "../build/windows/Swivel-Windows-0.84.0-$Runtime.zip"
     if ((Test-Path $output) -or (Test-Path $zip)) { throw 'This version already has output. Preserve it and choose a new version before rebuilding.' }
     if (-not $SkipTests) {
         & dotnet run --project Swivel.Core.Tests -c Release

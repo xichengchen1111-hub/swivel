@@ -11399,16 +11399,6 @@
     "一個 ZIP 項目的壓縮資料已損毀，未解壓縮。",
     "ZIP 内の項目の圧縮データが壊れているため、展開しませんでした。"
   ],
-  "Choose a .zip file to extract.": [
-    "请选择要解压的 .zip 文件。",
-    "請選擇要解壓縮的 .zip 檔案。",
-    "展開する .zip ファイルを選んでください。"
-  ],
-  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP archives (Store/Deflate, up to 2 GB and 10,000 entries) into a new folder on NTFS. TAR/GZip/7z/RAR extraction, ZIP64, encryption and archiving folder trees are still planned.": [
-    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP（存储/Deflate，最多 2 GB、10,000 个条目）解压到新文件夹。TAR/GZip/7z/RAR 解压、ZIP64、加密及文件夹树归档仍待实现。",
-    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP（儲存/Deflate，最多 2 GB、10,000 個項目）解壓縮到新資料夾。TAR/GZip/7z/RAR 解壓縮、ZIP64、加密及資料夾樹封存仍待實作。",
-    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP（格納/Deflate、2 GB・10,000 項目まで）を新しいフォルダーに展開できます。TAR/GZip/7z/RAR の展開、ZIP64、暗号化、フォルダー構造のアーカイブは実装予定です。"
-  ],
   "Encrypted ZIP archives are not supported.": [
     "不支持加密的 ZIP 压缩包。",
     "不支援加密的 ZIP 壓縮檔。",
@@ -11423,11 +11413,6 @@
     "解压",
     "解壓縮",
     "展開"
-  ],
-  "Extract ZIP…": [
-    "解压 ZIP…",
-    "解壓縮 ZIP…",
-    "ZIP を展開…"
   ],
   "Extracted paths would be longer than 240 characters. Move the archive to a shorter folder first.": [
     "解压后的路径会超过 240 个字符。请先把压缩包移到路径更短的文件夹。",
@@ -11589,11 +11574,6 @@
     "不解壓縮包含連結的 ZIP 壓縮檔。",
     "リンクを含む ZIP アーカイブは展開しません。"
   ],
-  "ZIP extraction currently requires an NTFS drive, so extracted files can keep their download warning.": [
-    "ZIP 解压目前需要 NTFS 磁盘，以便解压出的文件保留下载警告。",
-    "ZIP 解壓縮目前需要 NTFS 磁碟，以便解壓縮出的檔案保留下載警告。",
-    "展開したファイルにダウンロードの警告を残すため、ZIP の展開には現在 NTFS ドライブが必要です。"
-  ],
   "ZIP extraction is limited to 10,000 entries.": [
     "ZIP 解压最多 10,000 个条目。",
     "ZIP 解壓縮最多 10,000 個項目。",
@@ -11718,5 +11698,150 @@
     "此文件的附加数据流过多，无法安全复制。",
     "此檔案的附加資料流過多，無法安全複製。",
     "このファイルは代替データストリームが多すぎるため、安全にコピーできません。"
+  ],
+  "An archive entry changed after it was reviewed and was not extracted.": [
+    "归档中的某个条目在检查后发生了变化，未解压。",
+    "封存檔中的某個項目在檢查後發生了變化，未解壓縮。",
+    "アーカイブ内の項目が確認後に変更されたため、展開しませんでした。"
+  ],
+  "Archive extraction is limited to 10,000 entries.": [
+    "归档解压最多 10,000 个条目。",
+    "封存檔解壓縮最多 10,000 個項目。",
+    "アーカイブの展開は 10,000 項目までです。"
+  ],
+  "Archive extraction is limited to 2 GB of extracted data.": [
+    "归档解压后的数据最多 2 GB。",
+    "封存檔解壓縮後的資料最多 2 GB。",
+    "アーカイブの展開後のデータは 2 GB までです。"
+  ],
+  "Archives larger than 2 GB are not extracted in the Windows preview.": [
+    "Windows 预览版不解压大于 2 GB 的归档。",
+    "Windows 預覽版不解壓縮大於 2 GB 的封存檔。",
+    "Windows プレビューでは 2 GB を超えるアーカイブは展開しません。"
+  ],
+  "Sparse, multi-volume or unknown TAR entries are not supported.": [
+    "不支持稀疏、多卷或未知类型的 TAR 条目。",
+    "不支援稀疏、多卷或未知類型的 TAR 項目。",
+    "スパース、マルチボリューム、または不明な種類の TAR 項目には対応していません。"
+  ],
+  "TAR archives containing links are not extracted.": [
+    "包含链接的 TAR 归档不会解压。",
+    "包含連結的 TAR 封存檔不會解壓縮。",
+    "リンクを含む TAR アーカイブは展開しません。"
+  ],
+  "This TAR archive contains special files and was not extracted.": [
+    "此 TAR 归档包含特殊文件，未解压。",
+    "此 TAR 封存檔包含特殊檔案，未解壓縮。",
+    "この TAR アーカイブには特殊ファイルが含まれているため、展開しませんでした。"
+  ],
+  "This TAR archive has damaged headers and was not extracted.": [
+    "此 TAR 归档的头部已损坏，未解压。",
+    "此 TAR 封存檔的標頭已損壞，未解壓縮。",
+    "この TAR アーカイブはヘッダーが破損しているため、展開しませんでした。"
+  ],
+  "This TAR format is not supported. Use a POSIX (ustar or pax) or GNU TAR archive.": [
+    "不支持此 TAR 格式。请使用 POSIX（ustar 或 pax）或 GNU TAR 归档。",
+    "不支援此 TAR 格式。請使用 POSIX（ustar 或 pax）或 GNU TAR 封存檔。",
+    "この TAR 形式には対応していません。POSIX（ustar または pax）または GNU の TAR アーカイブを使用してください。"
+  ],
+  "This archive contains duplicate names (letter case is ignored on Windows) and was not extracted.": [
+    "此归档包含重复名称（Windows 不区分大小写），未解压。",
+    "此封存檔包含重複名稱（Windows 不區分大小寫），未解壓縮。",
+    "このアーカイブには重複する名前があるため（Windows は大文字と小文字を区別しません）、展開しませんでした。"
+  ],
+  "This archive contains names Windows cannot use safely and was not extracted.": [
+    "此归档包含 Windows 无法安全使用的名称，未解压。",
+    "此封存檔包含 Windows 無法安全使用的名稱，未解壓縮。",
+    "このアーカイブには Windows で安全に使用できない名前が含まれているため、展開しませんでした。"
+  ],
+  "This archive contains names in the Windows short-name form (such as NAME~1) and was not extracted.": [
+    "此归档包含 Windows 短文件名形式的名称（如 NAME~1），未解压。",
+    "此封存檔包含 Windows 短檔名形式的名稱（如 NAME~1），未解壓縮。",
+    "このアーカイブには Windows の短い名前の形式（NAME~1 など）の名前が含まれているため、展開しませんでした。"
+  ],
+  "This archive contains names that look identical and was not extracted.": [
+    "此归档包含看起来相同的名称，未解压。",
+    "此封存檔包含看起來相同的名稱，未解壓縮。",
+    "このアーカイブには見た目が同じ名前が含まれているため、展開しませんでした。"
+  ],
+  "This archive contains unsafe paths and was not extracted.": [
+    "此归档包含不安全的路径，未解压。",
+    "此封存檔包含不安全的路徑，未解壓縮。",
+    "このアーカイブには安全でないパスが含まれているため、展開しませんでした。"
+  ],
+  "This archive ends early or is damaged and was not extracted.": [
+    "此归档提前结束或已损坏，未解压。",
+    "此封存檔提前結束或已損壞，未解壓縮。",
+    "このアーカイブは途中で終わっているか破損しているため、展開しませんでした。"
+  ],
+  "This archive has unexpected data after its end and was not extracted.": [
+    "此归档在结尾之后还有意外的数据，未解压。",
+    "此封存檔在結尾之後還有非預期的資料，未解壓縮。",
+    "このアーカイブは終端の後に予期しないデータがあるため、展開しませんでした。"
+  ],
+  "This archive is empty.": [
+    "此归档是空的。",
+    "此封存檔是空的。",
+    "このアーカイブは空です。"
+  ],
+  "This archive nests folders more than 32 levels deep.": [
+    "此归档的文件夹嵌套超过 32 层。",
+    "此封存檔的資料夾巢狀超過 32 層。",
+    "このアーカイブはフォルダーが 32 階層を超えて入れ子になっています。"
+  ],
+  "This archive uses legacy non-Unicode names. Re-create it with Unicode (UTF-8) names.": [
+    "此归档使用旧式非 Unicode 名称。请用 Unicode（UTF-8）名称重新创建。",
+    "此封存檔使用舊式非 Unicode 名稱。請用 Unicode（UTF-8）名稱重新建立。",
+    "このアーカイブは古い非 Unicode の名前を使っています。Unicode（UTF-8）の名前で作り直してください。"
+  ],
+  "This archive uses one name for both a file and a folder and was not extracted.": [
+    "此归档中同一名称同时用于文件和文件夹，未解压。",
+    "此封存檔中同一名稱同時用於檔案和資料夾，未解壓縮。",
+    "このアーカイブでは同じ名前がファイルとフォルダーの両方に使われているため、展開しませんでした。"
+  ],
+  "This gzip file is damaged, uses more than one part, or failed its CRC check, and was not extracted.": [
+    "此 gzip 文件已损坏、包含多个部分或未通过 CRC 校验，未解压。",
+    "此 gzip 檔案已損壞、包含多個部分或未通過 CRC 檢查，未解壓縮。",
+    "この gzip ファイルは破損しているか、複数の部分からなるか、CRC チェックに失敗したため、展開しませんでした。"
+  ],
+  "This gzip file's name does not give a usable output name.": [
+    "无法从此 gzip 文件的名称得到可用的输出名称。",
+    "無法從此 gzip 檔案的名稱得到可用的輸出名稱。",
+    "この gzip ファイルの名前からは使用できる出力名を作れません。"
+  ],
+  "Choose a .zip, .tar, .tar.gz, .tgz or .gz file to extract.": [
+    "请选择要解压的 .zip、.tar、.tar.gz、.tgz 或 .gz 文件。",
+    "請選擇要解壓縮的 .zip、.tar、.tar.gz、.tgz 或 .gz 檔案。",
+    "展開する .zip、.tar、.tar.gz、.tgz、.gz ファイルを選んでください。"
+  ],
+  "Extract Archive…": [
+    "解压压缩包…",
+    "解壓縮壓縮檔…",
+    "アーカイブを展開…"
+  ],
+  "Archive extraction currently requires an NTFS drive, so extracted files can keep their download warning.": [
+    "解压目前需要 NTFS 磁盘，以便解压出的文件保留下载警告。",
+    "解壓縮目前需要 NTFS 磁碟，以便解壓縮出的檔案保留下載警告。",
+    "展開したファイルにダウンロードの警告を残すため、展開には現在 NTFS ドライブが必要です。"
+  ],
+  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP (Store/Deflate), TAR (POSIX ustar/pax or GNU), .tar.gz/.tgz and single-file .gz archives, up to 2 GB and 10,000 entries, into a new folder on NTFS. TAR links, devices and sparse files are refused; macOS ._ attribute files are left out. 7z/RAR extraction, ZIP64, encryption and archiving folder trees are still planned.": [
+    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP（存储/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及单文件 .gz（最多 2 GB、10,000 个条目）解压到新文件夹。TAR 中的链接、设备和稀疏文件会被拒绝；macOS 的 ._ 属性文件不解压。7z/RAR 解压、ZIP64、加密及文件夹树归档仍待实现。",
+    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP（儲存/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及單檔 .gz（最多 2 GB、10,000 個項目）解壓縮到新資料夾。TAR 中的連結、裝置和稀疏檔案會被拒絕；macOS 的 ._ 屬性檔案不解壓縮。7z/RAR 解壓縮、ZIP64、加密及資料夾樹封存仍待實作。",
+    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP（格納/Deflate）、TAR（POSIX ustar/pax または GNU）、.tar.gz/.tgz、単一ファイル .gz（2 GB・10,000 項目まで）を新しいフォルダーに展開できます。TAR 内のリンク、デバイス、スパースファイルは拒否し、macOS の ._ 属性ファイルは展開しません。7z/RAR の展開、ZIP64、暗号化、フォルダー構造のアーカイブは実装予定です。"
+  ],
+  "Files are extracted into a new folder beside the archive, named after it. Existing files and folders are never overwritten. TAR stores no file checksums, so each file is checked against its size and the CRC-32 Swivel recorded while reviewing the archive; a compressed archive's own checksum is checked too.": [
+    "文件会解压到压缩包旁边以其命名的新文件夹，绝不覆盖已有文件和文件夹。TAR 不保存文件校验值，因此每个文件都会按大小以及 Swivel 审查压缩包时记录的 CRC-32 核对；压缩过的包还会核对其自身校验值。",
+    "檔案會解壓縮到壓縮檔旁邊以其命名的新資料夾，絕不覆寫既有檔案和資料夾。TAR 不儲存檔案檢查碼，因此每個檔案都會依大小及 Swivel 審查壓縮檔時記錄的 CRC-32 核對；壓縮過的封存檔還會核對其本身的檢查碼。",
+    "ファイルはアーカイブの横に、その名前の新しいフォルダーとして展開されます。既存のファイルやフォルダーを上書きすることはありません。TAR にはファイルのチェックサムがないため、各ファイルはサイズと、Swivel がアーカイブ確認時に記録した CRC-32 で照合します。圧縮されたアーカイブはそれ自体のチェックサムも確認します。"
+  ],
+  "Modified times from the archive are kept. Owners, permissions, extended attributes and other data stored in the archive are not restored. If extraction stops, files already extracted stay in the new folder; it is not removed automatically.": [
+    "保留压缩包中的修改时间。不恢复所有者、权限、扩展属性等压缩包中保存的其他数据。如果解压中途停止，已解压的文件会留在新文件夹中，不会自动删除。",
+    "保留壓縮檔中的修改時間。不還原擁有者、權限、延伸屬性等壓縮檔中儲存的其他資料。如果解壓縮中途停止，已解壓縮的檔案會留在新資料夾中，不會自動刪除。",
+    "アーカイブ内の変更日時は保持されます。所有者、アクセス権、拡張属性などアーカイブに保存されたその他のデータは復元しません。展開が途中で止まった場合、展開済みのファイルは新しいフォルダーに残り、自動では削除されません。"
+  ],
+  "{0} macOS attribute file(s) (._ names) are left out.": [
+    "有 {0} 个 macOS 属性文件（._ 开头）不会解压。",
+    "有 {0} 個 macOS 屬性檔案（._ 開頭）不會解壓縮。",
+    "macOS の属性ファイル（._ で始まる名前）{0} 個は展開しません。"
   ]
 }
