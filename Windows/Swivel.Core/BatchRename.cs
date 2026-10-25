@@ -47,7 +47,13 @@ public sealed record RenamePair(string Source, string Destination)
 {
     public bool Changed => Source != Destination;
 }
-public readonly record struct FileStamp(uint Volume, ulong Index, ulong Size, long WriteTime, long CreationTime);
+public readonly record struct FileStamp(uint Volume, ulong Index, ulong Size, long WriteTime, long CreationTime)
+{
+    // NTFS name tunnelling gives a renamed file the creation time of a name vacated in the
+    // last few seconds (a swap exchanges them), so creation time cannot show an edit. The
+    // file ID still shows replacement; size and write time show edits.
+    public bool SameObjectAndContent(FileStamp other) => this with { CreationTime = other.CreationTime } == other;
+}
 public interface IRenameLease
 {
     string CurrentPath { get; }

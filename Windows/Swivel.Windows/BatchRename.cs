@@ -32,7 +32,7 @@ public sealed class RenameSession : IDisposable
         try
         {
             for (int i = 0; i < receipt.Count; i++)
-                if (session.leases[i].Stamp != receipt[i].Stamp) throw new UserError("A renamed file was replaced or edited. Undo was refused without changing any file.");
+                if (!session.leases[i].Stamp.SameObjectAndContent(receipt[i].Stamp)) throw new UserError("A renamed file was replaced or edited. Undo was refused without changing any file.");
             return session;
         }
         catch { session.Dispose(); throw; }

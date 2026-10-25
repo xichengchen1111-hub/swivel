@@ -156,7 +156,7 @@ internal static class WheelGestureWindowNativeChecks
             var args = (DragEventArgs)typeof(DragEventArgs).GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic, null,
                 new[] { typeof(IDataObject), typeof(DragDropKeyStates), typeof(DragDropEffects), typeof(DependencyObject), typeof(Point) }, null)!
                 .Invoke(new object[] { data, DragDropKeyStates.None, DragDropEffects.Copy | DragDropEffects.Move, actualTarget!, new Point(1, 1) });
-            typeof(GestureDropWindow).GetMethod(formatProbe ? "OnDragOver" : "OnDrop", BindingFlags.Instance | BindingFlags.NonPublic)!
+            typeof(GestureDropWindow).GetMethod(formatProbe ? "OnDragOver" : "OnDrop", BindingFlags.Instance | BindingFlags.NonPublic, new[] { typeof(object), typeof(DragEventArgs) })!
                 .Invoke(actualTarget, new object[] { actualTarget!, args });
             check(args.Effects == DragDropEffects.None && fileCalls == 0 && !actualTarget!.Completion.IsCompleted,
                 "A cancelled provider callback returns None without opening Wheel or synchronously closing its HWND");

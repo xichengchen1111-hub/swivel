@@ -143,8 +143,9 @@ public static partial class NativeFiles
             produce(stream);
             stream.Flush(true);
             token.ThrowIfCancellationRequested();
-            // The main stream is held without sharing; this stream belongs to the same new file.
-            using (var zoneHandle = Open(temp + ":Zone.Identifier", GenericWrite, 0, 1, 0))
+            // The main stream is held without sharing and with DELETE access, so another stream
+            // of the same new file can only be opened with delete sharing.
+            using (var zoneHandle = Open(temp + ":Zone.Identifier", GenericWrite, 4, 1, 0))
             using (var zone = new FileStream(zoneHandle, FileAccess.Write, 1, false))
             {
                 zone.Write(zoneData); zone.Flush(true);

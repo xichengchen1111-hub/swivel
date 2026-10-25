@@ -126,7 +126,7 @@ public static partial class NativeFiles
             WindowsPathPolicy.Validate(destination);
             if (System.IO.Path.GetDirectoryName(destination) != System.IO.Path.GetDirectoryName(CurrentPath))
                 throw new UserError("Batch Rename keeps each file in its original folder.");
-            if (ReadStamp(handle) != Stamp) throw new UserError("A file changed. Create a new preview before renaming.");
+            if (!ReadStamp(handle).SameObjectAndContent(Stamp)) throw new UserError("A file changed. Create a new preview before renaming.");
             if (!Rename(handle, destination, out int error)) throw new Win32Exception(error);
             // Set immediately after success; a later failure must never lose its location.
             CurrentPath = destination;
