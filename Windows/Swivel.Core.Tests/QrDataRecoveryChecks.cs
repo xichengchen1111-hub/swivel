@@ -126,8 +126,14 @@ internal static class QrDataRecoveryChecks
         var largeHash=System.Security.Cryptography.SHA256.HashData(large.Bgra);
         using(var cancellation=new CancellationTokenSource())
         {
+            // Timer resolution differs (about 15 ms on Windows), so keep reading until the cancel lands;
+            // every completed read must be whole, and the cancelled one must throw.
             cancellation.CancelAfter(1);bool cancelled=false;
-            try{QrFlatRead.ReadWithDataRecovery(large,cancellation.Token);}catch(OperationCanceledException){cancelled=true;}
+            for(int attempt=0;attempt<10000&&!cancelled;attempt++)
+            {
+                try{check(QrFlatRead.ReadWithDataRecovery(large,cancellation.Token) is not null,"Completed recovery read returns a whole result");}
+                catch(OperationCanceledException){cancelled=true;}
+            }
             check(cancelled,"Cancellation during a full valid raster read stops without returning a partial recovery result");
         }
         check(System.Security.Cryptography.SHA256.HashData(large.Bgra).SequenceEqual(largeHash),"Cancelled recovery keeps the entire supplied raster unchanged");
