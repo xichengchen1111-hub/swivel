@@ -4,7 +4,7 @@
 
 ## 首次真实 Windows 执行（GitHub Actions windows-2025，2026-10-25/26）
 
-- 运行 40201005306：核心 4,518,962 项与 native 5,067 项全部在真实 Windows Server 2025 x64 上通过，并生成 x64/ARM64 ZIP 与未签名 MSIX（签名 secret 未配置，未签名包不可安装）。ARM64 仅交叉发布，未在 ARM64 执行；Explorer 交互、DPI、讲述人等仍需人工。
+- 最终运行 40202056707（含复核修复）：核心 4,518,966 项与 native 5,068 项全部通过；首次全绿为 40201005306（核心 4,518,962、native 5,067）。均在真实 Windows Server 2025 x64 上通过，并生成 x64/ARM64 ZIP 与未签名 MSIX（签名 secret 未配置，未签名包不可安装）。ARM64 仅交叉发布，未在 ARM64 执行；Explorer 交互、DPI、讲述人等仍需人工。
 - 此前 native 套件从未在 Windows 执行。真机暴露并已修复的产品问题：
   1. 文件夹租约（DirectoryLease、Move 祖先）只用 ReadAttributes 句柄，不参与共享检查，被“持有”的文件夹仍可改名；改为 ReadAttributes|List|Traverse、共享读写不含删除。
   2. 同卷 Move 使用 FILE_RENAME_INFO RootDirectory 句柄，Windows 返回 87；改为对已持有并复核身份的目录路径加叶名改名。
