@@ -71,6 +71,7 @@ public static partial class NativeFiles
         if (!GetFileInformationByHandle(input.Stream.SafeFileHandle, out var source)) ThrowLast();
         var outcome = new ZipOutcome { FileCount = plan.Files.Count };
         var held = new List<SafeFileHandle>();
+        var folders = new Dictionary<string, SafeFileHandle>(StringComparer.OrdinalIgnoreCase);
         try
         {
             string stem = ZipExtract.FolderStem(System.IO.Path.GetFileName(input.Path));
@@ -85,7 +86,7 @@ public static partial class NativeFiles
             }
             if (root is null) throw new UserError("Too many files have this output name.");
             outcome.Folder = root;
-            HoldCreated(root, source.Volume, held);
+            folders[""] = HoldCreated(root, source.Volume, held);
             foreach (string directory in plan.Directories)
             {
                 token.ThrowIfCancellationRequested();
@@ -98,7 +99,7 @@ public static partial class NativeFiles
                     if (error == 183) throw new UserError("Something else changed the new folder while extracting. Nothing was overwritten.");
                     throw new Win32Exception(error);
                 }
-                HoldCreated(path, source.Volume, held);
+                folders[directory] = HoldCreated(path, source.Volume, held);
             }
             for (int i = 0; i < plan.Files.Count; i++)
             {
@@ -106,7 +107,7 @@ public static partial class NativeFiles
                 var file = plan.Files[i];
                 string destination = System.IO.Path.Combine(root, file.Path);
                 WindowsPathPolicy.Validate(destination);
-                PublishExactly(destination, output => ZipExtract.Extract(input.Stream, file, output, token), zoneData, file.Modified, token);
+                PublishExactly(folders[System.IO.Path.GetDirectoryName(file.Path) ?? ""], destination, output => ZipExtract.Extract(input.Stream, file, output, token), zoneData, file.Modified, token);
                 outcome.FilesWritten++;
                 progress?.Invoke(i + 1, plan.Files.Count);
             }
@@ -120,26 +121,27 @@ public static partial class NativeFiles
     // A folder this call created is held without delete sharing, so it cannot be renamed,
     // removed or swapped for a link while files are published into it. List/traverse access
     // is requested because attribute-only opens do not take part in share checks.
-    private static void HoldCreated(string path, uint volume, List<SafeFileHandle> held)
+    private static SafeFileHandle HoldCreated(string path, uint volume, List<SafeFileHandle> held)
     {
-        var handle = Open(path, ReadAttributes | 0x1 | 0x20, 3, 3, OpenReparse | BackupSemantics);
+        var handle = Open(path, ReadAttributes | Traverse, 3, 3, OpenReparse | BackupSemantics);
         held.Add(handle);
         Check(handle, true);
         if (!GetFileInformationByHandle(handle, out var info)) ThrowLast();
         if (info.Volume != volume) throw new UserError(LocalOnly);
+        return handle;
     }
 
-    private static void PublishExactly(string destination, Action<Stream> produce, byte[] zoneData, DateTime? modified, CancellationToken token)
+    private static void PublishExactly(SafeFileHandle parent, string destination, Action<Stream> produce, byte[] zoneData, DateTime? modified, CancellationToken token)
     {
         string directory = System.IO.Path.GetDirectoryName(destination)!;
         string temp = System.IO.Path.Combine(directory, ".swivel-" + Guid.NewGuid().ToString("N") + ".tmp");
         using var handle = Open(temp, GenericWrite | ReadAttributes | DeleteAccess, 0, 1, OpenReparse | 2 | 0x100);
-        // Disposing a FileStream closes its handle, which is still needed below; it lives as long as the handle.
-        using var stream = new FileStream(handle, FileAccess.Write, 65536, false);
+        FileStream? stream = null;
         bool published = false;
         try
         {
             Check(handle, false);
+            stream = new FileStream(handle, FileAccess.Write, 1, false); // unbuffered: nothing left to flush after a failed produce
             produce(stream);
             stream.Flush(true);
             token.ThrowIfCancellationRequested();
@@ -153,7 +155,7 @@ public static partial class NativeFiles
             var basic = new BasicInfo { Attributes = 0x80, Write = modified is DateTime time ? time.ToFileTimeUtc() : 0 };
             if (!SetBasic(handle, 0, ref basic, (uint)Marshal.SizeOf<BasicInfo>())) ThrowLast();
             token.ThrowIfCancellationRequested();
-            if (!Rename(handle, destination, out int error))
+            if (!RenameInto(handle, parent, System.IO.Path.GetFileName(destination), out int error))
             {
                 if (error is 80 or 183) throw new UserError("Something else changed the new folder while extracting. Nothing was overwritten.");
                 throw new Win32Exception(error);
@@ -168,6 +170,7 @@ public static partial class NativeFiles
                 byte delete = 1;
                 SetDisposition(handle, 4, ref delete, 1);
             }
+            stream?.Dispose(); // closes the handle, so only after the disposition
         }
     }
 

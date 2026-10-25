@@ -128,9 +128,11 @@ public static class PngMetadata
         token.ThrowIfCancellationRequested();return Plan.Create(bytes,chunks.ToArray(),width,height);
     }
     // Some system decoders accept damaged image data. Retained IDAT bytes are copied
-    // unchanged, so they must at least inflate (zlib checksum included) to exactly the
+    // unchanged, so they must at least inflate to exactly the
     // filtered size IHDR implies, with a valid filter type starting every row. Pixels
-    // are not unfiltered or decoded here.
+    // are not unfiltered or decoded here. The inflater stops quietly at a truncated end,
+    // so the Adler-32 that must close the stream is compared here; it also rejects data
+    // appended after a complete stream.
     private static void VerifyImageData(byte[] bytes,List<Chunk> chunks,int width,int height,int depth,int color,int interlace,CancellationToken token)
     {
         int channels=color switch{0=>1,2=>3,3=>1,4=>2,_=>4};long bits=(long)channels*depth;
@@ -149,12 +151,13 @@ public static class PngMetadata
         foreach(var chunk in chunks)if(chunk.Type=="IDAT")data.Write(bytes,chunk.Offset+8,chunk.Length-12);
         data.Position=0;
         using var inflate=new System.IO.Compression.ZLibStream(data,System.IO.Compression.CompressionMode.Decompress);
-        var buffer=new byte[65536];int group=0;long rowLeft=0,rowsLeft=rows.Count>0?rows[0].Rows:0;
+        var buffer=new byte[65536];int group=0;long rowLeft=0,rowsLeft=rows.Count>0?rows[0].Rows:0;uint a=1,b=0;
         try
         {
             for(int read;(read=inflate.Read(buffer,0,buffer.Length))>0;)
             {
                 token.ThrowIfCancellationRequested();
+                for(int k=0;k<read;k++){a=(a+buffer[k])%65521;b=(b+a)%65521;}
                 for(int i=0;i<read;)
                 {
                     if(rowLeft==0)
@@ -169,6 +172,8 @@ public static class PngMetadata
         }
         catch(InvalidDataException){throw new UserError(Invalid);}
         if(rowLeft!=0||rowsLeft!=0||rows.Skip(group+1).Any())throw new UserError(Invalid);
+        var all=data.GetBuffer().AsSpan(0,(int)data.Length);
+        if(all.Length<6||BinaryPrimitives.ReadUInt32BigEndian(all[^4..])!=(b<<16|a))throw new UserError(Invalid);
     }
     private static uint[] MakeCrcTable()
     {

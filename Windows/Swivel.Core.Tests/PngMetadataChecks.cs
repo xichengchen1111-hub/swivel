@@ -71,7 +71,7 @@ internal static class PngMetadataChecks
             else reject(()=>PngMetadata.Read(new MemoryStream(candidate),default),"Invalid or high-precision color/depth pairing refused");
         }
         check(PngMetadata.Read(new MemoryStream(Png(Header(9,10,interlace:1),Chunk("IDAT",ImageData(9,10,8,6,interlaced:true)),end)),default).Width==9,"Interlaced image data inflates to the exact Adam7 size");
-        foreach(var damaged in new[]{new byte[]{1,2,3},ImageData(3,2,8,6)[..^4].Concat(new byte[4]).ToArray(),ImageData(3,3,8,6),ImageData(3,2,8,6,extra:1),ImageData(3,2,8,6,filter:5),ImageData(3,2,8,6,interlaced:true)})
+        foreach(var damaged in new[]{new byte[]{1,2,3},ImageData(3,2,8,6)[..^4].Concat(new byte[4]).ToArray(),ImageData(3,3,8,6),ImageData(3,2,8,6,extra:1),ImageData(3,2,8,6,filter:5),ImageData(3,2,8,6,interlaced:true),ImageData(3,2,8,6)[..^4],ImageData(3,2,8,6).Concat(new byte[]{0}).ToArray()})
             reject(()=>PngMetadata.Read(new MemoryStream(Png(Header(),Chunk("IDAT",damaged),end)),default),"Damaged, checksum-failing, short, long, bad-filter or wrongly interlaced image data refused before any system decoder");
         foreach(var h in new[]{Header(0),Header(height:0),Header(16385),Header(4001,4000),Header(interlace:2),Header(color:1)})reject(()=>PngMetadata.Read(new MemoryStream(Png(h,idat,end)),default),"Dimension/pixel/interlace/unknown color bounds");
         foreach(var chunks in new[]{new[]{Header(color:3),idat,end},new[]{Header(color:0),Chunk("PLTE",new byte[]{0,0,0}),idat,end},new[]{Header(),idat,Chunk("PLTE",new byte[]{0,0,0}),end},new[]{Header(),Chunk("PLTE",new byte[]{0}),idat,end},new[]{Header(depth:1,color:3),Chunk("PLTE",new byte[9]),idat,end},new[]{Header(),Chunk("tRNS",new byte[1]),idat,end}})

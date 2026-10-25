@@ -2,6 +2,19 @@
 
 验证状态不能混用：**核心规则在 Mac 上可运行**；**原生检查必须在 Windows 上运行**；**编译原生测试不等于测试通过**。CI 的一个 x64 作业也不能证明 ARM64、多屏或实际拖拽已经验收。
 
+## 首次真实 Windows 执行（GitHub Actions windows-2025，2026-10-25/26）
+
+- 运行 40201005306：核心 4,518,962 项与 native 5,067 项全部在真实 Windows Server 2025 x64 上通过，并生成 x64/ARM64 ZIP 与未签名 MSIX（签名 secret 未配置，未签名包不可安装）。ARM64 仅交叉发布，未在 ARM64 执行；Explorer 交互、DPI、讲述人等仍需人工。
+- 此前 native 套件从未在 Windows 执行。真机暴露并已修复的产品问题：
+  1. 文件夹租约（DirectoryLease、Move 祖先）只用 ReadAttributes 句柄，不参与共享检查，被“持有”的文件夹仍可改名；改为 ReadAttributes|List|Traverse、共享读写不含删除。
+  2. 同卷 Move 使用 FILE_RENAME_INFO RootDirectory 句柄，Windows 返回 87；改为对已持有并复核身份的目录路径加叶名改名。
+  3. ZIP 解压（0.82）提前释放 FileStream 关闭了 staging 句柄；Zone.Identifier 流需共享删除才能与持有 DELETE 的主流并存。
+  4. 批量改名/Move 撤销：NTFS 名称隧道会在改名时带入最近腾出名称的创建时间（交换会互换），导致误拒撤销；创建时间不再视为编辑，文件 ID、大小、修改时间仍校验。
+  5. PNG 元数据工具：WIC 接受损坏的 IDAT；核心新增 zlib 解压精确尺寸（含 Adam7）与过滤字节校验，不解码像素。
+  6. 常用文件夹相似结果窗口遇被路径规则拒绝的位置（如盘符根）不再崩溃。
+- 测试自身问题（非产品）：QR 取消计时、GIF 预设应拒绝、透明像素隐藏 RGB、QR 底部按钮数、Mac 导出诊断、两个 UI fixture 需 Dispatcher 同步上下文、反射重载歧义、合成拖放参数缺 RoutedEvent。测试框架改为失败后继续并汇总、每组打印名称；全局 Dispatcher 上下文曾导致卡死，已仅限两个 UI fixture。
+- 上述产品修复的独立 agent 复核见下一条记录。
+
 ## 0.83 验证记录
 
 开始 `git fetch` 后 origin/main 仍为 `6cbfdc1`。常规核心 **4,518,955 项通过**（新增 `CopyFilesChecks`：命名序号／点文件／无扩展名、计划去重与上限、`FILE_STREAM_INFO` 解析和名称／大小比对及畸形缓冲区）。原生套件交叉编译 **0 警告／0 错误**；新增 `CopyFilesNativeChecks`（不覆盖、`名称 2`、精确内容、ADS 与 Web 标记、修改时间、源写入锁定、空文件、只读文件、取消保留已完成）**仅编译，未在 Windows 执行**。

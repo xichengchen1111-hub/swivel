@@ -33,7 +33,7 @@ public static partial class NativeFiles
                 void Add(string current)
                 {
                     token.ThrowIfCancellationRequested();
-                    var handle = NativeFiles.Open(current, ReadAttributes | 0x1 | 0x20, 3, 3, OpenReparse | BackupSemantics); // held like DirectoryLease
+                    var handle = NativeFiles.Open(current, ReadAttributes | Traverse, 3, 3, OpenReparse | BackupSemantics); // held like DirectoryLease
                     lease.handles.Add(handle); Check(handle, true);
                     entries.Add(new(current, ReadMoveIdentity(handle)));
                 }
@@ -166,15 +166,10 @@ public static partial class NativeFiles
     }
     private static bool RenameMove(SafeFileHandle source, MoveDirectoryLease directory, string fileName, out int error)
     {
-        // Windows rejects FILE_RENAME_INFO with a RootDirectory handle (error 87), so the
-        // target is the held directory's own path plus one validated leaf name. Every
-        // ancestor is held without delete sharing and its identity rechecked here, so that
-        // path still names the held directory.
-        WindowsPathPolicy.ValidateName(fileName);
+        // Relative to the held destination handle: a path could be redirected if an empty
+        // held folder were turned into a mount point between the check and the rename.
         directory.Verify();
-        string target = directory.Snapshot.Path.TrimEnd('\\') + "\\" + fileName;
-        WindowsPathPolicy.Validate(target);
-        return Rename(source, target, out error);
+        return RenameInto(source, directory.Handle, fileName, out error);
     }
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll", EntryPoint = "GetVolumeInformationByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]

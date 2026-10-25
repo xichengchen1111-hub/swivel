@@ -14,7 +14,7 @@ namespace Swivel.Windows;
 /// No path is handed to an image codec, shell command, URL loader, or network client.
 public static partial class NativeFiles
 {
-    private const uint ReadAttributes = 0x80, GenericRead = 0x80000000, GenericWrite = 0x40000000, DeleteAccess = 0x10000;
+    private const uint Traverse = 0x20, ReadAttributes = 0x80, GenericRead = 0x80000000, GenericWrite = 0x40000000, DeleteAccess = 0x10000;
     private const uint OpenReparse = 0x00200000, BackupSemantics = 0x02000000;
     private const uint UnsafeAttributes = 0x400 | 0x1000 | 0x40000 | 0x400000; // reparse, offline, recall-on-open/data-access
     private const string LocalOnly = "Choose a local regular file. Links, network drives and cloud placeholders are not supported yet.";
@@ -74,12 +74,17 @@ public static partial class NativeFiles
         string temp = System.IO.Path.Combine(directory, ".swivel-" + Guid.NewGuid().ToString("N") + ".tmp");
         // A private staging file is claimed atomically. DELETE permission allows cleanup/rename by
         // the very same handle. No FILE_SHARE_WRITE/DELETE means nobody can replace it mid-write.
+        // The output folder's own handle: names are published relative to it, never by a path
+        // that an empty folder turned into a mount point could redirect.
+        using var parent = Open(directory, ReadAttributes | Traverse, 3, 3, OpenReparse | BackupSemantics);
+        Check(parent, true);
         using var handle = Open(temp, GenericWrite | ReadAttributes | DeleteAccess, 0, 1, OpenReparse | 2 | 0x100);
-        using var stream = new FileStream(handle, FileAccess.Write);
+        FileStream? stream = null;
         bool published = false;
         try
         {
             Check(handle, false);
+            stream = new FileStream(handle, FileAccess.Write, 1, false); // unbuffered: nothing left to flush after a failed produce
             produce(stream);
             stream.Flush(true);
             cancellation.ThrowIfCancellationRequested();
@@ -90,7 +95,7 @@ public static partial class NativeFiles
                 string destination = System.IO.Path.Combine(directory, WindowsPathPolicy.OutputName(stem, extension, i));
                 WindowsPathPolicy.Validate(destination);
                 cancellation.ThrowIfCancellationRequested();
-                if (Rename(handle, destination, out int error))
+                if (RenameInto(handle, parent, System.IO.Path.GetFileName(destination), out int error))
                 {
                     published = true;
                     return destination;
@@ -107,6 +112,7 @@ public static partial class NativeFiles
                 // Never delete by path: a cleanup targets only the object this call created.
                 if (!SetDisposition(handle, 4, ref delete, 1)) ThrowLast();
             }
+            stream?.Dispose(); // closes the handle, so only after the disposition
         }
     }
 
@@ -172,6 +178,35 @@ public static partial class NativeFiles
         return new(info.Volume, ((ulong)info.IndexHigh << 32) | info.IndexLow, ((ulong)info.SizeHigh << 32) | info.SizeLow, Time(info.Write), Time(info.Creation));
     }
 
+    // Renames a held file to one leaf name inside a held directory handle, never resolving a
+    // path. ntdll is called directly: kernelbase rewrites FileName to a full path even when
+    // RootDirectory is set (ERROR_INVALID_PARAMETER). No replacement.
+    private static bool RenameInto(SafeFileHandle file, SafeFileHandle directory, string leaf, out int error)
+    {
+        WindowsPathPolicy.ValidateName(leaf);
+        byte[] name = Encoding.Unicode.GetBytes(leaf);
+        int lengthOffset = IntPtr.Size * 2, nameOffset = lengthOffset + 4, size = nameOffset + name.Length;
+        IntPtr buffer = Marshal.AllocHGlobal(size); bool retained = false;
+        try
+        {
+            directory.DangerousAddRef(ref retained);
+            Marshal.Copy(new byte[size], 0, buffer, size); // FILE_RENAME_INFORMATION.ReplaceIfExists = FALSE
+            Marshal.WriteIntPtr(buffer, IntPtr.Size, directory.DangerousGetHandle());
+            Marshal.WriteInt32(buffer, lengthOffset, name.Length);
+            Marshal.Copy(name, 0, buffer + nameOffset, name.Length);
+            int status = NtSetInformationFile(file, out _, buffer, (uint)size, 10);
+            error = status >= 0 ? 0 : (int)RtlNtStatusToDosError(status);
+            return status >= 0;
+        }
+        finally { if (retained) directory.DangerousRelease(); Marshal.FreeHGlobal(buffer); }
+    }
+    [StructLayout(LayoutKind.Sequential)] private struct IoStatusBlock { public IntPtr Status; public IntPtr Information; }
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("ntdll.dll", ExactSpelling = true)]
+    private static extern int NtSetInformationFile(SafeFileHandle file, out IoStatusBlock status, IntPtr information, uint length, int informationClass);
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("ntdll.dll", ExactSpelling = true)]
+    private static extern uint RtlNtStatusToDosError(int status);
     private static bool Rename(SafeFileHandle handle, string destination, out int error)
     {
         byte[] name = Encoding.Unicode.GetBytes(destination);
@@ -215,10 +250,11 @@ public static partial class NativeFiles
         }
         private void Add(string path)
         {
-            // List/traverse access takes part in share checks (attribute-only opens do not), so
-            // without delete sharing the folder cannot be renamed or removed while held. Write
-            // sharing stays on: publishing a child opens its parent for write data.
-            var handle = NativeFiles.Open(path, ReadAttributes | 0x1 | 0x20, 3, 3, OpenReparse | BackupSemantics);
+            // Traverse access counts as read in share checks (attribute-only opens do not), so
+            // without delete sharing the folder cannot be renamed or removed while held. It needs
+            // no list permission. Write sharing stays on: publishing a child opens its parent
+            // for write data.
+            var handle = NativeFiles.Open(path, ReadAttributes | Traverse, 3, 3, OpenReparse | BackupSemantics);
             handles.Add(handle);
             Check(handle, true);
         }
