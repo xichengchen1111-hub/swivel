@@ -17,6 +17,7 @@ internal static class UpscaleModel
         "Windows ML could not run the upscaling model on this PC.");
 
     internal static string ModelPath { get => Model.Path; set => Model.Path = value; }
+    internal static PinnedModel Diagnostics => Model;
 
     public static float[] Predict(float[] input, CancellationToken token) => Model.Predict(input, token);
 }

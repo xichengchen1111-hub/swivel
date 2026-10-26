@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Security.Cryptography;
 using System.Threading;
@@ -20,6 +22,12 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, long[]
     private LearningModelSession? session;
     private bool onGraphics;
     private string inputName = "", outputName = "";
+
+    /// Diagnostics for tests: the device and time of the last evaluation, and switches that
+    /// force the processor or the slower element-by-element output read for comparison.
+    internal string LastRun = "";
+    internal bool ProcessorOnly, VectorViewRead;
+    internal void ResetSession() { lock (gate) { session?.Dispose(); session = null; } }
 
     /// Tests point this at their own copy; the app uses the Models folder beside Swivel.exe.
     public string Path = System.IO.Path.Combine(AppContext.BaseDirectory, "Models", file);
@@ -55,9 +63,13 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, long[]
         try
         {
             binding.Bind(inputName, tensorIn);
+            var clock = Stopwatch.StartNew();
             result = current.Evaluate(binding, "swivel");
+            double evaluate = clock.Elapsed.TotalMilliseconds;
             if (!result.Succeeded || !result.Outputs.TryGetValue(outputName, out var value) || value is not TensorFloat tensor) throw new UserError(unavailable);
-            var output = tensor.GetAsVectorView().ToArray();
+            clock.Restart();
+            var output = VectorViewRead ? tensor.GetAsVectorView().ToArray() : Read(tensor, outputLength);
+            LastRun = $"{(onGraphics ? "graphics" : "processor")}: evaluate {evaluate:0} ms, read {clock.Elapsed.TotalMilliseconds:0} ms";
             if (output.Length != outputLength) throw new UserError(unavailable);
             token.ThrowIfCancellationRequested();
             return output;
@@ -70,9 +82,33 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, long[]
         }
     }
 
+    // The tensor's own memory, copied in one go. Reading through the WinRT vector view costs a
+    // cross-boundary call per value (3 million per upscaling tile).
+    private static float[] Read(TensorFloat tensor, int length)
+    {
+        using var reference = tensor.CreateReference();
+        IntPtr unknown = ((WinRT.IWinRTObject)reference).NativeObject.ThisPtr;
+        var iid = new Guid("5b0d3235-4dba-4d44-865e-8f1d0e4fd04d"); // IMemoryBufferByteAccess
+        Marshal.ThrowExceptionForHR(Marshal.QueryInterface(unknown, in iid, out IntPtr access));
+        try
+        {
+            // IUnknown's three methods come first; GetBuffer is the fourth slot.
+            var getBuffer = Marshal.GetDelegateForFunctionPointer<GetBuffer>(Marshal.ReadIntPtr(Marshal.ReadIntPtr(access), 3 * IntPtr.Size));
+            Marshal.ThrowExceptionForHR(getBuffer(access, out IntPtr data, out uint capacity));
+            if (data == IntPtr.Zero || capacity < (ulong)length * sizeof(float)) throw new InvalidOperationException("The model output is smaller than expected.");
+            var output = new float[length];
+            Marshal.Copy(data, output, 0, length);
+            return output;
+        }
+        finally { Marshal.Release(access); }
+    }
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int GetBuffer(IntPtr self, out IntPtr value, out uint capacity);
+
     // The graphics card when Windows offers one, otherwise the processor.
     private void Open()
     {
+        if (ProcessorOnly) { OpenOnProcessor(); return; }
         try { session = new LearningModelSession(model, new LearningModelDevice(LearningModelDeviceKind.DirectXHighPerformance)); onGraphics = true; }
         catch (Exception error) when (Native(error)) { OpenOnProcessor(); }
     }
