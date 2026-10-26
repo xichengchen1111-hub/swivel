@@ -411,13 +411,21 @@ public sealed class MainWindow : Window
         page.Children.Add(UI.Text(app.L("Optional tools start off. Enable each tool independently.")));
         foreach (var feature in Enum.GetValues<Feature>())
         {
-            string label = feature switch { Feature.Shelf => "File Shelf", Feature.QuickActions => "Quick Actions", Feature.KeepAwake => "Keep Awake", Feature.ImagePresets => "Image Presets", Feature.BatchRename => "Batch Rename", Feature.Archives => "Archives", Feature.SubtitleFiles => "SRT Subtitles", Feature.MyWheel => "My Wheel", Feature.Doctor => "Windows Doctor", Feature.AppRouting => "App Routing", Feature.Clothesline => "Clothesline", Feature.PdfPages => "PDF Pages", Feature.QrCodes => "QR & Barcodes", Feature.TextCapture => "Text Capture", Feature.Assistant=>"Assistant", Feature.FileMoves=>"Move Files", Feature.FolderStyle=>"Folder Style", _ => "Wheel" };
+            string label = feature switch { Feature.Shelf => "File Shelf", Feature.QuickActions => "Quick Actions", Feature.KeepAwake => "Keep Awake", Feature.ImagePresets => "Image Presets", Feature.BatchRename => "Batch Rename", Feature.Archives => "Archives", Feature.SubtitleFiles => "SRT Subtitles", Feature.MyWheel => "My Wheel", Feature.Doctor => "Windows Doctor", Feature.AppRouting => "App Routing", Feature.Clothesline => "Clothesline", Feature.PdfPages => "PDF Pages", Feature.QrCodes => "QR & Barcodes", Feature.TextCapture => "Text Capture", Feature.Assistant=>"Assistant", Feature.FileMoves=>"Move Files", Feature.FolderStyle=>"Folder Style", Feature.AgentTools=>"Agent Tools (MCP)", _ => "Wheel" };
             var check = new CheckBox { Content = app.L(label), IsChecked = app.Prefs.IsOn(feature), Margin = new Thickness(0, 7, 0, 7) };
             check.Click += (_, _) => app.Prefs.Set(feature, check.IsChecked == true);
             page.Children.Add(check);
         }
         page.Children.Add(UI.Text(app.L("Wheel") + ": " + app.Prefs.Shortcuts.Wheel.Label + " · " + app.L("Quick Actions") + ": " + app.Prefs.Shortcuts.Quick.Label + " · " + app.L("My Wheel") + ": " + app.Prefs.Shortcuts.Custom.Label));
         page.Children.Add(UI.Button(app.L("Change Shortcuts…"), () => new ShortcutsDialog(app) { Owner = this }.ShowDialog()));
+        page.Children.Add(UI.Text(app.L("Agent Tools (MCP)"), 18));
+        page.Children.Add(UI.Text(app.L("With Agent Tools on, an agent host such as Claude Code, Claude Desktop or Codex can start Swivel with --mcp and talk to it over stdin and stdout only. Agents can inspect files and convert, rotate, flip or grayscale images. Every write is planned first, applied once, creates new files beside the originals and can be undone to the Recycle Bin."), 12));
+        page.Children.Add(UI.Button(app.L("Copy Agent Tools Setup"), () =>
+        {
+            string command = NativeIdentity.HasPackage ? McpSetup.Alias : Environment.ProcessPath ?? "Swivel.exe";
+            try { Clipboard.SetText(McpSetup.Text(command)); SetStatus(app.L("Setup copied. Paste it into your agent host's configuration.")); }
+            catch (System.Runtime.InteropServices.ExternalException) { SetStatus(app.L("The clipboard is in use. Try again.")); }
+        }));
         page.Children.Add(UI.Button(app.L("Wheel Drag Gesture…"), app.OpenWheelGesture));
         page.Children.Add(UI.Button(app.L("Open Clothesline"),app.OpenClothesline));
         page.Children.Add(UI.Button(app.L("Image Arrival Cards…"),app.OpenImageArrivalCards));

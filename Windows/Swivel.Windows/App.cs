@@ -55,10 +55,13 @@ public sealed partial class App : Application
     }
 
     [STAThread]
-    public static void Main()
+    public static int Main(string[] args)
     {
-        // The preview intentionally has no command-line execution or MCP mode.
+        // Exactly `--mcp` starts the agent server on stdin/stdout; every other argument is
+        // ignored and the normal app starts. There is no other command-line execution.
+        if (args.Length == 1 && args[0] == "--mcp") return McpHost.Run();
         new App().Run();
+        return 0;
     }
     protected override void OnStartup(StartupEventArgs e)
     {

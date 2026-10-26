@@ -1,8 +1,8 @@
 # Windows 功能进度
 
-更新：2026-10-25。Windows当前 **0.85**。0.82补普通ZIP安全解压（B08待做→部分），0.83补复制到文件夹（B06仍部分），0.84补TAR/gzip解压（B08仍部分），0.85补资源管理器文件夹样式（B09待做→部分）。0.74–0.81八批开始前分别pull，均Already up to date，Mac仍为1.12.7 / `6cbfdc1`。连续补齐改名大小写／交换／连锁、GIF抖色、二维码直角方向与Mac兼容PNG、挂图长按、正常窗口关闭请求、跨常用目录文字／图片相似比较；0.77补同卷NTFS移动及会话撤销；0.78补明确启动的新到达图片卡片；0.79补明确启动的modifier/主鼠标键手势与非激活Drop入口；0.80补本机可访问非隐藏计划任务的有界只读信息；0.81补显式平面QR数据码字纠错及原生候选展示。固定52项为22/24/4/2，普通剩余28；所属大项仍有下列缺口，真实Windows验收另算。
+更新：2026-10-25。Windows当前 **0.86**。0.82补普通ZIP安全解压（B08待做→部分），0.83补复制到文件夹（B06仍部分），0.84补TAR/gzip解压（B08仍部分），0.85补资源管理器文件夹样式（B09待做→部分），0.86补Windows MCP（G02待做→部分）。0.74–0.81八批开始前分别pull，均Already up to date，Mac仍为1.12.7 / `6cbfdc1`。连续补齐改名大小写／交换／连锁、GIF抖色、二维码直角方向与Mac兼容PNG、挂图长按、正常窗口关闭请求、跨常用目录文字／图片相似比较；0.77补同卷NTFS移动及会话撤销；0.78补明确启动的新到达图片卡片；0.79补明确启动的modifier/主鼠标键手势与非激活Drop入口；0.80补本机可访问非隐藏计划任务的有界只读信息；0.81补显式平面QR数据码字纠错及原生候选展示。固定52项为22/26/2/2，普通剩余28；所属大项仍有下列缺口，真实Windows验收另算。
 
-**固定清单共 52 项：22 项已实现限定范围、25 项部分实现、3 项待实现、2 项平台差异。普通功能还需补齐 28 项（25 + 3），另外 2 项需评估 Windows 替代体验。** 这些是功能项数量，不是工时、剩余批次数或“完整兼容百分比”；不同项工作量差异很大。所有已实现项仍处于预览，Windows 实机验收另算。
+**固定清单共 52 项：22 项已实现限定范围、26 项部分实现、2 项待实现、2 项平台差异。普通功能还需补齐 28 项（26 + 2），另外 2 项需评估 Windows 替代体验。** 这些是功能项数量，不是工时、剩余批次数或“完整兼容百分比”；不同项工作量差异很大。所有已实现项仍处于预览，Windows 实机验收另算。
 
 | 功能域 | 已实现 | 部分实现 | 待实现 | 平台差异 | 合计 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -143,7 +143,7 @@
 | ID | 交付项 | 状态 | 当前范围、剩余内容与依据 |
 | --- | --- | --- | --- |
 | G01 | 可选 Assistant 与 Doctor 报告解释 | 已实现 | 限定：默认关闭/服务隔离凭据/完整请求审阅；动作建议只选行手动Return、自定义动作标签逐次允许；基本/九静态汇总/冻结monitor解释（保持暂停至Resume）；四来源Doctor标签默认off逐条多选1–40、无topN/截短、换选重审、双32KiB整拒，标签可含私人文字但不赋动作/修复权。更完整诊断列F09、真实Windows/服务验收另计。[设置](Swivel.Core/AssistantSettings.cs)、[计划](Swivel.Core/AssistantPlan.cs)、[脱敏](Swivel.Core/DoctorAssistantReport.cs)、[汇总](Swivel.Core/DoctorAssistantSummary.cs)、[标签](Swivel.Core/DoctorLabels.cs)、[会话](Swivel.Windows/DoctorAssistantSession.cs)、[监控](Swivel.Windows/UsageMonitorDialog.cs)、[限制](PORTING.md#056已交付) |
-| G02 | Windows MCP / Agent plan–apply–undo | 待实现 | stdio 协议、固定输入/计划、单次应用、身份核验、输出历史、可靠回收站撤销须成套完成；不先开放缺少撤销的写工具。[Mac MCPTools](../Sources/Swivel/MCPTools.swift)、[MCPServer](../Sources/Swivel/MCPServer.swift)、[兼容状态](Swivel.Core/Models.cs) |
+| G02 | Windows MCP / Agent plan–apply–undo | 部分 | 0.86：`Swivel.exe --mcp`（MSIX 别名 `swivel-preview.exe`）仅 stdio JSON-RPC，Agent Tools 默认关闭；list_actions/inspect_files/plan_action/apply_plan/undo/history。只开放在原图旁新建文件的图片转换/旋转/翻转/灰度；计划一次性、1 小时、输入身份/大小/时间变化即拒绝；每次应用记入 HKCU 历史，undo 只把未改动的输出移入固定盘回收站。缺：OCR/读码/目标大小/改名/移动等工具、MCPB 打包、真实 Claude/Codex 主机验证。[Mac MCPTools](../Sources/Swivel/MCPTools.swift)、[Mcp.cs](Swivel.Core/Mcp.cs)、[McpHost.cs](Swivel.Windows/McpHost.cs) |
 
 ## Mac 新增功能差距与本次同步
 

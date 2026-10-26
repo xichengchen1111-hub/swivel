@@ -102,3 +102,5 @@
 - 2026-10-26 安全修复复核无P1/P2，P3已应用；CI 40271658976真Windows全绿（核心4,519,135/native 5,081）；MSIX仍未签名。
 - 2026-10-26 用户：「继续下一批 Windows 功能。」0.85做B09资源管理器文件夹样式（Feature.FolderStyle默认关闭，folder.style）：desktop.ini+.swivel-folder-<8hex>.ico，只读按需设并记录，恢复默认只删自己文件；已有别人desktop.ini不动。独立复核无P1/确认P2，推理P2（重设样式失败会搁浅）改为旧ini经持有句柄移到旁边、失败放回；P3已修，复核通过。核心4,519,244、native编译0/0。
 - 2026-10-26 CI 40274382216（0.85）真Windows全绿：核心4,519,245、native 5,104（含文件夹样式应用/重设/恢复）；首跑发现长度校验误带:Zone.Identifier已修。资源管理器实际显示图标仍需人工看。
+- 2026-10-26 用户：「下一批做 G02 Windows MCP（plan–apply–undo）。」0.86：Agent Tools（Feature.AgentTools默认关闭），`Swivel.exe --mcp`仅stdio，MSIX别名swivel-preview.exe；工具list_actions/inspect_files/plan_action/apply_plan/undo/history，只允许旁边新建的图片动作，计划一次性1小时，输入变化拒绝；历史在HKCU AgentHistory，undo只把未改动的输出移到回收站（仅固定盘）。设置页有Copy Agent Tools Setup。
+- 0.86复核：2个P2（非预期异常崩溃且漏记撤销；多进程历史互相覆盖）已修并复核，无未解决P1/P2；核心4,519,302通过、native编译0/0。

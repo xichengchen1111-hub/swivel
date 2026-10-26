@@ -12033,5 +12033,30 @@
     "如果之后资源管理器的“自定义”选项卡或同步服务改写了 desktop.ini，Swivel 将不再认得它，“恢复默认”也不会改动它；请改在资源管理器的文件夹“属性”中移除样式。",
     "如果之後檔案總管的「自訂」索引標籤或同步服務改寫了 desktop.ini，Swivel 將不再認得它，「還原預設」也不會變更它；請改在檔案總管的資料夾「內容」中移除樣式。",
     "後でエクスプローラーの「カスタマイズ」タブや同期サービスが desktop.ini を書き換えると、Swivel のものとは認識されず、「既定に戻す」でも変更しません。その場合はエクスプローラーのフォルダーの「プロパティ」でスタイルを外してください。"
+  ],
+  "With Agent Tools on, Swivel.exe --mcp serves local agents over stdin/stdout only (no port or network). Agents can inspect files and convert, rotate, flip or grayscale images: every write is planned, applied once within an hour if no input changed, creates new files beside the originals, and is logged so undo can move unchanged outputs to the Recycle Bin. Renames, moves and the other tools are not offered yet.": [
+    "打开“Agent 工具”后，Swivel.exe --mcp 只通过标准输入输出为本机代理提供服务（不开端口、不联网）。代理可以查看文件，以及转换、旋转、翻转图片或将其变为灰度：每次写入都要先计划，在一小时内且输入未改变时只能应用一次，在原文件旁创建新文件，并记入历史，撤销时可把未改动的输出移到回收站。改名、移动和其他工具暂不提供。",
+    "開啟「Agent 工具」後，Swivel.exe --mcp 只透過標準輸入輸出為本機代理提供服務（不開連接埠、不連網）。代理可以檢視檔案，以及轉換、旋轉、翻轉圖片或將其變為灰階：每次寫入都要先規劃，在一小時內且輸入未變更時只能套用一次，在原檔案旁建立新檔案，並記入歷程，復原時可把未變更的輸出移到資源回收筒。重新命名、移動和其他工具暫不提供。",
+    "エージェントツールをオンにすると、Swivel.exe --mcp は標準入出力だけでローカルのエージェントに機能を提供します（ポートもネットワークも使いません）。エージェントはファイルを確認し、画像の変換・回転・反転・グレースケール化ができます。書き込みは必ず先に計画し、1 時間以内かつ入力が変わっていない場合に 1 回だけ適用でき、元のファイルの横に新しいファイルを作り、履歴に記録されるので、元に戻すと変更されていない出力をごみ箱に移せます。名前の変更、移動、その他のツールはまだ提供していません。"
+  ],
+  "With Agent Tools on, an agent host such as Claude Code, Claude Desktop or Codex can start Swivel with --mcp and talk to it over stdin and stdout only. Agents can inspect files and convert, rotate, flip or grayscale images. Every write is planned first, applied once, creates new files beside the originals and can be undone to the Recycle Bin.": [
+    "打开“Agent 工具”后，Claude Code、Claude Desktop 或 Codex 等代理程序可以用 --mcp 启动 Swivel，只通过标准输入输出与它通信。代理可以查看文件，以及转换、旋转、翻转图片或将其变为灰度。每次写入都先计划、只应用一次、在原文件旁创建新文件，并可撤销到回收站。",
+    "開啟「Agent 工具」後，Claude Code、Claude Desktop 或 Codex 等代理程式可以用 --mcp 啟動 Swivel，只透過標準輸入輸出與它通訊。代理可以檢視檔案，以及轉換、旋轉、翻轉圖片或將其變為灰階。每次寫入都先規劃、只套用一次、在原檔案旁建立新檔案，並可復原到資源回收筒。",
+    "エージェントツールをオンにすると、Claude Code、Claude Desktop、Codex などのエージェントホストが --mcp で Swivel を起動し、標準入出力だけでやり取りできます。エージェントはファイルを確認し、画像の変換・回転・反転・グレースケール化ができます。書き込みは必ず先に計画し、1 回だけ適用し、元のファイルの横に新しいファイルを作り、ごみ箱へ元に戻せます。"
+  ],
+  "Copy Agent Tools Setup": [
+    "复制 Agent 工具设置",
+    "複製 Agent 工具設定",
+    "エージェントツールの設定をコピー"
+  ],
+  "Setup copied. Paste it into your agent host's configuration.": [
+    "设置已复制，请粘贴到代理程序的配置中。",
+    "設定已複製，請貼到代理程式的設定中。",
+    "設定をコピーしました。エージェントホストの設定に貼り付けてください。"
+  ],
+  "The clipboard is in use. Try again.": [
+    "剪贴板正被占用，请重试。",
+    "剪貼簿正被佔用，請重試。",
+    "クリップボードが使用中です。もう一度お試しください。"
   ]
 }
