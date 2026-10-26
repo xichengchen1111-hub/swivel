@@ -73,7 +73,8 @@ internal static class ImageArrivalNativeChecks
             using (var writer = new FileStream(writing, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
             {
                 writer.Write(png); writer.Flush();
-                await Until(() => partial.Snapshot.Attempts >= 1);
+                // The counter rises before each open, so wait for a second attempt: the first was refused.
+                await Until(() => partial.Snapshot.Attempts >= 2);
                 check(partial.Snapshot.Cards.Count == 0 && partial.Snapshot.ReservedBytes == 0, "Active writer is refused before source read or byte reservation");
             }
             await Until(() => partial.Snapshot.Cards.Any(c => c.Path == writing));

@@ -346,14 +346,16 @@ public static partial class NativeFiles
     internal static void CheckCreatedIn(SafeFileHandle file, SafeFileHandle folder, string temp)
     {
         string expected = System.IO.Path.Combine(FinalPath(folder), System.IO.Path.GetFileName(temp));
-        if (!string.Equals(FinalPath(file), expected, StringComparison.OrdinalIgnoreCase))
+        // Both names come from the file system itself; exact comparison also holds in case-sensitive folders.
+        if (!string.Equals(FinalPath(file), expected, StringComparison.Ordinal))
             throw new UserError("The output folder changed while writing. Nothing was written.");
     }
     private static string FinalPath(SafeFileHandle handle)
     {
         var buffer = new char[32768];
         uint length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Length, 0);
-        if (length == 0 || length >= buffer.Length) ThrowLast();
+        if (length == 0) ThrowLast();
+        if (length >= buffer.Length) throw new UserError(LocalOnly);
         return new string(buffer, 0, (int)length);
     }
     private static void ThrowLast() => throw new Win32Exception(Marshal.GetLastWin32Error());

@@ -69,7 +69,9 @@ internal static class TarExtractNativeChecks
             using var bad = File.OpenHandle(Path.Combine(elsewhere, "f.txt"));
             NativeFiles.CheckCreatedIn(good, held, Path.Combine(inside, "f.txt"));
             check(true, "Native created-in check accepts a file inside the held folder");
-            reject(() => NativeFiles.CheckCreatedIn(bad, held, Path.Combine(inside, "f.txt")), "Native created-in check refuses a file created elsewhere");
+            bool refused = false;
+            try { NativeFiles.CheckCreatedIn(bad, held, Path.Combine(inside, "f.txt")); } catch (UserError) { refused = true; }
+            check(refused, "Native created-in check refuses a file created elsewhere with a user-facing error");
         }
     }
 
