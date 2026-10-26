@@ -37,7 +37,7 @@ internal static class UpscaleNativeChecks
         string photo = Path.Combine(root, "split.png");
         using (var file = File.Create(photo)) { var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, w * 4))); encoder.Save(file); }
         var clock = Stopwatch.StartNew(); int blocks = 0;
-        string four = Upscaler.Run(photo, 4, default, (done, total) => blocks = total);
+        string four = Upscaler.Run(photo, 4, default, (done, total, left) => blocks = total);
         Console.WriteLine($"Upscale 4× 96×64, {blocks} block(s) (first run, model load included): {clock.ElapsedMilliseconds} ms");
         check(four == Path.Combine(root, "split 4x.png") && blocks == 1, "Upscale 4× writes a PNG beside the original");
         var decoded = new FormatConvertedBitmap(BitmapFrame.Create(new Uri(four), BitmapCreateOptions.None, BitmapCacheOption.OnLoad), PixelFormats.Bgra32, null, 0);
@@ -56,29 +56,16 @@ internal static class UpscaleNativeChecks
         check(two == Path.Combine(root, "split 2x.jpg") && twoFrame.PixelWidth == w * 2 && twoFrame.PixelHeight == h * 2, "Upscale 2× keeps JPEG as JPEG");
         check(Upscaler.Run(photo, 4, default) == Path.Combine(root, "split 4x 2.png"), "Upscale never overwrites an earlier result");
 
-        // Where the time goes: the default device, the slow element-by-element read, the processor
-        // with Windows ML's own thread count and with every logical processor, and both tile sizes.
+        // Where the time goes: the device Windows ML picked, and the direct output read against the
+        // element-by-element vector view.
         var model = UpscaleModel.Diagnostics;
-        float[] Tile(int side) { var t = new float[3 * side * side]; for (int i = 0; i < t.Length; i++) t[i] = (i * 37 % 255) / 255f; return t; }
-        var tile = Tile(Upscale.Tile);
-        Console.WriteLine($"Upscale tile size for this PC: {UpscaleModel.TileSize(default)}");
-        var fast = UpscaleModel.Predict(tile, default); Console.WriteLine("Upscale block, default device: " + model.LastRun);
+        var tile = new float[3 * Upscale.Tile * Upscale.Tile];
+        for (int i = 0; i < tile.Length; i++) tile[i] = (i * 37 % 255) / 255f;
+        var fast = UpscaleModel.Predict(tile, default); Console.WriteLine($"Upscale block ({Environment.ProcessorCount} logical processors): " + model.LastRun);
         model.VectorViewRead = true;
         var slow = UpscaleModel.Predict(tile, default); Console.WriteLine("Upscale block, vector-view read: " + model.LastRun);
         model.VectorViewRead = false;
         check(fast.Length == slow.Length && fast.Zip(slow).All(p => p.First == p.Second), "The direct output read matches the vector view exactly");
-        model.ProcessorOnly = true;
-        foreach (uint threads in new[] { 0u, (uint)Environment.ProcessorCount })
-        {
-            model.Threads = threads; model.ResetSession();
-            var cpu = UpscaleModel.Predict(tile, default);
-            Console.WriteLine($"Upscale 256 block, processor, threads {(threads == 0 ? "default" : threads.ToString())} of {Environment.ProcessorCount}: " + model.LastRun);
-            check(fast.Zip(cpu).Max(p => Math.Abs(p.First - p.Second)) < 2e-3f, "Processor and default device agree");
-        }
-        model.Threads = 0; model.ResetSession();
-        var large = UpscaleModel.Predict(Tile(Upscale.ProcessorTile), default);
-        Console.WriteLine($"Upscale 384 block, processor: {model.LastRun}; peak working set {Process.GetCurrentProcess().PeakWorkingSet64 / 1048576} MB");
-        check(large.Length == 3 * 1536 * 1536, "The model accepts 384 × 384 tiles");
-        model.ProcessorOnly = false; model.ResetSession();
+        check(UpscaleModel.UsesGraphics(default) == model.LastRun.StartsWith("graphics", StringComparison.Ordinal), "The reported device matches the one used");
     }
 }

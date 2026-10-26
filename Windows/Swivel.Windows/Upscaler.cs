@@ -18,9 +18,8 @@ internal static class UpscaleModel
     internal static string ModelPath { get => Model.Path; set => Model.Path = value; }
     internal static PinnedModel Diagnostics => Model;
 
-    /// The tile size for this PC: the Mac's 256 on a graphics card, 384 on the processor (less
-    /// repeated context per useful pixel, about 1.8 times faster there, at more memory).
-    public static int TileSize(CancellationToken token) => Model.UsesGraphics(token) ? Upscale.Tile : Upscale.ProcessorTile;
+    /// Loads the model and reports whether Windows ML found a graphics card for it.
+    public static bool UsesGraphics(CancellationToken token) => Model.UsesGraphics(token);
 
     public static float[] Predict(float[] input, CancellationToken token)
     {
@@ -32,12 +31,15 @@ internal static class UpscaleModel
 /// Upscale 2× or 4×: a new file beside the original, JPEG stays JPEG (quality 95), everything else becomes PNG.
 public static class Upscaler
 {
-    public static string Run(string path, int factor, CancellationToken token, Action<int, int>? progress = null)
+    /// `progress` receives blocks done, blocks in this file and the estimated time left.
+    public static string Run(string path, int factor, CancellationToken token, Action<int, int, TimeSpan?>? progress = null)
     {
         using var document = ImageTools.Open(path, token);
         Upscale.Dimensions(document.Bitmap.PixelWidth, document.Bitmap.PixelHeight, factor);
         var pixels = ImageTools.ReadPixels(document.Bitmap, 0, token);
-        var result = Upscale.Run(pixels, factor, UpscaleModel.TileSize(token), tile => UpscaleModel.Predict(tile, token), progress, token);
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var result = Upscale.Run(pixels, factor, Upscale.Tile, tile => UpscaleModel.Predict(tile, token),
+            (done, total) => progress?.Invoke(done, total, done < total ? clock.Elapsed / done * (total - done) : null), token);
         token.ThrowIfCancellationRequested();
         var source = BitmapSource.Create(result.Width, result.Height, 96, 96, PixelFormats.Bgra32, null, result.Bgra, result.Width * 4);
         // A JPEG name with transparent content (a renamed PNG) still keeps its transparency as PNG.

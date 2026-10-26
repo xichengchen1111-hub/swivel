@@ -10,7 +10,7 @@ internal sealed class UpscaleDialog : Window
 {
     public int Factor { get; private set; } = 2;
 
-    public UpscaleDialog(App app, IReadOnlyList<string> files)
+    public UpscaleDialog(App app, IReadOnlyList<string> files, bool graphics)
     {
         Title = app.L("Upscale…"); Width = 640; Height = 560; MinWidth = 420; MinHeight = 340;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -27,7 +27,10 @@ internal sealed class UpscaleDialog : Window
         var group = new StackPanel(); AutomationProperties.SetName(group, app.L("Size"));
         group.Children.Add(two); group.Children.Add(four); body.Children.Add(group);
         body.Children.Add(UI.Text(app.L("Uses the Real-ESRGAN model on this PC (no upload). It sharpens and can invent small textures that were not in the original, so check faces, text and fine patterns.")));
-        body.Children.Add(UI.Text(app.L("The image is processed in 128 × 128 blocks. Without a graphics card each block can take several seconds, so large images may take many minutes. Cancel keeps finished files.")));
+        body.Children.Add(UI.Text(app.L(graphics
+            ? "Windows ML runs the model on this PC's graphics card."
+            : "Windows ML found no graphics card it can use, so the processor does the work. Each 128 × 128 block can take 10–20 seconds, so a 1-megapixel photo can take 10–20 minutes. The time left is shown after the first block.")));
+        body.Children.Add(UI.Text(app.L("The image is processed in 128 × 128 blocks. Cancel keeps finished files; the block in progress finishes first.")));
         body.Children.Add(UI.Text(app.L("Up to 16 megapixels in; the result stays within 64 megapixels and 16384 pixels per side (so 4× takes images up to 4 megapixels).")));
         body.Children.Add(UI.Text(app.L("JPEG stays JPEG (quality 95); other formats are saved as PNG. Transparency is kept. Saved as 8-bit SDR without source metadata or color profiles.")));
         body.Children.Add(UI.Text(app.L("New files are saved beside each original without replacing existing files. Originals stay unchanged. The batch stops at the first error; completed files are kept.")));

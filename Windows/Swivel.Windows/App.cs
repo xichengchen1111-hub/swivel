@@ -1161,14 +1161,25 @@ public sealed partial class App : Application
                 int factor = 0, current = 0, count = files.Length;
                 if (action.Id == "image.upscale")
                 {
-                    var choice = new UpscaleDialog(this, files);
+                    report(L("Loading the upscaling model…"));
+                    bool graphics = await OnSta(() => UpscaleModel.UsesGraphics(token));
+                    token.ThrowIfCancellationRequested();
+                    var choice = new UpscaleDialog(this, files, graphics);
                     if (!ShowOperationDialog(choice, owner, token)) return;
                     factor = choice.Factor;
                 }
                 else if (!ShowOperationDialog(new ConversionDialog(this, action, files, format), owner, token)) return;
                 var entries = await OnSta(() => ImageBatch.Run(files,
                     file => factor > 0
-                        ? Upscaler.Run(file, factor, token, (done, total) => { int index = current; Dispatcher.BeginInvoke(() => report(string.Format(L("Upscaling file {0} of {1}: block {2} of {3}…"), index, count, done, total))); })
+                        ? Upscaler.Run(file, factor, token, (done, total, left) =>
+                        {
+                            int index = current;
+                            string text = left is { } time
+                                ? string.Format(L("Upscaling file {0} of {1}: block {2} of {3}, about {4} left…"), index, count, done, total,
+                                    time.TotalMinutes >= 1 ? string.Format(L("{0} min"), (int)Math.Ceiling(time.TotalMinutes)) : string.Format(L("{0} s"), (int)Math.Ceiling(time.TotalSeconds)))
+                                : string.Format(L("Upscaling file {0} of {1}: block {2} of {3}…"), index, count, done, total);
+                            Dispatcher.BeginInvoke(() => report(text));
+                        })
                         : ImageTools.Run(file, action.Id, edge, token, recipe, quality, resize, targetBytes), token,
                     (index, total) => { current = index; Dispatcher.Invoke(() => report(string.Format(L("Processing file {0} of {1}…"), index, total))); }));
                 result = new BatchResult();

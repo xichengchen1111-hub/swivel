@@ -23,12 +23,10 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, string
     private bool onGraphics;
     private string inputName = "", outputName = "";
 
-    /// Diagnostics for tests: the device and time of the last evaluation, and switches that
-    /// force the processor or the slower element-by-element output read for comparison.
+    /// Diagnostics for tests: the device and time of the last evaluation, and a switch to the
+    /// slower element-by-element output read for comparison.
     internal string LastRun = "";
-    internal bool ProcessorOnly, VectorViewRead;
-    internal uint Threads; // 0 = Windows ML's own choice
-    internal void ResetSession() { lock (gate) { session?.Dispose(); session = null; } }
+    internal bool VectorViewRead;
 
     /// Tests point this at their own copy; the app uses the Models folder beside Swivel.exe.
     public string Path = System.IO.Path.Combine(AppContext.BaseDirectory, "Models", file);
@@ -122,27 +120,14 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, string
     // The graphics card when Windows offers one, otherwise the processor.
     private void Open()
     {
-        if (ProcessorOnly) { OpenOnProcessor(); return; }
         try { session = new LearningModelSession(model, new LearningModelDevice(LearningModelDeviceKind.DirectXHighPerformance)); onGraphics = true; }
         catch (Exception error) when (Native(error)) { OpenOnProcessor(); }
     }
     private void OpenOnProcessor()
     {
         session?.Dispose(); session = null; onGraphics = false;
-        var options = new LearningModelSessionOptions();
-        if (Threads > 0)
-        {
-            // ILearningModelSessionOptionsNative::SetIntraOpNumThreadsOverride (Windows 10 2004 and later).
-            IntPtr unknown = ((WinRT.IWinRTObject)options).NativeObject.ThisPtr;
-            var iid = new Guid("c71e953f-37b4-4564-8658-d8396866db0d");
-            if (Marshal.QueryInterface(unknown, in iid, out IntPtr native) >= 0)
-                try { Marshal.GetDelegateForFunctionPointer<SetThreads>(Marshal.ReadIntPtr(Marshal.ReadIntPtr(native), 3 * IntPtr.Size))(native, Threads); }
-                finally { Marshal.Release(native); }
-        }
-        session = new LearningModelSession(model, new LearningModelDevice(LearningModelDeviceKind.Cpu), options);
+        session = new LearningModelSession(model, new LearningModelDevice(LearningModelDeviceKind.Cpu));
     }
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate int SetThreads(IntPtr self, uint count);
 
     private LearningModel Load(CancellationToken token)
     {

@@ -5,8 +5,9 @@ namespace Swivel.Core;
 
 /// Real-ESRGAN x4plus upscaling like the Mac's: square model tiles whose useful centre has 64
 /// pixels of real neighbouring context on each side (the photo is mirrored past its edges), so
-/// tiles join without seams. Graphics cards use the Mac's 256 × 256 tiles (128 × 128 useful);
-/// the processor uses 384 × 384 (256 × 256 useful), which wastes less work on context. 2× is each 4× tile averaged 2 × 2.
+/// tiles join without seams. The app uses the Mac's 256 × 256 tiles (128 × 128 useful); less
+/// context shows seams (32 pixels: up to 30 levels apart on test photos) and larger tiles need
+/// several gigabytes on the processor. 2× is each 4× tile averaged 2 × 2.
 /// Colour and alpha are handled apart: fully transparent pixels take nearby colour before the
 /// model sees them, and alpha is enlarged separately with Lanczos.
 public static class Upscale
@@ -14,7 +15,7 @@ public static class Upscale
     public const string ModelFile = "realesrgan-x4plus.onnx";
     public const long ModelBytes = 66_903_282;
     public const string ModelSha256 = "043A257B04A3F1B54D9D7D1AC17B5BECA43FFDD457D55278FB944F96E0BE5994";
-    public const int Tile = 256, ProcessorTile = 384, Halo = 64, ModelScale = 4;
+    public const int Tile = 256, Halo = 64, ModelScale = 4;
     public const long MaxInputPixels = 16_000_000, MaxOutputPixels = 64_000_000;
     public const int MaxOutputSide = 16384;
     private const string TooLarge = "The enlarged image would be too large. Use an image whose result stays within 64 megapixels and 16384 pixels per side.";

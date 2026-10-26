@@ -12229,11 +12229,6 @@
     "在這台電腦上使用 Real-ESRGAN 模型（不上傳）。它會銳化，也可能產生原圖沒有的細小紋理，請檢查人臉、文字和細密圖案。",
     "この PC で Real-ESRGAN モデルを使います（アップロードしません）。シャープになりますが、元の画像にない細かな質感が生まれることがあるため、顔、文字、細かい模様を確認してください。"
   ],
-  "The image is processed in 128 × 128 blocks. Without a graphics card each block can take several seconds, so large images may take many minutes. Cancel keeps finished files.": [
-    "图片按 128 × 128 的块处理。没有显卡时每块可能要好几秒，大图可能需要很多分钟。取消会保留已完成的文件。",
-    "圖片按 128 × 128 的區塊處理。沒有顯示卡時每塊可能要好幾秒，大圖可能需要很多分鐘。取消會保留已完成的檔案。",
-    "画像は 128 × 128 のブロックごとに処理します。グラフィックカードがないと 1 ブロックに数秒かかることがあり、大きな画像は何分もかかる場合があります。キャンセルしても完了したファイルは残ります。"
-  ],
   "Up to 16 megapixels in; the result stays within 64 megapixels and 16384 pixels per side (so 4× takes images up to 4 megapixels).": [
     "输入最多 1600 万像素；结果不超过 6400 万像素、每边 16384 像素（所以 4× 最多接受 400 万像素的图片）。",
     "輸入最多 1600 萬像素；結果不超過 6400 萬像素、每邊 16384 像素（所以 4× 最多接受 400 萬像素的圖片）。",
@@ -12268,5 +12263,40 @@
     "Windows ML 无法在这台电脑上运行放大模型。",
     "Windows ML 無法在這台電腦上執行放大模型。",
     "Windows ML はこの PC でアップスケールモデルを実行できませんでした。"
+  ],
+  "The image is processed in 128 × 128 blocks. Cancel keeps finished files; the block in progress finishes first.": [
+    "图片按 128 × 128 的块处理。取消会保留已完成的文件；正在处理的那一块会先做完。",
+    "圖片按 128 × 128 的區塊處理。取消會保留已完成的檔案；正在處理的那一塊會先做完。",
+    "画像は 128 × 128 のブロックごとに処理します。キャンセルしても完了したファイルは残ります。処理中のブロックは最後まで処理されます。"
+  ],
+  "Windows ML runs the model on this PC's graphics card.": [
+    "Windows ML 使用这台电脑的显卡运行模型。",
+    "Windows ML 使用這台電腦的顯示卡執行模型。",
+    "Windows ML はこの PC のグラフィックカードでモデルを実行します。"
+  ],
+  "Loading the upscaling model…": [
+    "正在加载放大模型…",
+    "正在載入放大模型…",
+    "アップスケールモデルを読み込み中…"
+  ],
+  "Upscaling file {0} of {1}: block {2} of {3}, about {4} left…": [
+    "正在放大第 {0}/{1} 个文件：第 {2}/{3} 块，大约还需 {4}…",
+    "正在放大第 {0}/{1} 個檔案：第 {2}/{3} 塊，大約還需 {4}…",
+    "{1} 件中 {0} 件目をアップスケール中：ブロック {3} 個中 {2} 個目、残り約 {4}…"
+  ],
+  "{0} min": [
+    "{0} 分钟",
+    "{0} 分鐘",
+    "{0} 分"
+  ],
+  "{0} s": [
+    "{0} 秒",
+    "{0} 秒",
+    "{0} 秒"
+  ],
+  "Windows ML found no graphics card it can use, so the processor does the work. Each 128 × 128 block can take 10–20 seconds, so a 1-megapixel photo can take 10–20 minutes. The time left is shown after the first block.": [
+    "Windows ML 没有找到可用的显卡，只能用处理器计算。每个 128 × 128 的块可能要 10–20 秒，100 万像素的照片可能要 10–20 分钟。处理完第一块后会显示剩余时间。",
+    "Windows ML 沒有找到可用的顯示卡，只能用處理器運算。每個 128 × 128 的區塊可能要 10–20 秒，100 萬像素的照片可能要 10–20 分鐘。處理完第一塊後會顯示剩餘時間。",
+    "Windows ML が使えるグラフィックカードが見つからないため、プロセッサで処理します。128 × 128 のブロックごとに 10～20 秒かかることがあり、100 万画素の写真で 10～20 分かかる場合があります。最初のブロックの後に残り時間を表示します。"
   ]
 }

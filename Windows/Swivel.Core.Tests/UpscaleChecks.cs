@@ -49,10 +49,10 @@ internal static class UpscaleChecks
         reject(() => Upscale.Dimensions(8193, 100, 2), "Upscale refuses more than 16384 pixels per side");
         reject(() => Upscale.Dimensions(4001, 4000, 2), "Upscale refuses more than 16 megapixels in");
         reject(() => Upscale.Dimensions(100, 100, 3), "Upscale accepts only 2× and 4×");
-        check(Upscale.Tiles(128, 128) == 1 && Upscale.Tiles(129, 128) == 2 && Upscale.Tiles(300, 70) == 3 && Upscale.Tiles(512, 257, Upscale.ProcessorTile) == 4, "Upscale block count");
+        check(Upscale.Tiles(128, 128) == 1 && Upscale.Tiles(129, 128) == 2 && Upscale.Tiles(300, 70) == 3 && Upscale.Tiles(512, 257, 384) == 4, "Upscale block count");
         reject(() => Upscale.Tiles(10, 10, 128), "Upscale refuses a tile without room for context");
 
-        foreach (int size in new[] { Upscale.Tile, Upscale.ProcessorTile })
+        foreach (int size in new[] { Upscale.Tile, 384 })
         foreach (var (w, h) in new[] { (1, 1), (130, 129), (300, 70), (257, 260) })
         {
             var image = Pattern(w, h); int calls = 0, last = 0;
@@ -69,7 +69,7 @@ internal static class UpscaleChecks
         }
 
         // A model that looks at neighbours: blocks must see real context, so the joins are invisible.
-        foreach (int size in new[] { Upscale.Tile, Upscale.ProcessorTile })
+        foreach (int size in new[] { Upscale.Tile, 384 })
         {
             int w = 300, h = 290; var image = Pattern(w, h);
             var four = Upscale.Run(image, 4, size, tile => Fake(tile, true), null, default);
