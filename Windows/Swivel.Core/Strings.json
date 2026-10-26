@@ -12428,5 +12428,160 @@
     "Windows ML 没有找到可用的显卡，因此由处理器完成。所需时间可能与录音时长相当或更长。处理完前 30 秒后会显示剩余时间。",
     "Windows ML 沒有找到可用的顯示卡，因此由處理器完成。所需時間可能與錄音長度相當或更長。處理完前 30 秒後會顯示剩餘時間。",
     "Windows ML が使えるグラフィックスカードが見つからないため、プロセッサーで処理します。録音と同じくらいかそれ以上の時間がかかることがあります。最初の 30 秒の後に残り時間が表示されます。"
+  ],
+  "A subtitle is too long to fit in three lines at this text size. Choose a smaller text size or shorten it.": [
+    "有一条字幕在当前字号下超过三行。请选择更小的字号或缩短这条字幕。",
+    "有一條字幕在目前字級下超過三行。請選擇更小的字級或縮短這條字幕。",
+    "この文字サイズでは 3 行に収まらない字幕があります。小さい文字サイズを選ぶか、字幕を短くしてください。"
+  ],
+  "Also save the subtitles as an SRT file": [
+    "同时把字幕另存为 SRT 文件",
+    "同時把字幕另存為 SRT 檔案",
+    "字幕を SRT ファイルとしても保存"
+  ],
+  "Burn In": [
+    "烧录",
+    "燒錄",
+    "焼き込む"
+  ],
+  "Burn In Subtitles…": [
+    "烧录字幕…",
+    "燒錄字幕…",
+    "字幕を焼き込む…"
+  ],
+  "Choose a video from 64 × 64 to 3840 × 2160 pixels (even width and height) and at most two hours long.": [
+    "请选择 64 × 64 到 3840 × 2160 像素（宽高均为偶数）、不超过两小时的视频。",
+    "請選擇 64 × 64 到 3840 × 2160 像素（寬高皆為偶數）、不超過兩小時的影片。",
+    "64 × 64 ～ 3840 × 2160 ピクセル（幅・高さとも偶数）、2 時間以内の動画を選んでください。"
+  ],
+  "Choose…": [
+    "选择…",
+    "選擇…",
+    "選択…"
+  ],
+  "Decoding the video's sound…": [
+    "正在解码视频的声音…",
+    "正在解碼影片的聲音…",
+    "動画の音声をデコード中…"
+  ],
+  "Drawing the subtitles…": [
+    "正在绘制字幕…",
+    "正在繪製字幕…",
+    "字幕を描画中…"
+  ],
+  "Encoding the video: {0}% done…": [
+    "正在编码视频：已完成 {0}%…",
+    "正在編碼影片：已完成 {0}%…",
+    "動画をエンコード中：{0}% 完了…"
+  ],
+  "Large": [
+    "大",
+    "大",
+    "大"
+  ],
+  "Medium": [
+    "中",
+    "中",
+    "中"
+  ],
+  "Small": [
+    "小",
+    "小",
+    "小"
+  ],
+  "Loading video…": [
+    "正在加载视频…",
+    "正在載入影片…",
+    "動画を読み込み中…"
+  ],
+  "None of the subtitles fall within the video's length.": [
+    "没有一条字幕落在视频时长之内。",
+    "沒有一條字幕落在影片長度之內。",
+    "動画の長さの範囲に入る字幕がありません。"
+  ],
+  "SRT file": [
+    "SRT 文件",
+    "SRT 檔案",
+    "SRT ファイル"
+  ],
+  "Subtitles": [
+    "字幕",
+    "字幕",
+    "字幕"
+  ],
+  "Subtitles are drawn into the picture (white text on a dark band near the bottom, at most three lines) and cannot be turned off afterwards. Overlapping subtitles are shortened so only one shows at a time.": [
+    "字幕会画进画面（底部深色底条上的白字，最多三行），之后无法关闭。时间重叠的字幕会被缩短，同一时间只显示一条。",
+    "字幕會畫進畫面（底部深色底條上的白字，最多三行），之後無法關閉。時間重疊的字幕會被縮短，同一時間只顯示一條。",
+    "字幕は映像に描き込まれ（下部の暗い帯に白い文字、最大 3 行）、後から消せません。時間が重なる字幕は短くし、一度に 1 つだけ表示します。"
+  ],
+  "Text Size": [
+    "字号",
+    "字級",
+    "文字サイズ"
+  ],
+  "The new file is saved beside the original as “name subtitled.mp4” without replacing existing files. The original stays unchanged. Cancelling saves no video.": [
+    "新文件以“名称 subtitled.mp4”保存在原文件旁边，不会替换已有文件，原文件保持不变。取消不会保存视频。",
+    "新檔案以「名稱 subtitled.mp4」儲存在原檔案旁邊，不會取代現有檔案，原檔案保持不變。取消不會儲存影片。",
+    "新しいファイルは「名前 subtitled.mp4」として元のファイルの隣に保存され、既存のファイルは置き換えません。元のファイルは変更されません。キャンセルすると動画は保存しません。"
+  ],
+  "This video has no sound track that Windows can decode, so there is nothing to transcribe. Use an SRT file instead.": [
+    "这个视频没有 Windows 能解码的音轨，无法转写。请改用 SRT 文件。",
+    "這個影片沒有 Windows 能解碼的音軌，無法轉寫。請改用 SRT 檔案。",
+    "この動画には Windows がデコードできる音声トラックがないため、文字起こしできません。代わりに SRT ファイルを使ってください。"
+  ],
+  "This video has no sound track, so only an SRT file can be used.": [
+    "这个视频没有音轨，只能使用 SRT 文件。",
+    "這個影片沒有音軌，只能使用 SRT 檔案。",
+    "この動画には音声トラックがないため、SRT ファイルのみ使えます。"
+  ],
+  "This video is stored turned (as phones often record). Turned videos are not supported yet.": [
+    "这个视频是以旋转方式保存的（手机拍摄常见），暂不支持旋转的视频。",
+    "這個影片是以旋轉方式儲存的（手機拍攝常見），暫不支援旋轉的影片。",
+    "この動画は回転した状態で保存されています（スマートフォンでよくあります）。回転した動画にはまだ対応していません。"
+  ],
+  "Transcribe the video's speech on this PC": [
+    "在这台电脑上转写视频里的说话",
+    "在這台電腦上轉寫影片裡的說話",
+    "この PC で動画の話し声を文字起こし"
+  ],
+  "Transcription takes videos up to one hour long.": [
+    "转写只支持不超过一小时的视频。",
+    "轉寫只支援不超過一小時的影片。",
+    "文字起こしは 1 時間以内の動画のみ対応しています。"
+  ],
+  "Transcription uses the Whisper base model on this PC (no upload, no download); check the text afterwards, or save it as SRT, correct it, and burn that file in instead.": [
+    "转写在这台电脑上使用 Whisper base 模型（不上传、不下载）；请在之后检查文字，或先另存为 SRT、改正后再烧录那个文件。",
+    "轉寫在這台電腦上使用 Whisper base 模型（不上傳、不下載）；請在之後檢查文字，或先另存為 SRT、改正後再燒錄那個檔案。",
+    "文字起こしはこの PC で Whisper base モデルを使います（アップロード・ダウンロードなし）。後でテキストを確認するか、SRT として保存して修正し、そのファイルを焼き込んでください。"
+  ],
+  "Use an SRT subtitle file": [
+    "使用 SRT 字幕文件",
+    "使用 SRT 字幕檔案",
+    "SRT 字幕ファイルを使う"
+  ],
+  "Windows could not encode the subtitled video. No file was saved.": [
+    "Windows 无法编码加字幕的视频，未保存文件。",
+    "Windows 無法編碼加字幕的影片，未儲存檔案。",
+    "Windows は字幕付き動画をエンコードできませんでした。ファイルは保存していません。"
+  ],
+  "Windows could not open this video. Choose an MP4, MOV, M4V or WMV file that plays in the Windows Media Player or Films & TV app.": [
+    "Windows 无法打开这个视频。请选择能在 Windows 媒体播放器或“电影和电视”应用中播放的 MP4、MOV、M4V 或 WMV 文件。",
+    "Windows 無法開啟這個影片。請選擇能在 Windows 媒體播放器或「電影與電視」應用程式中播放的 MP4、MOV、M4V 或 WMV 檔案。",
+    "Windows はこの動画を開けませんでした。Windows メディア プレーヤーまたは「映画 & テレビ」アプリで再生できる MP4・MOV・M4V・WMV ファイルを選んでください。"
+  ],
+  "Windows encodes a new H.264/AAC MP4 at the original size and frame rate. The whole video is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 and two hours; turned phone videos are not supported yet.": [
+    "Windows 会按原尺寸和帧率编码一个新的 H.264/AAC MP4。整个视频都要重新编码，需要一些时间，画质会略有损失；HDR 会变成 SDR，额外音轨、章节和元数据不保留。最大 3840 × 2160、两小时；暂不支持旋转的手机视频。",
+    "Windows 會按原尺寸和影格速率編碼一個新的 H.264/AAC MP4。整個影片都要重新編碼，需要一些時間，畫質會略有損失；HDR 會變成 SDR，額外音軌、章節和中繼資料不保留。最大 3840 × 2160、兩小時；暫不支援旋轉的手機影片。",
+    "Windows は元のサイズとフレームレートで新しい H.264/AAC MP4 をエンコードします。動画全体を再エンコードするため時間がかかり、画質がわずかに落ちます。HDR は SDR になり、追加の音声トラック・チャプター・メタデータは保持しません。最大 3840 × 2160、2 時間まで。回転したスマートフォン動画にはまだ対応していません。"
+  ],
+  "{0} × {1} pixels, {2}": [
+    "{0} × {1} 像素，{2}",
+    "{0} × {1} 像素，{2}",
+    "{0} × {1} ピクセル、{2}"
+  ],
+  "Swivel could not open the subtitle file. Choose an SRT file on a local drive.": [
+    "Swivel 无法打开这个字幕文件。请选择本地磁盘上的 SRT 文件。",
+    "Swivel 無法開啟這個字幕檔案。請選擇本機磁碟上的 SRT 檔案。",
+    "Swivel は字幕ファイルを開けませんでした。ローカル ドライブ上の SRT ファイルを選んでください。"
   ]
 }

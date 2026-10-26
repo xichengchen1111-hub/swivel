@@ -27,5 +27,12 @@ internal static class NativeAsync
         try{await operation.AsTask().ConfigureAwait(false);token.ThrowIfCancellationRequested();}
         finally{operation.Close();}
     }
+    internal static async Task<T> Join<T>(IAsyncOperationWithProgress<T,double> operation,Action<double> progress,CancellationToken token)
+    {
+        using var cancel=token.Register(()=>TryCancel(operation));
+        operation.Progress=(_,value)=>progress(value);
+        try{var result=await operation.AsTask().ConfigureAwait(false);token.ThrowIfCancellationRequested();return result;}
+        finally{operation.Close();}
+    }
     private static void TryCancel(IAsyncInfo operation){try{operation.Cancel();}catch(Exception){/* A completed native operation may already reject cancellation. */}}
 }

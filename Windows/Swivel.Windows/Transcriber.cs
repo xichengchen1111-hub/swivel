@@ -107,12 +107,19 @@ public sealed class TranscribeDocument : IDisposable
     {
         token.ThrowIfCancellationRequested();
         var input = NativeFiles.OpenRead(path);
-        try
+        try { return await OpenAsync(input, false, token).ConfigureAwait(false); }
+        catch { input.Dispose(); throw; }
+    }
+
+    /// The sound of a held file; a video's sound track is decoded by Windows. The document then
+    /// owns <paramref name="input"/> (disposing it), except when this throws.
+    internal static async Task<TranscribeDocument> OpenAsync(NativeFiles.Input input, bool video, CancellationToken token)
+    {
         {
-            if (input.Stream.Length > PcmWave.MaxBytes) throw new UserError(Unsupported);
+            if (!video && input.Stream.Length > PcmWave.MaxBytes) throw new UserError(Unsupported);
             byte[] wave;
             WaveInfo? source = null;
-            try { source = PcmWave.Read(input.Stream, token); } catch (UserError) { }
+            if (!video) try { source = PcmWave.Read(input.Stream, token); } catch (UserError) { }
             if (source is not null)
             {
                 if (source.Seconds > Transcribe.MaxSeconds) throw new UserError(Transcribe.TooLong);
@@ -121,7 +128,7 @@ public sealed class TranscribeDocument : IDisposable
                 WaveConverter.Export(input.Stream, converted, new WaveFormat(Transcribe.SampleRate, 1, 16), token);
                 wave = converted.ToArray();
             }
-            else wave = await DecodeAsync(input.Stream, token).ConfigureAwait(false);
+            else wave = await DecodeAsync(input.Stream, video, token).ConfigureAwait(false);
             using var check = new MemoryStream(wave, false);
             var info = PcmWave.Read(check, token);
             if (info.Rate != Transcribe.SampleRate || info.Channels != 1 || info.Bits != 16) throw new UserError(Unsupported);
@@ -129,16 +136,16 @@ public sealed class TranscribeDocument : IDisposable
             if (info.Frames == 0) throw new UserError("The audio is empty.");
             return new TranscribeDocument(input, wave, info);
         }
-        catch { input.Dispose(); throw; }
     }
 
     // Windows' own decoders, asked for 16 kHz mono PCM16 directly (they resample and mix down).
-    private static async Task<byte[]> DecodeAsync(Stream stream, CancellationToken token)
+    private static async Task<byte[]> DecodeAsync(Stream stream, bool video, CancellationToken token)
     {
-        if (stream.Length > MaxBytes) throw new UserError(Unsupported);
+        if (!video && stream.Length > MaxBytes) throw new UserError(Unsupported);
         stream.Position = 0;
-        SystemAudioInput.Identify(stream, token);
-        using var sourceView = new BoundedStream(stream, MaxBytes, false, token); using var source = sourceView.AsRandomAccessStream();
+        if (!video) SystemAudioInput.Identify(stream, token);
+        // Only the decoded 16 kHz mono sound is bounded for a video (one hour fits in 128 MiB).
+        using var sourceView = new BoundedStream(stream, video ? stream.Length : MaxBytes, false, token); using var source = sourceView.AsRandomAccessStream();
         if (source.CanWrite || !source.CanRead) throw new UserError(Unsupported);
         var target = MediaEncodingProfile.CreateWav(AudioEncodingQuality.Auto);
         target.Audio = AudioEncodingProperties.CreatePcm(Transcribe.SampleRate, 1, 16);
@@ -146,7 +153,7 @@ public sealed class TranscribeDocument : IDisposable
         var transcoder = new MediaTranscoder { AlwaysReencode = true, HardwareAccelerationEnabled = false };
         var preparation = await NativeAsync.Join(transcoder.PrepareStreamTranscodeAsync(source, output, target), token).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
-        if (!preparation.CanTranscode) throw new UserError(Unsupported);
+        if (!preparation.CanTranscode) throw new UserError(video ? VideoSubtitles.NoSound : Unsupported);
         await NativeAsync.Join(preparation.TranscodeAsync(), token).ConfigureAwait(false);
         token.ThrowIfCancellationRequested();
         // Only the data chunk is kept, in a canonical WAV the checks above read again.

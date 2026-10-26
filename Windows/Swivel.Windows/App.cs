@@ -941,6 +941,62 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested();if(!save)return;
                 report(L("Processing…"));result=new BatchResult();result.Outputs.Add(await Task.Run(()=>document.Save(token),token));
             }
+            else if (action.Id == "video.subtitles")
+            {
+                report(L("Loading video…"));
+                using var video = await Task.Run(() => VideoSubtitles.OpenAsync(files[0], token), token);
+                token.ThrowIfCancellationRequested();
+                var choice = new BurnSubtitlesDialog(this, video);
+                if (!ShowOperationDialog(choice, owner, token)) return;
+                result = new BatchResult();
+                IReadOnlyList<SubtitleCue> cues; IReadOnlyList<SubtitleImage> images;
+                if (choice.Transcribe)
+                {
+                    report(L("Decoding the video's sound…"));
+                    using var sound = await Task.Run(() => video.SoundAsync(token), token);
+                    report(L("Loading the speech recognition model…"));
+                    await Task.Run(() => SpeechModel.UsesGraphics(token), token);
+                    var transcript = await Task.Run(() => sound.Run(choice.SpeechLanguage, (done, total, left) =>
+                    {
+                        int percent = total > 0 ? (int)(100L * done / total) : 0;
+                        int seconds = left is { } time ? (int)Math.Min(int.MaxValue, Math.Ceiling(time.TotalSeconds)) : 0;
+                        string text = left is not null
+                            ? string.Format(L("Transcribing: {0}% done, about {1} left…"), percent, seconds >= 60 ? string.Format(L("{0} min"), (seconds + 59) / 60) : string.Format(L("{0} s"), seconds))
+                            : string.Format(L("Transcribing: {0}% done…"), percent);
+                        Dispatcher.BeginInvoke(() => report(text));
+                    }, token), token);
+                    token.ThrowIfCancellationRequested();
+                    if (transcript.Segments.Count == 0) throw new UserError("No speech was recognised in this recording. Nothing was saved.");
+                    cues = transcript.Cues;
+                    // Drawn first, so a cue too long to fit is refused before anything is saved.
+                    report(L("Drawing the subtitles…"));
+                    images = await OnSta(() => video.Draw(cues, choice.TextSize, token));
+                    token.ThrowIfCancellationRequested();
+                    if (choice.SaveSubtitles) result.Outputs.AddRange(await Task.Run(() => sound.Save(transcript, false, true, token), token));
+                }
+                else
+                {
+                    byte[] bytes;
+                    try
+                    {
+                        using var subtitles = NativeFiles.OpenRead(choice.SubtitleFile!);
+                        if (subtitles.Stream.Length > SubRip.MaxBytes) throw new UserError("Subtitle files are limited to 2 MB.");
+                        bytes = new byte[subtitles.Stream.Length]; subtitles.Stream.ReadExactly(bytes);
+                    }
+                    catch (Exception error) when (error is not (UserError or OperationCanceledException)) { throw new UserError("Swivel could not open the subtitle file. Choose an SRT file on a local drive."); }
+                    cues = SubRip.Parse(SubRip.Decode(bytes));
+                    report(L("Drawing the subtitles…"));
+                    images = await OnSta(() => video.Draw(cues, choice.TextSize, token));
+                    token.ThrowIfCancellationRequested();
+                }
+                // The SRT saved above is still listed when encoding fails or is cancelled.
+                try
+                {
+                    report(string.Format(L("Encoding the video: {0}% done…"), 0));
+                    result.Outputs.Add(await Task.Run(() => video.BurnAsync(images, done => Dispatcher.BeginInvoke(() => report(string.Format(L("Encoding the video: {0}% done…"), (int)(done * 100)))), token), token));
+                }
+                catch (OperationCanceledException) { result.Cancelled = true; } catch (Exception error) { result.Error = error; }
+            }
             else if (action.Id == "audio.transcribe")
             {
                 report(L("Loading audio…"));
