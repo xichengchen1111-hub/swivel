@@ -55,6 +55,8 @@ public sealed class McpSession
         new("convert.gif", "Convert to Static GIF", " converted"),
         new("image.rotate", "Rotate 90° Clockwise", " rotated"), new("image.flip", "Flip Horizontally", " flipped"),
         new("image.gray", "Grayscale", " grayscale"),
+        // Run on this PC with the pinned U²-Net model; the result is a PNG either way.
+        new("image.removebg", "Remove Background", " cutout"), new("image.blurbg", "Blur Background", " blurred"),
     };
 
     private readonly IMcpHost host;

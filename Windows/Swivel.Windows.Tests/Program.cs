@@ -117,6 +117,7 @@ internal static class Program
             Group("TarExtractNativeChecks", () => TarExtractNativeChecks.Run(directory,Check,Reject));
             Group("FolderStyleNativeChecks", () => FolderStyleNativeChecks.Run(directory,Check,Reject));
             Group("McpNativeChecks", () => McpNativeChecks.Run(directory,Check,Reject));
+            Group("CutoutNativeChecks", () => CutoutNativeChecks.Run(directory,Check,Reject));
             Group("CopyFilesNativeChecks", () => CopyFilesNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalNativeChecks", () => ImageArrivalNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalWindowNativeChecks", () => ImageArrivalWindowNativeChecks.Run(Check,Reject));

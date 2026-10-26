@@ -105,3 +105,5 @@
 - 2026-10-26 用户：「下一批做 G02 Windows MCP（plan–apply–undo）。」0.86：Agent Tools（Feature.AgentTools默认关闭），`Swivel.exe --mcp`仅stdio，MSIX别名swivel-preview.exe；工具list_actions/inspect_files/plan_action/apply_plan/undo/history，只允许旁边新建的图片动作，计划一次性1小时，输入变化拒绝；历史在HKCU AgentHistory，undo只把未改动的输出移到回收站（仅固定盘）。设置页有Copy Agent Tools Setup。
 - 0.86复核：2个P2（非预期异常崩溃且漏记撤销；多进程历史互相覆盖）已修并复核，无未解决P1/P2；核心4,519,302通过、native编译0/0。
 - 2026-10-26 CI 40278180090（0.86）真Windows全绿：核心4,519,303、native 5,111（含真实--mcp管道与回收站撤销）；MSIX仍未签名。
+- 2026-10-26 用户：「继续下一批 Windows 功能。」0.87做C10第一部分：Remove Background/Blur Background，U²-Net（Apache-2.0权重，rembg MIT ONNX，175,997,641 B，SHA-256 8d10d2f3…b491）经系统Windows ML本机运行；模型太大不进git，构建脚本固定URL下载到build/models并校验，app加载前再验SHA-256。与rembg参考蒙版IoU 0.991–0.9998。证件照下一批。
+- 0.87复核：P1（.NET流不能克隆→WinML加载必失败）改InMemoryRandomAccessStream；P2淡背景可恢复→蒙版<16置0并如实说明；P2错误类型覆盖已修；复核无未解决P1/P2。核心4,519,336、native编译0/0。

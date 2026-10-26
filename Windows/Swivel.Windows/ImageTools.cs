@@ -167,6 +167,14 @@ public static class ImageTools
             source = BitmapSource.Create(adjusted.Width, adjusted.Height, 96, 96, PixelFormats.Bgra32, null, adjusted.Bgra, adjusted.Width * 4);
             suffix = action == "image.gray" ? " grayscale" : " edited";
         }
+        else if (action is "image.removebg" or "image.blurbg")
+        {
+            var pixels = ReadPixels(source, 0, cancellation);
+            var mask = Cutout.Mask(CutoutModel.Predict(Cutout.Input(pixels, cancellation), cancellation), pixels.Width, pixels.Height, cancellation);
+            var result = action == "image.removebg" ? Cutout.Apply(pixels, mask) : Cutout.BlurBackground(pixels, mask, cancellation);
+            source = BitmapSource.Create(result.Width, result.Height, 96, 96, PixelFormats.Bgra32, null, result.Bgra, result.Width * 4);
+            suffix = action == "image.removebg" ? " cutout" : " blurred";
+        }
         else if (action == "image.retouch")
         {
             if (retouch is null || retouch.Count == 0) throw new UserError("Paint an area before saving a repair.");

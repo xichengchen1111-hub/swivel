@@ -176,6 +176,8 @@ public static class Catalog
         new("image.adjust", "Edit Photo…", ImageOnly: true, SingleFile: true),
         new("image.flip", "Flip Horizontal", ImageOnly: true),
         new("image.gray", "Grayscale", ImageOnly: true),
+        new("image.removebg", "Remove Background", ImageOnly: true),
+        new("image.blurbg", "Blur Background", ImageOnly: true),
         new("image.retouch", "Retouch", ImageOnly: true, SingleFile: true),
         new("image.redact", "Redact…", ImageOnly: true, SingleFile: true),
         new("image.annotate", "Annotate…", ImageOnly: true, SingleFile: true),

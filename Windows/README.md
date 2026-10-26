@@ -10,6 +10,10 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.87 新增：移除背景与背景虚化
+
+图片工具里新增 **Remove Background**（主体保留、背景变透明，输出 `名称 cutout.png`）和 **Blur Background**（只虚化主体后面的背景，主体像素不变、不产生光晕，输出 `名称 blurred.png`），可批量，结果放在原图旁、不覆盖。使用用户批准的定版本地模型 U²-Net（权重 Apache-2.0，ONNX 由 rembg 导出、MIT），通过 Windows 自带的 Windows ML 在本机运行（有显卡用显卡，否则用处理器），不上传、不联网；模型随安装包提供，启动时核对大小与 SHA-256，不符就拒绝。模型在 320×320 上判断主体，复杂背景、细发丝、与背景颜色接近或不是“显著物体”的主体可能漏掉或带边；模型不太确定的淡背景（蒙版低于 16/255）也变为全透明，完全透明处的颜色会清空；边缘和模型拿不准的区域会半透明并保留原色（在 Owl 等测试照片上约 2–9% 像素），这些像素调成不透明就能看到原图，分享前请检查。完整安装包大约增加 176 MB。agent 工具（MCP）也可以调用这两个动作。证件照仍待做，C10 由待实现变为部分实现，固定 52 项为 22／27／1／2，普通剩余 28。
+
 ## 0.86 新增：Agent 工具（MCP）
 
 在设置里打开 **Agent Tools (MCP)** 后，Claude Code、Claude Desktop、Codex 等本机 agent 可以通过 `Swivel.exe --mcp` 调用 Swivel（MSIX 安装后用别名 `swivel-preview.exe`）。只走标准输入/输出，不开端口、不联网、不显示窗口。设置页的 **Copy Agent Tools Setup** 复制三种主机的配置。工具：`list_actions`、`inspect_files`（只读）、`plan_action`、`apply_plan`、`undo`、`history`。写入只能先 plan 再 apply：计划一次性、1 小时内有效，输入文件的身份、大小或修改时间变了就拒绝；目前只开放在原图旁新建文件的转换（PNG/JPG/BMP/TIFF/GIF）、旋转、翻转和灰度，绝不覆盖。每次应用都记入历史（当前用户注册表），`undo` 先核对输出没被改动，再把它移到回收站；只在有回收站的本地固定盘上撤销，其他位置一律不动。OCR、读码、目标大小压缩、改名、移动和 MCPB 打包仍待做，G02 由待实现变为部分实现，固定 52 项为 22／26／2／2，普通剩余 28。真实 agent 主机尚未验证。
@@ -376,7 +380,7 @@ bash Windows/build.sh win-arm64
 - 保持 `NativeFiles` 路径/实际句柄验证、祖先固定、`CREATE_NEW`、不覆盖发布、句柄清理；新建二维码无原件，目录由用户明确选择并采用相同的祖先句柄与不覆盖写入规则。不得引入 Exists→Write、覆盖移动、提权或shell字符串拼接。
 - UI文本使用 `Strings.L` / `app.L` 和四语言 `Strings.json`；动作ID不翻译。设置独立存储在 `HKCU\Software\Swivel\WindowsPreview`；读取v1/v2老配置，为新功能使用关闭/空配置默认值。0.6增加QR可选分组和应用剪贴板模式，旧设置默认保持不分组/直接打开；0.5增加本地QR库、独立模板颜色和逐图Auto，全部兼容旧设置默认值；0.4增加模板/动画选项与可选照片配方字段，保持旧默认值；0.3新增应用、My Wheel及快捷键字段，设置总长上限1 MiB（0.23扩容；0.17曾为384 KiB，0.16为160 KiB）。
 - manifest保持`asInvoker`、`uiAccess=false`、PerMonitorV2。菜单与挂图采用解析弹簧（damping 0.8）及 CompositionTarget 渲染事件，静止/重绘/关闭退订；遵循系统动画设置。
-- 便携包包含微软 .NET/WPF/WinForms 10.0.13运行时，`Licenses/`含许可、告知、来源。没有捆绑ffmpeg、Python、Apple模型或第三方应用运行时。模型、网络、签名发布另行评估。
+- 便携包包含微软 .NET/WPF/WinForms 10.0.13运行时，`Licenses/`含许可、告知、来源。没有捆绑ffmpeg、Python、Apple模型或第三方应用运行时；0.87起含用户批准的U²-Net背景模型（数据文件，经系统Windows ML运行，见“背景模型致谢”）。模型、网络、签名发布另行评估。
 
 ## 迁移文件来源
 
@@ -389,6 +393,10 @@ Mac 图片预设当前保存在 `imagePresets.v1` 的 JSON Data 中，Mac 应用
 ## 功能思路致谢
 
 文件夹空间图、重复文件查找及项目构建文件夹识别的功能思路参考 [MangoDisk](https://github.com/harry0703/MangoDisk)。按照项目对其GPL-3.0来源的限制，本实现仅参考功能方向，扫描、内容比较、标记识别、布局与界面均自行编写，未使用其代码、规则库或素材；没有新增第三方运行时。重复文件清理、项目产物清理和应用卸载/残留仍未实现。
+
+## 背景模型致谢
+
+移除背景与背景虚化使用 [U²-Net](https://github.com/xuebinqin/U-2-Net)（Qin 等，Apache-2.0）的权重及 [rembg](https://github.com/danielgatis/rembg)（MIT）发布的 ONNX 文件，未修改；许可、来源与哈希见包内 `Licenses/U2Net-LICENSE.txt`、`Licenses/rembg-LICENSE.txt`、`Licenses/U2Net-UPSTREAM.md`（源码 `Windows/ThirdParty/U2Net/`）。前后处理代码为自行编写，未使用 rembg 代码。
 
 ## GIF格式致谢
 
