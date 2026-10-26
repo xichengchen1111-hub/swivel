@@ -11848,5 +11848,190 @@
     "写入期间输出文件夹发生了变化，未写入任何内容。",
     "寫入期間輸出資料夾發生了變化，未寫入任何內容。",
     "書き込み中に出力フォルダーが変更されたため、何も書き込みませんでした。"
+  ],
+  "Change Folder Style…": [
+    "更改文件夹样式…",
+    "變更資料夾樣式…",
+    "フォルダーのスタイルを変更…"
+  ],
+  "Enable Folder Style in Settings first.": [
+    "请先在设置中启用“文件夹样式”。",
+    "請先在設定中啟用「資料夾樣式」。",
+    "先に設定で「フォルダーのスタイル」を有効にしてください。"
+  ],
+  "Choose Folders to Style…": [
+    "选择要设置样式的文件夹…",
+    "選擇要設定樣式的資料夾…",
+    "スタイルを設定するフォルダーを選択…"
+  ],
+  "Choose 1–20 folders.": [
+    "请选择 1–20 个文件夹。",
+    "請選擇 1–20 個資料夾。",
+    "フォルダーを 1～20 個選んでください。"
+  ],
+  "Choose each folder only once.": [
+    "每个文件夹只能选择一次。",
+    "每個資料夾只能選擇一次。",
+    "各フォルダーは 1 回だけ選んでください。"
+  ],
+  "Reading folder settings…": [
+    "正在读取文件夹设置…",
+    "正在讀取資料夾設定…",
+    "フォルダーの設定を読み取っています…"
+  ],
+  "Restored Explorer's default look for {0} of {1} folder(s).": [
+    "已为 {1} 个文件夹中的 {0} 个恢复资源管理器默认外观。",
+    "已為 {1} 個資料夾中的 {0} 個還原檔案總管預設外觀。",
+    "{1} 個中 {0} 個のフォルダーをエクスプローラーの既定の表示に戻しました。"
+  ],
+  "Styled {0} of {1} folder(s).": [
+    "已为 {1} 个文件夹中的 {0} 个设置样式。",
+    "已為 {1} 個資料夾中的 {0} 個設定樣式。",
+    "{1} 個中 {0} 個のフォルダーにスタイルを設定しました。"
+  ],
+  "{0} folder(s) were left unchanged.": [
+    "有 {0} 个文件夹保持不变。",
+    "有 {0} 個資料夾保持不變。",
+    "{0} 個のフォルダーは変更していません。"
+  ],
+  "Apply Style": [
+    "应用样式",
+    "套用樣式",
+    "スタイルを適用"
+  ],
+  "Restore Default": [
+    "恢复默认",
+    "還原預設",
+    "既定に戻す"
+  ],
+  "Explorer shows a folder's own icon from a hidden desktop.ini file. Swivel adds two hidden system files to each folder (desktop.ini and an icon) and sets the folder's Read-only attribute if it is not set yet, which is how Explorer recognises the icon. Read-only on a folder does not stop changes to the files inside it.": [
+    "资源管理器通过隐藏的 desktop.ini 文件显示文件夹自己的图标。Swivel 会在每个文件夹中添加两个隐藏的系统文件（desktop.ini 和一个图标），并在文件夹尚未设置“只读”属性时设置它，资源管理器据此识别图标。文件夹的“只读”属性不会阻止修改其中的文件。",
+    "檔案總管透過隱藏的 desktop.ini 檔案顯示資料夾自己的圖示。Swivel 會在每個資料夾中加入兩個隱藏的系統檔案（desktop.ini 和一個圖示），並在資料夾尚未設定「唯讀」屬性時設定它，檔案總管據此辨識圖示。資料夾的「唯讀」屬性不會阻止修改其中的檔案。",
+    "エクスプローラーは、隠しファイル desktop.ini をもとにフォルダー独自のアイコンを表示します。Swivel は各フォルダーに 2 つの隠しシステムファイル（desktop.ini とアイコン）を追加し、フォルダーに読み取り専用属性がまだなければ設定します。エクスプローラーはこれでアイコンを認識します。フォルダーの読み取り専用属性は、中のファイルの変更を妨げません。"
+  ],
+  "Restore Default removes exactly these two files and clears Read-only only if Swivel set it. Folders that already have their own desktop.ini are left unchanged. Explorer may need a moment, or a refresh, to show the change; sync services such as OneDrive also sync the two files.": [
+    "“恢复默认”只删除这两个文件，并且仅在“只读”是 Swivel 设置的情况下才清除它。已有自己 desktop.ini 的文件夹保持不变。资源管理器可能需要片刻或刷新后才显示变化；OneDrive 等同步服务也会同步这两个文件。",
+    "「還原預設」只刪除這兩個檔案，並且僅在「唯讀」是 Swivel 設定的情況下才清除它。已有自己 desktop.ini 的資料夾保持不變。檔案總管可能需要片刻或重新整理後才顯示變更；OneDrive 等同步服務也會同步這兩個檔案。",
+    "「既定に戻す」はこの 2 つのファイルだけを削除し、読み取り専用属性は Swivel が設定した場合にのみ解除します。独自の desktop.ini があるフォルダーは変更しません。変更が表示されるまでに少し時間がかかったり、更新が必要な場合があります。OneDrive などの同期サービスはこの 2 つのファイルも同期します。"
+  ],
+  "Colour": [
+    "颜色",
+    "顏色",
+    "色"
+  ],
+  "Badge (optional, up to two characters)": [
+    "标记（可选，最多两个字符）",
+    "標記（選用，最多兩個字元）",
+    "バッジ（任意、2 文字まで）"
+  ],
+  "Folders": [
+    "文件夹",
+    "資料夾",
+    "フォルダー"
+  ],
+  "Swivel style (will be replaced)": [
+    "Swivel 样式（将被替换）",
+    "Swivel 樣式（將被取代）",
+    "Swivel のスタイル（置き換えます）"
+  ],
+  "Has its own desktop.ini (left unchanged)": [
+    "已有自己的 desktop.ini（保持不变）",
+    "已有自己的 desktop.ini（保持不變）",
+    "独自の desktop.ini あり（変更しません）"
+  ],
+  "Explorer default": [
+    "资源管理器默认",
+    "檔案總管預設",
+    "エクスプローラーの既定"
+  ],
+  "Choose one of the folder colours.": [
+    "请选择一种文件夹颜色。",
+    "請選擇一種資料夾顏色。",
+    "フォルダーの色を 1 つ選んでください。"
+  ],
+  "Use up to two letters, digits or symbols for the badge, without spaces around them.": [
+    "标记最多使用两个字母、数字或符号，前后不能有空格。",
+    "標記最多使用兩個字母、數字或符號，前後不能有空格。",
+    "バッジには文字・数字・記号を 2 つまで使え、前後に空白は入れられません。"
+  ],
+  "Something else changed this folder. Nothing was overwritten.": [
+    "有其他程序更改了此文件夹，未覆盖任何内容。",
+    "有其他程式變更了此資料夾，未覆寫任何內容。",
+    "別のアプリがこのフォルダーを変更しました。何も上書きしていません。"
+  ],
+  "This folder already has its own Explorer settings (desktop.ini). Swivel leaves them unchanged.": [
+    "此文件夹已有自己的资源管理器设置（desktop.ini），Swivel 不会更改。",
+    "此資料夾已有自己的檔案總管設定（desktop.ini），Swivel 不會變更。",
+    "このフォルダーには独自のエクスプローラー設定（desktop.ini）があります。Swivel は変更しません。"
+  ],
+  "This folder has no Swivel style.": [
+    "此文件夹没有 Swivel 样式。",
+    "此資料夾沒有 Swivel 樣式。",
+    "このフォルダーには Swivel のスタイルがありません。"
+  ],
+  "This folder's desktop.ini was not written by Swivel, so it was left unchanged.": [
+    "此文件夹的 desktop.ini 不是 Swivel 写入的，因此保持不变。",
+    "此資料夾的 desktop.ini 不是 Swivel 寫入的，因此保持不變。",
+    "このフォルダーの desktop.ini は Swivel が書いたものではないため、変更していません。"
+  ],
+  "Choose a folder, not a whole drive.": [
+    "请选择文件夹，而不是整个磁盘。",
+    "請選擇資料夾，而不是整個磁碟。",
+    "ドライブ全体ではなくフォルダーを選んでください。"
+  ],
+  "Another app is using this folder's desktop.ini. Try again in a moment.": [
+    "其他程序正在使用此文件夹的 desktop.ini，请稍后再试。",
+    "其他程式正在使用此資料夾的 desktop.ini，請稍後再試。",
+    "別のアプリがこのフォルダーの desktop.ini を使用中です。しばらくしてからもう一度お試しください。"
+  ],
+  "Teal": [
+    "青绿色",
+    "青綠色",
+    "ティール"
+  ],
+  "Green": [
+    "绿色",
+    "綠色",
+    "緑"
+  ],
+  "Orange": [
+    "橙色",
+    "橙色",
+    "オレンジ"
+  ],
+  "Pink": [
+    "粉色",
+    "粉紅色",
+    "ピンク"
+  ],
+  "Purple": [
+    "紫色",
+    "紫色",
+    "紫"
+  ],
+  "Brown": [
+    "棕色",
+    "棕色",
+    "茶"
+  ],
+  "Graphite": [
+    "石墨灰",
+    "石墨灰",
+    "グラファイト"
+  ],
+  "Give 1–20 local folders a coloured Explorer icon with an optional two-character badge, through a hidden desktop.ini and icon file inside each folder; the folder becomes Read-only if it was not. Restore Default removes exactly those files. Folders with their own desktop.ini are left unchanged. Mac textures, pictures and emoji colours are not available; Explorer refresh timing is unverified.": [
+    "可为 1–20 个本地文件夹设置带颜色的资源管理器图标和可选的两字符标记，方法是在每个文件夹中写入隐藏的 desktop.ini 和图标文件；文件夹原本不是只读时会设为只读。“恢复默认”只删除这些文件。已有自己 desktop.ini 的文件夹保持不变。没有 Mac 的材质、图片和彩色表情；资源管理器刷新时机未验证。",
+    "可為 1–20 個本機資料夾設定帶顏色的檔案總管圖示和選用的兩字元標記，方法是在每個資料夾中寫入隱藏的 desktop.ini 和圖示檔案；資料夾原本不是唯讀時會設為唯讀。「還原預設」只刪除這些檔案。已有自己 desktop.ini 的資料夾保持不變。沒有 Mac 的材質、圖片和彩色表情符號；檔案總管重新整理時機未驗證。",
+    "ローカルフォルダー 1～20 個に、色付きのエクスプローラーアイコンと任意の 2 文字バッジを設定します。各フォルダーに隠しファイル desktop.ini とアイコンファイルを書き込み、読み取り専用でなければ読み取り専用にします。「既定に戻す」はそれらのファイルだけを削除します。独自の desktop.ini があるフォルダーは変更しません。Mac の質感・画像・カラー絵文字は使えません。エクスプローラーの更新タイミングは未検証です。"
+  ],
+  "Unavailable (left unchanged)": [
+    "不可用（保持不变）",
+    "無法使用（保持不變）",
+    "利用できません（変更しません）"
+  ],
+  "If Explorer's Customize tab or a sync service later rewrites desktop.ini, it is no longer recognised as Swivel's and Restore Default leaves it alone; remove the style in Explorer's folder Properties instead.": [
+    "如果之后资源管理器的“自定义”选项卡或同步服务改写了 desktop.ini，Swivel 将不再认得它，“恢复默认”也不会改动它；请改在资源管理器的文件夹“属性”中移除样式。",
+    "如果之後檔案總管的「自訂」索引標籤或同步服務改寫了 desktop.ini，Swivel 將不再認得它，「還原預設」也不會變更它；請改在檔案總管的資料夾「內容」中移除樣式。",
+    "後でエクスプローラーの「カスタマイズ」タブや同期サービスが desktop.ini を書き換えると、Swivel のものとは認識されず、「既定に戻す」でも変更しません。その場合はエクスプローラーのフォルダーの「プロパティ」でスタイルを外してください。"
   ]
 }

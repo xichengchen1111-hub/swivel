@@ -1004,3 +1004,7 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 文本沿用一次200尝试/16MiB/60s及原严格文本/行集合80%配对；图片沿用一次200尝试/128MiB/60s及原9×8明暗网格比较、低细节跳过；最多1000对。不会给每个根重置内容预算，不把相似视为字节相同或可安全删除。Fluent虚拟结果表、问题页与明确复制，不自动扫描/删除/联网/持久化/发送助手。单目录旧入口保持。Windows路径/文件系统/实际解码/GUI/DPI/Narrator/ARM64均待实机验收。
 
 0.74–0.76新增稳定动作ID保存到My Wheel后，旧版可能拒绝整份设置并回默认；降级前保留升级前备份。无新的Prefs schema、第三方应用依赖或模型。打包和独立复核见TESTING及外置构建报告，固定52项普通剩余28，不将子功能换算成整项完成。
+
+## 0.85 Explorer 文件夹样式（B09）
+
+批次开始 `git fetch`，origin/main 仍为 Mac 1.12.7／`6cbfdc1`。追加默认关闭 `Feature.FolderStyle`（枚举末尾）和 `folder.style`（自带多选文件夹选择器，不读取当前文件）。Core `FolderStyles` 生成并逐字节识别 Swivel 的 `desktop.ini`（UTF-16LE BOM、`[.ShellClassInfo] IconResource=<icon>,0`、`[Swivel] Version/Icon/ReadOnlyAdded`），图标名固定为 `.swivel-folder-<8 位小写十六进制>.ico`，ICO 内全为 PNG。Native `NativeFiles.FolderStyle` 持有从盘根到文件夹的所有祖先，另开带 WRITE_ATTRIBUTES 的文件夹句柄；新文件经私有暂存＋`CheckCreatedIn`＋相对持有句柄 `RenameInto`（不替换）发布；旧 `desktop.ini` 读入后用 POSIX 语义经同一句柄删除，图标只按生成名字并经 `CheckCreatedIn` 后删除。顺序：先发布新图标，删旧 ini，发布新 ini（失败则删新图标），再删旧图标、按需设只读，最后 `SHChangeNotify(SHCNE_UPDATEITEM)`。Mac 的 Finder 资源写入、23 种材质、图片与彩色 emoji 不移植。

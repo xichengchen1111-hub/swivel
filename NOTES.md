@@ -100,3 +100,4 @@
 
 - 2026-10-26：1.12.8 (36) 已构建并安装到 Applications 和桌面；旧版1.12.7及偏好导出备份在 build/previous-1.12.7-before-1.12.8/。未提交、未push。
 - 2026-10-26 安全修复复核无P1/P2，P3已应用；CI 40271658976真Windows全绿（核心4,519,135/native 5,081）；MSIX仍未签名。
+- 2026-10-26 用户：「继续下一批 Windows 功能。」0.85做B09资源管理器文件夹样式（Feature.FolderStyle默认关闭，folder.style）：desktop.ini+.swivel-folder-<8hex>.ico，只读按需设并记录，恢复默认只删自己文件；已有别人desktop.ini不动。独立复核无P1/确认P2，推理P2（重设样式失败会搁浅）改为旧ini经持有句柄移到旁边、失败放回；P3已修，复核通过。核心4,519,244、native编译0/0。

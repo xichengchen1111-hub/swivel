@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 
 namespace Swivel.Core;
 
-public enum Feature { Wheel, Shelf, QuickActions, KeepAwake, ImagePresets, BatchRename, Archives, SubtitleFiles, MyWheel, Doctor, AppRouting, Clothesline, PdfPages, QrCodes, TextCapture, Assistant, FileMoves }
+public enum Feature { Wheel, Shelf, QuickActions, KeepAwake, ImagePresets, BatchRename, Archives, SubtitleFiles, MyWheel, Doctor, AppRouting, Clothesline, PdfPages, QrCodes, TextCapture, Assistant, FileMoves, FolderStyle }
 
 /// Windows preferences are separate from macOS. Only Wheel starts enabled.
 public sealed class Prefs
@@ -205,6 +205,7 @@ public static class Catalog
         new("file.paths", "Copy Path"),
         new("file.reveal", "Show in Explorer"),
         new("file.terminal", "Open Command Prompt Here…", SingleFile: true),
+        new("folder.style", "Change Folder Style…", Core.Feature.FolderStyle, RequiresFiles: false),
         new("archive.zip", "Create ZIP…", Core.Feature.Archives),
         new("archive.tar", "Create TAR…", Core.Feature.Archives),
         new("archive.gzip", "Create GZip…", Core.Feature.Archives, SingleFile: true),
@@ -319,7 +320,7 @@ public static class Compatibility
         new("Windows Doctor", "Partial", "Button-only bounded system, network, memory, installation, startup, folder, duplicate and similarity snapshots show unknowns and partial results. Monitoring pauses when hidden or minimized. Sensitive details stay hidden where stated. A separate confirmed request can ask one eligible window to close normally; saving, app exit and memory release are not guaranteed. Reliable app ownership, cleanup, undo, uninstalling and deeper repair remain planned."),
         new("Agent Tools (MCP)", "Planned", "Windows MCP is unavailable until plan, apply and undo pass Windows safety checks."),
         new("AirDrop & Force Touch", "Platform Difference", "Apple AirDrop and Mac trackpad haptics have no direct Windows equivalent in this app."),
-        new("Folder Style", "Planned", "Finder folder icons cannot be reused directly. Explorer folder styles need separate icon, backup and restore handling; this feature is not implemented yet."),
+        new("Folder Style", "Partial", "Give 1–20 local folders a coloured Explorer icon with an optional two-character badge, through a hidden desktop.ini and icon file inside each folder; the folder becomes Read-only if it was not. Restore Default removes exactly those files. Folders with their own desktop.ini are left unchanged. Mac textures, pictures and emoji colours are not available; Explorer refresh timing is unverified."),
         new("Windows Validation", "Pending", "This preview must pass real Windows drag, focus, display scaling and file-system checks before release.")
     };
 }

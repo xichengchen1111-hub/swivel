@@ -1,19 +1,19 @@
 # Windows 功能进度
 
-更新：2026-10-25。Windows当前 **0.84**。0.82补普通ZIP安全解压（B08待做→部分），0.83补复制到文件夹（B06仍部分），0.84补TAR/gzip解压（B08仍部分）。0.74–0.81八批开始前分别pull，均Already up to date，Mac仍为1.12.7 / `6cbfdc1`。连续补齐改名大小写／交换／连锁、GIF抖色、二维码直角方向与Mac兼容PNG、挂图长按、正常窗口关闭请求、跨常用目录文字／图片相似比较；0.77补同卷NTFS移动及会话撤销；0.78补明确启动的新到达图片卡片；0.79补明确启动的modifier/主鼠标键手势与非激活Drop入口；0.80补本机可访问非隐藏计划任务的有界只读信息；0.81补显式平面QR数据码字纠错及原生候选展示。固定52项为22/24/4/2，普通剩余28；所属大项仍有下列缺口，真实Windows验收另算。
+更新：2026-10-25。Windows当前 **0.85**。0.82补普通ZIP安全解压（B08待做→部分），0.83补复制到文件夹（B06仍部分），0.84补TAR/gzip解压（B08仍部分），0.85补资源管理器文件夹样式（B09待做→部分）。0.74–0.81八批开始前分别pull，均Already up to date，Mac仍为1.12.7 / `6cbfdc1`。连续补齐改名大小写／交换／连锁、GIF抖色、二维码直角方向与Mac兼容PNG、挂图长按、正常窗口关闭请求、跨常用目录文字／图片相似比较；0.77补同卷NTFS移动及会话撤销；0.78补明确启动的新到达图片卡片；0.79补明确启动的modifier/主鼠标键手势与非激活Drop入口；0.80补本机可访问非隐藏计划任务的有界只读信息；0.81补显式平面QR数据码字纠错及原生候选展示。固定52项为22/24/4/2，普通剩余28；所属大项仍有下列缺口，真实Windows验收另算。
 
-**固定清单共 52 项：22 项已实现限定范围、24 项部分实现、4 项待实现、2 项平台差异。普通功能还需补齐 28 项（24 + 4），另外 2 项需评估 Windows 替代体验。** 这些是功能项数量，不是工时、剩余批次数或“完整兼容百分比”；不同项工作量差异很大。所有已实现项仍处于预览，Windows 实机验收另算。
+**固定清单共 52 项：22 项已实现限定范围、25 项部分实现、3 项待实现、2 项平台差异。普通功能还需补齐 28 项（25 + 3），另外 2 项需评估 Windows 替代体验。** 这些是功能项数量，不是工时、剩余批次数或“完整兼容百分比”；不同项工作量差异很大。所有已实现项仍处于预览，Windows 实机验收另算。
 
 | 功能域 | 已实现 | 部分实现 | 待实现 | 平台差异 | 合计 |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | A 系统交互与工作台 | 4 | 3 | 0 | 2 | 9 |
-| B 文件与应用动作 | 5 | 3 | 1 | 0 | 9 |
+| B 文件与应用动作 | 5 | 4 | 0 | 0 | 9 |
 | C 图片与识别 | 5 | 4 | 2 | 0 | 11 |
 | D 音视频与字幕 | 3 | 3 | 0 | 0 | 6 |
 | E PDF、文档与二维码 | 1 | 5 | 0 | 0 | 6 |
 | F Windows Doctor | 3 | 6 | 0 | 0 | 9 |
 | G 助手与 Agent 工具 | 1 | 0 | 1 | 0 | 2 |
-| **总计** | **22** | **24** | **4** | **2** | **52** |
+| **总计** | **22** | **25** | **3** | **2** | **52** |
 
 计数规则：每行是一个稳定交付范围，ID 后续保留。**已实现**只表示该行明示范围已有实现，不等于 Windows 运行通过或与 Mac 像素一致；**部分实现**表示同一工作流已有入口和实用能力，但表中仍有未补齐范围；**待实现**不表示平台做不到；**平台差异**仅用于目前没有可直接复用的 Apple 系统体验。所有范围均继承 [README 的文件与平台边界](README.md#文件及平台边界)。源码链接用于复核实现，未实现项同时引用 Mac 功能及 [移植清单](PORTING.md)。
 
@@ -64,7 +64,7 @@
 | B06 | Copy to / Move to 安全文件操作 | 部分实现 | 0.77独立默认关闭Move Files，明确1–100普通文件、完整路径确认、同卷NTFS按持有句柄移动，不覆盖/不隐式改名；原对象保留所有数据流与下载来源标记、原权限不保证继承目标。全部源/两侧祖先持有，完整卷/文件/目录身份及元数据核验、失败反向回滚/准确当前路径、最多20批会话Undo/显式结果复核；同目录不变，跨卷/硬链/只读/云/链接拒绝，崩溃无持久恢复。仅检查记录元数据，不证明所有流内容/权限未变。0.83补Copy to Folder：1–100文件到本地NTFS，CopyFile2保留全部数据流/Web标记/属性/修改时间，不覆盖（名称 N），按CopyFile2创建对象身份核对流名称与大小、不符经句柄删除，失败/取消保留已完成。跨卷移动/目录树/副本撤销仍待做。[规则与收据](Swivel.Core/MoveFiles.cs)、[复制](Swivel.Windows/NativeFiles.Copy.cs)、[原生移动](Swivel.Windows/NativeFiles.Move.cs)、[预览结果](Swivel.Windows/MoveFilesDialog.cs) |
 | B07 | ZIP/TAR/GZip 创建 | 已实现 | 明确选择普通文件，最多 100 个/总 2 GiB；ZIP/TAR 保存文件名与内容，GZip 单文件。目录树、时间戳、权限/ADS 保真未纳入此限定范围。[归档规则](Swivel.Core/Archives.cs)、[文件会话](Swivel.Windows/FileTools.cs) |
 | B08 | 归档解压及目录归档扩展 | 部分实现 | 0.82单个本地NTFS上的ZIP32 Store/Deflate完整普通目录树解压：全量预检名称／重名（大小写与NFC）／链接与特殊项／加密／ZIP64／分卷／数据重叠，10,000项／2GB／32层；新建旁边文件夹不复用、逐文件私有暂存＋大小与CRC-32＋Web标记max(3,源ZoneId)＋独占发布，保留修改时间；非事务，失败／取消保留已出现文件并报告。0.84加TAR（POSIX ustar/pax、GNU长名）、.tar.gz/.tgz及单文件.gz：同一预检／限额／名称规则，拒绝链接／设备／稀疏／分卷／未知类型，跳过已识别macOS `._`属性文件并计数；gzip核对尾部CRC-32/ISIZE，拒截断／多段／附加数据；TAR无文件校验，审查时记录CRC-32，解压时逐文件核对。不还原所有者／权限／扩展属性。7z/RAR解压、ZIP64、加密、文件夹树归档和ADS/ACL还原仍待做。[TAR](Swivel.Core/TarExtract.cs)、[解析](Swivel.Core/ZipExtract.cs)、[发布](Swivel.Windows/NativeFiles.Extract.cs)、[对话框](Swivel.Windows/ZipExtractDialog.cs)、[Mac Documents](../Sources/Swivel/Documents.swift) |
-| B09 | Explorer 文件夹 Change Style | 待实现 | 需要 Windows 图标、目录属性、原设置备份/恢复及不覆盖方案；不复用 Finder 资源写入。[兼容状态](Swivel.Core/Models.cs)、[Mac FolderStyle](../Sources/Swivel/FolderStyle.swift) |
+| B09 | Explorer 文件夹 Change Style | 部分实现 | 0.85新增默认关闭Folder Style、显式选择1–20个本地文件夹：10种颜色+可选两字符标记，原创WPF绘制8尺寸PNG图标；文件夹内写入隐藏系统`desktop.ini`（UTF-16，带Swivel标记，逐字节可复原）和`.swivel-folder-<8hex>.ico`，原非只读时设只读并记录。全部经持有句柄暂存+相对改名、不覆盖；已有别人的desktop.ini整夹不动。“恢复默认”只删Swivel自己的两文件、仅在Swivel设过时清只读。Mac 23种材质/图片/彩色emoji、Explorer刷新时机与图标缓存未实现/未验证。[规则](Swivel.Core/FolderStyle.cs)、[写入](Swivel.Windows/NativeFiles.FolderStyle.cs)、[对话框](Swivel.Windows/FolderStyleDialog.cs)、[Mac FolderStyle](../Sources/Swivel/FolderStyle.swift) |
 
 ## C 图片与识别
 

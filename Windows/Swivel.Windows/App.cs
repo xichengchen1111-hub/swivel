@@ -632,6 +632,50 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested();var dialog=new DoctorDialog(this,snapshot.Facts,token,snapshot.DriveSpace);try{ShowOperationDialog(dialog,owner,token);}finally{await dialog.FinishAsync();}
                 report(token.IsCancellationRequested ? L("Cancelled.") : L("Read-only checks finished. Swivel did not change files or settings.")); return;
             }
+            if (action.Id == "folder.style")
+            {
+                if (!Prefs.IsOn(Feature.FolderStyle)) throw new UserError("Enable Folder Style in Settings first.");
+                workFeature = Feature.FolderStyle; token.ThrowIfCancellationRequested();
+                var picker = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose Folders to Style…"), Multiselect = true };
+                if (picker.ShowDialog(owner) != true) return;
+                token.ThrowIfCancellationRequested();
+                string[] folders = picker.FolderNames;
+                if (folders.Length is < 1 or > FolderStyles.MaxFolders) throw new UserError("Choose 1–20 folders.");
+                if (folders.Distinct(StringComparer.OrdinalIgnoreCase).Count() != folders.Length) throw new UserError("Choose each folder only once.");
+                report(L("Reading folder settings…"));
+                // One unreadable folder is shown as unavailable instead of stopping the whole choice.
+                var states = await Task.Run(() => folders.Select(f =>
+                {
+                    token.ThrowIfCancellationRequested();
+                    try { return (f, NativeFiles.InspectFolderStyle(f), (string?)null); }
+                    catch (Exception error) when (error is not OperationCanceledException and not OutOfMemoryException)
+                    { return (f, FolderStyleState.Unavailable, error is UserError ? L(error.Message) : L("The operation could not finish. Check the file format, permissions, free space and whether another app is using the file.")); }
+                }).ToArray(), token);
+                token.ThrowIfCancellationRequested();
+                var dialog = new FolderStyleDialog(this, states);
+                if (!ShowOperationDialog(dialog, owner, token)) return;
+                var style = dialog.Chosen; bool restore = dialog.Restore;
+                byte[]? icon = restore ? null : FolderStyleIcons.Icon(style);
+                report(L("Processing…"));
+                var targets = states.Where(s => restore ? s.Item2 == FolderStyleState.Swivel : s.Item2 is FolderStyleState.None or FolderStyleState.Swivel).Select(s => s.f).ToArray();
+                var failures = new List<string>(); int changed = 0;
+                foreach (string folder in targets)
+                {
+                    token.ThrowIfCancellationRequested();
+                    try
+                    {
+                        await Task.Run(() => { if (restore) NativeFiles.RemoveFolderStyle(folder, token); else NativeFiles.ApplyFolderStyle(folder, icon!, token); }, token);
+                        changed++;
+                    }
+                    catch (Exception error) when (error is not OperationCanceledException and not OutOfMemoryException) { failures.Add(folder + ": " + (error is UserError ? L(error.Message) : L("The operation could not finish. Check the file format, permissions, free space and whether another app is using the file."))); }
+                }
+                string summary = string.Format(L(restore ? "Restored Explorer's default look for {0} of {1} folder(s)." : "Styled {0} of {1} folder(s)."), changed, targets.Length);
+                int skipped = states.Length - targets.Length;
+                if (skipped > 0) summary += " " + string.Format(L("{0} folder(s) were left unchanged."), skipped);
+                report(summary); Home.ShowResults(folders, summary);
+                if (failures.Count > 0 && !exiting) ShowError(new UserError(string.Join("\n", failures)));
+                return;
+            }
             if (action.Id == "file.move")
             {
                 if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
