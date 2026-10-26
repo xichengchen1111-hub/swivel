@@ -26,5 +26,12 @@
     <None Include="../../build/models/realesrgan-x4plus.onnx" Link="Models/realesrgan-x4plus.onnx" Condition="Exists('../../build/models/realesrgan-x4plus.onnx')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../ThirdParty/RealESRGAN/LICENSE" Link="Licenses/RealESRGAN-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../ThirdParty/RealESRGAN/UPSTREAM.md" Link="Licenses/RealESRGAN-UPSTREAM.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Pinned speech model converted by ThirdParty/Whisper/fetch-model.*; builds without it still compile. -->
+    <None Include="../../build/models/whisper-base-encoder.onnx" Link="Models/whisper-base-encoder.onnx" Condition="Exists('../../build/models/whisper-base-encoder.onnx')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../build/models/whisper-base-decoder.onnx" Link="Models/whisper-base-decoder.onnx" Condition="Exists('../../build/models/whisper-base-decoder.onnx')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../build/models/whisper-multilingual.tiktoken" Link="Models/whisper-multilingual.tiktoken" Condition="Exists('../../build/models/whisper-multilingual.tiktoken')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/Whisper/LICENSE" Link="Licenses/Whisper-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/Whisper/NOTICE" Link="Licenses/Whisper-NOTICE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/Whisper/UPSTREAM.md" Link="Licenses/Whisper-UPSTREAM.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

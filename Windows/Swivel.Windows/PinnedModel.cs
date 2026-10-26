@@ -44,9 +44,19 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, string
         }
     }
 
+    /// One input named by the model's first input, read back from its first output.
     public float[] Predict(float[] input, long[] inputShape, int outputLength, CancellationToken token)
     {
         if (input.Length != inputShape.Aggregate(1L, (a, b) => a * b)) throw new ArgumentException("Invalid model input.");
+        using var tensorIn = TensorFloat.CreateFromArray(inputShape, input);
+        return Evaluate(binding => binding.Bind(inputName, tensorIn), output => output(outputName, outputLength), token);
+    }
+
+    /// One evaluation: <paramref name="bind"/> binds the inputs by name (and may run again on the
+    /// processor), and <paramref name="read"/> copies the float outputs it needs by name and length.
+    /// The caller keeps and disposes its input tensors; every output is released here.
+    public T Evaluate<T>(Action<LearningModelBinding> bind, Func<Func<string, int, float[]>, T> read, CancellationToken token)
+    {
         lock (gate)
         {
             token.ThrowIfCancellationRequested();
@@ -55,9 +65,9 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, string
             try
             {
                 if (session is null) Open();
-                try { return Evaluate(session!, input, inputShape, outputLength, token); }
+                try { return Evaluate(session!, bind, read, token); }
                 // Some graphics drivers accept the session but fail to run it; the processor still can.
-                catch (Exception error) when (onGraphics && Native(error)) { OpenOnProcessor(); return Evaluate(session!, input, inputShape, outputLength, token); }
+                catch (Exception error) when (onGraphics && Native(error)) { OpenOnProcessor(); return Evaluate(session!, bind, read, token); }
             }
             catch (Exception error) when (Native(error)) { throw new UserError(unavailable); }
         }
@@ -67,27 +77,33 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, string
     /// types (invalid argument, not implemented…); all of them mean "cannot run here".
     private static bool Native(Exception error) => error is not (OperationCanceledException or UserError or OutOfMemoryException);
 
-    private float[] Evaluate(LearningModelSession current, float[] input, long[] inputShape, int outputLength, CancellationToken token)
+    private T Evaluate<T>(LearningModelSession current, Action<LearningModelBinding> bind, Func<Func<string, int, float[]>, T> read, CancellationToken token)
     {
         var binding = new LearningModelBinding(current);
-        using var tensorIn = TensorFloat.CreateFromArray(inputShape, input);
         LearningModelEvaluationResult? result = null;
         try
         {
-            binding.Bind(inputName, tensorIn);
+            bind(binding);
             var clock = Stopwatch.StartNew();
             result = current.Evaluate(binding, "swivel");
             double evaluate = clock.Elapsed.TotalMilliseconds;
-            if (!result.Succeeded || !result.Outputs.TryGetValue(outputName, out var value) || value is not TensorFloat tensor) throw new UserError(unavailable);
+            if (!result.Succeeded) throw new UserError(unavailable);
             clock.Restart();
-            float[] output;
-            // The direct read is checked only on the processor so far; anything unexpected uses the vector view.
-            try { output = VectorViewRead ? tensor.GetAsVectorView().ToArray() : Read(tensor, outputLength); }
-            catch (Exception error) when (error is not OutOfMemoryException) { output = tensor.GetAsVectorView().ToArray(); }
+            var outputs = result.Outputs;
+            float[] Output(string name, int length)
+            {
+                if (!outputs.TryGetValue(name, out var value) || value is not TensorFloat tensor) throw new UserError(unavailable);
+                float[] output;
+                // The direct read is checked only on the processor so far; anything unexpected uses the vector view.
+                try { output = VectorViewRead ? tensor.GetAsVectorView().ToArray() : Read(tensor, length); }
+                catch (Exception error) when (error is not OutOfMemoryException) { output = tensor.GetAsVectorView().ToArray(); }
+                if (output.Length != length) throw new UserError(unavailable);
+                return output;
+            }
+            var values = read(Output);
             LastRun = $"{(onGraphics ? "graphics" : "processor")}: evaluate {evaluate:0} ms, read {clock.Elapsed.TotalMilliseconds:0} ms";
-            if (output.Length != outputLength) throw new UserError(unavailable);
             token.ThrowIfCancellationRequested();
-            return output;
+            return values;
         }
         finally
         {
@@ -164,7 +180,7 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, string
                 memory.Seek(0);
                 loaded = LearningModel.LoadFromStream(RandomAccessStreamReference.CreateFromStream(memory));
             }
-            if (loaded.InputFeatures.Count != 1 || loaded.OutputFeatures.Count < 1) { loaded.Dispose(); throw new UserError(damaged); }
+            if (loaded.InputFeatures.Count < 1 || loaded.OutputFeatures.Count < 1) { loaded.Dispose(); throw new UserError(damaged); }
             inputName = loaded.InputFeatures[0].Name; outputName = loaded.OutputFeatures[0].Name;
             return loaded;
         }

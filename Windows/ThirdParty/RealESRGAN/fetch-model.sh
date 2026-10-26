@@ -1,5 +1,5 @@
 #!/bin/bash
-# Downloads the official Real-ESRGAN x4plus checkpoint, converts it with Convert/ (no Python),
+# Downloads the official Real-ESRGAN x4plus checkpoint, converts it with ../ModelConvert/ (no Python),
 # and refuses anything whose SHA-256 differs from the pinned values.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
@@ -19,6 +19,6 @@ if ! { [ -f "$checkpoint" ] && [ "$(shasum -a 256 "$checkpoint" | cut -d' ' -f1)
     mv -f "$part" "$checkpoint"
 fi
 # From Windows/ so its global.json picks the SDK (and a relative SWIVEL_DOTNET from build.sh resolves).
-(cd Windows && "$dotnet_cmd" run --project ThirdParty/RealESRGAN/Convert -c Release -- "../$checkpoint" "../$target.converted" > /dev/null)
+(cd Windows && "$dotnet_cmd" run --project ThirdParty/ModelConvert -c Release -- realesrgan "../$checkpoint" "../$target.converted" > /dev/null)
 [ "$(shasum -a 256 "$target.converted" | cut -d' ' -f1)" = "$onnx_sha" ] || { echo 'The converted Real-ESRGAN model does not match the pinned SHA-256.' >&2; exit 1; }
 mv -f "$target.converted" "$target"

@@ -941,6 +941,29 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested();if(!save)return;
                 report(L("Processing…"));result=new BatchResult();result.Outputs.Add(await Task.Run(()=>document.Save(token),token));
             }
+            else if (action.Id == "audio.transcribe")
+            {
+                report(L("Loading audio…"));
+                using var document = await Task.Run(() => TranscribeDocument.OpenAsync(files[0], token), token);
+                token.ThrowIfCancellationRequested();
+                report(L("Loading the speech recognition model…"));
+                bool graphics = await Task.Run(() => SpeechModel.UsesGraphics(token), token);
+                token.ThrowIfCancellationRequested();
+                var choice = new TranscribeDialog(this, document, graphics);
+                if (!ShowOperationDialog(choice, owner, token)) return;
+                report(L("Preparing the audio…"));
+                var transcript = await Task.Run(() => document.Run(choice.SpeechLanguage, (done, total, left) =>
+                {
+                    int percent = total > 0 ? (int)(100L * done / total) : 0;
+                    int seconds = left is { } time ? (int)Math.Min(int.MaxValue, Math.Ceiling(time.TotalSeconds)) : 0;
+                    string text = left is not null
+                        ? string.Format(L("Transcribing: {0}% done, about {1} left…"), percent, seconds >= 60 ? string.Format(L("{0} min"), (seconds + 59) / 60) : string.Format(L("{0} s"), seconds))
+                        : string.Format(L("Transcribing: {0}% done…"), percent);
+                    Dispatcher.BeginInvoke(() => report(text));
+                }, token), token);
+                token.ThrowIfCancellationRequested();
+                result = new BatchResult(); result.Outputs.AddRange(await Task.Run(() => document.Save(transcript, choice.Text, choice.Subtitles, token), token));
+            }
             else if(action.Id=="audio.g711")
             {
                 report(L("Loading audio…"));

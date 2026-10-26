@@ -120,6 +120,7 @@ internal static class Program
             Group("CutoutNativeChecks", () => CutoutNativeChecks.Run(directory,Check,Reject));
             Group("IdPhotoNativeChecks", () => IdPhotoNativeChecks.Run(directory,Check,Reject));
             Group("UpscaleNativeChecks", () => UpscaleNativeChecks.Run(directory,Check,Reject));
+            Group("TranscribeNativeChecks", () => TranscribeNativeChecks.Run(directory,Check,Reject));
             Group("CopyFilesNativeChecks", () => CopyFilesNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalNativeChecks", () => ImageArrivalNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalWindowNativeChecks", () => ImageArrivalWindowNativeChecks.Run(Check,Reject));

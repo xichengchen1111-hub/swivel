@@ -85,6 +85,7 @@ FolderStyleChecks.Run(Check, Reject);
         CutoutChecks.Run(Check, Reject);
         IdPhotoChecks.Run(Check, Reject);
         UpscaleChecks.Run(Check, Reject);
+        TranscribeChecks.Run(Check, Reject);
 CopyFilesChecks.Run(Check, Reject);
 ImageExtraChecks.Run(Check, Reject);
 CustomizationChecks.Run(Check, Reject);

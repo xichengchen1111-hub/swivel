@@ -1,4 +1,4 @@
-# Downloads the official Real-ESRGAN x4plus checkpoint, converts it with Convert/ (no Python),
+# Downloads the official Real-ESRGAN x4plus checkpoint, converts it with ../ModelConvert/ (no Python),
 # and refuses anything whose SHA-256 differs from the pinned values.
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # the progress bar makes large downloads very slow
@@ -21,7 +21,7 @@ $converted = "$target.converted"
 try {
     # From Windows/ so its global.json picks the SDK.
     Push-Location (Join-Path $PSScriptRoot '../..')
-    try { & dotnet run --project 'ThirdParty/RealESRGAN/Convert' -c Release -- $checkpoint $converted | Out-Null } finally { Pop-Location }
+    try { & dotnet run --project 'ThirdParty/ModelConvert' -c Release -- realesrgan $checkpoint $converted | Out-Null } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { throw 'Converting the Real-ESRGAN model failed.' }
     if ((Get-FileHash $converted -Algorithm SHA256).Hash -ne $onnxSha) { throw 'The converted Real-ESRGAN model does not match the pinned SHA-256.' }
     Move-Item -LiteralPath $converted -Destination $target -Force

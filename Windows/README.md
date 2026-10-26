@@ -10,6 +10,10 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.90 新增：语音转文字
+
+音频工具里新增 **Transcribe Speech…**（单个文件）：用 OpenAI Whisper base 模型在本机把说话转成文字，不上传、不联网、不下载。官方检查点（MIT）在构建时由 Swivel 自带的转换工具变成两个 ONNX 文件（编码器、解码器），连同 Whisper 自带的多语言分词表按固定 SHA-256 校验；应用加载前再校验一次，经 Windows ML 运行（有显卡用显卡，否则用处理器）。可选语言：自动识别（按前 30 秒为整段选一种语言，支持 Whisper 的 99 种语言）、中文、英语、日语；输出可选文本 `名称.txt`（每段一行）和字幕 `名称.srt`（带时间），放在原文件旁、不覆盖。处理方式与官方 `transcribe()` 默认设置一致：整段计算对数梅尔频谱，按预测的时间戳移动 30 秒窗口，贪心解码，文字过于重复或把握太低时依次提高温度重试，判断为无人声的窗口跳过，前文作为提示。在 Mac 上用官方 Python 版对照：英文、中文、43 秒中英混合、静音、噪声和纯音，分段文字与时间完全相同。支持整数 PCM WAV（Swivel 自己转成 16 kHz 单声道）以及 Windows 能解码的 WAV、FLAC、MP3、ADTS AAC（最大 128 MB），最长 1 小时；视频文件、M4A 暂不支持。模型可能听错人名、数字、小声或重叠的话，音乐或噪声时可能编造词句；中文常输出繁体字。只用处理器时所需时间可能与录音时长相当或更长，处理完前 30 秒后显示剩余时间，可随时取消（取消不保存）。字幕烧录进视频、按语音区间压低配乐仍待做，D06 仍为部分实现；固定 52 项仍为 23／27／0／2，普通剩余 27。完整安装包约再增加 146 MB。
+
 ## 0.89 新增：AI 图片放大
 
 图片工具里新增 **Upscale…**（可批量）：选 2× 或 4×，用与 Mac 相同的 Real-ESRGAN x4plus 模型在本机放大，不上传、不联网。官方权重（BSD-3-Clause）在构建时由 Swivel 自带的转换工具变成 ONNX，并按固定 SHA-256 校验；应用加载前再校验一次，经 Windows 自带的 Windows ML 运行（有显卡用显卡，否则用处理器）。图片按 128×128 的块处理，每块带周围 64 像素的真实上下文，块与块之间不留接缝；2× 是 4× 结果按 2×2 平均。透明度单独放大，完全透明处的颜色先用附近可见颜色代替。输入最多 1600 万像素，结果不超过 6400 万像素、每边 16384 像素（所以 4× 最多 400 万像素）。JPEG 仍存 JPEG（质量 95），其他格式存 PNG，文件名 `名称 2x.png`／`名称 4x.jpg`，放在原图旁、不覆盖。模型会锐化并可能生成原图没有的细小纹理，请检查人脸、文字和细密图案。对话框会说明 Windows ML 用的是显卡还是处理器；只用处理器时每块约 10–20 秒（100 万像素照片约 10–20 分钟），处理完第一块后显示剩余时间，可随时取消（已完成文件保留，正在处理的一块会先做完）；4× 大图峰值内存可能接近 1 GB。视频放大仍待做。C11 由待实现变为部分实现，固定 52 项为 23／27／0／2，普通剩余 27。完整安装包约再增加 67 MB。
@@ -388,7 +392,7 @@ bash Windows/build.sh win-arm64
 - 保持 `NativeFiles` 路径/实际句柄验证、祖先固定、`CREATE_NEW`、不覆盖发布、句柄清理；新建二维码无原件，目录由用户明确选择并采用相同的祖先句柄与不覆盖写入规则。不得引入 Exists→Write、覆盖移动、提权或shell字符串拼接。
 - UI文本使用 `Strings.L` / `app.L` 和四语言 `Strings.json`；动作ID不翻译。设置独立存储在 `HKCU\Software\Swivel\WindowsPreview`；读取v1/v2老配置，为新功能使用关闭/空配置默认值。0.6增加QR可选分组和应用剪贴板模式，旧设置默认保持不分组/直接打开；0.5增加本地QR库、独立模板颜色和逐图Auto，全部兼容旧设置默认值；0.4增加模板/动画选项与可选照片配方字段，保持旧默认值；0.3新增应用、My Wheel及快捷键字段，设置总长上限1 MiB（0.23扩容；0.17曾为384 KiB，0.16为160 KiB）。
 - manifest保持`asInvoker`、`uiAccess=false`、PerMonitorV2。菜单与挂图采用解析弹簧（damping 0.8）及 CompositionTarget 渲染事件，静止/重绘/关闭退订；遵循系统动画设置。
-- 便携包包含微软 .NET/WPF/WinForms 10.0.13运行时，`Licenses/`含许可、告知、来源。没有捆绑ffmpeg、Python、Apple模型或第三方应用运行时；0.87起含用户批准的U²-Net背景模型、0.89起含Real-ESRGAN放大模型（数据文件，经系统Windows ML运行，见“背景模型致谢”）。模型、网络、签名发布另行评估。
+- 便携包包含微软 .NET/WPF/WinForms 10.0.13运行时，`Licenses/`含许可、告知、来源。没有捆绑ffmpeg、Python、Apple模型或第三方应用运行时；0.87起含用户批准的U²-Net背景模型、0.89起含Real-ESRGAN放大模型、0.90起含Whisper base语音识别模型（数据文件，经系统Windows ML运行，见“背景模型致谢”）。模型、网络、签名发布另行评估。
 
 ## 迁移文件来源
 
@@ -406,7 +410,9 @@ Mac 图片预设当前保存在 `imagePresets.v1` 的 JSON Data 中，Mac 应用
 
 移除背景与背景虚化使用 [U²-Net](https://github.com/xuebinqin/U-2-Net)（Qin 等，Apache-2.0）的权重及 [rembg](https://github.com/danielgatis/rembg)（MIT）发布的 ONNX 文件，未修改；许可、来源与哈希见包内 `Licenses/U2Net-LICENSE.txt`、`Licenses/rembg-LICENSE.txt`、`Licenses/U2Net-UPSTREAM.md`（源码 `Windows/ThirdParty/U2Net/`）。前后处理代码为自行编写，未使用 rembg 代码。
 
-图片放大使用 [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)（Wang 等，BSD-3-Clause）官方 x4plus 权重；权重未改，只由 Swivel 自写的转换工具换成 ONNX 格式（网络结构按 BasicSR 的 RRDBNet 发布描述实现，未复制代码）。许可、来源与哈希见包内 `Licenses/RealESRGAN-LICENSE.txt`、`Licenses/RealESRGAN-UPSTREAM.md`（源码 `Windows/ThirdParty/RealESRGAN/`）。
+图片放大使用 [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)（Wang 等，BSD-3-Clause）官方 x4plus 权重；权重未改，只由 Swivel 自写的转换工具换成 ONNX 格式（网络结构按 BasicSR 的 RRDBNet 发布描述实现，未复制代码）。许可、来源与哈希见包内 `Licenses/RealESRGAN-LICENSE.txt`、`Licenses/RealESRGAN-UPSTREAM.md`（源码 `Windows/ThirdParty/RealESRGAN/`，转换工具 `Windows/ThirdParty/ModelConvert/`）。
+
+语音转文字使用 [Whisper](https://github.com/openai/whisper)（OpenAI，MIT）官方 base 检查点和多语言分词表；权重未改，只由同一转换工具换成 ONNX 格式（网络结构按其发布的 model.py 实现，未复制代码），频谱、解码规则与分段也是自行编写。许可、来源与哈希见包内 `Licenses/Whisper-LICENSE.txt`、`Licenses/Whisper-NOTICE.txt`、`Licenses/Whisper-UPSTREAM.md`（源码 `Windows/ThirdParty/Whisper/`）。
 
 ## GIF格式致谢
 

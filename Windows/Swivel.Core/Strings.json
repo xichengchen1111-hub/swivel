@@ -12298,5 +12298,135 @@
     "Windows ML 没有找到可用的显卡，只能用处理器计算。每个 128 × 128 的块可能要 10–20 秒，100 万像素的照片可能要 10–20 分钟。处理完第一块后会显示剩余时间。",
     "Windows ML 沒有找到可用的顯示卡，只能用處理器運算。每個 128 × 128 的區塊可能要 10–20 秒，100 萬像素的照片可能要 10–20 分鐘。處理完第一塊後會顯示剩餘時間。",
     "Windows ML が使えるグラフィックカードが見つからないため、プロセッサで処理します。128 × 128 のブロックごとに 10～20 秒かかることがあり、100 万画素の写真で 10～20 分かかる場合があります。最初のブロックの後に残り時間を表示します。"
+  ],
+  "Chinese": [
+    "中文",
+    "中文",
+    "中国語"
+  ],
+  "Choose an integer PCM WAV up to 512 MB, or a WAV, FLAC, MP3 or ADTS AAC file up to 128 MB that Windows can decode, up to one hour long.": [
+    "请选择不超过 512 MB 的整数 PCM WAV，或 Windows 能解码、不超过 128 MB 的 WAV、FLAC、MP3、ADTS AAC 文件，时长不超过一小时。",
+    "請選擇不超過 512 MB 的整數 PCM WAV，或 Windows 能解碼、不超過 128 MB 的 WAV、FLAC、MP3、ADTS AAC 檔案，長度不超過一小時。",
+    "512 MB 以内の整数 PCM WAV、または Windows がデコードできる 128 MB 以内の WAV・FLAC・MP3・ADTS AAC ファイル（1 時間以内）を選んでください。"
+  ],
+  "Choose audio up to one hour long. Longer recordings can be split first.": [
+    "请选择不超过一小时的音频。更长的录音可以先拆分。",
+    "請選擇不超過一小時的音訊。更長的錄音可以先拆分。",
+    "1 時間以内の音声を選んでください。長い録音は先に分割できます。"
+  ],
+  "Detect Automatically": [
+    "自动识别",
+    "自動識別",
+    "自動検出"
+  ],
+  "Detect Automatically chooses one language for the whole recording from its first 30 seconds. Chinese often comes out in Traditional characters with this model.": [
+    "“自动识别”根据前 30 秒为整段录音选定一种语言。此模型识别中文时常输出繁体字。",
+    "「自動識別」根據前 30 秒為整段錄音選定一種語言。此模型辨識中文時常輸出繁體字。",
+    "「自動検出」は最初の 30 秒から録音全体の言語を 1 つ選びます。このモデルでは中国語が繁体字で出力されることがよくあります。"
+  ],
+  "English": [
+    "英语",
+    "英語",
+    "英語"
+  ],
+  "Japanese": [
+    "日语",
+    "日語",
+    "日本語"
+  ],
+  "Length: {0}": [
+    "时长：{0}",
+    "長度：{0}",
+    "長さ：{0}"
+  ],
+  "Loading the speech recognition model…": [
+    "正在加载语音识别模型…",
+    "正在載入語音辨識模型…",
+    "音声認識モデルを読み込み中…"
+  ],
+  "New files are saved beside the original without replacing existing files. The original stays unchanged. Cancelling before the transcript is finished saves nothing.": [
+    "新文件保存在原文件旁边，不会替换已有文件，原文件保持不变。在转写完成前取消不会保存任何内容。",
+    "新檔案儲存在原檔案旁邊，不會取代現有檔案，原檔案保持不變。在轉寫完成前取消不會儲存任何內容。",
+    "新しいファイルは元のファイルの隣に保存され、既存のファイルは置き換えません。元のファイルは変更されません。文字起こしが終わる前にキャンセルすると何も保存しません。"
+  ],
+  "No speech was recognised in this recording. Nothing was saved.": [
+    "这段录音中没有识别出语音，未保存任何内容。",
+    "這段錄音中沒有辨識出語音，未儲存任何內容。",
+    "この録音では音声が認識されませんでした。何も保存していません。"
+  ],
+  "Preparing the audio…": [
+    "正在准备音频…",
+    "正在準備音訊…",
+    "音声を準備中…"
+  ],
+  "Save": [
+    "保存",
+    "儲存",
+    "保存"
+  ],
+  "Subtitles (.srt) with times": [
+    "带时间的字幕（.srt）",
+    "帶時間的字幕（.srt）",
+    "時間付き字幕（.srt）"
+  ],
+  "Text (.txt), one line per passage": [
+    "文本（.txt），每段一行",
+    "文字（.txt），每段一行",
+    "テキスト（.txt）、区切りごとに 1 行"
+  ],
+  "The audio is empty.": [
+    "音频是空的。",
+    "音訊是空的。",
+    "音声が空です。"
+  ],
+  "The speech recognition model in this copy of Swivel is damaged. Use a complete package.": [
+    "此 Swivel 副本中的语音识别模型已损坏，请使用完整的安装包。",
+    "此 Swivel 副本中的語音辨識模型已損毀，請使用完整的安裝套件。",
+    "この Swivel の音声認識モデルは破損しています。完全なパッケージを使ってください。"
+  ],
+  "The speech recognition model is not included in this copy of Swivel. Use a complete package.": [
+    "此 Swivel 副本未包含语音识别模型，请使用完整的安装包。",
+    "此 Swivel 副本未包含語音辨識模型，請使用完整的安裝套件。",
+    "この Swivel には音声認識モデルが含まれていません。完全なパッケージを使ってください。"
+  ],
+  "Transcribe": [
+    "转写",
+    "轉寫",
+    "文字起こし"
+  ],
+  "Transcribe Speech…": [
+    "语音转文字…",
+    "語音轉文字…",
+    "音声を文字起こし…"
+  ],
+  "Transcribing: {0}% done, about {1} left…": [
+    "正在转写：已完成 {0}%，大约还需 {1}…",
+    "正在轉寫：已完成 {0}%，大約還需 {1}…",
+    "文字起こし中：{0}% 完了、残り約 {1}…"
+  ],
+  "Transcribing: {0}% done…": [
+    "正在转写：已完成 {0}%…",
+    "正在轉寫：已完成 {0}%…",
+    "文字起こし中：{0}% 完了…"
+  ],
+  "Up to one hour of audio. Integer PCM WAV up to 512 MB is converted by Swivel; other WAV, FLAC, MP3 and ADTS AAC files are decoded by Windows (up to 128 MB). Video files and M4A are not accepted yet.": [
+    "最长一小时的音频。不超过 512 MB 的整数 PCM WAV 由 Swivel 转换；其他 WAV、FLAC、MP3、ADTS AAC 文件由 Windows 解码（不超过 128 MB）。暂不支持视频文件和 M4A。",
+    "最長一小時的音訊。不超過 512 MB 的整數 PCM WAV 由 Swivel 轉換；其他 WAV、FLAC、MP3、ADTS AAC 檔案由 Windows 解碼（不超過 128 MB）。暫不支援影片檔案和 M4A。",
+    "最大 1 時間の音声。512 MB 以内の整数 PCM WAV は Swivel が変換し、その他の WAV・FLAC・MP3・ADTS AAC ファイルは Windows がデコードします（128 MB まで）。動画ファイルと M4A にはまだ対応していません。"
+  ],
+  "Uses the Whisper base model on this PC (no upload, no download). It can mishear names, numbers and quiet or overlapping speech, and may invent words during music or noise, so check the text before using it.": [
+    "在这台电脑上使用 Whisper base 模型（不上传、不下载）。它可能听错人名、数字以及小声或重叠的说话，遇到音乐或噪声时还可能编造词句，使用前请检查文字。",
+    "在這台電腦上使用 Whisper base 模型（不上傳、不下載）。它可能聽錯人名、數字以及小聲或重疊的說話，遇到音樂或雜訊時還可能編造詞句，使用前請檢查文字。",
+    "この PC で Whisper base モデルを使います（アップロード・ダウンロードなし）。名前や数字、小さな声や重なった話し声を聞き間違えることがあり、音楽や雑音の間に言葉を作り出すこともあるので、使う前にテキストを確認してください。"
+  ],
+  "Windows ML could not run the speech recognition model on this PC.": [
+    "Windows ML 无法在这台电脑上运行语音识别模型。",
+    "Windows ML 無法在這台電腦上執行語音辨識模型。",
+    "Windows ML はこの PC で音声認識モデルを実行できませんでした。"
+  ],
+  "Windows ML found no graphics card it can use, so the processor does the work. This can take about as long as the recording or longer. The time left is shown after the first 30 seconds.": [
+    "Windows ML 没有找到可用的显卡，因此由处理器完成。所需时间可能与录音时长相当或更长。处理完前 30 秒后会显示剩余时间。",
+    "Windows ML 沒有找到可用的顯示卡，因此由處理器完成。所需時間可能與錄音長度相當或更長。處理完前 30 秒後會顯示剩餘時間。",
+    "Windows ML が使えるグラフィックスカードが見つからないため、プロセッサーで処理します。録音と同じくらいかそれ以上の時間がかかることがあります。最初の 30 秒の後に残り時間が表示されます。"
   ]
 }

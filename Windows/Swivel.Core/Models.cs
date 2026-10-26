@@ -198,6 +198,7 @@ public static class Catalog
         new("text.ocr", "Recognize Text…", Feature.TextCapture, ImageOnly:true, SingleFile:true),
         new("pdf.raster", "Render PDF Pages…", Feature.PdfPages, Extensions:new[]{"pdf"}),
         new("audio.systemdecode", "Decode Audio with Windows…", SingleFile:true, Extensions:new[]{"wav","mp3","aac","flac"}),
+        new("audio.transcribe", "Transcribe Speech…", SingleFile: true, Extensions: new[] { "wav", "mp3", "aac", "flac" }),
         new("audio.g711", "Decode G.711 WAV…", Extensions: new[]{"wav"}, SingleFile: true),
         new("audio.floatpcm", "Convert Float WAV to PCM…", SingleFile: true, Extensions: new[] { "wav" }),
         new("audio.noise", "Reduce WAV Noise…", SingleFile: true, Extensions: new[] { "wav" }),
