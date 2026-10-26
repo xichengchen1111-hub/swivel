@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../../.."
 dotnet_cmd="${SWIVEL_DOTNET:-dotnet}"
 target=build/models/realesrgan-x4plus.onnx
 checkpoint=build/models/RealESRGAN_x4plus.pth
-onnx_sha=ecf0c6c5b5996958746d654cef8af8180f925d537d65581fbc254904b322ab7f
+onnx_sha=043a257b04a3f1b54d9d7d1ac17b5beca43ffdd457d55278fb944f96e0be5994
 pth_sha=4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1
 if [ -f "$target" ] && [ "$(shasum -a 256 "$target" | cut -d' ' -f1)" = "$onnx_sha" ]; then exit 0; fi
 mkdir -p build/models

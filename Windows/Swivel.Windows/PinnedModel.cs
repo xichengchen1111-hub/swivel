@@ -15,7 +15,7 @@ namespace Swivel.Windows;
 /// A model file shipped with Swivel, run on this PC with the Windows ML runtime built into
 /// Windows. Its bytes are read once, checked against the compiled-in size and SHA-256, and only
 /// those verified bytes reach Windows ML; nothing is downloaded. Evaluations run one at a time.
-internal sealed class PinnedModel(string file, long bytes, string sha256, long[] inputShape, int outputLength, string missing, string damaged, string unavailable)
+internal sealed class PinnedModel(string file, long bytes, string sha256, string missing, string damaged, string unavailable)
 {
     private readonly object gate = new();
     private LearningModel? model;
@@ -27,12 +27,26 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, long[]
     /// force the processor or the slower element-by-element output read for comparison.
     internal string LastRun = "";
     internal bool ProcessorOnly, VectorViewRead;
+    internal uint Threads; // 0 = Windows ML's own choice
     internal void ResetSession() { lock (gate) { session?.Dispose(); session = null; } }
 
     /// Tests point this at their own copy; the app uses the Models folder beside Swivel.exe.
     public string Path = System.IO.Path.Combine(AppContext.BaseDirectory, "Models", file);
 
-    public float[] Predict(float[] input, CancellationToken token)
+    /// Whether evaluations run on a graphics card (loads the model and opens the session).
+    public bool UsesGraphics(CancellationToken token)
+    {
+        lock (gate)
+        {
+            token.ThrowIfCancellationRequested();
+            model ??= Load(token);
+            try { if (session is null) Open(); }
+            catch (Exception error) when (Native(error)) { throw new UserError(unavailable); }
+            return onGraphics;
+        }
+    }
+
+    public float[] Predict(float[] input, long[] inputShape, int outputLength, CancellationToken token)
     {
         if (input.Length != inputShape.Aggregate(1L, (a, b) => a * b)) throw new ArgumentException("Invalid model input.");
         lock (gate)
@@ -43,9 +57,9 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, long[]
             try
             {
                 if (session is null) Open();
-                try { return Evaluate(session!, input, token); }
+                try { return Evaluate(session!, input, inputShape, outputLength, token); }
                 // Some graphics drivers accept the session but fail to run it; the processor still can.
-                catch (Exception error) when (onGraphics && Native(error)) { OpenOnProcessor(); return Evaluate(session!, input, token); }
+                catch (Exception error) when (onGraphics && Native(error)) { OpenOnProcessor(); return Evaluate(session!, input, inputShape, outputLength, token); }
             }
             catch (Exception error) when (Native(error)) { throw new UserError(unavailable); }
         }
@@ -55,7 +69,7 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, long[]
     /// types (invalid argument, not implemented…); all of them mean "cannot run here".
     private static bool Native(Exception error) => error is not (OperationCanceledException or UserError or OutOfMemoryException);
 
-    private float[] Evaluate(LearningModelSession current, float[] input, CancellationToken token)
+    private float[] Evaluate(LearningModelSession current, float[] input, long[] inputShape, int outputLength, CancellationToken token)
     {
         var binding = new LearningModelBinding(current);
         using var tensorIn = TensorFloat.CreateFromArray(inputShape, input);
@@ -115,8 +129,20 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, long[]
     private void OpenOnProcessor()
     {
         session?.Dispose(); session = null; onGraphics = false;
-        session = new LearningModelSession(model, new LearningModelDevice(LearningModelDeviceKind.Cpu));
+        var options = new LearningModelSessionOptions();
+        if (Threads > 0)
+        {
+            // ILearningModelSessionOptionsNative::SetIntraOpNumThreadsOverride (Windows 10 2004 and later).
+            IntPtr unknown = ((WinRT.IWinRTObject)options).NativeObject.ThisPtr;
+            var iid = new Guid("c71e953f-37b4-4564-8658-d8396866db0d");
+            if (Marshal.QueryInterface(unknown, in iid, out IntPtr native) >= 0)
+                try { Marshal.GetDelegateForFunctionPointer<SetThreads>(Marshal.ReadIntPtr(Marshal.ReadIntPtr(native), 3 * IntPtr.Size))(native, Threads); }
+                finally { Marshal.Release(native); }
+        }
+        session = new LearningModelSession(model, new LearningModelDevice(LearningModelDeviceKind.Cpu), options);
     }
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int SetThreads(IntPtr self, uint count);
 
     private LearningModel Load(CancellationToken token)
     {

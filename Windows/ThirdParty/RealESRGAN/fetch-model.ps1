@@ -5,7 +5,7 @@ $ProgressPreference = 'SilentlyContinue' # the progress bar makes large download
 $root = Resolve-Path (Join-Path $PSScriptRoot '../../..')
 $target = Join-Path $root 'build/models/realesrgan-x4plus.onnx'
 $checkpoint = Join-Path $root 'build/models/RealESRGAN_x4plus.pth'
-$onnxSha = 'ECF0C6C5B5996958746D654CEF8AF8180F925D537D65581FBC254904B322AB7F'
+$onnxSha = '043A257B04A3F1B54D9D7D1AC17B5BECA43FFDD457D55278FB944F96E0BE5994'
 $pthSha = '4FA0D38905F75AC06EB49A7951B426670021BE3018265FD191D2125DF9D682F1'
 if ((Test-Path $target) -and (Get-FileHash $target -Algorithm SHA256).Hash -eq $onnxSha) { return }
 New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null

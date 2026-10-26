@@ -3,17 +3,18 @@ using System.Threading;
 
 namespace Swivel.Core;
 
-/// Real-ESRGAN x4plus upscaling like the Mac's: fixed 256 × 256 model tiles whose useful
-/// 128 × 128 centre has 64 pixels of real neighbouring context on each side (the photo is
-/// mirrored past its edges), so tiles join without seams. 2× is each 4× tile averaged 2 × 2.
+/// Real-ESRGAN x4plus upscaling like the Mac's: square model tiles whose useful centre has 64
+/// pixels of real neighbouring context on each side (the photo is mirrored past its edges), so
+/// tiles join without seams. Graphics cards use the Mac's 256 × 256 tiles (128 × 128 useful);
+/// the processor uses 384 × 384 (256 × 256 useful), which wastes less work on context. 2× is each 4× tile averaged 2 × 2.
 /// Colour and alpha are handled apart: fully transparent pixels take nearby colour before the
 /// model sees them, and alpha is enlarged separately with Lanczos.
 public static class Upscale
 {
     public const string ModelFile = "realesrgan-x4plus.onnx";
-    public const long ModelBytes = 66_903_262;
-    public const string ModelSha256 = "ECF0C6C5B5996958746D654CEF8AF8180F925D537D65581FBC254904B322AB7F";
-    public const int Tile = 256, Halo = 64, Centre = Tile - 2 * Halo, ModelScale = 4;
+    public const long ModelBytes = 66_903_282;
+    public const string ModelSha256 = "043A257B04A3F1B54D9D7D1AC17B5BECA43FFDD457D55278FB944F96E0BE5994";
+    public const int Tile = 256, ProcessorTile = 384, Halo = 64, ModelScale = 4;
     public const long MaxInputPixels = 16_000_000, MaxOutputPixels = 64_000_000;
     public const int MaxOutputSide = 16384;
     private const string TooLarge = "The enlarged image would be too large. Use an image whose result stays within 64 megapixels and 16384 pixels per side.";
@@ -26,12 +27,19 @@ public static class Upscale
         return (width * factor, height * factor);
     }
 
-    public static int Tiles(int width, int height) => checked(((width + Centre - 1) / Centre) * ((height + Centre - 1) / Centre));
+    public static int Tiles(int width, int height, int tile = Tile)
+    {
+        int centre = Centre(tile);
+        return checked(((width + centre - 1) / centre) * ((height + centre - 1) / centre));
+    }
 
-    /// `predict` takes one 3 × 256 × 256 RGB tile in 0–1 (channel planes) and returns 3 × 1024 × 1024.
-    public static PixelImage Run(PixelImage image, int factor, Func<float[], float[]> predict, Action<int, int>? progress, CancellationToken token)
+    private static int Centre(int tile) => tile is >= 3 * Halo and <= 512 ? tile - 2 * Halo : throw new ArgumentException("Invalid tile size.");
+
+    /// `predict` takes one 3 × tile × tile RGB tile in 0–1 (channel planes) and returns 3 × 4tile × 4tile.
+    public static PixelImage Run(PixelImage image, int factor, int tile, Func<float[], float[]> predict, Action<int, int>? progress, CancellationToken token)
     {
         image.Validate();
+        int Tile = tile, Centre = Upscale.Centre(tile);
         var (ow, oh) = Dimensions(image.Width, image.Height, factor);
         int w = image.Width, h = image.Height;
         var colour = OpaqueColours(image, token, out bool transparent);

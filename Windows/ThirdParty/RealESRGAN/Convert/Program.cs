@@ -6,14 +6,13 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-// Converts the official RealESRGAN_x4plus.pth (a PyTorch zip checkpoint) into a fixed-size
-// ONNX graph for Windows ML, without Python. Only the handful of pickle instructions a plain
+// Converts the official RealESRGAN_x4plus.pth (a PyTorch zip checkpoint) into an
+// ONNX graph (any tile size) for Windows ML, without Python. Only the handful of pickle instructions a plain
 // state dict uses are understood; anything else is refused. The output is byte-for-byte
 // deterministic, so the build pins its SHA-256.
 internal static class Program
 {
     private const string CheckpointSha256 = "4fa0d38905f75ac06eb49a7951b426670021be3018265fd191d2125df9d682f1";
-    public const int Tile = 256;
 
     private static int Main(string[] args)
     {
@@ -211,11 +210,12 @@ internal static class Graph
         foreach (var node in nodes) graph.Message(1, node);
         graph.String(2, "RealESRGAN_x4plus");
         foreach (var tensor in initializers) graph.Message(5, tensor);
-        graph.Message(11, Value("image", Program.Tile));
+        // Height and width are left free so the app can pick the block size for the device.
+        graph.Message(11, Value("image", "height", "width"));
         // The last node's output is renamed by an Identity so the graph's output has a stable name.
         var identity = new Proto(); identity.String(1, output); identity.String(2, "upscaled"); identity.String(3, "upscaled"); identity.String(4, "Identity");
         graph.Message(1, identity.ToArray());
-        graph.Message(12, Value("upscaled", Program.Tile * 4));
+        graph.Message(12, Value("upscaled", "height4", "width4"));
 
         var model = new Proto();
         model.Varint(1, 6); model.String(2, "Swivel"); model.String(3, "1");
@@ -225,10 +225,11 @@ internal static class Graph
         return model.ToArray();
     }
 
-    private static byte[] Value(string name, int side)
+    private static byte[] Value(string name, string height, string width)
     {
         var shape = new Proto();
-        foreach (int d in new[] { 1, 3, side, side }) { var dim = new Proto(); dim.Varint(1, d); shape.Message(1, dim.ToArray()); }
+        foreach (int d in new[] { 1, 3 }) { var dim = new Proto(); dim.Varint(1, d); shape.Message(1, dim.ToArray()); }
+        foreach (string d in new[] { height, width }) { var dim = new Proto(); dim.String(2, d); shape.Message(1, dim.ToArray()); }
         var tensor = new Proto(); tensor.Varint(1, 1); tensor.Message(2, shape.ToArray());
         var type = new Proto(); type.Message(1, tensor.ToArray());
         var value = new Proto(); value.String(1, name); value.Message(2, type.ToArray());
