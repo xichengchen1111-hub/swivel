@@ -83,20 +83,9 @@ public sealed class McpHost : IMcpHost
         WindowsPathPolicy.Validate(path);
         using var parent = NativeFiles.DirectoryLease.Open(Path.GetDirectoryName(path)!);
         if (!NativeFiles.InspectStamp(path).SameObjectAndContent(expected)) throw new McpToolError("The file changed; it was left alone.");
-        string root = Path.GetPathRoot(path)!;
         // Only fixed drives with a Recycle Bin; elsewhere Windows would delete permanently.
-        if (GetDriveType(root) != 3) throw new McpToolError("This drive has no Recycle Bin, so the file was left alone.");
-        var info = new RecycleBinInfo { Size = Marshal.SizeOf<RecycleBinInfo>() };
-        if (SHQueryRecycleBin(root, ref info) != 0) throw new McpToolError("This drive has no Recycle Bin, so the file was left alone.");
-        var operation = new FileOperation
-        {
-            Function = 3, // FO_DELETE
-            From = path + "\0\0",
-            // Undoable, no progress or error UI; Windows still asks if a file is too big to recycle.
-            Flags = 0x40 | 0x10 | 0x400 | 0x4 | 0x4000,
-        };
-        int result = SHFileOperation(ref operation);
-        if (result != 0 || operation.Aborted) throw new McpToolError("Windows did not move the file to the Recycle Bin; it was left alone.");
+        if (!RecycleBin.Available(path)) throw new McpToolError("This drive has no Recycle Bin, so the file was left alone.");
+        if (!RecycleBin.Move(path)) throw new McpToolError("Windows did not move the file to the Recycle Bin; it was left alone.");
         if (Stamp(path) is not null) throw new McpToolError("Windows did not move the file to the Recycle Bin; it was left alone.");
     }
 
@@ -124,26 +113,4 @@ public sealed class McpHost : IMcpHost
         using var key = Registry.CurrentUser.CreateSubKey(Key);
         key.SetValue(historyValue, json, RegistryValueKind.String);
     }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct FileOperation
-    {
-        public IntPtr Window;
-        public uint Function;
-        public string From;
-        public string? To;
-        public ushort Flags;
-        [MarshalAs(UnmanagedType.Bool)] public bool Aborted;
-        public IntPtr NameMappings;
-        public string? ProgressTitle;
-    }
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RecycleBinInfo { public int Size; public long Bytes, Items; }
-
-    [DllImport("shell32.dll", EntryPoint = "SHFileOperationW", CharSet = CharSet.Unicode)] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static extern int SHFileOperation(ref FileOperation operation);
-    [DllImport("shell32.dll", EntryPoint = "SHQueryRecycleBinW", CharSet = CharSet.Unicode)] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static extern int SHQueryRecycleBin(string root, ref RecycleBinInfo info);
-    [DllImport("kernel32.dll", EntryPoint = "GetDriveTypeW", CharSet = CharSet.Unicode)] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static extern uint GetDriveType(string root);
 }

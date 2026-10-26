@@ -12638,5 +12638,130 @@
     "关闭“只在有人说话时压低”时：",
     "關閉「只在有人說話時壓低」時：",
     "「話し声があるときだけ下げる」がオフのとき："
+  ],
+  "Copy Report includes the chosen folder, all candidate details and recorded issues. Copy Selected Folder Details includes that candidate and the chosen folder. Names and paths are visible. Nothing is saved or sent automatically.": [
+    "“复制报告”包含所选文件夹、所有候选项详情和记录的问题。“复制所选文件夹详情”包含该候选项和所选文件夹。名称和路径均可见。不会自动保存或发送任何内容。",
+    "「複製報告」包含所選資料夾、所有候選項詳細資料和記錄的問題。「複製所選資料夾詳細資料」包含該候選項和所選資料夾。名稱和路徑均可見。不會自動儲存或傳送任何內容。",
+    "「レポートをコピー」には選んだフォルダ、すべての候補の詳細、記録された問題が含まれます。「選択したフォルダの詳細をコピー」にはその候補と選んだフォルダが含まれます。名前とパスは表示されます。自動で保存や送信はしません。"
+  ],
+  "Move Selected to Recycle Bin…": [
+    "将所选项移到回收站…",
+    "將所選項目移到資源回收筒…",
+    "選択項目をごみ箱に移動…"
+  ],
+  "Move Selected to Recycle Bin… first lists the selected folders with their full paths. Each folder is then checked again: it must still be a plain local folder (not a link, system or cloud item), and every listed project file must still be there. Its contents are not compared with the scan, so files added since then move too. Only fixed drives with a Recycle Bin are used; if a folder is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move restores the last moved folders while this window is open, unless something now exists at their place; afterwards, restore them from the Recycle Bin.": [
+    "“将所选项移到回收站…”会先列出所选文件夹的完整路径。之后会再次检查每个文件夹：它必须仍是普通的本地文件夹（不是链接、系统项或云端项），且列出的每个项目文件都必须仍然存在。不会将其内容与扫描结果比较，因此扫描后新增的文件也会一起移走。只使用带回收站的固定磁盘；如果文件夹太大无法放入回收站，Windows 会在永久删除前询问。窗口打开期间，“撤销移动”可恢复最近移动的文件夹，除非原位置现在已有其他内容；之后请从回收站还原。",
+    "「將所選項目移到資源回收筒…」會先列出所選資料夾的完整路徑。之後會再次檢查每個資料夾：它必須仍是一般的本機資料夾（不是連結、系統項目或雲端項目），且列出的每個專案檔案都必須仍然存在。不會將其內容與掃描結果比較，因此掃描後新增的檔案也會一起移走。只使用有資源回收筒的固定磁碟；如果資料夾太大無法放入資源回收筒，Windows 會在永久刪除前詢問。視窗開啟期間，「復原移動」可還原最近移動的資料夾，除非原位置現在已有其他內容；之後請從資源回收筒還原。",
+    "「選択項目をごみ箱に移動…」はまず選んだフォルダをフルパスで一覧表示します。その後、各フォルダをもう一度確認します。通常のローカルフォルダ（リンク、システム項目、クラウド項目ではない）のままで、一覧のプロジェクトファイルがすべて残っている必要があります。中身はスキャン結果と比較しないため、その後に追加されたファイルも一緒に移動します。ごみ箱のある固定ドライブだけを使います。フォルダが大きすぎてごみ箱に入らない場合は、完全に削除する前に Windows が確認します。このウインドウが開いている間は「移動を取り消す」で最後に移動したフォルダを元に戻せます（元の場所に何かがある場合を除く）。その後はごみ箱から元に戻してください。"
+  ],
+  "Move {0} folders to the Recycle Bin?": [
+    "要将 {0} 个文件夹移到回收站吗？",
+    "要將 {0} 個資料夾移到資源回收筒嗎？",
+    "{0} 個のフォルダをごみ箱に移動しますか？"
+  ],
+  "Moved to the Recycle Bin in this window: {0}": [
+    "本窗口中已移到回收站：{0}",
+    "本視窗中已移到資源回收筒：{0}",
+    "このウインドウでごみ箱に移動済み: {0}"
+  ],
+  "Moved to the Recycle Bin: {0} of {1}": [
+    "已移到回收站：{0}/{1}",
+    "已移到資源回收筒：{0}/{1}",
+    "ごみ箱に移動: {0}/{1}"
+  ],
+  "Recycle Bin": [
+    "回收站",
+    "資源回收筒",
+    "ごみ箱"
+  ],
+  "Restored from the Recycle Bin: {0} of {1}": [
+    "已从回收站恢复：{0}/{1}",
+    "已從資源回收筒還原：{0}/{1}",
+    "ごみ箱から元に戻しました: {0}/{1}"
+  ],
+  "Something now exists at the folder's original place, so it was not restored.": [
+    "文件夹原位置现在已有其他内容，因此未恢复。",
+    "資料夾原位置現在已有其他內容，因此未還原。",
+    "フォルダの元の場所に別の項目があるため、元に戻しませんでした。"
+  ],
+  "The folder or its project files changed since the scan (or are now a link, system or cloud item), so it was left alone.": [
+    "扫描后文件夹或其项目文件已更改（或现在是链接、系统项或云端项），因此未作处理。",
+    "掃描後資料夾或其專案檔案已變更（或現在是連結、系統項目或雲端項目），因此未處理。",
+    "スキャン後にフォルダまたはプロジェクトファイルが変わった（またはリンク、システム項目、クラウド項目になった）ため、そのままにしました。"
+  ],
+  "These folders may contain your own files. Check each one before moving it.": [
+    "这些文件夹可能包含您自己的文件。移动前请逐一检查。",
+    "這些資料夾可能包含您自己的檔案。移動前請逐一檢查。",
+    "これらのフォルダには自分のファイルが含まれている場合があります。移動する前にそれぞれ確認してください。"
+  ],
+  "This drive has no Recycle Bin, so the folder was left alone.": [
+    "此磁盘没有回收站，因此未处理该文件夹。",
+    "此磁碟沒有資源回收筒，因此未處理該資料夾。",
+    "このドライブにはごみ箱がないため、フォルダはそのままにしました。"
+  ],
+  "Undo Move": [
+    "撤销移动",
+    "復原移動",
+    "移動を取り消す"
+  ],
+  "Windows did not move the folder to the Recycle Bin; it was left alone.": [
+    "Windows 未将文件夹移到回收站；未作处理。",
+    "Windows 未將資料夾移到資源回收筒；未處理。",
+    "Windows はフォルダをごみ箱に移動しませんでした。そのままです。"
+  ],
+  "Windows did not restore the folder. It may still be in the Recycle Bin.": [
+    "Windows 未恢复该文件夹。它可能仍在回收站中。",
+    "Windows 未還原該資料夾。它可能仍在資源回收筒中。",
+    "Windows はフォルダを元に戻しませんでした。まだごみ箱にある可能性があります。"
+  ],
+  "Windows stopped the Recycle Bin work. Some folders may not have been handled.": [
+    "Windows 中止了回收站操作。部分文件夹可能未处理。",
+    "Windows 中止了資源回收筒操作。部分資料夾可能未處理。",
+    "Windows がごみ箱の処理を中止しました。一部のフォルダは処理されていない可能性があります。"
+  ],
+  "Working with the Recycle Bin…": [
+    "正在处理回收站…",
+    "正在處理資源回收筒…",
+    "ごみ箱を処理しています…"
+  ],
+  "and {0} more": [
+    "以及另外 {0} 个",
+    "以及另外 {0} 個",
+    "ほか {0} 件"
+  ],
+  "Windows could not open the Recycle Bin to restore the folder.": [
+    "Windows 无法打开回收站来恢复该文件夹。",
+    "Windows 無法開啟資源回收筒來還原該資料夾。",
+    "Windows はフォルダを元に戻すためにごみ箱を開けませんでした。"
+  ],
+  "Project folder inspection finished. Folders moved to the Recycle Bin: {0}": [
+    "项目文件夹检查已完成。已移到回收站的文件夹：{0}",
+    "專案資料夾檢查已完成。已移到資源回收筒的資料夾：{0}",
+    "プロジェクトフォルダの確認が終わりました。ごみ箱に移動したフォルダ: {0}"
+  ],
+  "Find bounded build-folder hints from nearby project marker names and move chosen ones to the Recycle Bin after a recheck, with Undo. Configurations are not parsed; custom build paths are not found.": [
+    "根据附近的项目标记文件名查找有限范围内的构建文件夹线索，并在重新检查后将所选项移到回收站（可撤销）。不解析配置；找不到自定义构建路径。",
+    "根據附近的專案標記檔名尋找有限範圍內的建置資料夾線索，並在重新檢查後將所選項目移到資源回收筒（可復原）。不解析設定；找不到自訂建置路徑。",
+    "近くのプロジェクト目印のファイル名から範囲を限ってビルドフォルダの候補を探し、再確認のうえ選んだものをごみ箱に移動します（取り消し可）。設定は解析しないため、独自のビルドパスは見つかりません。"
+  ],
+  "Move 1 folder to the Recycle Bin?": [
+    "要将 1 个文件夹移到回收站吗？",
+    "要將 1 個資料夾移到資源回收筒嗎？",
+    "1 個のフォルダをごみ箱に移動しますか？"
+  ],
+  "Windows removed the folder without putting it in the Recycle Bin (it asks first when a folder is too large for the Recycle Bin). It cannot be restored with Undo.": [
+    "Windows 删除了该文件夹，但没有放入回收站（文件夹太大无法放入回收站时会先询问）。无法用“撤销移动”恢复。",
+    "Windows 刪除了該資料夾，但沒有放入資源回收筒（資料夾太大無法放入資源回收筒時會先詢問）。無法用「復原移動」還原。",
+    "Windows はフォルダをごみ箱に入れずに削除しました（ごみ箱に入らないほど大きい場合は先に確認します）。「移動を取り消す」では元に戻せません。"
+  ],
+  "Windows moved or removed the folder, but Swivel could not tell where, so Undo is not available for it. Check the Recycle Bin.": [
+    "Windows 已移动或删除该文件夹，但 Swivel 无法确定其位置，因此无法撤销。请查看回收站。",
+    "Windows 已移動或刪除該資料夾，但 Swivel 無法確定其位置，因此無法復原。請查看資源回收筒。",
+    "Windows はフォルダを移動または削除しましたが、Swivel にはその場所がわからないため取り消せません。ごみ箱を確認してください。"
+  ],
+  "Removed without the Recycle Bin, or not found there, in this window: {0}": [
+    "本窗口中未经回收站删除或未在回收站找到：{0}",
+    "本視窗中未經資源回收筒刪除或未在資源回收筒找到：{0}",
+    "このウインドウでごみ箱を経ずに削除された、またはごみ箱で見つからなかった項目: {0}"
   ]
 }

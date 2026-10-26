@@ -1,8 +1,8 @@
 # Windows 功能进度
 
-更新：2026-10-26。Windows当前 **0.92**。0.82补普通ZIP安全解压（B08待做→部分），0.83补复制到文件夹（B06仍部分），0.84补TAR/gzip解压（B08仍部分），0.85补资源管理器文件夹样式（B09待做→部分），0.86补Windows MCP（G02待做→部分），0.87补移除背景/背景虚化（C10待做→部分），0.88补证件照（C10部分→限定实现），0.89补AI图片放大（C11待做→部分），0.90补本机语音转文字（D06仍部分），0.91补字幕烧录进视频（D06仍部分），0.92补按说话压低配乐（D06部分→已实现限定范围）。0.74–0.81八批开始前分别pull，均Already up to date，Mac仍为1.12.7 / `6cbfdc1`。连续补齐改名大小写／交换／连锁、GIF抖色、二维码直角方向与Mac兼容PNG、挂图长按、正常窗口关闭请求、跨常用目录文字／图片相似比较；0.77补同卷NTFS移动及会话撤销；0.78补明确启动的新到达图片卡片；0.79补明确启动的modifier/主鼠标键手势与非激活Drop入口；0.80补本机可访问非隐藏计划任务的有界只读信息；0.81补显式平面QR数据码字纠错及原生候选展示。固定52项为23/27/0/2，普通剩余27；所属大项仍有下列缺口，真实Windows验收另算。
+更新：2026-10-26。Windows当前 **0.93**。0.82补普通ZIP安全解压（B08待做→部分），0.83补复制到文件夹（B06仍部分），0.84补TAR/gzip解压（B08仍部分），0.85补资源管理器文件夹样式（B09待做→部分），0.86补Windows MCP（G02待做→部分），0.87补移除背景/背景虚化（C10待做→部分），0.88补证件照（C10部分→限定实现），0.89补AI图片放大（C11待做→部分），0.90补本机语音转文字（D06仍部分），0.91补字幕烧录进视频（D06仍部分），0.92补按说话压低配乐（D06部分→已实现限定范围），0.93补项目构建文件夹复核后移入回收站及撤销（F05部分→已实现限定范围）。0.74–0.81八批开始前分别pull，均Already up to date，Mac仍为1.12.7 / `6cbfdc1`。连续补齐改名大小写／交换／连锁、GIF抖色、二维码直角方向与Mac兼容PNG、挂图长按、正常窗口关闭请求、跨常用目录文字／图片相似比较；0.77补同卷NTFS移动及会话撤销；0.78补明确启动的新到达图片卡片；0.79补明确启动的modifier/主鼠标键手势与非激活Drop入口；0.80补本机可访问非隐藏计划任务的有界只读信息；0.81补显式平面QR数据码字纠错及原生候选展示。固定52项为23/27/0/2，普通剩余27；所属大项仍有下列缺口，真实Windows验收另算。
 
-**固定清单共 52 项：24 项已实现限定范围、26 项部分实现、0 项待实现、2 项平台差异。普通功能还需补齐 26 项，另外 2 项需评估 Windows 替代体验。** 这些是功能项数量，不是工时、剩余批次数或“完整兼容百分比”；不同项工作量差异很大。所有已实现项仍处于预览，Windows 实机验收另算。
+**固定清单共 52 项：25 项已实现限定范围、25 项部分实现、0 项待实现、2 项平台差异。普通功能还需补齐 25 项，另外 2 项需评估 Windows 替代体验。** 这些是功能项数量，不是工时、剩余批次数或“完整兼容百分比”；不同项工作量差异很大。所有已实现项仍处于预览，Windows 实机验收另算。
 
 | 功能域 | 已实现 | 部分实现 | 待实现 | 平台差异 | 合计 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -11,9 +11,9 @@
 | C 图片与识别 | 6 | 5 | 0 | 0 | 11 |
 | D 音视频与字幕 | 4 | 2 | 0 | 0 | 6 |
 | E PDF、文档与二维码 | 1 | 5 | 0 | 0 | 6 |
-| F Windows Doctor | 3 | 6 | 0 | 0 | 9 |
+| F Windows Doctor | 4 | 5 | 0 | 0 | 9 |
 | G 助手与 Agent 工具 | 1 | 1 | 0 | 0 | 2 |
-| **总计** | **24** | **26** | **0** | **2** | **52** |
+| **总计** | **25** | **25** | **0** | **2** | **52** |
 
 计数规则：每行是一个稳定交付范围，ID 后续保留。**已实现**只表示该行明示范围已有实现，不等于 Windows 运行通过或与 Mac 像素一致；**部分实现**表示同一工作流已有入口和实用能力，但表中仍有未补齐范围；**待实现**不表示平台做不到；**平台差异**仅用于目前没有可直接复用的 Apple 系统体验。所有范围均继承 [README 的文件与平台边界](README.md#文件及平台边界)。源码链接用于复核实现，未实现项同时引用 Mac 功能及 [移植清单](PORTING.md)。
 
@@ -112,7 +112,7 @@
 | F02 | 本地网络/代理快照与设置入口 | 已实现 | IP/DNS/网关/DHCP、当前用户代理标志；地址默认隐藏，四个固定系统设置入口；不联网/执行 PAC，不证明实际可达性。[读取](Swivel.Windows/DoctorNetworkReader.cs)、[报告](Swivel.Core/DoctorReport.cs)、[设置](Swivel.Windows/WindowsSettings.cs) |
 | F03 | 只读文件夹空间图 | 已实现 | 根 +4 层/2 万项/约 30 秒软限，只读元数据、Partial/跳过原因；逻辑字节，不是占用/可释放量。[扫描](Swivel.Core/FolderSizes.cs)、[原生空间图](Swivel.Windows/FolderMapDialog.cs) |
 | F04 | 重复与相似文件工作流 | 部分实现 | 受限同大小→首尾→全量 SHA-256、硬链接去重、只读分组；0.40另补严格纯文本同扩展名行集合>=80%配对，1MiB/200尝试/16MiB/20K原始行及200K保留行/60秒软限、前1000对、全部跳过理由；100%不证明字节相同，不传递分组。0.41另补受限静态SDR图片的整数9×8明暗网格/64位比较、<=6位差独立配对，低细节/格式/预算明确跳过；16MiB/图、128MiB/200尝试/60秒软限、前1000对。100%不证明图片相同，不是对象识别，不分组。0.69补常用目录明确选择/完整内容确认后的一次跨根精确比较，共享预算、完整volume+file身份去重、失败/partial/未尝试根可见；独立agent发现并修复metadata异常未扣预算P2。[协调](Swivel.Core/CommonDuplicates.cs)、[原生适配](Swivel.Windows/CommonDuplicateReader.cs)、[结果](Swivel.Windows/CommonDuplicateDialogs.cs)。0.76补常用目录明确选择1–6根并再次确认内容读取后的文字／图片相似比较，共享20K/30s元数据与原单次内容预算；根祖先贯穿、身份去重、失败/未尝试可见。[协调](Swivel.Core/CommonSimilarity.cs)、[读取](Swivel.Windows/CommonSimilarityReader.cs)、[原生窗口](Swivel.Windows/CommonSimilarityDialogs.cs)。保留副本复核后清理与回收站撤销仍缺。[图片相似核心](Swivel.Core/PhotoSimilarity.cs)、[图片安全读取](Swivel.Windows/DoctorPhotoSimilarity.cs)、[图片配对窗口](Swivel.Windows/PhotoSimilarityDialog.cs)。[相似文本核心](Swivel.Core/TextSimilarity.cs)、[安全读取](Swivel.Windows/DoctorTextSimilarity.cs)、[结果窗口](Swivel.Windows/TextSimilarityDialog.cs)。[Windows 比较](Swivel.Core/DuplicateFiles.cs)、[原生读取](Swivel.Windows/DoctorDuplicates.cs)、[Mac DoctorExplore](../Sources/Swivel/DoctorExplore.swift) |
-| F05 | 项目构建产物工作流 | 部分实现 | 常见项目目录名称/相邻与内部标记线索、证据/部分结果；自定义位置/未列工具、更完整识别、清理前复核与撤销尚缺。[Windows 规则](Swivel.Core/ProjectFolders.cs)、[原生入口](Swivel.Windows/DoctorProjects.cs)、[Mac DoctorExplore](../Sources/Swivel/DoctorExplore.swift) |
+| F05 | 项目构建产物工作流 | 已实现 | 限定：常见项目目录名称/相邻与内部标记线索、证据/部分结果；0.93 多选后列出完整路径确认，逐个复核（普通本地文件夹、非链接/系统/云端、列出的项目文件仍在），只在有回收站的固定盘移入回收站（过大时由 Windows 询问是否永久删除），窗口打开期间可撤销最近一批（原位置被占用时拒绝）。与 Mac 相同只认已列项目文件；自定义构建路径/未列工具不识别，内容不与扫描比较，Windows 实机未验收。[原生移动/撤销](Swivel.Windows/NativeFiles.ProjectFolders.cs)、[Windows 规则](Swivel.Core/ProjectFolders.cs)、[原生入口](Swivel.Windows/DoctorProjects.cs)、[Mac DoctorExplore](../Sources/Swivel/DoctorExplore.swift) |
 | F06 | 存储/大文件/缓存清理与撤销 | 部分实现 | 0.18补显式选一个文件夹、只读元数据的大文件降序列表/十进制阈值与安装包扩展名线索、全部问题/Partial及明确复制，不重扫；不是可释放空间或删除建议。0.65另补两个用户临时/旧WinINET位置选择与只读地图，不是完整缓存分类或可删建议。0.68另补六常用位置预览/明确选择、分根只读地图及失败/partial/重复可见，不合计重叠。[常用位置](Swivel.Core/CommonFolders.cs)、[读取](Swivel.Windows/CommonFolderReader.cs)、[界面](Swivel.Windows/CommonFolderDialogs.cs)。0.69精确比较另补跨常用目录，共享一次预算/不删除；0.76补文字／图片相似比较跨常用目录入口；完整缓存规则、清理前身份复核、回收站事务与撤销仍缺。[核心](Swivel.Core/LargeFiles.cs)、[原生入口](Swivel.Windows/DoctorLargeFiles.cs)、[界面](Swivel.Windows/LargeFilesDialog.cs)、[Mac清理](../Sources/Swivel/DoctorCleanup.swift) |
 | F07 | 应用内存分组、正常退出与动态图表 | 部分实现 | 0.19补明确打开的CPU时间占比/物理内存曲线、约2秒单飞采样、相对最后刷新120秒/61点、暂停/最小化/关闭停止与等待、缺失值和恢复基线、明确快照复制。0.72为最新CPU/物理内存读数增加系统色环形百分比；0.73为PC Doctor固定磁盘只读快照添加每卷环形用量，不新增扫描、采样或持久化。磁盘值表示caller可用空间，非物理或可回收量。多processor group的CPU暂不可用；物理内存非应用汇总。0.29补显式进程元数据快照、Ordinal完整报告路径分组、已知工作集小计/未知/4K-PID与10s软限、虚拟双表及路径默认隐藏/明确复制；不同EXE helper归属不猜，工作集非可释放/私有RAM。0.75另补最多64合格同用户同会话窗口、完整标题/EXE审阅、默认Cancel的逐次WM_CLOSE请求；每条一次，重查身份但HWND检查/发送非原子，不强杀、不保证保存/应用退出/释放内存。[窗口会话](Swivel.Core/CloseWindows.cs)、[原生请求](Swivel.Windows/CloseWindowsReader.cs)。可靠应用/helper关联、整应用正常退出及缓存环图仍缺。[分组](Swivel.Core/AppMemory.cs)、[进程读取](Swivel.Windows/AppMemoryReader.cs)、[快照窗口](Swivel.Windows/AppMemoryDialog.cs)、[核心](Swivel.Core/UsageMonitor.cs)、[原生读取](Swivel.Windows/UsageReader.cs)、[窗口](Swivel.Windows/UsageMonitorDialog.cs)、[Mac](../Sources/Swivel/DoctorCharts.swift) |
 | F08 | 应用卸载及残留 | 部分实现 | 0.31补显式传统桌面安装记录（HKLM/HKCU请求32/64视图）、仅报告名称/版本/发布者、4096条/每字段1024UTF16/10s软限、原生虚拟表及明确复制。子key默认隐藏；视图共享/重定向/注册表链接不核验，不能证明实际安装/架构/归属。Store/MSIX/portable/其他用户/ARM32额外视图、真正卸载与残留归属/可恢复操作仍待做；不能以同名目录为安全删除依据。[核心](Swivel.Core/InstalledApps.cs)、[读取](Swivel.Windows/InstalledAppsReader.cs)、[窗口](Swivel.Windows/InstalledAppsDialog.cs)、[Mac DoctorExplore](../Sources/Swivel/DoctorExplore.swift)、[对齐说明](PORTING.md#mac-医生新功能来源mangodisk2026-10-23供-pc-doctor-对齐) |
@@ -150,7 +150,8 @@
 0.38先pull返回Already up to date（当时origin/main b9d6020/Mac1.12.3）。本地并发Mac随后提交7bf2fff/1.12.4安全修复：TAR的@名字及解压外链、草稿宽目录限制、Clothesline有界正规图片、similar keeper/卸载共享identifier及MCP16并发；实际baseline HEAD为7bf2fff。后续63685ed中性fixture及de1f7f8/ba54ebc归档链接/同描述符读取/MCP旧ID兼容等并发修复已核对，差异原样保留并外置记录；Windows未写/运行/构建/安装Mac，不能声称Mac文件全部未变。0.17已经核对相对`2fc19d1`的新增提交，涵盖 Mac Doctor 的存储/内存清理、图表、重复/相似文件、项目构建产物和卸载；[提交](https://github.com/xichengchen1111-hub/swivel/commit/bcb7bb92930dbf04aaddb710b74a1c819d42ff39)可复核新增范围。
 
 - 已对齐受限只读版本：空间图 F03、精确重复查找 F04、项目目录线索 F05。
-- 继续跟踪差距：相似图片完整覆盖与安全删除 F04、项目清理 F05、大文件/缓存与回收站撤销 F06、可靠应用/helper分组、整应用退出和缓存环图 F07、卸载/残留 F08。
+- 继续跟踪差距：相似图片完整覆盖与安全删除 F04、大文件/缓存与回收站撤销 F06、可靠应用/helper分组、整应用退出和缓存环图 F07、卸载/残留 F08。
+- 0.93补F05项目构建文件夹复核后移入回收站与窗口内撤销。
 - 0.18补F06的只读大文件/安装包名称线索；清理和可靠撤销仍待做。
 - 0.19补F07 CPU/物理内存曲线，0.29再补报告EXE路径的只读工作集分组；0.72–0.75补CPU/内存/固定盘环图与单窗口关闭请求；可靠helper归属、整应用退出与缓存环图仍待做。
 - 0.41补F04受限相似图片独立配对，格式/低细节/漏检及100%非图片身份已标注；0.76已补常用目录批量入口；清理/撤销仍待做。

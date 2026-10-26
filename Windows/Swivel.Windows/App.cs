@@ -570,8 +570,9 @@ public sealed partial class App : Application
                 report(L("Reading project folder metadata…"));
                 var projectResult = await AwaitDoctorReadAsync(Task.Run(() => DoctorProjects.Run(directory, token), token),token);
                 token.ThrowIfCancellationRequested();
-                await ShowDoctorOperationAsync(new ProjectFoldersDialog(this,directory,projectResult.Scan,projectResult.Projects),DoctorAssistantSummary.Projects(projectResult.Scan,projectResult.Projects),owner,token);
-                report(L("Read-only project folder inspection finished. No files were changed.")); return;
+                var projectDialog=new ProjectFoldersDialog(this,directory,projectResult.Scan,projectResult.Projects);
+                await ShowDoctorOperationAsync(projectDialog,DoctorAssistantSummary.Projects(projectResult.Scan,projectResult.Projects),owner,token);
+                report(projectDialog.Moved>0?string.Format(L("Project folder inspection finished. Folders moved to the Recycle Bin: {0}"),projectDialog.Moved):token.IsCancellationRequested?L("Cancelled."):L("Read-only project folder inspection finished. No files were changed.")); return;
             }
             if (action.Id == "doctor.photosimilar")
             {

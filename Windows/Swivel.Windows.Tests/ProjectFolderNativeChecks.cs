@@ -83,5 +83,31 @@ internal static class ProjectFolderNativeChecks
         dialog.Close();
         check(File.ReadAllBytes(dotnetMarker).SequenceEqual(new byte[] {0xff,0,1}) && new FileInfo(binary).Length == 120 && new FileInfo(cache).Length == 11,"Read-only project inspection preserves source bytes and metadata fixture sizes");
         Directory.Move(root,root+" released");check(Directory.Exists(root+" released"),"All project metadata handles released after result construction");
+
+        // Recycle Bin move with recheck, refusal and Undo (Windows CI runs on a fixed drive with a Recycle Bin).
+        string scanned = root+" released";
+        var current = DoctorProjects.Run(scanned,default);
+        var node = current.Projects.Folders.Single(x => x.RelativePath == @"node\node_modules");
+        string nodePath = Path.Combine(scanned,node.RelativePath);
+        string[] markers = node.Evidence.Select(x => Path.Combine(scanned,x)).ToArray();
+        string package = Path.Combine(scanned,@"node\package.json");
+        File.Move(package,package+".away");
+        reject(() => NativeFiles.RecycleProjectFolder(nodePath,markers),"Recycle refuses a build folder whose project file is gone");
+        File.Move(package+".away",package);
+        check(Directory.Exists(nodePath),"A refused build folder stays in place");
+        string venv = Path.Combine(scanned,@"python\.venv");
+        File.SetAttributes(venv,File.GetAttributes(venv) | FileAttributes.System);
+        try { reject(() => NativeFiles.RecycleProjectFolder(venv,new[] { Path.Combine(scanned,@"python\requirements.txt") }),"Recycle refuses a build folder that became a system item"); }
+        finally { File.SetAttributes(venv,File.GetAttributes(venv) & ~FileAttributes.System); }
+        if (!RecycleBin.Available(nodePath)) { Console.WriteLine("SKIP: no Recycle Bin on the test drive."); return; }
+        string stored = NativeFiles.RecycleProjectFolder(nodePath,markers);
+        check(!Directory.Exists(nodePath) && File.Exists(Path.Combine(stored,@"pkg\node_modules\nested.bin")) && stored.Contains("$Recycle.Bin",StringComparison.OrdinalIgnoreCase),"Recycle moves the whole build folder to the Recycle Bin and reports where: "+stored);
+        check(File.Exists(package),"Recycle leaves the project file in place");
+        Directory.CreateDirectory(nodePath);
+        reject(() => NativeFiles.RestoreProjectFolder(nodePath,stored),"Undo refuses while something exists at the original place");
+        check(Directory.Exists(stored),"A refused Undo leaves the folder in the Recycle Bin");
+        Directory.Delete(nodePath);
+        NativeFiles.RestoreProjectFolder(nodePath,stored);
+        check(File.Exists(Path.Combine(nodePath,@"pkg\node_modules\nested.bin")) && File.ReadAllBytes(Path.Combine(nodePath,@"pkg\package.json")).Length == 5 && !Directory.Exists(stored),"Undo restores the build folder and its files from the Recycle Bin");
     }
 }
