@@ -74,6 +74,27 @@ internal static class WaveDuckingChecks
         reject(()=>WaveActivity.Analyze(interrupted,new(0,.02),new(),cts.Token),"Activity observes cancellation after last analysis read");
         using var failed=new Interrupt(quarter,cts,true);reject(()=>WaveActivity.Analyze(failed,new(0,.02),new(),default),"Activity content read failures propagate");
         check(aStream.CanRead&&bStream.CanRead&&aStream.ToArray().SequenceEqual(quarter)&&bStream.ToArray().SequenceEqual(quarter),"Activity never closes/modifies either input");
+
+        // Speech intervals instead of volume: silence that "speaks" between 0.5–1.0 s and 1.3–1.5 s
+        // (gap 0.3 s bridged), 2 s at 8 kHz; windows are 160 frames (20 ms).
+        byte[] silent=Fixture(16,1,new int[16000]);
+        var speech=new WaveDucking(-35,.2,new[]{new TranscriptSegment(1.3,1.5,"b"),new TranscriptSegment(.5,1.0,"a")});
+        var sp=Profile(silent,settings:speech);
+        check(!sp.IsActive(3999)&&sp.IsActive(4000)&&sp.IsActive(9000)&&sp.IsActive(11999)&&!sp.IsActive(12000)&&!sp.IsActive(15999),"Speech lowering follows intervals, bridges short pauses, ignores the audio's volume");
+        var trimmed=Profile(silent,new(.6,1.2),speech);
+        check(trimmed.Frames==4800&&trimmed.IsActive(0)&&trimmed.IsActive(4799),"Speech intervals are in source time and follow the trim");
+        var apart=Profile(silent,settings:new(-35,.2,new[]{new TranscriptSegment(.2,.3,"a"),new TranscriptSegment(1.0,1.1,"b")}));
+        check(apart.IsActive(1600)&&!apart.IsActive(4000)&&apart.IsActive(8000),"Speech pauses of half a second or more let the music recover");
+        check(!Profile(silent,settings:new(-35,.2,Array.Empty<TranscriptSegment>())).IsActive(8000),"No speech found leaves the music unchanged");
+        check(Profile(silent,settings:new(double.NaN,.2,Array.Empty<TranscriptSegment>())).WindowCount==100,"Speech lowering does not use the threshold");
+        reject(()=>Profile(silent,settings:new(-35,1.5,Array.Empty<TranscriptSegment>())),"Speech lowering refuses a level above 100%");
+        reject(()=>Profile(silent,settings:new(-35,.2,new[]{new TranscriptSegment(1,.5,"x")})),"Speech lowering refuses a reversed interval");
+        reject(()=>Profile(silent,settings:new(-35,.2,new[]{new TranscriptSegment(double.NaN,1,"x")})),"Speech lowering refuses a non-finite interval");
+        var longSilence=Fixture(16,1,new int[8000*700]);
+        check(Profile(longSilence,settings:new(-35,.2,new[]{new TranscriptSegment(650,651,"late")})).IsActive(650*8000),"Speech lowering is not limited to 10 minutes");
+        var mixed=Render(silent,Fixture(16,1,Enumerable.Repeat(8000,16000).ToArray()),new(0,2),new(0,1,Ducking:speech));
+        short At(byte[] w,double t)=>BinaryPrimitives.ReadInt16LittleEndian(w.AsSpan(44+2*(int)(t*8000)));
+        check(At(mixed,.25)==8000&&At(mixed,.8)==1600&&At(mixed,1.15)==1600&&At(mixed,1.9)==8000,"Music is lowered to the chosen level during speech and recovers after it");
     }
     private sealed class Interrupt(byte[] bytes,CancellationTokenSource token,bool fail):MemoryStream(bytes)
     {

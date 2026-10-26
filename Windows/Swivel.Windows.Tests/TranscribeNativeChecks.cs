@@ -58,6 +58,15 @@ internal static class TranscribeNativeChecks
             check(saved.SequenceEqual(new[] { Path.Combine(root, "speech.txt"), Path.Combine(root, "speech.srt") }) && File.ReadAllText(saved[1]).StartsWith("1\r\n00:00:", StringComparison.Ordinal)
                 && File.ReadAllText(saved[0]).Contains("fox", StringComparison.OrdinalIgnoreCase), "Transcribe saves text and subtitles beside the original");
             check(document.Save(transcript, false, true, default).Single() == Path.Combine(root, "speech 2.srt"), "Transcribe never overwrites an earlier result");
+            // The same segments drive music lowering for the speech WAV itself.
+            using (var main = File.OpenRead(speech))
+            {
+                var info = PcmWave.Read(main, default);
+                var activity = WaveActivity.Analyze(main, new(0, info.Seconds), new WaveDucking(-35, .2, transcript.Segments), default);
+                var first = transcript.Segments[0];
+                check(activity.IsActive((long)((first.Start + first.End) / 2 * info.Rate)) && (transcript.Segments[^1].End + 1 >= info.Seconds || !activity.IsActive(activity.Frames - 1)),
+                    "Transcribed speech drives music lowering");
+            }
             var english = document.Run("en", null, default);
             check(english.Language == "en" && english.Segments.Count > 0, "Transcribe with a chosen language");
         }

@@ -5049,10 +5049,10 @@
     "音樂音量（%）",
     "BGM音量（%）"
   ],
-  "Music starts relative to the trimmed output. Mono music is copied to both stereo channels; stereo music is averaged for mono output. Loops repeat directly unless you enable a crossfade below. Optional activity-based lowering is available below; it does not recognize speech.": [
-    "音乐开始时间相对于裁剪后的输出。单声道音乐会复制到立体声的两个声道；用于单声道输出时，立体声音乐会取平均。默认直接重复循环，可在下方启用交叉淡化。也可选按活动压低音乐；它不识别人声。",
-    "音樂開始時間相對於裁剪後的輸出。單聲道音樂會複製到立體聲的兩個聲道；用於單聲道輸出時，立體聲音樂會取平均。預設直接重複循環，可在下方啟用交叉淡化。也可選依活動壓低音樂；它不辨識人聲。",
-    "音楽の開始位置はトリミング後の出力を基準とします。モノラル音楽はステレオの両チャンネルへ複製し、モノラル出力ではステレオ音楽を平均します。通常はそのままループし、下でクロスフェードを有効にできます。活動に応じた音量低下も選べますが、音声は認識しません。"
+  "Music starts relative to the trimmed output. Mono music is copied to both stereo channels; stereo music is averaged for mono output. Loops repeat directly unless you enable a crossfade below. Optional lowering below follows the main audio's volume, or speech found on this PC.": [
+    "音乐开始时间相对于裁剪后的输出。单声道音乐会复制到立体声的两个声道；用于单声道输出时，立体声音乐会取平均。默认直接重复循环，可在下方启用交叉淡化。下方可选按主音频音量、或按在这台电脑上找到的说话压低音乐。",
+    "音樂開始時間相對於裁剪後的輸出。單聲道音樂會複製到立體聲的兩個聲道；用於單聲道輸出時，立體聲音樂會取平均。預設直接重複循環，可在下方啟用交叉淡化。下方可選依主音訊音量、或依在這台電腦上找到的說話壓低音樂。",
+    "音楽の開始位置はトリミング後の出力を基準とします。モノラル音楽はステレオの両チャンネルへ複製し、モノラル出力ではステレオ音楽を平均します。通常はそのままループし、下でクロスフェードを有効にできます。下では、メイン音声の音量、またはこの PC で見つけた話し声に応じて音楽を下げることもできます。"
   ],
   "Music starts relative to the trimmed output. Mono music is copied to both stereo channels; stereo music is averaged for mono output. Loops repeat without crossfading. Automatic speech ducking is not available yet.": [
     "音乐开始时间相对于裁剪后的输出。单声道音乐复制到左右声道；单声道输出时立体声音乐取平均。循环直接重复，不做交叉淡化。暂不支持根据人声自动压低背景音乐。",
@@ -12583,5 +12583,60 @@
     "Swivel 无法打开这个字幕文件。请选择本地磁盘上的 SRT 文件。",
     "Swivel 無法開啟這個字幕檔案。請選擇本機磁碟上的 SRT 檔案。",
     "Swivel は字幕ファイルを開けませんでした。ローカル ドライブ上の SRT ファイルを選んでください。"
+  ],
+  "Lower Only While Someone Speaks": [
+    "只在有人说话时压低",
+    "只在有人說話時壓低",
+    "話し声があるときだけ下げる"
+  ],
+  "Find Speech": [
+    "查找说话",
+    "尋找說話",
+    "話し声を探す"
+  ],
+  "Finding speech: {0}% done…": [
+    "正在查找说话：已完成 {0}%…",
+    "正在尋找說話：已完成 {0}%…",
+    "話し声を探しています：{0}% 完了…"
+  ],
+  "No speech was found in the main audio, so the music keeps its normal volume.": [
+    "主音频里没有找到说话，配乐保持原音量。",
+    "主音訊裡沒有找到說話，配樂保持原音量。",
+    "メイン音声に話し声が見つからなかったため、音楽は通常の音量のままです。"
+  ],
+  "Found {0} speech segment(s), {1:0.#} seconds in all. Preview before saving.": [
+    "找到 {0} 段说话，共 {1:0.#} 秒。保存前请先试听。",
+    "找到 {0} 段說話，共 {1:0.#} 秒。儲存前請先試聽。",
+    "話し声を {0} 区間、合計 {1:0.#} 秒見つけました。保存する前に試聴してください。"
+  ],
+  "Speech could not be found in this audio.": [
+    "无法在这段音频中查找说话。",
+    "無法在這段音訊中尋找說話。",
+    "この音声では話し声を探せませんでした。"
+  ],
+  "Choose Find Speech first, or turn off Lower Only While Someone Speaks.": [
+    "请先点“查找说话”，或关闭“只在有人说话时压低”。",
+    "請先按「尋找說話」，或關閉「只在有人說話時壓低」。",
+    "先に「話し声を探す」を押すか、「話し声があるときだけ下げる」をオフにしてください。"
+  ],
+  "Choose music during speech from 0–100%. Find speech again if the main audio changed.": [
+    "请把说话时的配乐音量设为 0–100%。如果主音频变了，请重新查找说话。",
+    "請把說話時的配樂音量設為 0–100%。如果主音訊變了，請重新尋找說話。",
+    "話し声の間の音楽の音量を 0～100% にしてください。メイン音声が変わった場合は話し声を探し直してください。"
+  ],
+  "With Lower Only While Someone Speaks, Find Speech transcribes the main audio on this PC with the Whisper base model (no upload, no download; up to one hour, and on a processor it can take about as long as the audio). The music is lowered wherever speech was found, with pauses under half a second bridged; the threshold is not used and the 10-minute limit does not apply. Whisper can miss quiet or overlapping speech and can mistake singing or noise for speech, so preview before saving. The speech found is kept only while this window is open.": [
+    "勾选“只在有人说话时压低”后，“查找说话”会在这台电脑上用 Whisper base 模型转写主音频（不上传、不下载；最长一小时，只用处理器时耗时可能与音频时长相当）。找到说话的地方压低配乐，不到半秒的停顿视为连续；不使用阈值，也不受 10 分钟限制。Whisper 可能漏掉小声或重叠的话，也可能把歌声或噪声当成说话，保存前请先试听。找到的结果只在这个窗口打开期间保留。",
+    "勾選「只在有人說話時壓低」後，「尋找說話」會在這台電腦上用 Whisper base 模型轉寫主音訊（不上傳、不下載；最長一小時，只用處理器時耗時可能與音訊長度相當）。找到說話的地方壓低配樂，不到半秒的停頓視為連續；不使用門檻，也不受 10 分鐘限制。Whisper 可能漏掉小聲或重疊的話，也可能把歌聲或雜音當成說話，儲存前請先試聽。找到的結果只在這個視窗開啟期間保留。",
+    "「話し声があるときだけ下げる」をオンにすると、「話し声を探す」がこの PC で Whisper base モデルを使ってメイン音声を文字起こしします（アップロード・ダウンロードなし。最長 1 時間で、プロセッサーのみの場合は音声と同じくらいの時間がかかることがあります）。話し声が見つかった部分で音楽を下げ、0.5 秒未満の間は続けて下げたままにします。しきい値は使わず、10 分の制限もありません。Whisper は小さな声や重なった声を聞き逃したり、歌や雑音を話し声と誤ることがあるため、保存前に試聴してください。見つかった結果はこのウィンドウを開いている間だけ保持されます。"
+  ],
+  "Lower Only While Someone Speaks needs main audio of one hour or less.": [
+    "“只在有人说话时压低”要求主音频不超过一小时。",
+    "「只在有人說話時壓低」要求主音訊不超過一小時。",
+    "「話し声があるときだけ下げる」はメイン音声が 1 時間以内の場合に使えます。"
+  ],
+  "When Lower Only While Someone Speaks is off:": [
+    "关闭“只在有人说话时压低”时：",
+    "關閉「只在有人說話時壓低」時：",
+    "「話し声があるときだけ下げる」がオフのとき："
   ]
 }

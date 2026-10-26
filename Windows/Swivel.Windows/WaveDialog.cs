@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Media;
 using System.Threading;
@@ -16,6 +17,7 @@ namespace Swivel.Windows;
 internal static class WaveDuckingNotices
 {
     internal const string Scope="Off by default. This detects audio volume activity, not speech: noise, tones and existing music can lower the background, while quiet speech can be missed. RMS uses all main-audio channels after the selected gain and fades, before clipping or quantization. Music During Activity is a percentage of the configured music volume; the main audio itself is unchanged by this control.";
+    internal const string Speech="With Lower Only While Someone Speaks, Find Speech transcribes the main audio on this PC with the Whisper base model (no upload, no download; up to one hour, and on a processor it can take about as long as the audio). The music is lowered wherever speech was found, with pauses under half a second bridged; the threshold is not used and the 10-minute limit does not apply. Whisper can miss quiet or overlapping speech and can mistake singing or noise for speech, so preview before saving. The speech found is kept only while this window is open.";
     internal const string Limits="Activity lowering supports a main selection up to 10 minutes and 128 MiB of PCM data. Every preview and save first reads the whole selection for approximately 20 ms RMS windows, which adds preparation time. Threshold equality counts as active. A window may anticipate audio within it; full-depth lowering takes approximately 20 ms and full recovery approximately 250 ms; partial changes take less time. This is not Mac's speech classifier, transcription or pitch-preserving processing. Matching-rate integer PCM WAV inputs are still required.";
 }
 
@@ -31,8 +33,13 @@ internal sealed class WaveDialog : Window
     public WaveMusic MusicSettings { get; private set; } = new();
     private Task pending = Task.CompletedTask;
     private CancellationTokenSource? cancellation;
+    // Find Speech has its own task and cancellation, so editing a field does not discard it.
+    private Task finding = Task.CompletedTask;
+    private CancellationTokenSource? findCancellation;
+    private bool playing, searching;
     private PreviewSound? sound;
     private bool closed;
+    private IReadOnlyList<TranscriptSegment>? speech;
     public WaveDialog(App app,WaveDocument document,WaveDocument? music = null)
     {
         var info = document.Info; Settings = new(0,info.Seconds); bool prepared = music?.PreparedMusicClippedSamples is not null;
@@ -46,7 +53,7 @@ internal sealed class WaveDialog : Window
             panel.Children.Add(UI.Text(app.L("Background Music"), 18)); panel.Children.Add(UI.Text(music.Path, 12));
             panel.Children.Add(UI.Text(string.Format(app.L("{0:0.###} seconds · {1} Hz · {2} channel(s) · {3}-bit PCM"), music.Info.Seconds, music.Info.Rate, music.Info.Channels, music.Info.Bits), 12));
             if (prepared) panel.Children.Add(UI.Text(string.Format(CultureInfo.CurrentCulture, app.L("Prepared music: {0} Hz · {1} frames · {2} sample(s) clipped during rate conversion. The source above is unchanged."), music.MusicInfo.Rate, music.MusicInfo.Frames, music.PreparedMusicClippedSamples), 12));
-            panel.Children.Add(UI.Text(app.L("Music starts relative to the trimmed output. Mono music is copied to both stereo channels; stereo music is averaged for mono output. Loops repeat directly unless you enable a crossfade below. Optional activity-based lowering is available below; it does not recognize speech.")));
+            panel.Children.Add(UI.Text(app.L("Music starts relative to the trimmed output. Mono music is copied to both stereo channels; stereo music is averaged for mono output. Loops repeat directly unless you enable a crossfade below. Optional lowering below follows the main audio's volume, or speech found on this PC.")));
         }
         panel.Children.Add(UI.Text(string.Format(app.L("{0:0.###} seconds · {1} Hz · {2} channel(s) · {3}-bit PCM"),info.Seconds,info.Rate,info.Channels,info.Bits),20));
         panel.Children.Add(UI.Text(app.L("Trim, adjust volume and add fades locally. Save keeps the sample rate, channels and bit depth, creates a new WAV beside the original, and removes metadata. Volume above 100% can clip.")));
@@ -58,7 +65,7 @@ internal sealed class WaveDialog : Window
         }
         var start = Field("Start (seconds)",0); var end = Field("End (seconds)",info.Seconds); var volume = Field("Volume (%)",100);
         var fadeIn = Field("Fade In (seconds)",0); var fadeOut = Field("Fade Out (seconds)",0);
-        TextBox? musicStart = null, musicVolume = null, musicFadeIn = null, musicFadeOut = null, duckThreshold = null, duckLevel = null, crossfade = null; CheckBox? loop = null, duck = null;
+        TextBox? musicStart = null, musicVolume = null, musicFadeIn = null, musicFadeOut = null, duckThreshold = null, duckLevel = null, crossfade = null; CheckBox? loop = null, duck = null, speechOnly = null; Button? findSpeech = null;
         if (music is not null)
         {
             panel.Children.Add(UI.Text(app.L("Music Mix"), 20));
@@ -71,6 +78,11 @@ internal sealed class WaveDialog : Window
             duck = new CheckBox { Content = app.L("Lower Music During Active Main Audio"), Margin = new Thickness(0, 8, 0, 8) }; panel.Children.Add(duck);
             duckThreshold = Field("Activity Threshold (dBFS)", -35); duckLevel = Field("Music During Activity (%)", 20);
             duckThreshold.IsEnabled = duckLevel.IsEnabled = false;
+            speechOnly = new CheckBox { Content = app.L("Lower Only While Someone Speaks"), Margin = new Thickness(0, 8, 0, 4), IsEnabled = false }; panel.Children.Add(speechOnly);
+            findSpeech = UI.Button(app.L("Find Speech"), () => { }); findSpeech.IsEnabled = false; findSpeech.HorizontalAlignment = HorizontalAlignment.Left; panel.Children.Add(findSpeech);
+            panel.Children.Add(UI.Text(app.L(WaveDuckingNotices.Speech),12));
+            if (info.Seconds > Transcribe.MaxSeconds) panel.Children.Add(UI.Text(app.L("Lower Only While Someone Speaks needs main audio of one hour or less."),12));
+            panel.Children.Add(UI.Text(app.L("When Lower Only While Someone Speaks is off:"),12));
             panel.Children.Add(UI.Text(app.L(WaveDuckingNotices.Scope),12));
             panel.Children.Add(UI.Text(app.L(prepared ? MusicRateNotices.Duck : WaveDuckingNotices.Limits),12));
             panel.Children.Add(UI.Text(app.L(prepared ? MusicRateNotices.Output : "The output keeps the main audio duration, rate, channels and bit depth. Loud combinations can clip. Music inputs must already have matching sample rates; use Convert WAV Format first if needed. Compressed music is not supported yet; loop crossfade is an explicit option above."), 12));
@@ -80,9 +92,18 @@ internal sealed class WaveDialog : Window
         DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); root.Children.Add(UI.Scroll(panel)); Content = root;
         var preview = UI.Button(app.L("Play Selection Preview"),() => { });
         var save = UI.Button(app.L("Save WAV"),() => { try { Settings = Read(); MusicSettings = ReadMusic(Settings); Stop(); DialogResult = true; } catch (UserError ex) { status.Text = app.L(ex.Message); } });
-        preview.Click += (_,_) => { if (pending.IsCompleted) pending = Play(); };
+        preview.Click += (_,_) => { if (!playing && !searching && pending.IsCompleted) pending = Play(); };
+        if (findSpeech is not null) findSpeech.Click += (_,_) => { if (!playing && !searching && finding.IsCompleted) finding = FindSpeech(); };
+        // One place for the buttons that depend on a running preview or Find Speech.
+        void UpdateButtons()
+        {
+            if (closed) return;
+            save.IsEnabled = preview.IsEnabled = !playing && !searching;
+            if (findSpeech is not null)
+                findSpeech.IsEnabled = duck!.IsChecked == true && speechOnly!.IsChecked == true && !playing && !searching && info.Seconds <= Transcribe.MaxSeconds;
+        }
         buttons.Children.Add(preview); buttons.Children.Add(UI.Button(app.L("Stop"),Stop)); buttons.Children.Add(save);
-        var cancel = UI.Button(app.L("Cancel"),() => { Stop(); DialogResult = false; }); cancel.IsCancel = true; buttons.Children.Add(cancel);
+        var cancel = UI.Button(app.L("Cancel"),() => { Stop(); StopFind(); DialogResult = false; }); cancel.IsCancel = true; buttons.Children.Add(cancel);
         AudioEdit Read()
         {
             double Value(TextBox box) => double.TryParse(box.Text,NumberStyles.Float,CultureInfo.CurrentCulture,out double value) ? value : double.NaN;
@@ -92,7 +113,7 @@ internal sealed class WaveDialog : Window
         {
             if (music is null) return new();
             double Value(TextBox box) => double.TryParse(box.Text,NumberStyles.Float,CultureInfo.CurrentCulture,out double value) ? value : double.NaN;
-            var settings = new WaveMusic(Value(musicStart!), Value(musicVolume!) / 100, loop!.IsChecked == true, Value(musicFadeIn!), Value(musicFadeOut!), duck?.IsChecked == true ? new WaveDucking(Value(duckThreshold!),Value(duckLevel!)/100) : null, loop.IsChecked == true ? Value(crossfade!) : 0);
+            var settings = new WaveMusic(Value(musicStart!), Value(musicVolume!) / 100, loop!.IsChecked == true, Value(musicFadeIn!), Value(musicFadeOut!), duck?.IsChecked == true ? (speechOnly!.IsChecked == true ? new WaveDucking(-35, Value(duckLevel!) / 100, speech ?? throw new UserError("Choose Find Speech first, or turn off Lower Only While Someone Speaks.")) : new WaveDucking(Value(duckThreshold!),Value(duckLevel!)/100)) : null, loop.IsChecked == true ? Value(crossfade!) : 0);
             settings.Range(info, music.MusicInfo, edit); return settings;
         }
         void RefreshSelection()
@@ -109,17 +130,24 @@ internal sealed class WaveDialog : Window
         }
         if(duck is not null)
         {
-            void ToggleDucking(){duckThreshold!.IsEnabled=duckLevel!.IsEnabled=duck.IsChecked==true;RefreshSelection();}
+            void ToggleDucking()
+            {
+                bool on=duck.IsChecked==true,bySpeech=on&&speechOnly!.IsChecked==true;
+                duckLevel!.IsEnabled=on;speechOnly!.IsEnabled=on&&info.Seconds<=Transcribe.MaxSeconds;duckThreshold!.IsEnabled=on&&!bySpeech;
+                if(!bySpeech)StopFind();
+                UpdateButtons();RefreshSelection();
+            }
             duck.Checked+=(_,_)=>ToggleDucking();duck.Unchecked+=(_,_)=>ToggleDucking();
+            speechOnly!.Checked+=(_,_)=>ToggleDucking();speechOnly.Unchecked+=(_,_)=>ToggleDucking();
             SourceInitialized+=(_,_)=>WebRouteLayout.Fit(this,Owner??this);DpiChanged+=(_,_)=>WebRouteLayout.Fit(this,this);
         }
-        Closed += (_,_) => { closed = true; Stop(); };
+        Closed += (_,_) => { closed = true; Stop(); StopFind(); };
         async Task Play()
         {
             AudioEdit edit; WaveMusic mix;
             try { edit = Read(); mix = ReadMusic(edit); } catch (UserError ex) { status.Text = app.L(ex.Message); return; }
             Stop(); var owned = cancellation = new CancellationTokenSource(); var token = owned.Token;
-            save.IsEnabled = preview.IsEnabled = false; status.Text = app.L("Preparing audio preview…"); PreviewSound? prepared = null;
+            playing = true; UpdateButtons(); status.Text = app.L("Preparing audio preview…"); PreviewSound? prepared = null;
             try
             {
                 prepared = await Task.Run(() => PreviewSound.Create(music is null ? document.Preview(edit,token) : document.MixPreview(music,edit,mix,token),token));
@@ -132,14 +160,48 @@ internal sealed class WaveDialog : Window
             finally
             {
                 prepared?.Dispose(); if (ReferenceEquals(cancellation,owned)) cancellation = null; owned.Dispose();
-                if (!closed) save.IsEnabled = preview.IsEnabled = true;
+                playing = false; UpdateButtons();
+            }
+        }
+        // Whisper on the main audio, off the UI thread; cancelled by Stop (any field change, Close,
+        // Quit) and joined by FinishPreviewAsync like a preview.
+        async Task FindSpeech()
+        {
+            Stop(); var owned = findCancellation = new CancellationTokenSource(); var token = owned.Token;
+            searching = true; UpdateButtons(); status.Text = app.L("Loading the speech recognition model…");
+            try
+            {
+                string path = document.Path;
+                var found = await Task.Run(async () =>
+                {
+                    using var source = await TranscribeDocument.OpenAsync(path, token).ConfigureAwait(false);
+                    SpeechModel.UsesGraphics(token);
+                    return source.Run(null, (done, total, left) =>
+                    {
+                        int percent = total > 0 ? (int)(100L * done / total) : 0;
+                        Dispatcher.BeginInvoke(() => { if (!closed && ReferenceEquals(findCancellation, owned)) status.Text = string.Format(app.L("Finding speech: {0}% done…"), percent); });
+                    }, token).Segments;
+                }, token);
+                token.ThrowIfCancellationRequested();
+                if (closed) return;
+                speech = found;
+                status.Text = found.Count == 0 ? app.L("No speech was found in the main audio, so the music keeps its normal volume.")
+                    : string.Format(CultureInfo.CurrentCulture, app.L("Found {0} speech segment(s), {1:0.#} seconds in all. Preview before saving."), found.Count, found.Sum(x => x.End - x.Start));
+            }
+            catch (OperationCanceledException) { if (!closed) status.Text = app.L("Cancelled."); }
+            catch (Exception ex) { if (!closed) status.Text = ex is UserError error ? app.L(error.Message) : app.L("Speech could not be found in this audio."); }
+            finally
+            {
+                if (ReferenceEquals(findCancellation, owned)) findCancellation = null; owned.Dispose();
+                searching = false; UpdateButtons();
             }
         }
     }
+    private void StopFind() => findCancellation?.Cancel();
     private void Stop() { cancellation?.Cancel(); sound?.Dispose(); sound = null; }
     // App awaits this before exporting or releasing the source lease, including
     // when an owner closes, the app quits or the user cancels during generation.
-    public async Task FinishPreviewAsync() { Stop(); await pending; }
+    public async Task FinishPreviewAsync() { Stop(); StopFind(); await pending; await finding; }
 
     internal sealed class PreviewSound : IDisposable
     {
