@@ -80,7 +80,10 @@ internal sealed class PinnedModel(string file, long bytes, string sha256, string
             double evaluate = clock.Elapsed.TotalMilliseconds;
             if (!result.Succeeded || !result.Outputs.TryGetValue(outputName, out var value) || value is not TensorFloat tensor) throw new UserError(unavailable);
             clock.Restart();
-            var output = VectorViewRead ? tensor.GetAsVectorView().ToArray() : Read(tensor, outputLength);
+            float[] output;
+            // The direct read is checked only on the processor so far; anything unexpected uses the vector view.
+            try { output = VectorViewRead ? tensor.GetAsVectorView().ToArray() : Read(tensor, outputLength); }
+            catch (Exception error) when (error is not OutOfMemoryException) { output = tensor.GetAsVectorView().ToArray(); }
             LastRun = $"{(onGraphics ? "graphics" : "processor")}: evaluate {evaluate:0} ms, read {clock.Elapsed.TotalMilliseconds:0} ms";
             if (output.Length != outputLength) throw new UserError(unavailable);
             token.ThrowIfCancellationRequested();

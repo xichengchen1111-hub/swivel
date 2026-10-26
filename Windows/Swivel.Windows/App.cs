@@ -1174,9 +1174,10 @@ public sealed partial class App : Application
                         ? Upscaler.Run(file, factor, token, (done, total, left) =>
                         {
                             int index = current;
-                            string text = left is { } time
+                            int seconds = left is { } time ? (int)Math.Min(int.MaxValue, Math.Ceiling(time.TotalSeconds)) : 0;
+                            string text = left is not null
                                 ? string.Format(L("Upscaling file {0} of {1}: block {2} of {3}, about {4} left…"), index, count, done, total,
-                                    time.TotalMinutes >= 1 ? string.Format(L("{0} min"), (int)Math.Ceiling(time.TotalMinutes)) : string.Format(L("{0} s"), (int)Math.Ceiling(time.TotalSeconds)))
+                                    seconds >= 60 ? string.Format(L("{0} min"), (seconds + 59) / 60) : string.Format(L("{0} s"), seconds))
                                 : string.Format(L("Upscaling file {0} of {1}: block {2} of {3}…"), index, count, done, total);
                             Dispatcher.BeginInvoke(() => report(text));
                         })
