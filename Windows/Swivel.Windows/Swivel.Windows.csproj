@@ -22,5 +22,9 @@
     <None Include="../ThirdParty/U2Net/LICENSE" Link="Licenses/U2Net-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../ThirdParty/U2Net/rembg-LICENSE.txt" Link="Licenses/rembg-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../ThirdParty/U2Net/UPSTREAM.md" Link="Licenses/U2Net-UPSTREAM.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Pinned model converted by ThirdParty/RealESRGAN/fetch-model.*; builds without it still compile. -->
+    <None Include="../../build/models/realesrgan-x4plus.onnx" Link="Models/realesrgan-x4plus.onnx" Condition="Exists('../../build/models/realesrgan-x4plus.onnx')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/RealESRGAN/LICENSE" Link="Licenses/RealESRGAN-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/RealESRGAN/UPSTREAM.md" Link="Licenses/RealESRGAN-UPSTREAM.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

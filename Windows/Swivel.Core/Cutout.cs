@@ -242,7 +242,7 @@ public static class Cutout
     }
 
     /// Resizes a small plane to the target, handing over one finished row at a time.
-    private static void Expand(float[] plane, int sw, int sh, int dw, int dh, bool lanczos, Action<int, float[]> writeRow, CancellationToken token)
+    internal static void Expand(float[] plane, int sw, int sh, int dw, int dh, bool lanczos, Action<int, float[]> writeRow, CancellationToken token)
     {
         var across = new Taps(sw, dw, lanczos); var down = new Taps(sh, dh, lanczos);
         var column = new float[sw]; var row = new float[dw];

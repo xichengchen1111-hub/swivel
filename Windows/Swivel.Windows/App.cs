@@ -1158,10 +1158,19 @@ public sealed partial class App : Application
             else
             {
                 string format = ImageOutputInfo.Format(action.Id, recipe);
-                if (!ShowOperationDialog(new ConversionDialog(this, action, files, format), owner, token)) return;
+                int factor = 0, current = 0, count = files.Length;
+                if (action.Id == "image.upscale")
+                {
+                    var choice = new UpscaleDialog(this, files);
+                    if (!ShowOperationDialog(choice, owner, token)) return;
+                    factor = choice.Factor;
+                }
+                else if (!ShowOperationDialog(new ConversionDialog(this, action, files, format), owner, token)) return;
                 var entries = await OnSta(() => ImageBatch.Run(files,
-                    file => ImageTools.Run(file, action.Id, edge, token, recipe, quality, resize, targetBytes), token,
-                    (index, total) => Dispatcher.Invoke(() => report(string.Format(L("Processing file {0} of {1}…"), index, total)))));
+                    file => factor > 0
+                        ? Upscaler.Run(file, factor, token, (done, total) => { int index = current; Dispatcher.BeginInvoke(() => report(string.Format(L("Upscaling file {0} of {1}: block {2} of {3}…"), index, count, done, total))); })
+                        : ImageTools.Run(file, action.Id, edge, token, recipe, quality, resize, targetBytes), token,
+                    (index, total) => { current = index; Dispatcher.Invoke(() => report(string.Format(L("Processing file {0} of {1}…"), index, total))); }));
                 result = new BatchResult();
                 result.Outputs.AddRange(entries.Where(x => x.State == BatchState.Saved).Select(x => x.Output!));
                 result.Cancelled = entries.Any(x => x.State == BatchState.Cancelled);

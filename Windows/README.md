@@ -10,6 +10,10 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.89 新增：AI 图片放大
+
+图片工具里新增 **Upscale…**（可批量）：选 2× 或 4×，用与 Mac 相同的 Real-ESRGAN x4plus 模型在本机放大，不上传、不联网。官方权重（BSD-3-Clause）在构建时由 Swivel 自带的转换工具变成 ONNX，并按固定 SHA-256 校验；应用加载前再校验一次，经 Windows 自带的 Windows ML 运行（有显卡用显卡，否则用处理器）。图片按 128×128 的块处理，每块带周围 64 像素的真实上下文，块与块之间不留接缝；2× 是 4× 结果按 2×2 平均。透明度单独放大，完全透明处的颜色先用附近可见颜色代替。输入最多 1600 万像素，结果不超过 6400 万像素、每边 16384 像素（所以 4× 最多 400 万像素）。JPEG 仍存 JPEG（质量 95），其他格式存 PNG，文件名 `名称 2x.png`／`名称 4x.jpg`，放在原图旁、不覆盖。模型会锐化并可能生成原图没有的细小纹理，请检查人脸、文字和细密图案。没有显卡时每块可能要好几秒，大图可能需要很多分钟，可随时取消（已完成文件保留）；4× 大图峰值内存可能接近 1 GB。视频放大仍待做。C11 由待实现变为部分实现，固定 52 项为 23／27／0／2，普通剩余 27。完整安装包约再增加 67 MB。
+
 ## 0.88 新增：证件照
 
 图片工具里新增 **ID Photo…**（单张）：一寸 295×413、二寸 413×579、护照 33×48 mm、美国签证 600×600 或自定义（像素或毫米，1–4000 像素/边），DPI 72–1200；底色白、蓝 #438EDB、红 #D9001B 或自选颜色；Zoom 与 Vertical Position 微调，右侧实时预览。保存为 JPEG（质量 95，写入所选 DPI），文件名 `名称 id.jpg`，放在原图旁、不覆盖。用 0.87 的定版 U²-Net 本机模型找出人物，用 Windows 自带的人脸检测（`Windows.Media.FaceAnalysis`）找脸；没有脸或超过一张脸都会拒绝。Windows 只给出脸的方框，没有 Mac 那样的五官定位，所以头顶由人物蒙版推算、下巴由方框估计，头部约占高度 70%、头顶离上边约 13%——请看预览再调 Zoom／Vertical Position。换底色时按“原像素 + (1−α)(新底色 − 估计旧底色)”处理，头发边缘不带旧底色；照片外的部分用底色补齐。仅供方便使用，正式用途请按发证机关要求检查。C10 由部分实现变为限定实现，固定 52 项为 23／26／1／2，普通剩余 27。真实照片、人脸检测在各 PC 上的可用性与打印尺寸仍待在真实 Windows 上验证。
@@ -384,7 +388,7 @@ bash Windows/build.sh win-arm64
 - 保持 `NativeFiles` 路径/实际句柄验证、祖先固定、`CREATE_NEW`、不覆盖发布、句柄清理；新建二维码无原件，目录由用户明确选择并采用相同的祖先句柄与不覆盖写入规则。不得引入 Exists→Write、覆盖移动、提权或shell字符串拼接。
 - UI文本使用 `Strings.L` / `app.L` 和四语言 `Strings.json`；动作ID不翻译。设置独立存储在 `HKCU\Software\Swivel\WindowsPreview`；读取v1/v2老配置，为新功能使用关闭/空配置默认值。0.6增加QR可选分组和应用剪贴板模式，旧设置默认保持不分组/直接打开；0.5增加本地QR库、独立模板颜色和逐图Auto，全部兼容旧设置默认值；0.4增加模板/动画选项与可选照片配方字段，保持旧默认值；0.3新增应用、My Wheel及快捷键字段，设置总长上限1 MiB（0.23扩容；0.17曾为384 KiB，0.16为160 KiB）。
 - manifest保持`asInvoker`、`uiAccess=false`、PerMonitorV2。菜单与挂图采用解析弹簧（damping 0.8）及 CompositionTarget 渲染事件，静止/重绘/关闭退订；遵循系统动画设置。
-- 便携包包含微软 .NET/WPF/WinForms 10.0.13运行时，`Licenses/`含许可、告知、来源。没有捆绑ffmpeg、Python、Apple模型或第三方应用运行时；0.87起含用户批准的U²-Net背景模型（数据文件，经系统Windows ML运行，见“背景模型致谢”）。模型、网络、签名发布另行评估。
+- 便携包包含微软 .NET/WPF/WinForms 10.0.13运行时，`Licenses/`含许可、告知、来源。没有捆绑ffmpeg、Python、Apple模型或第三方应用运行时；0.87起含用户批准的U²-Net背景模型、0.89起含Real-ESRGAN放大模型（数据文件，经系统Windows ML运行，见“背景模型致谢”）。模型、网络、签名发布另行评估。
 
 ## 迁移文件来源
 
@@ -401,6 +405,8 @@ Mac 图片预设当前保存在 `imagePresets.v1` 的 JSON Data 中，Mac 应用
 ## 背景模型致谢
 
 移除背景与背景虚化使用 [U²-Net](https://github.com/xuebinqin/U-2-Net)（Qin 等，Apache-2.0）的权重及 [rembg](https://github.com/danielgatis/rembg)（MIT）发布的 ONNX 文件，未修改；许可、来源与哈希见包内 `Licenses/U2Net-LICENSE.txt`、`Licenses/rembg-LICENSE.txt`、`Licenses/U2Net-UPSTREAM.md`（源码 `Windows/ThirdParty/U2Net/`）。前后处理代码为自行编写，未使用 rembg 代码。
+
+图片放大使用 [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN)（Wang 等，BSD-3-Clause）官方 x4plus 权重；权重未改，只由 Swivel 自写的转换工具换成 ONNX 格式（网络结构按 BasicSR 的 RRDBNet 发布描述实现，未复制代码）。许可、来源与哈希见包内 `Licenses/RealESRGAN-LICENSE.txt`、`Licenses/RealESRGAN-UPSTREAM.md`（源码 `Windows/ThirdParty/RealESRGAN/`）。
 
 ## GIF格式致谢
 

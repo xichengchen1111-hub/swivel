@@ -12203,5 +12203,70 @@
     "这台电脑上无法使用 Windows 人脸检测。",
     "這台電腦上無法使用 Windows 人臉偵測。",
     "この PC では Windows の顔検出を使用できません。"
+  ],
+  "Upscale…": [
+    "放大…",
+    "放大…",
+    "アップスケール…"
+  ],
+  "Upscale": [
+    "放大",
+    "放大",
+    "アップスケール"
+  ],
+  "2× (twice the width and height)": [
+    "2×（宽和高各放大 2 倍）",
+    "2×（寬和高各放大 2 倍）",
+    "2×（幅と高さを 2 倍）"
+  ],
+  "4× (four times the width and height)": [
+    "4×（宽和高各放大 4 倍）",
+    "4×（寬和高各放大 4 倍）",
+    "4×（幅と高さを 4 倍）"
+  ],
+  "Uses the Real-ESRGAN model on this PC (no upload). It sharpens and can invent small textures that were not in the original, so check faces, text and fine patterns.": [
+    "在这台电脑上使用 Real-ESRGAN 模型（不上传）。它会锐化，也可能生成原图没有的细小纹理，请检查人脸、文字和细密图案。",
+    "在這台電腦上使用 Real-ESRGAN 模型（不上傳）。它會銳化，也可能產生原圖沒有的細小紋理，請檢查人臉、文字和細密圖案。",
+    "この PC で Real-ESRGAN モデルを使います（アップロードしません）。シャープになりますが、元の画像にない細かな質感が生まれることがあるため、顔、文字、細かい模様を確認してください。"
+  ],
+  "The image is processed in 128 × 128 blocks. Without a graphics card each block can take several seconds, so large images may take many minutes. Cancel keeps finished files.": [
+    "图片按 128 × 128 的块处理。没有显卡时每块可能要好几秒，大图可能需要很多分钟。取消会保留已完成的文件。",
+    "圖片按 128 × 128 的區塊處理。沒有顯示卡時每塊可能要好幾秒，大圖可能需要很多分鐘。取消會保留已完成的檔案。",
+    "画像は 128 × 128 のブロックごとに処理します。グラフィックカードがないと 1 ブロックに数秒かかることがあり、大きな画像は何分もかかる場合があります。キャンセルしても完了したファイルは残ります。"
+  ],
+  "Up to 16 megapixels in; the result stays within 64 megapixels and 16384 pixels per side (so 4× takes images up to 4 megapixels).": [
+    "输入最多 1600 万像素；结果不超过 6400 万像素、每边 16384 像素（所以 4× 最多接受 400 万像素的图片）。",
+    "輸入最多 1600 萬像素；結果不超過 6400 萬像素、每邊 16384 像素（所以 4× 最多接受 400 萬像素的圖片）。",
+    "入力は最大 1600 万画素、結果は 6400 万画素・各辺 16384 ピクセル以内です（4× は 400 万画素までの画像）。"
+  ],
+  "JPEG stays JPEG (quality 95); other formats are saved as PNG. Transparency is kept. Saved as 8-bit SDR without source metadata or color profiles.": [
+    "JPEG 仍保存为 JPEG（质量 95）；其他格式保存为 PNG。保留透明度。保存为 8 位 SDR，不含原图元数据和颜色配置文件。",
+    "JPEG 仍儲存為 JPEG（品質 95）；其他格式儲存為 PNG。保留透明度。儲存為 8 位元 SDR，不含原圖中繼資料和色彩設定檔。",
+    "JPEG は JPEG のまま（品質 95）、その他の形式は PNG で保存します。透明部分は保持されます。8 ビット SDR で保存し、元のメタデータやカラープロファイルは含みません。"
+  ],
+  "Upscaling file {0} of {1}: block {2} of {3}…": [
+    "正在放大第 {0}/{1} 个文件：第 {2}/{3} 块…",
+    "正在放大第 {0}/{1} 個檔案：第 {2}/{3} 塊…",
+    "{1} 件中 {0} 件目をアップスケール中：ブロック {3} 個中 {2} 個目…"
+  ],
+  "The enlarged image would be too large. Use an image whose result stays within 64 megapixels and 16384 pixels per side.": [
+    "放大后的图片太大。请使用放大结果不超过 6400 万像素、每边 16384 像素的图片。",
+    "放大後的圖片太大。請使用放大結果不超過 6400 萬像素、每邊 16384 像素的圖片。",
+    "拡大後の画像が大きすぎます。結果が 6400 万画素・各辺 16384 ピクセル以内に収まる画像を使ってください。"
+  ],
+  "The upscaling model is not included in this copy of Swivel. Use a complete package.": [
+    "这份 Swivel 不含放大模型。请使用完整的安装包。",
+    "這份 Swivel 不含放大模型。請使用完整的安裝包。",
+    "この Swivel にはアップスケールモデルが含まれていません。完全なパッケージを使ってください。"
+  ],
+  "The upscaling model in this copy of Swivel is damaged. Use a complete package.": [
+    "这份 Swivel 的放大模型已损坏。请使用完整的安装包。",
+    "這份 Swivel 的放大模型已損毀。請使用完整的安裝包。",
+    "この Swivel のアップスケールモデルは破損しています。完全なパッケージを使ってください。"
+  ],
+  "Windows ML could not run the upscaling model on this PC.": [
+    "Windows ML 无法在这台电脑上运行放大模型。",
+    "Windows ML 無法在這台電腦上執行放大模型。",
+    "Windows ML はこの PC でアップスケールモデルを実行できませんでした。"
   ]
 }
