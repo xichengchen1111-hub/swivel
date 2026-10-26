@@ -12088,5 +12088,120 @@
     "Windows ML 无法在这台电脑上运行背景模型。",
     "Windows ML 無法在這台電腦上執行背景模型。",
     "この PC では Windows ML で背景モデルを実行できませんでした。"
+  ],
+  "ID Photo…": [
+    "证件照…",
+    "證件照…",
+    "証明写真…"
+  ],
+  "Finding the face…": [
+    "正在查找人脸…",
+    "正在尋找人臉…",
+    "顔を探しています…"
+  ],
+  "One inch (295 × 413)": [
+    "一寸（295 × 413）",
+    "一吋（295 × 413）",
+    "1インチ（295 × 413）"
+  ],
+  "Two inch (413 × 579)": [
+    "二寸（413 × 579）",
+    "二吋（413 × 579）",
+    "2インチ（413 × 579）"
+  ],
+  "Passport (33 × 48 mm)": [
+    "护照（33 × 48 毫米）",
+    "護照（33 × 48 公釐）",
+    "パスポート（33 × 48 mm）"
+  ],
+  "US Visa (600 × 600)": [
+    "美国签证（600 × 600）",
+    "美國簽證（600 × 600）",
+    "米国ビザ（600 × 600）"
+  ],
+  "Custom": [
+    "自定义",
+    "自訂",
+    "カスタム"
+  ],
+  "Custom size": [
+    "自定义尺寸",
+    "自訂尺寸",
+    "カスタムサイズ"
+  ],
+  "Units": [
+    "单位",
+    "單位",
+    "単位"
+  ],
+  "Pixels": [
+    "像素",
+    "像素",
+    "ピクセル"
+  ],
+  "Millimeters": [
+    "毫米",
+    "公釐",
+    "ミリメートル"
+  ],
+  "DPI": [
+    "DPI",
+    "DPI",
+    "DPI"
+  ],
+  "Choose Colour…": [
+    "选择颜色…",
+    "選擇顏色…",
+    "色を選択…"
+  ],
+  "Zoom": [
+    "缩放",
+    "縮放",
+    "ズーム"
+  ],
+  "Vertical Position": [
+    "上下位置",
+    "上下位置",
+    "上下の位置"
+  ],
+  "Size": [
+    "尺寸",
+    "尺寸",
+    "サイズ"
+  ],
+  "Save JPEG": [
+    "保存 JPEG",
+    "儲存 JPEG",
+    "JPEG を保存"
+  ],
+  "Windows finds only the face's outline, so the head size and chin are estimated. Check the preview and adjust Zoom and Vertical Position.": [
+    "Windows 只能找到人脸的大致范围，头部大小和下巴位置是估算的。请看预览，必要时调整缩放和上下位置。",
+    "Windows 只能找到人臉的大致範圍，頭部大小和下巴位置是估算的。請看預覽，必要時調整縮放和上下位置。",
+    "Windows は顔のおおよその範囲しか見つけられないため、頭の大きさとあごの位置は推定です。プレビューを確認し、必要ならズームと上下の位置を調整してください。"
+  ],
+  "For convenience only. Follow the issuing authority's requirements for official use.": [
+    "仅供方便使用。正式用途请遵守发证机构的要求。",
+    "僅供方便使用。正式用途請遵守發證機關的要求。",
+    "簡易用途です。正式な用途では発行機関の要件に従ってください。"
+  ],
+  "Choose a DPI from 72 to 1200 and a size from 1 to 4000 pixels per side.": [
+    "请选择 72–1200 的 DPI，以及每边 1–4000 像素的尺寸。",
+    "請選擇 72–1200 的 DPI，以及每邊 1–4000 像素的尺寸。",
+    "DPI は 72〜1200、サイズは各辺 1〜4000 ピクセルで選んでください。"
+  ],
+  "No face found. Choose a clear portrait facing the camera.": [
+    "没有找到人脸。请选择一张正对镜头的清晰人像。",
+    "沒有找到人臉。請選擇一張正對鏡頭的清晰人像。",
+    "顔が見つかりません。カメラに正面を向いたはっきりした人物写真を選んでください。"
+  ],
+  "More than one face found. Choose a photo with just one person.": [
+    "找到不止一张人脸。请选择只有一个人的照片。",
+    "找到不只一張人臉。請選擇只有一個人的照片。",
+    "複数の顔が見つかりました。1 人だけが写った写真を選んでください。"
+  ],
+  "Windows face detection is not available on this PC.": [
+    "这台电脑上无法使用 Windows 人脸检测。",
+    "這台電腦上無法使用 Windows 人臉偵測。",
+    "この PC では Windows の顔検出を使用できません。"
   ]
 }

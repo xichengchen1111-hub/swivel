@@ -102,34 +102,8 @@ public static class Cutout
     {
         image.Validate(); CheckMask(image, mask);
         int w = image.Width, h = image.Height;
-        double scale = Math.Min(1, 1024.0 / Math.Max(w, h));
-        int sw = Math.Max(1, (int)Math.Round(w * scale)), sh = Math.Max(1, (int)Math.Round(h * scale));
-        // Premultiplied by the background weight: B, G, R and the weight itself.
-        var small = new float[4][];
-        for (int c = 0; c < 4; c++)
-        {
-            int channel = c;
-            small[c] = Shrink(w, h, sw, sh, false, (y, row) =>
-            {
-                int p = y * w, i = p * 4;
-                for (int x = 0; x < w; x++, p++, i += 4)
-                {
-                    // Hidden colour under transparency never mixes into visible pixels.
-                    float weight = (255 - mask[p]) / 255f * (image.Bgra[i + 3] / 255f);
-                    row[x] = channel == 3 ? weight : image.Bgra[i + channel] * weight;
-                }
-            }, token);
-        }
-        int radius = Math.Max(1, (int)Math.Round(Math.Max(sw, sh) * 0.04));
-        foreach (var plane in small) { for (int pass = 0; pass < 3; pass++) BoxBlur(plane, sw, sh, radius, token); }
+        var (planes, sw, sh) = BackgroundPlanes(image, mask, 0.04, token);
         var output = (byte[])image.Bgra.Clone();
-        var planes = new float[3][];
-        for (int c = 0; c < 3; c++)
-        {
-            var plane = new float[sw * sh];
-            for (int i = 0; i < plane.Length; i++) plane[i] = small[3][i] > 1e-4f ? small[c][i] / small[3][i] : float.NaN;
-            planes[c] = plane;
-        }
         for (int c = 0; c < 3; c++)
         {
             int channel = c;
@@ -148,7 +122,61 @@ public static class Cutout
         return new(w, h, output);
     }
 
-    private static void CheckMask(PixelImage image, byte[] mask)
+    /// The colour behind the subject, B, G and R at most 1024 pixels on the long edge: an
+    /// average of background pixels only (weighted by 1 − mask and by alpha, so hidden colour
+    /// never counts), blurred over a radius that is a share of the long edge. NaN where no
+    /// background is near.
+    internal static (float[][] Planes, int Width, int Height) BackgroundPlanes(PixelImage image, byte[] mask, double radiusShare, CancellationToken token)
+    {
+        image.Validate(); CheckMask(image, mask);
+        int w = image.Width, h = image.Height;
+        double scale = Math.Min(1, 1024.0 / Math.Max(w, h));
+        int sw = Math.Max(1, (int)Math.Round(w * scale)), sh = Math.Max(1, (int)Math.Round(h * scale));
+        // Premultiplied by the background weight: B, G, R and the weight itself.
+        var small = new float[4][];
+        for (int c = 0; c < 4; c++)
+        {
+            int channel = c;
+            small[c] = Shrink(w, h, sw, sh, false, (y, row) =>
+            {
+                int p = y * w, i = p * 4;
+                for (int x = 0; x < w; x++, p++, i += 4)
+                {
+                    // Hidden colour under transparency never mixes into visible pixels.
+                    float weight = (255 - mask[p]) / 255f * (image.Bgra[i + 3] / 255f);
+                    row[x] = channel == 3 ? weight : image.Bgra[i + channel] * weight;
+                }
+            }, token);
+        }
+        int radius = Math.Max(1, (int)Math.Round(Math.Max(sw, sh) * radiusShare));
+        foreach (var plane in small) { for (int pass = 0; pass < 3; pass++) BoxBlur(plane, sw, sh, radius, token); }
+        var planes = new float[3][];
+        for (int c = 0; c < 3; c++)
+        {
+            var plane = new float[sw * sh];
+            for (int i = 0; i < plane.Length; i++) plane[i] = small[3][i] > 1e-4f ? small[c][i] / small[3][i] : float.NaN;
+            planes[c] = plane;
+        }
+        return (planes, sw, sh);
+    }
+
+    /// One value of a small plane at a full-size pixel, bilinear and NaN-aware.
+    internal static float Sample(float[] plane, int sw, int sh, int fullWidth, int fullHeight, int x, int y)
+    {
+        double fx = Math.Clamp((x + 0.5) * sw / fullWidth - 0.5, 0, sw - 1), fy = Math.Clamp((y + 0.5) * sh / fullHeight - 0.5, 0, sh - 1);
+        int x0 = (int)fx, y0 = (int)fy, x1 = Math.Min(sw - 1, x0 + 1), y1 = Math.Min(sh - 1, y0 + 1);
+        double ax = fx - x0, ay = fy - y0, sum = 0, used = 0;
+        void Add(int px, int py, double weight)
+        {
+            float v = plane[py * sw + px];
+            if (weight <= 0 || float.IsNaN(v)) return;
+            sum += v * weight; used += weight;
+        }
+        Add(x0, y0, (1 - ax) * (1 - ay)); Add(x1, y0, ax * (1 - ay)); Add(x0, y1, (1 - ax) * ay); Add(x1, y1, ax * ay);
+        return used > 0 ? (float)(sum / used) : float.NaN;
+    }
+
+    internal static void CheckMask(PixelImage image, byte[] mask)
     {
         if (mask is null || mask.Length != (long)image.Width * image.Height) throw new ArgumentException("Invalid mask.");
     }

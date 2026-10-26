@@ -1040,6 +1040,18 @@ public sealed partial class App : Application
                 report(L("Processing…")); result = new BatchResult();
                 result.Outputs.Add(await OnSta(() => subtitle.Save(text, transcript, token)));
             }
+            else if (action.Id == "image.idphoto")
+            {
+                report(L("Finding the face…"));
+                using var document = await OnSta(() => IdPhotoDocument.Open(files[0], token));
+                await document.DetectAsync(token);
+                token.ThrowIfCancellationRequested();
+                var dialog = new IdPhotoDialog(this, document);
+                if (!ShowOperationDialog(dialog, owner, token)) return;
+                var settings = dialog.Settings;
+                report(L("Processing…")); result = new BatchResult();
+                result.Outputs.Add(await OnSta(() => document.Save(settings, token)));
+            }
             else if (action.Id == "image.background")
             {
                 report(L("Loading image…"));
