@@ -114,3 +114,4 @@
 - 2026-10-26 CI 40288055856（0.89）真Windows全绿：核心4,519,459、native 5,134；Windows ML真实运行放大模型，结果正确；但runner无显卡每块约29秒（Mac onnxruntime CPU约2秒），原因（软件渲染回退或WinRT读出）待查。MSIX仍未签名。
 - 2026-10-26 用户：「先查无显卡时为什么这么慢并修一下。」结论：runner无可用显卡，Windows ML直接回退处理器（非软件渲染）；每块约1.2万亿次乘加，2–4核12–19秒，是模型本身计算量；WinRT读出0.1–0.7秒已改一次拷贝。线程数无效、384块峰值5.2GB、缩小上下文出接缝（32像素最多差30级），均未采用；对话框说明显卡/处理器并显示剩余时间。模型改为自由高宽并重新固定（SHA-256 043a257b…5994）。
 - 2026-10-26 用户：「继续下一批 Windows 功能。」0.90做D06语音转文字：Transcribe Speech…（audio.transcribe，单文件wav/mp3/aac/flac，≤1小时），OpenAI Whisper base（MIT，base.pt SHA-256 ed3a0b6b…e34e）构建时经共用转换器ThirdParty/ModelConvert（原RealESRGAN/Convert，ESRGAN哈希不变）生成编码器/解码器两个ONNX（4af8caaa…891f、7d6f8475…daf1）＋原样分词表（b34b360d…a126），Windows ML本机运行；自动识别/中/英/日，输出名称.txt/名称.srt原文件旁不覆盖。Mac上6段测试音频与官方whisper分段文字和时间完全一致。D06仍部分（视频输入、字幕烧录、按语音压低配乐待做），52项23/27/0/2不变。
+- 2026-10-26 CI 40303150602（0.90）真Windows全绿：核心4,519,560、native 5,147；Windows ML处理器上跑通，Windows合成英语7.6秒3.8秒转写、逐字正确。真实录音、中日文准确率、显卡速度待测。MSIX仍未签名。
