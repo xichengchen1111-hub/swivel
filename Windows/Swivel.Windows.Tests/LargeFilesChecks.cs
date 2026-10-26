@@ -74,8 +74,10 @@ internal static class LargeFilesChecks
             minimum.SelectedIndex = 3; check(files.Items.Count == 2, "Decimal 500 MB includes its exact boundary");
             minimum.SelectedIndex = 4; check(files.Items.Count == 1, "Decimal 1 GB includes its exact boundary");
             check(entries.Length == 6 && result.Issues.Count == 2 && scan.Entries == 7, "Changing native filters leaves the input metadata unchanged");
-            check(nodes.OfType<Button>().Count() == 3 && nodes.OfType<Button>().Single(x => Equals(x.Content, app.L("Close"))).IsCancel,
-                "The result window exposes only explicit copy actions and Close, with no file-open or destructive action");
+            var buttons = nodes.OfType<Button>().ToArray();
+            check(buttons.Length == 5 && buttons.Single(x => Equals(x.Content, app.L("Close"))).IsCancel
+                && !buttons.Single(x => Equals(x.Content, app.L("Undo Move"))).IsEnabled && buttons.Any(x => Equals(x.Content, app.L("Move Selected to Recycle Bin…"))),
+                "The result window offers copy actions, a confirmed Move to Recycle Bin, Undo (off until a move) and Close, with no file-open action");
         }
         finally { dialog.Close(); }
 
