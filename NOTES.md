@@ -104,3 +104,4 @@
 - 2026-10-26 CI 40274382216（0.85）真Windows全绿：核心4,519,245、native 5,104（含文件夹样式应用/重设/恢复）；首跑发现长度校验误带:Zone.Identifier已修。资源管理器实际显示图标仍需人工看。
 - 2026-10-26 用户：「下一批做 G02 Windows MCP（plan–apply–undo）。」0.86：Agent Tools（Feature.AgentTools默认关闭），`Swivel.exe --mcp`仅stdio，MSIX别名swivel-preview.exe；工具list_actions/inspect_files/plan_action/apply_plan/undo/history，只允许旁边新建的图片动作，计划一次性1小时，输入变化拒绝；历史在HKCU AgentHistory，undo只把未改动的输出移到回收站（仅固定盘）。设置页有Copy Agent Tools Setup。
 - 0.86复核：2个P2（非预期异常崩溃且漏记撤销；多进程历史互相覆盖）已修并复核，无未解决P1/P2；核心4,519,302通过、native编译0/0。
+- 2026-10-26 CI 40278180090（0.86）真Windows全绿：核心4,519,303、native 5,111（含真实--mcp管道与回收站撤销）；MSIX仍未签名。
