@@ -84,6 +84,7 @@ public static partial class NativeFiles
         try
         {
             Check(handle, false);
+            CheckCreatedIn(handle, parent, temp);
             stream = new FileStream(handle, FileAccess.Write, 1, false); // unbuffered: nothing left to flush after a failed produce
             produce(stream);
             stream.Flush(true);
@@ -112,7 +113,8 @@ public static partial class NativeFiles
                 {
                     byte delete = 1;
                     // Never delete by path: a cleanup targets only the object this call created.
-                    if (!SetDisposition(handle, 4, ref delete, 1)) ThrowLast();
+                    // An exception is already propagating; a failed cleanup must not replace it.
+                    SetDisposition(handle, 4, ref delete, 1);
                 }
             }
             finally { stream?.Dispose(); } // closes the handle, so only after the disposition
@@ -339,6 +341,21 @@ public static partial class NativeFiles
         if ((info.Attributes & UnsafeAttributes) != 0 || ((info.Attributes & 0x10) != 0) != directory)
             throw new UserError(LocalOnly);
     }
+    /// The staging file was created by path; an empty held folder could have become a mount
+    /// point in between. Its final path must be the held folder's own path plus the staging name.
+    internal static void CheckCreatedIn(SafeFileHandle file, SafeFileHandle folder, string temp)
+    {
+        string expected = System.IO.Path.Combine(FinalPath(folder), System.IO.Path.GetFileName(temp));
+        if (!string.Equals(FinalPath(file), expected, StringComparison.OrdinalIgnoreCase))
+            throw new UserError("The output folder changed while writing. Nothing was written.");
+    }
+    private static string FinalPath(SafeFileHandle handle)
+    {
+        var buffer = new char[32768];
+        uint length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Length, 0);
+        if (length == 0 || length >= buffer.Length) ThrowLast();
+        return new string(buffer, 0, (int)length);
+    }
     private static void ThrowLast() => throw new Win32Exception(Marshal.GetLastWin32Error());
 
     [StructLayout(LayoutKind.Sequential)] private struct FileInfo
@@ -358,6 +375,8 @@ public static partial class NativeFiles
     private static extern bool GetVolumeInformation(string root, StringBuilder? volumeName, int volumeNameSize, out uint serial, out uint maxComponent, out uint flags, StringBuilder fileSystem, int fileSystemSize);
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetFinalPathNameByHandle(SafeFileHandle handle, [Out] char[] path, uint length, uint flags);
     [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetFileInformationByHandle(SafeFileHandle handle, out FileInfo info);
     [DllImport("kernel32.dll")] private static extern uint GetFileType(SafeFileHandle handle);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

@@ -58,5 +58,27 @@ internal static class TarExtractNativeChecks
         using (var work = ZipExtractWork.Open(plain, default)) outcome = work.Extract(default, null);
         check(outcome.Error is null && File.ReadAllText(Path.Combine(root, "plain", "b.txt")) == "second", "Native plain TAR");
         reject(() => ZipExtractWork.Open(Path.Combine(root, "note.rar"), default), "Native extraction refuses other extensions");
+
+        // A child created by path must really be inside the held parent (a mount-point swap is refused).
+        string inside = Path.Combine(root, "held"), elsewhere = Path.Combine(root, "elsewhere");
+        Directory.CreateDirectory(inside); Directory.CreateDirectory(elsewhere);
+        File.WriteAllText(Path.Combine(inside, "f.txt"), "a"); File.WriteAllText(Path.Combine(elsewhere, "f.txt"), "b");
+        {
+            using var held = OpenFolder(inside);
+            using var good = File.OpenHandle(Path.Combine(inside, "f.txt"));
+            using var bad = File.OpenHandle(Path.Combine(elsewhere, "f.txt"));
+            NativeFiles.CheckCreatedIn(good, held, Path.Combine(inside, "f.txt"));
+            check(true, "Native created-in check accepts a file inside the held folder");
+            reject(() => NativeFiles.CheckCreatedIn(bad, held, Path.Combine(inside, "f.txt")), "Native created-in check refuses a file created elsewhere");
+        }
     }
+
+    private static Microsoft.Win32.SafeHandles.SafeFileHandle OpenFolder(string path)
+    {
+        var handle = CreateFile(path, 0x80, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero);
+        if (handle.IsInvalid) throw new System.ComponentModel.Win32Exception();
+        return handle;
+    }
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
 }

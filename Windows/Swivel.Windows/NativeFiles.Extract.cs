@@ -102,7 +102,10 @@ public static partial class NativeFiles
                     if (error == 183) throw new UserError("Something else changed the new folder while extracting. Nothing was overwritten.");
                     throw new Win32Exception(error);
                 }
-                folders[directory] = HoldCreated(path, source.Volume, held);
+                var folder = HoldCreated(path, source.Volume, held);
+                // Created by path: a held but still empty parent could have become a mount point.
+                CheckCreatedIn(folder, folders[System.IO.Path.GetDirectoryName(directory) ?? ""], path);
+                folders[directory] = folder;
             }
             for (int i = 0; i < plan.Files.Count; i++)
             {
@@ -144,15 +147,20 @@ public static partial class NativeFiles
         try
         {
             Check(handle, false);
+            CheckCreatedIn(handle, parent, temp);
             stream = new FileStream(handle, FileAccess.Write, 1, false); // unbuffered: nothing left to flush after a failed produce
             produce(stream);
             stream.Flush(true);
             token.ThrowIfCancellationRequested();
             // The main stream is held without sharing and with DELETE access, so another stream
             // of the same new file can only be opened with delete sharing.
-            using (var zoneHandle = Open(temp + ":Zone.Identifier", GenericWrite, 4, 1, 0))
+            using (var zoneHandle = Open(temp + ":Zone.Identifier", GenericWrite | ReadAttributes, 4, 1, 0))
             using (var zone = new FileStream(zoneHandle, FileAccess.Write, 1, false))
             {
+                // Opened by path, so it must belong to the very file this call is writing.
+                if (!GetFileInformationByHandle(handle, out var main) || !GetFileInformationByHandle(zoneHandle, out var zoneInfo)
+                    || main.Volume != zoneInfo.Volume || main.IndexHigh != zoneInfo.IndexHigh || main.IndexLow != zoneInfo.IndexLow)
+                    throw new UserError("The output folder changed while writing. Nothing was written.");
                 zone.Write(zoneData); zone.Flush(true);
             }
             var basic = new BasicInfo { Attributes = 0x80, Write = modified is DateTime time ? time.ToFileTimeUtc() : 0 };

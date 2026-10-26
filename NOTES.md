@@ -93,3 +93,5 @@
 - 2026-10-26 复核修复后CI 40202056707全绿（核心4,518,966/native5,068）。独立复核两轮：P2路径改名可被挂载点重定向→改NtSetInformationFile相对持有目录句柄；P2单字符名缓冲过小已修；无未解决P1/P2。MSIX仍未签名，等用户加两个secret。
 - 2026-10-26 用户：「两个 secret 已经加好了，请重新跑 CI 生成签名的 MSIX，然后继续下一批功能。」但gh secret list和API均看不到仓库Actions secrets，重跑仍未签名；需用户确认位置/名称（Repository secrets：SWIVEL_TEST_CERT_PFX_BASE64、SWIVEL_TEST_CERT_PASSWORD）。
 - 0.84：B08加TAR/.tar.gz/.tgz/单文件.gz安全解压（Swivel.Core/TarExtract.cs，archive.extract标题改Extract Archive…，ID不变）。独立复核无确定P1/P2，4个P3已修复加回归，核心4,519,131通过、native编译0/0。
+- 2026-10-26 CI 40204919879（0.84）真Windows全绿：核心4,519,131、native 5,079（含TAR原生检查）；签名步骤仍报无secret，MSIX未签名。
+- 2026-10-26 用户：「agent check 以及安全测试一下」。两个独立agent（解压对抗测试、原生文件层审查）无确认P1/P2；推理P2（持有的空文件夹被改成挂载点）已修：新子文件夹/暂存文件须在持有父目录内（最终路径比对），Zone流须同一文件；清理失败不再掩盖原错误。
