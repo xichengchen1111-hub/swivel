@@ -129,9 +129,14 @@ public sealed class VideoSubtitles : IDisposable
         return images;
     }
 
-    private static FormattedText Text(string text, Typeface face, double size, double width) =>
-        new(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, face, size, Brushes.White, 1.0)
-        { MaxTextWidth = width, TextAlignment = TextAlignment.Center, Trimming = TextTrimming.None };
+    // An infinite width means one unwrapped line (WPF refuses an infinite MaxTextWidth).
+    private static FormattedText Text(string text, Typeface face, double size, double width)
+    {
+        var formatted = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, face, size, Brushes.White, 1.0)
+        { TextAlignment = TextAlignment.Center, Trimming = TextTrimming.None };
+        if (double.IsFinite(width)) formatted.MaxTextWidth = width;
+        return formatted;
+    }
 
     /// Encodes the original with the pictures laid over it and publishes `name subtitled.mp4`.
     internal async Task<string> BurnAsync(IReadOnlyList<SubtitleImage> images, Action<double>? progress, CancellationToken token)
