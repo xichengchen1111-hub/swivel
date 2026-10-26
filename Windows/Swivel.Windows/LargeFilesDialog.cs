@@ -17,7 +17,8 @@ internal static class LargeFileNotices
     internal const string Snapshot = "Sizes are recorded directory metadata, not a live or simultaneous snapshot. Logical bytes are not physical or reclaimable space; hard links may be counted more than once, and alternate streams and filesystem overhead are excluded. File contents are not read.";
     internal const string Hints = "Installer and disk-image hints use filename extensions only. They do not verify file contents, whether an application is installed, or whether a file is safe to delete.";
     internal const string Filtering = "Filters use this recorded metadata without scanning again. Every matching file is listed, largest first. MB and GB use decimal bytes. Skipped or unexamined items may contain other matches.";
-    internal const string Privacy = "Copy Report includes the chosen folder, current filters, all matching files and all recorded issues. Copy Selected File Details includes only the selected file and scan scope. Nothing is opened, deleted, saved or sent automatically.";
+    internal const string Privacy = "Copy Report includes the chosen folder, current filters, all matching files and all recorded issues. Copy Selected File Details includes only the selected file and scan scope. Nothing is opened, saved or sent automatically.";
+    internal const string Recycle = "Move Selected to Recycle Bin… first lists the selected files with their full paths and sizes. Each file is then checked again: it must still be a plain local file (not a link, system or cloud item) with the recorded size and no other hard link. Its contents are not compared, so a file edited to the same size still moves. Only fixed drives with a Recycle Bin are used; if a file is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move restores the last moved files while this window is open, unless something now exists at their place; afterwards, restore them from the Recycle Bin.";
 }
 
 internal sealed class LargeFilesDialog : Window
@@ -33,7 +34,9 @@ internal sealed class LargeFilesDialog : Window
     private readonly TextBlock empty;
     private readonly TextBox details = DetailBox();
     private readonly Button copySelected;
+    private readonly RecycleBinSession<LargeFile> bin;
     private IReadOnlyList<LargeFile> matches = Array.Empty<LargeFile>();
+    internal int Moved => bin.Gone.Count; // also those Windows removed outright
 
     internal string CurrentReport
     {
@@ -45,6 +48,7 @@ internal sealed class LargeFilesDialog : Window
             text.AppendLine(app.L("Skipped Items"));
             if (result.Issues.Count == 0) text.AppendLine(app.L("No recorded skipped items."));
             foreach (var issue in result.Issues) text.AppendLine(Visible(issue.RelativePath) + " · " + app.L(issue.Reason));
+            bin.AppendReport(text, result.Files);
             return text.ToString();
         }
     }
@@ -53,7 +57,7 @@ internal sealed class LargeFilesDialog : Window
     {
         get
         {
-            if (files.SelectedItem is not FileRow row) return null;
+            if (files.SelectedItems.Count != 1 || files.SelectedItem is not FileRow row) return null;
             var text = ReportHeader(); AppendFile(text, row.File); return text.ToString();
         }
     }
@@ -71,6 +75,14 @@ internal sealed class LargeFilesDialog : Window
             if (SelectedFileReport is string report) app.Try(() => Clipboard.SetText(report));
         });
         copySelected.IsEnabled = false; footer.Children.Add(copySelected);
+        bin = new RecycleBinSession<LargeFile>(app, this, new(
+            file => Visible(file.RelativePath),
+            file => Visible(Absolute(file.RelativePath)) + " · " + file.Bytes.ToString("N0", CultureInfo.CurrentCulture),
+            (file, owner) => NativeFiles.RecycleFile(Absolute(file.RelativePath), file.Bytes, owner),
+            (file, stored) => NativeFiles.RestoreRecycled(Absolute(file.RelativePath), stored, false),
+            "Move 1 file to the Recycle Bin?", "Move {0} files to the Recycle Bin?", "Check that you no longer need these files before moving them."),
+            () => files.SelectedItems.OfType<FileRow>().Select(row => row.File).ToArray(), ApplyFilter);
+        footer.Children.Add(bin.Move); footer.Children.Add(bin.Undo);
         var close = UI.Button(app.L("Close"), () => DialogResult = false); close.IsCancel = true; footer.Children.Add(close);
         DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
 
@@ -84,6 +96,7 @@ internal sealed class LargeFilesDialog : Window
         body.Children.Add(UI.Text(app.L(LargeFileNotices.Hints), 12));
         body.Children.Add(UI.Text(app.L(LargeFileNotices.Filtering), 12));
         body.Children.Add(UI.Text(app.L(LargeFileNotices.Privacy), 12));
+        body.Children.Add(UI.Text(app.L(LargeFileNotices.Recycle), 12));
 
         body.Children.Add(UI.Text(app.L("Minimum Logical Size"), 13));
         foreach (var option in new[] { new SizeOption(0, "All sizes"), new SizeOption(10_000_000, "10 MB"), new SizeOption(100_000_000, "100 MB"), new SizeOption(500_000_000, "500 MB"), new SizeOption(1_000_000_000, "1 GB") })
@@ -94,7 +107,9 @@ internal sealed class LargeFilesDialog : Window
         summary = UI.Text("", 14); body.Children.Add(summary);
         empty = UI.Text(app.L("No files match these filters in the inspected metadata."), 12); body.Children.Add(empty);
         files.View = Columns(("Relative Path", "Path", 470), ("Counted Logical Bytes", "Size", 170), ("Name Hint", "Hint", 200));
+        files.SelectionMode = SelectionMode.Extended;
         AutomationProperties.SetName(files, app.L("Matching Files")); body.Children.Add(files);
+        body.Children.Add(bin.Status);
         body.Children.Add(UI.Text(app.L("Selected File Details"), 13));
         AutomationProperties.SetName(details, app.L("Selected File Details")); body.Children.Add(details);
         files.SelectionChanged += (_, _) => SelectFile();
@@ -118,10 +133,12 @@ internal sealed class LargeFilesDialog : Window
         root.Children.Add(tabs); Content = root; ApplyFilter();
     }
 
+    private string Absolute(string relative) => System.IO.Path.Combine(path, relative);
     private SizeOption Minimum => minimum.SelectedItem is ComboBoxItem { Tag: SizeOption option } ? option : new(100_000_000, "100 MB");
     private void ApplyFilter()
     {
-        matches = LargeFiles.Filter(result, Minimum.Bytes, installerOnly.IsChecked == true, default);
+        // Files moved in this window leave the list (and the report) until Undo puts them back.
+        matches = LargeFiles.Filter(result, Minimum.Bytes, installerOnly.IsChecked == true, default).Where(file => !bin.Gone.Contains(file)).ToArray();
         files.SelectedItem = null;
         files.ItemsSource = matches.Select(file => new FileRow(file, Visible(file.RelativePath), file.Bytes.ToString("N0", CultureInfo.CurrentCulture), Hint(file))).ToArray();
         summary.Text = Summary(); empty.Visibility = matches.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -157,8 +174,10 @@ internal sealed class LargeFilesDialog : Window
     }
     private void SelectFile()
     {
-        copySelected.IsEnabled = files.SelectedItem is FileRow;
-        if (files.SelectedItem is not FileRow row) { details.Text = app.L("Select a file to see its full path and recorded size."); return; }
+        bin.UpdateButtons();
+        copySelected.IsEnabled = bin.Idle && files.SelectedItems.Count == 1;
+        minimum.IsEnabled = installerOnly.IsEnabled = bin.Idle;
+        if (files.SelectedItems.Count != 1 || files.SelectedItem is not FileRow row) { details.Text = app.L("Select a file to see its full path and recorded size."); return; }
         var text = new StringBuilder(); AppendFile(text, row.File); details.Text = text.ToString();
     }
     // Reports and selected details preserve every path component. Escaping control

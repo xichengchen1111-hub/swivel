@@ -62,7 +62,7 @@ internal static class RecycleBin
     }
     private static object? Keep(List<object> held, object? com) { if (com is not null) held.Add(com); return com; }
 
-    internal const string RestoreUnavailable = "Windows could not open the Recycle Bin to restore the folder.";
+    internal const string RestoreUnavailable = "Windows could not open the Recycle Bin to restore it.";
     private static object? Call(object target, string name, params object[] arguments)
         => target.GetType().InvokeMember(name, BindingFlags.InvokeMethod, null, target, arguments);
     private static object? Get(object target, string name)

@@ -104,10 +104,10 @@ internal static class ProjectFolderNativeChecks
         check(!Directory.Exists(nodePath) && File.Exists(Path.Combine(stored,@"pkg\node_modules\nested.bin")) && stored.Contains("$Recycle.Bin",StringComparison.OrdinalIgnoreCase),"Recycle moves the whole build folder to the Recycle Bin and reports where: "+stored);
         check(File.Exists(package),"Recycle leaves the project file in place");
         Directory.CreateDirectory(nodePath);
-        reject(() => NativeFiles.RestoreProjectFolder(nodePath,stored),"Undo refuses while something exists at the original place");
+        reject(() => NativeFiles.RestoreRecycled(nodePath,stored,true),"Undo refuses while something exists at the original place");
         check(Directory.Exists(stored),"A refused Undo leaves the folder in the Recycle Bin");
         Directory.Delete(nodePath);
-        NativeFiles.RestoreProjectFolder(nodePath,stored);
+        NativeFiles.RestoreRecycled(nodePath,stored,true);
         check(File.Exists(Path.Combine(nodePath,@"pkg\node_modules\nested.bin")) && File.ReadAllBytes(Path.Combine(nodePath,@"pkg\package.json")).Length == 5 && !Directory.Exists(stored),"Undo restores the build folder and its files from the Recycle Bin");
     }
 }

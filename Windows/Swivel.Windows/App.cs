@@ -557,8 +557,9 @@ public sealed partial class App : Application
                 report(L("Reading file size metadata…"));
                 var largeResult = await AwaitDoctorReadAsync(Task.Run(() => DoctorLargeFiles.Run(directory, token), token),token);
                 token.ThrowIfCancellationRequested();
-                await ShowDoctorOperationAsync(new LargeFilesDialog(this,directory,largeResult.Scan,largeResult.Files),DoctorAssistantSummary.Large(largeResult.Scan,largeResult.Files),owner,token);
-                report(token.IsCancellationRequested ? L("Cancelled.") : L("Read-only file size inspection finished. No files were changed.")); return;
+                var largeDialog=new LargeFilesDialog(this,directory,largeResult.Scan,largeResult.Files);
+                await ShowDoctorOperationAsync(largeDialog,DoctorAssistantSummary.Large(largeResult.Scan,largeResult.Files),owner,token);
+                report(largeDialog.Moved>0?string.Format(L("File size inspection finished. Files moved to the Recycle Bin or removed: {0}"),largeDialog.Moved):token.IsCancellationRequested ? L("Cancelled.") : L("Read-only file size inspection finished. No files were changed.")); return;
             }
             if (action.Id == "doctor.projects")
             {
@@ -572,7 +573,7 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested();
                 var projectDialog=new ProjectFoldersDialog(this,directory,projectResult.Scan,projectResult.Projects);
                 await ShowDoctorOperationAsync(projectDialog,DoctorAssistantSummary.Projects(projectResult.Scan,projectResult.Projects),owner,token);
-                report(projectDialog.Moved>0?string.Format(L("Project folder inspection finished. Folders moved to the Recycle Bin: {0}"),projectDialog.Moved):token.IsCancellationRequested?L("Cancelled."):L("Read-only project folder inspection finished. No files were changed.")); return;
+                report(projectDialog.Moved>0?string.Format(L("Project folder inspection finished. Folders moved to the Recycle Bin or removed: {0}"),projectDialog.Moved):token.IsCancellationRequested?L("Cancelled."):L("Read-only project folder inspection finished. No files were changed.")); return;
             }
             if (action.Id == "doctor.photosimilar")
             {
