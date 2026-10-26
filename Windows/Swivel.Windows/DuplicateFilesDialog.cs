@@ -14,8 +14,9 @@ namespace Swivel.Windows;
 internal static class DuplicateNotices
 {
     internal const string Limits = "Metadata scan: the chosen folder plus 4 levels, up to 20,000 entries and about 30 seconds. Content comparison: files up to 512 MiB each, at most 2 GiB read and about 60 seconds. These are soft time limits; a blocked system call may return later.";
-    internal const string Scope = "Only ordinary local files on the chosen volume are compared. Empty files are skipped; repeated hard-link identities are counted once. System items, links, cloud placeholders and unavailable files or folders are skipped. Nothing is deleted.";
+    internal const string Scope = "Only ordinary local files on the chosen volume are compared. Empty files are skipped; repeated hard-link identities are counted once. System items, links, cloud placeholders and unavailable files or folders are skipped. The comparison itself changes nothing.";
     internal const string Snapshot = "Matching size and SHA-256 describe main file contents when each file was read, not one simultaneous snapshot. Files may change afterward. Alternate streams, permissions and metadata are not compared; logical repeat bytes are not physical or reclaimable space.";
+    internal const string Recycle = "To clean up a group, select the files to remove in its file list and choose Move Selected to Recycle Bin…; at least one file of the group must stay unselected. Before each move, another file of the group is read again and must still have the group's SHA-256, and is held open until the move ends so other programs cannot newly open it for writing, rename or delete it; the selected file must still be a plain local file with one link and the same SHA-256. Otherwise it is left alone. Only fixed drives with a Recycle Bin are used; if a file is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move restores the last moved files while this window is open, unless something now exists at their place; afterwards, restore them from the Recycle Bin.";
     internal const string Privacy = "Names and paths are visible. Copy Report includes the chosen folder, every matching group and all recorded skip reasons; Copy Selected Group includes that group and the chosen folder. Nothing is saved or sent automatically.";
 }
 
@@ -51,6 +52,8 @@ internal sealed class DuplicateFilesDialog : Window
     private readonly ListView paths = NativeList(190);
     private readonly TextBlock selectedSummary, selectedHash;
     private readonly Button copySelected;
+    private readonly RecycleBinSession<Member> bin;
+    internal int Moved => bin.Gone.Count; // also those Windows removed outright
 
     internal string CurrentReport
     {
@@ -62,6 +65,7 @@ internal sealed class DuplicateFilesDialog : Window
             text.AppendLine(app.L("Skipped Items"));
             if (issues.Count == 0) text.AppendLine(app.L("No recorded skipped items."));
             foreach (var issue in issues) text.AppendLine(issue.Path + " · " + issue.Reason);
+            bin.AppendReport(text, result.Groups.SelectMany(group => group.Paths.Select(member => new Member(group, member))));
             return text.ToString();
         }
     }
@@ -81,6 +85,14 @@ internal sealed class DuplicateFilesDialog : Window
             app.Try(() => { var text = ReportHeader(); AppendGroup(text, row.Group, row.Index); Clipboard.SetText(text.ToString()); });
         });
         copySelected.IsEnabled = false; footer.Children.Add(copySelected);
+        bin = new RecycleBinSession<Member>(app, this, new(
+            member => Visible(member.Relative),
+            member => Visible(Absolute(member.Relative)) + " · " + member.Group.Length.ToString("N0", CultureInfo.CurrentCulture),
+            (member, owner) => NativeFiles.RecycleDuplicate(Absolute(member.Relative), member.Group.Length, member.Group.Sha256, Keep(member), owner),
+            (member, stored) => NativeFiles.RestoreRecycled(Absolute(member.Relative), stored, false),
+            "Move 1 duplicate file to the Recycle Bin?", "Move {0} duplicate files to the Recycle Bin?", "At least one other file of the group is kept. Check which copy you want to keep before moving."),
+            SelectedMembers, Refresh);
+        footer.Children.Add(bin.Move); footer.Children.Add(bin.Undo);
         var close = UI.Button(app.L("Close"), () => DialogResult = false); close.IsCancel = true; footer.Children.Add(close);
         DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
 
@@ -91,18 +103,19 @@ internal sealed class DuplicateFilesDialog : Window
         matches.Children.Add(UI.Text(ScopeStatus(), 12));
         matches.Children.Add(UI.Text(app.L(DuplicateNotices.Snapshot), 12));
         matches.Children.Add(UI.Text(app.L(DuplicateNotices.Privacy), 12));
+        matches.Children.Add(UI.Text(app.L(DuplicateNotices.Recycle), 12));
         if (result.Groups.Count == 0) matches.Children.Add(UI.Text(app.L("No duplicate groups in the compared files. Skipped or unexamined files may still contain duplicates.")));
         groups.View = Columns(("Group", "Label", 85), ("Files", "Count", 65), ("Bytes Per File", "Size", 150), ("Logical Repeat Bytes", "Repeated", 180), ("First File", "First", 350));
-        groups.ItemsSource = result.Groups.Select((group, index) => new GroupRow(group, index + 1,
-            string.Format(app.L("Group {0}"), index + 1), group.Paths.Count.ToString("N0", CultureInfo.CurrentCulture),
-            group.Length.ToString("N0", CultureInfo.CurrentCulture), RepeatedBytes(group).ToString("N0", CultureInfo.CurrentCulture),
-            group.Paths.Count > 0 ? Visible(group.Paths[0]) : "")).ToArray();
+        groups.ItemsSource = result.Groups.Select((group, index) => new GroupRow(this, group, index + 1)).ToArray();
         AutomationProperties.SetName(groups, app.L("Matching Groups")); matches.Children.Add(groups);
         selectedSummary = UI.Text(app.L("Select a group to see all matching file paths."), 14);
         selectedHash = UI.Text("", 12); matches.Children.Add(selectedSummary); matches.Children.Add(selectedHash);
+        paths.SelectionMode = SelectionMode.Extended;
+        paths.SelectionChanged += (_, _) => bin.UpdateButtons();
         paths.View = Columns(("Relative Path", "Path", 780));
         AutomationProperties.SetName(paths, app.L("Files in Selected Group")); matches.Children.Add(paths);
         groups.SelectionChanged += (_, _) => SelectGroup();
+        matches.Children.Add(bin.Status);
         tabs.Items.Add(new TabItem { Header = app.L("Matching Groups"), Content = UI.Scroll(matches), Padding = new Thickness(12, 7, 12, 7) });
 
         var skipped = new StackPanel { Margin = new Thickness(12) };
@@ -145,7 +158,8 @@ internal sealed class DuplicateFilesDialog : Window
     {
         text.AppendLine(string.Format(app.L("Group {0}: {1} files · {2:N0} bytes each · {3:N0} logical repeat bytes"), index, group.Paths.Count, group.Length, RepeatedBytes(group)));
         text.AppendLine(app.L("SHA-256") + ": " + group.Sha256);
-        foreach (var member in group.Paths) text.AppendLine(Visible(member));
+        foreach (var member in group.Paths)
+            text.AppendLine(bin.Gone.Contains(new Member(group, member)) ? Visible(member) + " · " + app.L("moved or removed in this window") : Visible(member));
     }
 
     private void SelectGroup()
@@ -155,9 +169,33 @@ internal sealed class DuplicateFilesDialog : Window
         {
             selectedSummary.Text = app.L("Select a group to see all matching file paths."); selectedHash.Text = ""; paths.ItemsSource = null; return;
         }
-        selectedSummary.Text = string.Format(app.L("Group {0}: {1} files · {2:N0} bytes each · {3:N0} logical repeat bytes"), row.Index, row.Group.Paths.Count, row.Group.Length, RepeatedBytes(row.Group));
+        selectedSummary.Text = string.Format(app.L("Group {0}: {1} files · {2:N0} bytes each · {3:N0} logical repeat bytes"), row.Index, Remaining(row.Group).Count(), row.Group.Length, (decimal)row.Group.Length * Math.Max(0, Remaining(row.Group).Count() - 1));
         selectedHash.Text = app.L("SHA-256") + ": " + row.Group.Sha256;
-        paths.ItemsSource = row.Group.Paths.Select(member => new PathRow(Visible(member))).ToArray();
+        paths.ItemsSource = Remaining(row.Group).Select(member => new PathRow(new Member(row.Group, member), Visible(member))).ToArray();
+        bin.UpdateButtons();
+    }
+
+    // Files of a group still in place, in the group's order.
+    private IEnumerable<string> Remaining(DuplicateGroup group) => group.Paths.Where(member => !bin.Gone.Contains(new Member(group, member)));
+
+    // Only a selection that leaves at least one file of its group in place can be moved.
+    private IReadOnlyList<Member> SelectedMembers()
+    {
+        var chosen = paths.SelectedItems.OfType<PathRow>().Select(row => row.Member).Where(member => !bin.Gone.Contains(member)).Distinct().ToArray();
+        if (chosen.Length == 0 || chosen.Select(member => member.Group).Distinct().Count() != 1) return Array.Empty<Member>();
+        return chosen.Length < Remaining(chosen[0].Group).Count() ? chosen : Array.Empty<Member>();
+    }
+
+    // Files that may serve as the kept copy: in place, not in the batch being moved.
+    private IEnumerable<string> Keep(Member member)
+        => member.Group.Paths.Where(other => other != member.Relative && !bin.Gone.Contains(new Member(member.Group, other)) && !bin.Batch.Contains(new Member(member.Group, other))).Select(Absolute).ToArray();
+
+    private void Refresh()
+    {
+        int index = groups.SelectedIndex;
+        groups.Items.Refresh();
+        if (groups.SelectedIndex != index) groups.SelectedIndex = index; else SelectGroup();
+        groups.IsEnabled = paths.IsEnabled = bin.Idle;
     }
 
     private IReadOnlyList<IssueRow> BuildIssues()
@@ -174,6 +212,7 @@ internal sealed class DuplicateFilesDialog : Window
         return rows.AsReadOnly();
     }
 
+    private string Absolute(string relative) => System.IO.Path.Combine(path, relative);
     private static string Visible(string value) => DoctorFacts.VisibleBounded(value, 512);
     private static decimal RepeatedBytes(DuplicateGroup group) => (decimal)group.Length * Math.Max(0, group.Paths.Count - 1);
     private static ListView NativeList(double height)
@@ -189,7 +228,16 @@ internal sealed class DuplicateFilesDialog : Window
         foreach (var column in columns) view.Columns.Add(new GridViewColumn { Header = app.L(column.Title), DisplayMemberBinding = new Binding(column.Property), Width = column.Width });
         return view;
     }
-    private sealed record GroupRow(DuplicateGroup Group, int Index, string Label, string Count, string Size, string Repeated, string First);
-    private sealed record PathRow(string Path);
+    private sealed record Member(DuplicateGroup Group, string Relative);
+    private sealed record GroupRow(DuplicateFilesDialog Owner, DuplicateGroup Group, int Index)
+    {
+        private int Left => Owner.Remaining(Group).Count();
+        public string Label => string.Format(Owner.app.L("Group {0}"), Index);
+        public string Count => Left.ToString("N0", CultureInfo.CurrentCulture);
+        public string Size => Group.Length.ToString("N0", CultureInfo.CurrentCulture);
+        public string Repeated => ((decimal)Group.Length * Math.Max(0, Left - 1)).ToString("N0", CultureInfo.CurrentCulture);
+        public string First => Owner.Remaining(Group).FirstOrDefault() is string first ? Visible(first) : "";
+    }
+    private sealed record PathRow(Member Member, string Path);
     private sealed record IssueRow(string Path, string Reason);
 }

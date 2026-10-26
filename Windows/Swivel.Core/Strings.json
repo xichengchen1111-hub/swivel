@@ -5614,10 +5614,10 @@
     "僅安裝套件或磁碟映像名稱線索",
     "インストーラーまたはディスクイメージ名の候補のみ"
   ],
-  "Only ordinary local files on the chosen volume are compared. Empty files are skipped; repeated hard-link identities are counted once. System items, links, cloud placeholders and unavailable files or folders are skipped. Nothing is deleted.": [
-    "只比较所选卷上的普通本地文件。跳过空文件，同一硬链接文件身份只计一次。跳过系统项目、链接、云占位文件及无法访问的文件或文件夹。不删除任何内容。",
-    "只比較所選磁碟區上的一般本機檔案。略過空檔案，同一硬連結檔案識別資訊只計一次。略過系統項目、連結、雲端預留位置檔案及無法存取的檔案或資料夾。不刪除任何內容。",
-    "選択したボリューム上の通常のローカルファイルだけを比較します。空のファイルはスキップし、同じハードリンク識別子は一度だけ数えます。システム項目、リンク、クラウドプレースホルダー、アクセスできないファイルやフォルダーはスキップします。何も削除しません。"
+  "Only ordinary local files on the chosen volume are compared. Empty files are skipped; repeated hard-link identities are counted once. System items, links, cloud placeholders and unavailable files or folders are skipped. The comparison itself changes nothing.": [
+    "只比较所选卷上的普通本地文件。跳过空文件，同一硬链接文件身份只计一次。跳过系统项目、链接、云占位文件及无法访问的文件或文件夹。比较本身不更改任何内容。",
+    "只比較所選磁碟區上的一般本機檔案。略過空檔案，同一硬連結檔案識別資訊只計一次。略過系統項目、連結、雲端預留位置檔案及無法存取的檔案或資料夾。比較本身不變更任何內容。",
+    "選択したボリューム上の通常のローカルファイルだけを比較します。空のファイルはスキップし、同じハードリンク識別子は一度だけ数えます。システム項目、リンク、クラウドプレースホルダー、アクセスできないファイルやフォルダーはスキップします。比較自体は何も変更しません。"
   ],
   "Only outermost matching folders are listed to avoid nested totals. Partial counts are not the full folder size. Logical bytes are not physical or reclaimable space; hard links may be counted more than once, and alternate streams and filesystem overhead are excluded. Names and sizes may change during the scan.": [
     "仅列出最外层的匹配文件夹，避免嵌套重复统计。部分统计不代表完整文件夹大小。逻辑字节不等于实际占用或可释放空间；硬链接可能重复统计，不计备用数据流和文件系统开销。扫描期间名称和大小可能变化。",
@@ -12793,5 +12793,45 @@
     "项目文件夹检查已完成。已移到回收站或被删除的文件夹：{0}",
     "專案資料夾檢查已完成。已移到資源回收筒或被刪除的資料夾：{0}",
     "プロジェクトフォルダの確認が終わりました。ごみ箱に移動または削除されたフォルダ: {0}"
+  ],
+  "To clean up a group, select the files to remove in its file list and choose Move Selected to Recycle Bin…; at least one file of the group must stay unselected. Before each move, another file of the group is read again and must still have the group's SHA-256, and is held open until the move ends so other programs cannot newly open it for writing, rename or delete it; the selected file must still be a plain local file with one link and the same SHA-256. Otherwise it is left alone. Only fixed drives with a Recycle Bin are used; if a file is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move restores the last moved files while this window is open, unless something now exists at their place; afterwards, restore them from the Recycle Bin.": [
+    "要清理一个组，请在其文件列表中选择要移除的文件，然后选择“将所选项移到回收站…”；该组至少要保留一个文件不选。每次移动前，会重新读取该组的另一个文件，它必须仍具有该组的 SHA-256，并在移动结束前保持打开，其他程序无法新开它来写入、改名或删除；所选文件必须仍是只有一个链接的普通本地文件，且 SHA-256 相同。否则保留不动。只使用有回收站的固定驱动器；如果文件太大无法放入回收站，Windows 会在永久删除前询问。此窗口打开期间，“撤销移动”可恢复最近一次移动的文件，除非原位置现在已有其他项目；之后请从回收站恢复。",
+    "要清理一個群組，請在其檔案清單中選取要移除的檔案，然後選擇「將所選項目移到資源回收筒…」；該群組至少要保留一個檔案不選。每次移動前，會重新讀取該群組的另一個檔案，它必須仍具有該群組的 SHA-256，並在移動結束前保持開啟，其他程式無法新開它來寫入、重新命名或刪除；所選檔案必須仍是只有一個連結的一般本機檔案，且 SHA-256 相同。否則保留不動。只使用有資源回收筒的固定磁碟機；如果檔案太大無法放入資源回收筒，Windows 會在永久刪除前詢問。此視窗開啟期間，「復原移動」可還原最近一次移動的檔案，除非原位置現在已有其他項目；之後請從資源回收筒還原。",
+    "グループを整理するには、ファイル一覧で削除するファイルを選び、「選択項目をごみ箱に移動…」を選びます。グループのファイルを少なくとも 1 つは選択せずに残す必要があります。移動の前に毎回グループの別のファイルを読み直し、そのファイルがまだグループの SHA-256 と一致することを確認し、移動が終わるまで開いたままにし、他のプログラムが書き込み・名前変更・削除のために新しく開けないようにします。選択したファイルも、リンクが 1 つだけの通常のローカルファイルで、SHA-256 が同じである必要があります。そうでない場合はそのまま残します。ごみ箱のある固定ドライブだけを使います。ファイルが大きすぎてごみ箱に入らない場合、Windows は完全に削除する前に確認します。このウィンドウを開いている間は「移動を取り消す」で最後に移動したファイルを復元できます（元の場所に別の項目がある場合を除く）。その後はごみ箱から復元してください。"
+  ],
+  "Move 1 duplicate file to the Recycle Bin?": [
+    "将 1 个重复文件移到回收站？",
+    "將 1 個重複檔案移到資源回收筒？",
+    "重複ファイル 1 個をごみ箱に移動しますか？"
+  ],
+  "Move {0} duplicate files to the Recycle Bin?": [
+    "将 {0} 个重复文件移到回收站？",
+    "將 {0} 個重複檔案移到資源回收筒？",
+    "重複ファイル {0} 個をごみ箱に移動しますか？"
+  ],
+  "At least one other file of the group is kept. Check which copy you want to keep before moving.": [
+    "该组至少会保留另一个文件。移动前请确认要保留哪个副本。",
+    "該群組至少會保留另一個檔案。移動前請確認要保留哪個副本。",
+    "グループの別のファイルが少なくとも 1 つ残ります。移動する前に、どのコピーを残すか確認してください。"
+  ],
+  "Its contents no longer match its group, so it was left alone.": [
+    "它的内容已与所在组不一致，因此保留不动。",
+    "它的內容已與所在群組不一致，因此保留不動。",
+    "内容がグループと一致しなくなったため、そのまま残しました。"
+  ],
+  "No other file of its group could be checked as still identical, so it was left alone.": [
+    "无法确认所在组中还有其他文件仍然相同，因此保留不动。",
+    "無法確認所在群組中還有其他檔案仍然相同，因此保留不動。",
+    "グループ内にまだ同一の別ファイルがあることを確認できなかったため、そのまま残しました。"
+  ],
+  "Duplicate comparison finished. Files moved to the Recycle Bin or removed: {0}": [
+    "重复文件比较已完成。已移到回收站或已移除的文件：{0}",
+    "重複檔案比較已完成。已移到資源回收筒或已移除的檔案：{0}",
+    "重複ファイルの比較が終わりました。ごみ箱に移動または削除されたファイル: {0}"
+  ],
+  "moved or removed in this window": [
+    "已在此窗口中移走或移除",
+    "已在此視窗中移走或移除",
+    "このウィンドウで移動または削除済み"
   ]
 }

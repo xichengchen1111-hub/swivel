@@ -43,6 +43,8 @@ internal sealed class RecycleBinSession<T> where T : notnull
     public HashSet<T> Removed { get; } = new();
     public int Recycled => Gone.Count - Removed.Count;
     public bool Idle => !busy && !closeRequested;
+    /// The items of the batch being moved (or last moved), for checks that must not rely on them.
+    public IReadOnlyList<T> Batch { get; private set; } = Array.Empty<T>();
 
     public RecycleBinSession(App app, Window window, RecycleBinItems<T> items, Func<IReadOnlyList<T>> selected, Action changed)
     {
@@ -86,6 +88,7 @@ internal sealed class RecycleBinSession<T> where T : notnull
         string question = (chosen.Length == 1 ? app.L(items.AskOne) : string.Format(app.L(items.AskMany), chosen.Length)) + "\n\n" + list + "\n" + app.L(items.Warning);
         if (MessageBox.Show(window, question, app.L("Move Selected to Recycle Bin…"), MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK
             || !Idle || !window.IsVisible) return;
+        Batch = chosen;
         var done = new List<(T Item, string Stored)>();
         var gone = new List<T>(); // removed, or moved where Undo cannot find it
         var problems = new List<string>();

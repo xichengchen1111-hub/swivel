@@ -99,6 +99,25 @@ internal static class DuplicateNativeChecks
         check(File.ReadAllBytes(first).SequenceEqual(bytes) && File.ReadAllBytes(second).SequenceEqual(bytes) && File.ReadAllBytes(different).SequenceEqual(changedMiddle),
             "Duplicate scans preserve all input bytes");
         Directory.Move(folder,folder+" released"); check(Directory.Exists(folder+" released"),"All duplicate/root/ancestor handles released on completion");
+
+        // Recycle Bin cleanup keeping a verified copy (Windows CI runs on a fixed drive with a Recycle Bin).
+        string moved = folder+" released", keep = Path.Combine(moved,"a.bin"), copy = Path.Combine(moved,"child","b.bin");
+        string other = Path.Combine(moved,"different.bin"), edited = Path.Combine(moved,"edited.bin");
+        var group = result.Duplicates.Groups.Single();
+        reject(() => NativeFiles.RecycleDuplicate(copy,group.Length,group.Sha256,Array.Empty<string>()),"Duplicate cleanup refuses without another file to keep");
+        reject(() => NativeFiles.RecycleDuplicate(copy,group.Length,group.Sha256,new[]{other}),"Duplicate cleanup refuses when the kept file no longer matches the group");
+        reject(() => NativeFiles.RecycleDuplicate(copy,group.Length,group.Sha256,new[]{copy}),"Duplicate cleanup never keeps the file it moves");
+        File.WriteAllBytes(edited,changedMiddle);
+        reject(() => NativeFiles.RecycleDuplicate(edited,group.Length,group.Sha256,new[]{keep}),"Duplicate cleanup refuses a same-size file whose contents differ");
+        using (File.Open(keep,FileMode.Open,FileAccess.ReadWrite,FileShare.ReadWrite))
+            reject(() => NativeFiles.RecycleDuplicate(copy,group.Length,group.Sha256,new[]{keep}),"Duplicate cleanup refuses while the kept file is open for writing");
+        check(File.Exists(copy) && File.Exists(edited),"Refused duplicates stay in place");
+        if (!RecycleBin.Available(copy)) { Console.WriteLine("SKIP: no Recycle Bin on the test drive."); return; }
+        string stored = NativeFiles.RecycleDuplicate(copy,group.Length,group.Sha256,new[]{other,keep});
+        check(!File.Exists(copy) && File.ReadAllBytes(keep).SequenceEqual(bytes) && stored.Contains("$Recycle.Bin",StringComparison.OrdinalIgnoreCase),
+            "Duplicate cleanup moves one copy to the Recycle Bin after finding a matching file to keep: "+stored);
+        NativeFiles.RestoreRecycled(copy,stored,false);
+        check(File.ReadAllBytes(copy).SequenceEqual(bytes) && !File.Exists(stored),"Undo restores the duplicate from the Recycle Bin");
     }
     [StructLayout(LayoutKind.Sequential)] private struct IdentityLayout { public ulong Volume, Low, High; }
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

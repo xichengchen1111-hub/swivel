@@ -614,8 +614,9 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested(); report(L("Reading files for duplicate comparison…"));
                 var duplicateResult = await AwaitDoctorReadAsync(Task.Run(() => DoctorDuplicates.Run(directory, token), token),token);
                 token.ThrowIfCancellationRequested();
-                await ShowDoctorOperationAsync(new DuplicateFilesDialog(this,directory,duplicateResult.Folder,duplicateResult.Duplicates),DoctorAssistantSummary.Duplicates(duplicateResult.Folder,duplicateResult.Duplicates),owner,token);
-                report(L("Read-only duplicate comparison finished. No files were changed.")); return;
+                var duplicateDialog=new DuplicateFilesDialog(this,directory,duplicateResult.Folder,duplicateResult.Duplicates);
+                await ShowDoctorOperationAsync(duplicateDialog,DoctorAssistantSummary.Duplicates(duplicateResult.Folder,duplicateResult.Duplicates),owner,token);
+                report(duplicateDialog.Moved>0?string.Format(L("Duplicate comparison finished. Files moved to the Recycle Bin or removed: {0}"),duplicateDialog.Moved):token.IsCancellationRequested?L("Cancelled."):L("Read-only duplicate comparison finished. No files were changed.")); return;
             }
             if (action.Id == "doctor.folder")
             {

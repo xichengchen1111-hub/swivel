@@ -33,6 +33,67 @@ public static partial class NativeFiles
                 throw new UserError(RecycleChanged);
         }, owner);
 
+    internal const string DuplicateChanged = "Its contents no longer match its group, so it was left alone.";
+    internal const string NoKeptCopy = "No other file of its group could be checked as still identical, so it was left alone.";
+
+    /// Rechecks a file from Duplicate Files and moves it to the Recycle Bin only while another
+    /// file of its group is held unchanged: `keep` (in order) is tried until one is a different
+    /// plain local file with the group's length and SHA-256. That copy stays open without
+    /// write or delete sharing until the move ends, so it cannot change or vanish meanwhile.
+    /// The file itself must still be a plain local file with one link and the same contents.
+    internal static string RecycleDuplicate(string file, long length, string sha256, IEnumerable<string> keep, IntPtr owner = default)
+    {
+        SafeFileHandle? kept = null;
+        try
+        {
+            foreach (string candidate in keep)
+            {
+                SafeFileHandle handle;
+                try { WindowsPathPolicy.Validate(candidate); handle = Open(candidate, GenericRead | ReadAttributes, 1, 3, OpenReparse); }
+                catch (Exception error) when (error is Win32Exception or UserError) { continue; }
+                try
+                {
+                    if (GetFileType(handle) == 1 && GetFileInformationByHandle(handle, out var info) && (info.Attributes & (SkippedForRecycle | 0x10)) == 0
+                        && (((ulong)info.SizeHigh << 32) | info.SizeLow) == (ulong)length && Sha256(handle, length) == sha256) { kept = handle; break; }
+                }
+                catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException) { } // try the next one
+                handle.Dispose();
+            }
+            if (kept is null || !GetFileInformationByHandle(kept, out var keptInfo)) throw new UserError(NoKeptCopy);
+            return Recycle(file, false, held =>
+            {
+                if (!GetFileInformationByHandle(held, out var info) || info.Links != 1 || (((ulong)info.SizeHigh << 32) | info.SizeLow) != (ulong)length)
+                    throw new UserError(RecycleChanged);
+                if (info.Volume == keptInfo.Volume && info.IndexHigh == keptInfo.IndexHigh && info.IndexLow == keptInfo.IndexLow) throw new UserError(NoKeptCopy);
+                SafeFileHandle data;
+                try { data = Open(file, GenericRead | ReadAttributes, 7, 3, OpenReparse); }
+                catch (Win32Exception) { throw new UserError(RecycleChanged); }
+                using (data)
+                {
+                    if (!GetFileInformationByHandle(data, out var same) || same.Volume != info.Volume || same.IndexHigh != info.IndexHigh || same.IndexLow != info.IndexLow)
+                        throw new UserError(RecycleChanged);
+                    if (Sha256(data, length) != sha256) throw new UserError(DuplicateChanged);
+                }
+            }, owner);
+        }
+        finally { kept?.Dispose(); }
+    }
+
+    private static string Sha256(SafeFileHandle handle, long length)
+    {
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        var buffer = new byte[64 * 1024];
+        long offset = 0;
+        while (true)
+        {
+            int read = System.IO.RandomAccess.Read(handle, buffer, offset);
+            if (read == 0) break;
+            hash.AppendData(buffer, 0, read); offset += read;
+            if (offset > length) return "";
+        }
+        return offset == length ? Convert.ToHexString(hash.GetHashAndReset()) : "";
+    }
+
     /// The parent and its ancestors are held, so the item stays where it was checked; the item
     /// itself is held with delete sharing, so after the move its handle tells exactly where
     /// Windows put it. Returns that Recycle Bin path for Undo.
