@@ -87,9 +87,9 @@ public static partial class NativeFiles
 
     private static StyledFolder HoldStyledFolder(string folder)
     {
-        WindowsPathPolicy.Validate(folder);
         if (System.IO.Path.GetDirectoryName(folder) is null) throw new UserError("Choose a folder, not a whole drive.");
-        WindowsPathPolicy.Validate(System.IO.Path.Combine(folder, ".swivel-" + new string('0', 32) + ".tmp:Zone.Identifier"));
+        WindowsPathPolicy.Validate(folder);
+        WindowsPathPolicy.Validate(System.IO.Path.Combine(folder, ".swivel-" + new string('0', 32) + ".tmp")); // the longest name written inside
         var lease = DirectoryLease.Open(folder);
         SafeFileHandle? handle = null;
         try
