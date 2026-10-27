@@ -81,6 +81,33 @@ internal static class McpNativeChecks
                 check(read3[i]!["ok"]!.GetValue<bool>() && (string?)read3[i]!["text"] == expected && expected.Contains("第二行 & <tag>"), "Native MCP extract_text reads " + formats[i].Item2 + " through the document reader: " + read3[i]!.ToJsonString());
             }
 
+            // plan_action document conversions: a text file to DOCX and ODT, a DOCX to TXT, each read
+            // back through the document reader; undo recycles them. A stale stamp makes nothing.
+            string Read(string path) { using var file = File.OpenRead(path); return DocumentText.Read(file, Path.GetExtension(path).TrimStart('.'), default).Text; }
+            var toDocx = Call("plan_action", new JsonObject { ["action"] = "document.docx", ["paths"] = new JsonArray(notes) })["structuredContent"]!;
+            var docxMade = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)toDocx["plan_id"] })["structuredContent"]!;
+            string notesDocx = Path.Combine(root, "notes text.docx");
+            check((int?)docxMade["completed"] == 1 && (string?)docxMade["outputs"]![0] == notesDocx && Read(notesDocx).TrimEnd('\n') == "Line one\n第二行" && toDocx["note"] is JsonValue,
+                "Native MCP plan_action saves a text file's text as DOCX beside it: " + docxMade.ToJsonString());
+            var toOdtTxt = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)Call("plan_action", new JsonObject { ["action"] = "document.odt", ["paths"] = new JsonArray(notes) })["structuredContent"]!["plan_id"] })["structuredContent"]!;
+            check((string?)toOdtTxt["outputs"]![0] == Path.Combine(root, "notes text.odt") && Read(Path.Combine(root, "notes text.odt")).TrimEnd('\n') == "Line one\n第二行", "Native MCP plan_action saves text as ODT");
+            string sourceDocx = (string)documents[0]!;
+            var docxToTxt = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)Call("plan_action", new JsonObject { ["action"] = "document.txt", ["paths"] = new JsonArray(sourceDocx) })["structuredContent"]!["plan_id"] })["structuredContent"]!;
+            check((string?)docxToTxt["outputs"]![0] == Path.Combine(root, "notes text.txt") && File.ReadAllText(Path.Combine(root, "notes text.txt")) == Read(sourceDocx), "Native MCP plan_action saves a DOCX's text as UTF-8 TXT: " + docxToTxt.ToJsonString());
+            var wrongKind = Call("plan_action", new JsonObject { ["action"] = "document.txt", ["paths"] = new JsonArray(photo) });
+            check(wrongKind["isError"]!.GetValue<bool>(), "Native MCP refuses a document action for an image");
+            var stale = NativeFiles.InspectStamp(notes) with { WriteTime = 1 };
+            int before = Directory.GetFiles(root).Length;
+            string Refusal(Action run) { try { run(); return "ran"; } catch (Exception error) { return error.Message; } }
+            check(Refusal(() => new McpHost(() => true, value).Run("document.rtf", notes, stale, default)) == McpSession.Changed, "Native MCP Run refuses a document whose held stamp no longer matches the plan");
+            check(Refusal(() => new McpHost(() => true, value).Run("image.gray", photo, NativeFiles.InspectStamp(photo) with { Size = 1 }, default)) == McpSession.Changed, "Native MCP Run refuses an image whose held stamp no longer matches the plan");
+            check(Refusal(() => new McpHost(() => true, value).Compress(photo, 100_000, NativeFiles.InspectStamp(photo) with { Size = 1 }, default)) == McpSession.Changed, "Native MCP Compress refuses an image whose held stamp no longer matches the plan");
+            check(Directory.GetFiles(root).Length == before, "Native MCP a refused stale run makes no file");
+            var docsBack = Call("undo", new JsonObject())["structuredContent"]!;
+            check(docsBack["complete"]!.GetValue<bool>() && !File.Exists(Path.Combine(root, "notes text.txt")) && File.Exists(sourceDocx), "Native MCP undo recycles a document conversion: " + docsBack.ToJsonString());
+            Call("undo", new JsonObject()); Call("undo", new JsonObject());
+            check(!File.Exists(notesDocx) && !File.Exists(Path.Combine(root, "notes text.odt")) && File.Exists(notes), "Native MCP undo recycles the DOCX and ODT copies, the original kept");
+
             // plan_rename on real files: a chain onto a name another file gives up, a case-only
             // change, a name taken by a folder; apply, then undo puts every name back.
             string names = Path.Combine(root, "rename"); Directory.CreateDirectory(names);

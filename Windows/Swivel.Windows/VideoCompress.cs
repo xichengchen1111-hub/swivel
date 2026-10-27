@@ -17,7 +17,6 @@ namespace Swivel.Windows;
 internal static class VideoCompress
 {
     public const string Failed = "Windows could not encode the compressed video. No file was saved.";
-    public const string Changed = "The file changed since planning. No file was made for it; plan again.";
     private static readonly Guid RotationKey = new("C380465D-2271-428C-9B83-ECEA3B4A85C1"); // MF_MT_VIDEO_ROTATION
 
     public static async Task<VideoProbe> ProbeAsync(string path, CancellationToken token)
@@ -32,7 +31,7 @@ internal static class VideoCompress
         // The held read handle denies writers and deleters, so the file Windows opens by path is
         // the one checked, from planning to publishing.
         using var input = NativeFiles.OpenRead(path);
-        if (!input.Stamp.SameObjectAndContent(expected)) throw new McpToolError(Changed);
+        if (!input.Stamp.SameObjectAndContent(expected)) throw new McpToolError(McpSession.Changed);
         var (file, video, probe) = await OpenAsync(path, token).ConfigureAwait(false);
         var attempt = VideoBudget.Plan(maxBytes, probe);
         SweepStale();

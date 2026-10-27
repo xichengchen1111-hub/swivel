@@ -12,11 +12,13 @@ public sealed class DocumentTextFile : IDisposable
     public TextDocument Document {get;}
     public TextStatistics Statistics {get;}
     private DocumentTextFile(NativeFiles.Input input,TextDocument document,TextStatistics statistics){this.input=input;Document=document;Statistics=statistics;}
-    public static DocumentTextFile Open(string path,CancellationToken token)
+    /// With `expected` (an agent's plan), a file that is no longer the planned one is refused before it is read.
+    public static DocumentTextFile Open(string path,CancellationToken token,FileStamp? expected=null)
     {
         token.ThrowIfCancellationRequested();var input=NativeFiles.OpenRead(path);
         try
         {
+            if(expected is FileStamp planned&&!input.Stamp.SameObjectAndContent(planned))throw new McpToolError(McpSession.Changed);
             if(input.Stream.Length>DocumentText.MaxInputBytes)throw new UserError("Document input is limited to 8 MiB.");
             var document=DocumentText.Read(input.Stream,System.IO.Path.GetExtension(path).TrimStart('.'),token);
             var stats=DocumentText.Count(document.Text,token);token.ThrowIfCancellationRequested();return new(input,document,stats);

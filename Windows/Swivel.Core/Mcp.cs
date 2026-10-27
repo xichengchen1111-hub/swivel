@@ -18,7 +18,8 @@ public interface IMcpHost
     /// A plain absolute path to an existing local regular file, not a link or cloud placeholder.
     FileStamp Inspect(string path);
     /// Runs one allowed action on one input and returns the new file it created beside it.
-    string Run(string action, string path, CancellationToken token);
+    /// Refused when the file, once held, no longer matches its planned stamp.
+    string Run(string action, string path, FileStamp expected, CancellationToken token);
     /// The one clean flat QR code in an image (QrFlatRead's strict rules); a UserError when none.
     QrReadResult ReadCode(string path, CancellationToken token);
     /// The installed Windows OCR language tags; empty when OCR cannot run here (no MSIX package
@@ -75,7 +76,12 @@ public sealed class McpToolError(string message) : Exception(message)
     public static bool Expected(Exception error) => error is not (OutOfMemoryException or StackOverflowException or AccessViolationException);
 }
 
-public sealed record McpAction(string Id, string Title, string Suffix);
+public sealed record McpAction(string Id, string Title, string Suffix, bool Document = false)
+{
+    /// The new file's extension.
+    public string Extension => Document ? Id["document.".Length..] : ImageOutputInfo.Format(Id);
+    public bool Accepts(string path) => Document ? McpSession.IsDocument(path) : Catalog.IsImage(path);
+}
 
 /// Swivel's agent tools over MCP (JSON-RPC 2.0, one message per line on stdin/stdout).
 /// Read-only tools inspect; every write goes plan → apply_plan (single use, one hour, refused
@@ -99,7 +105,13 @@ public sealed class McpSession
         new("image.gray", "Grayscale", " grayscale"),
         // Run on this PC with the pinned U²-Net model; the result is a PNG either way.
         new("image.removebg", "Remove Background", " cutout"), new("image.blurbg", "Blur Background", " blurred"),
+        // A document's text only, as Inspect Document Text saves it.
+        new("document.txt", "Save Text as TXT", " text", true), new("document.rtf", "Save Text as RTF", " text", true),
+        new("document.docx", "Save Text as DOCX", " text", true), new("document.html", "Save Text as HTML", " text", true),
+        new("document.odt", "Save Text as ODT", " text", true),
     };
+    public const string Changed = "The file changed since planning. No file was made for it; plan again.";
+    private const string DocumentInputs = "Plain text (TXT, TEXT, MD, MARKDOWN, CSV, TSV, LOG, SRT) in strict UTF-8 or UTF-16 with a byte order mark, DOCX, ODT, RTF, or static HTML/HTM without scripts; up to 8 MiB and 2,000,000 characters of text";
     /// plan_compress's work, logged like an action; not offered through plan_action.
     private static readonly McpAction Compression = new("compress", "Compress to a size", " compressed");
     public const long MinTarget = 1_000, MaxTarget = 1_000_000_000_000;
@@ -243,8 +255,8 @@ public sealed class McpSession
     {
         ["actions"] = new JsonArray(Actions.Select(a => (JsonNode)new JsonObject
         {
-            ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = "PNG, JPEG, BMP, TIFF or static GIF images",
-            ["writes"] = "A new " + ImageOutputInfo.Format(a.Id).ToUpperInvariant() + " file beside each original, named '<name>" + a.Suffix + "." + ImageOutputInfo.Format(a.Id) + "' or the next free numbered name.",
+            ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = a.Document ? DocumentInputs : "PNG, JPEG, BMP, TIFF or static GIF images",
+            ["writes"] = "A new " + a.Extension.ToUpperInvariant() + " file" + (a.Document ? " holding only the document's text (no formatting, images, table layout or objects)" : "") + " beside each original, named '<name>" + a.Suffix + "." + a.Extension + "' or the next free numbered name.",
         }).ToArray()),
     };
 
@@ -270,7 +282,7 @@ public sealed class McpSession
                 files.Add(new JsonObject
                 {
                     ["path"] = path, ["ok"] = true, ["size"] = stamp.Size,
-                    ["actions"] = new JsonArray((Catalog.IsImage(path) ? Actions.Select(a => (JsonNode)a.Id) : Enumerable.Empty<JsonNode>()).ToArray()),
+                    ["actions"] = new JsonArray(Actions.Where(a => a.Accepts(path)).Select(a => (JsonNode)a.Id).ToArray()),
                     ["tools"] = new JsonArray((Catalog.IsImage(path) ? ((ocr ??= host.TextLanguages.Count > 0) ? new[] { "extract_text", "read_codes" } : new[] { "read_codes" }) : IsDocument(path) ? new[] { "extract_text" } : Array.Empty<string>())
                         .Concat(Catalog.IsImage(path) || VideoBudget.IsVideo(path) ? new[] { "plan_compress" } : Array.Empty<string>()).Append("plan_rename").Append("plan_move").Select(t => (JsonNode)t).ToArray()),
                 });
@@ -280,7 +292,7 @@ public sealed class McpSession
         return new JsonObject { ["files"] = files };
     }
 
-    private static bool IsDocument(string path)
+    public static bool IsDocument(string path)
         => DocumentText.Extensions.Contains(System.IO.Path.GetExtension(path).TrimStart('.'), StringComparer.OrdinalIgnoreCase);
 
     private JsonObject ExtractText(JsonObject arguments, CancellationToken token)
@@ -354,21 +366,26 @@ public sealed class McpSession
         foreach (string path in paths)
         {
             token.ThrowIfCancellationRequested();
-            if (!Catalog.IsImage(path)) throw new McpToolError(path + ": this action needs a PNG, JPEG, BMP, TIFF or GIF image.");
-            try { inputs.Add((path, host.Inspect(path))); }
+            if (!action.Accepts(path)) throw new McpToolError(path + (action.Document ? ": this action needs a plain-text, DOCX, ODT, RTF or HTML document." : ": this action needs a PNG, JPEG, BMP, TIFF or GIF image."));
+            FileStamp stamp;
+            try { stamp = host.Inspect(path); }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }
+            if (action.Document && stamp.Size > DocumentText.MaxInputBytes) throw new McpToolError(path + ": documents are limited to 8 MiB (8,388,608 bytes).");
+            inputs.Add((path, stamp));
         }
         var plan = Store(action, null, inputs);
-        string extension = ImageOutputInfo.Format(action.Id);
-        return new JsonObject
+        var body = new JsonObject
         {
             ["plan_id"] = plan.Id, ["action"] = action.Id, ["expires"] = plan.Expires.ToString("O"),
             ["inputs"] = new JsonArray(inputs.Select(i => (JsonNode)new JsonObject
             {
                 ["path"] = i.Item1,
-                ["output"] = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(i.Item1) ?? "", System.IO.Path.GetFileNameWithoutExtension(i.Item1) + action.Suffix + "." + extension) + " (or the next free numbered name)",
+                ["output"] = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(i.Item1) ?? "", System.IO.Path.GetFileNameWithoutExtension(i.Item1) + action.Suffix + "." + action.Extension) + " (or the next free numbered name)",
             }).ToArray()),
         };
+        // The document is read only at apply: one it can't read (too large, an unsupported encoding) fails there.
+        if (action.Document) body["note"] = "Only the text is kept: formatting, images, table layout, headers, notes and objects are dropped. Documents are read at apply_plan; one Swivel can't read (another text encoding, HTML with scripts, more than 2,000,000 characters) fails there and stops the rest.";
+        return body;
     }
 
     private JsonObject PlanCompress(JsonObject arguments, CancellationToken token)
@@ -631,7 +648,7 @@ public sealed class McpSession
             if (token.IsCancellationRequested) { failure = "Cancelled."; break; }
             try
             {
-                string output = plan.Target is long target ? host.Compress(path, target, planned, token) : host.Run(action.Id, path, token);
+                string output = plan.Target is long target ? host.Compress(path, target, planned, token) : host.Run(action.Id, path, planned, token);
                 var stamp = host.Stamp(output) ?? throw new McpToolError("The new file disappeared.");
                 outputs.Add(StampNode(output, stamp));
             }

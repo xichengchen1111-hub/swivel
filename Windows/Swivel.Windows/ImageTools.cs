@@ -24,10 +24,16 @@ public static class ImageTools
         internal Document(NativeFiles.Input input, BitmapSource bitmap) { Input = input; Bitmap = bitmap; }
         public void Dispose() => Input.Dispose();
     }
-    public static Document Open(string path, CancellationToken cancellation)
+    /// With `expected` (an agent's plan), a file that is no longer the planned one is refused
+    /// before it is decoded.
+    public static Document Open(string path, CancellationToken cancellation, FileStamp? expected = null)
     {
         var input = NativeFiles.OpenRead(path);
-        try { return new Document(input, Decode(input, cancellation)); }
+        try
+        {
+            if (expected is FileStamp planned && !input.Stamp.SameObjectAndContent(planned)) throw new McpToolError(McpSession.Changed);
+            return new Document(input, Decode(input, cancellation));
+        }
         catch { input.Dispose(); throw; }
     }
     public static Document OpenTile(string path, int width, int height, bool fill, CancellationToken cancellation)
@@ -251,8 +257,7 @@ public static class ImageTools
     /// edge only when even the lowest quality is too big (JpegBudget.Fit). Written beside the original.
     public static string CompressTo(string path, long maxBytes, FileStamp expected, CancellationToken cancellation)
     {
-        using var document = Open(path, cancellation);
-        if (!document.Input.Stamp.SameObjectAndContent(expected)) throw new McpToolError(VideoCompress.Changed);
+        using var document = Open(path, cancellation, expected);
         var clean = CopyPixels(OnWhite(document.Bitmap), cancellation);
         BitmapSource frame = clean; var size = (clean.PixelWidth, clean.PixelHeight);
         var fit = JpegBudget.Fit(maxBytes, clean.PixelWidth, clean.PixelHeight, (width, height, quality) =>

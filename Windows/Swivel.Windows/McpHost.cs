@@ -67,10 +67,17 @@ public sealed class McpHost : IMcpHost
     public DateTime UtcNow => DateTime.UtcNow;
     public FileStamp Inspect(string path) => NativeFiles.InspectStamp(path);
 
-    public string Run(string action, string path, CancellationToken token)
+    // The file is held, and checked against the plan before it is read, through publishing.
+    public string Run(string action, string path, FileStamp expected, CancellationToken token)
     {
-        if (!System.Linq.Enumerable.Any(McpSession.Actions, a => a.Id == action)) throw new McpToolError("Unknown action.");
-        return ImageTools.Run(path, action, 0, token);
+        var allowed = McpSession.Actions.FirstOrDefault(a => a.Id == action) ?? throw new McpToolError("Unknown action.");
+        if (allowed.Document)
+        {
+            using var file = DocumentTextFile.Open(path, token, expected);
+            return file.Save(allowed.Extension switch { "txt" => TextExport.Utf8, "rtf" => TextExport.Rtf, "docx" => TextExport.Docx, "html" => TextExport.Html, "odt" => TextExport.Odt, _ => throw new McpToolError("Unknown action.") }, token);
+        }
+        using var document = ImageTools.Open(path, token, expected);
+        return ImageTools.Export(document, action, 0, token);
     }
 
     // On this STA thread, like the image actions; OCR itself awaits on the thread pool.

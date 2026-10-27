@@ -1047,6 +1047,18 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.109 MCP 文档文字转换与逐个文件再核对（G02 部分）
+
+批次开始 `git fetch`：origin/main 仍为 `c053dd0`（Mac 1.14.5），不含 `Windows/` 改动；0.108 已推送，Windows CI 40509653918 通过（核心 4,520,456、原生 5,358）。
+
+`McpAction` 新增 `Document`（默认 false）、`Extension`（图片动作用 `ImageOutputInfo.Format`，文档动作取 `document.` 之后的部分）与 `Accepts(path)`（图片动作用 `Catalog.IsImage`，文档动作用 `McpSession.IsDocument`，即 `DocumentText.Extensions`）。`Actions` 末尾追加 `document.txt`、`document.rtf`、`document.docx`、`document.html`、`document.odt`（标题 “Save Text as …”，后缀 ` text`），原有十个图片动作的顺序与 id 不变。`list_actions` 的 inputs/writes 按种类描述；`inspect_files` 的 `actions` 只列 `Accepts` 该文件的动作；`plan_action` 对不接受的文件、以及文档动作下大于 8 MiB（`DocumentText.MaxInputBytes`）的文件整次拒绝并说明原因，输出预测用 `Extension`，文档动作另加 `note`（只保留文字；文档在 apply 时才读取，读不了的那时失败）。历史条目照旧是新建文件条目（action 为新 id），旧版可读。
+
+`IMcpHost.Run(action, path, expected, token)` 新增计划印记参数，`ApplyPlan` 逐个传入。Windows `McpHost.Run`：文档动作用 `DocumentTextFile.Open(path, token, expected)`（`NativeFiles.OpenRead` 租住文件后先比较印记再读取；8 MiB 与各格式读取限制不变），再 `Save`（与“检查文档文字”窗口的五种写出完全相同：`名称 text.扩展名` 经 `WriteBeside` 独占发布）；图片动作改为 `ImageTools.Open(path, token, expected)`（同样先比较印记再解码，`plan_compress` 的图片也走这里）再 `ImageTools.Export`（原 `ImageTools.Run` 即这两步，行为不变）。两个 `Open` 的 `expected` 默认为空，界面调用不变。印记不符报 `McpSession.Changed`（由 0.108 的 `VideoCompress.Changed` 移来，plan_compress 共用）。设置页 Agent 工具说明与兼容表状态四语改写。
+
+独立 agent 审查（只读；跑核心并编译原生，对照 Windows 宿主推演）：无 P1/P2。已修 P3：计划印记原先在文档解析、图片解码之后才比较（现在 `NativeFiles.OpenRead` 后立即比较，先于读取；界面调用不传印记，行为不变）；大于 8 MiB 的文档原先能计划、到 apply 才失败（现在计划时拒绝，inputs 说明与 note 照读取器实际接受的写，并说明读不了的文档在 apply 时失败并停止其余）；“表格布局”措辞；原生拒绝检查只比较消息的一部分（现在逐字相等）；一个测试名笔误。复查确认五项全部修好，只提 TESTING 仍有占位文字（已补）。
+
+核心 4,520,463；Mac 上原生只编译（0 警告 0 错误），Windows CI 结果见下。G02 仍为部分实现，固定 52 项仍 27／23／0／2。
+
 ## 0.108 MCP 按大小压缩：plan_compress → apply_plan → undo（G02 部分）
 
 批次开始 `git fetch`：origin/main 仍为 `c053dd0`（Mac 1.14.5），不含 `Windows/` 改动；本分支 0.107 已随另一会话推送的 `cfb952a`（Mac 1.14.6）到远端，该推送未触发 Windows CI。工作区另有其他会话的 Mac 未提交改动，未触碰。

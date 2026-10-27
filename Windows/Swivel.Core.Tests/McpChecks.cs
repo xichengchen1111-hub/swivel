@@ -27,12 +27,16 @@ internal static class McpChecks
             return key[(key.LastIndexOf('\\') + 1)..];
         }
         public void CheckRename(string path) { if (Locked.Contains(path)) throw new UserError("Batch Rename does not accept read-only files, hard links or unavailable file identities."); }
-        public string Run(string action, string path, CancellationToken token)
+        public readonly List<(string Action, string Path)> Ran = new();
+        public string Run(string action, string path, FileStamp expected, CancellationToken token)
         {
             if (path == FailOn) throw Throw ?? new UserError("Could not read the image.");
             DuringRun?.Invoke();
-            string output = System.IO.Path.ChangeExtension(path, null) + " converted." + ImageOutputInfo.Format(action);
-            while (Files.ContainsKey(output)) output = output.Replace(" converted", " converted 2");
+            if (!Files[path].SameObjectAndContent(expected)) throw new UserError(McpSession.Changed);
+            Ran.Add((action, path));
+            var allowed = McpSession.Actions.First(a => a.Id == action);
+            string output = System.IO.Path.ChangeExtension(path, null) + (allowed.Document ? " text." : " converted.") + allowed.Extension;
+            while (Files.ContainsKey(output)) output = output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
             Add(output); return output;
         }
         public readonly Dictionary<string, VideoProbe> Videos = new(StringComparer.OrdinalIgnoreCase);
@@ -42,7 +46,7 @@ internal static class McpChecks
         {
             if (path == FailOn) throw Throw ?? new UserError("The target size can't be reached.");
             DuringRun?.Invoke();
-            if (!Files[path].SameObjectAndContent(expected)) throw new UserError("The file changed since planning. No file was made for it; plan again.");
+            if (!Files[path].SameObjectAndContent(expected)) throw new UserError(McpSession.Changed);
             Compressed.Add((path, maxBytes));
             string output = System.IO.Path.ChangeExtension(path, null) + " compressed." + (VideoBudget.IsVideo(path) ? "mp4" : "jpg");
             for (int n = 2; Files.ContainsKey(output); n++) output = System.IO.Path.ChangeExtension(path, null) + " compressed " + n + "." + (VideoBudget.IsVideo(path) ? "mp4" : "jpg");
@@ -188,7 +192,8 @@ internal static class McpChecks
         string photo = @"C:\Users\me\Pictures\photo.jpg", doc = @"C:\Users\me\notes.txt";
         host.Add(photo); host.Add(doc);
         var inspected = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\missing.png") }))["files"]!;
-        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Count == McpSession.Actions.Count && ((JsonArray)inspected[1]!["actions"]!).Count == 0 && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path");
+        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document).Select(a => a.Id))
+            && ((JsonArray)inspected[1]!["actions"]!).Select(a => (string)a!).SequenceEqual(new[] { "document.txt", "document.rtf", "document.docx", "document.html", "document.odt" }) && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path with the actions for its kind");
         check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes", "plan_compress", "plan_rename", "plan_move" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }),
             "MCP inspect_files names the read-only tools for images and documents");
         host.OcrLanguages = new(); host.LanguageReads = 0;
@@ -201,6 +206,33 @@ internal static class McpChecks
         check(IsError(Call(session, "inspect_files", new JsonObject { ["paths"] = new JsonArray() })) && IsError(Call(session, "inspect_files", new JsonObject { ["paths"] = new JsonArray(1) })), "MCP empty or non-string paths refused");
         check(IsError(Call(session, "plan_action", new JsonObject { ["action"] = "file.delete", ["paths"] = Paths(photo) })), "MCP unknown action refused");
         check(IsError(Call(session, "plan_action", new JsonObject { ["action"] = "convert.png", ["paths"] = Paths(doc) })), "MCP non-image refused at planning");
+        // Document actions and the per-file recheck, on their own host so the history checks below stay as they are.
+        var paper = new FakeHost(); var papers = new McpSession(paper, "0.109.0"); paper.Add(photo); paper.Add(doc);
+        check(((string)Body(Call(papers, "plan_action", new JsonObject { ["action"] = "document.odt", ["paths"] = Paths(doc, photo) }))["error"]!).StartsWith(photo + ": this action needs a plain-text", StringComparison.Ordinal), "MCP an image refused for a document action");
+        var listedActions = (JsonArray)Body(Call(papers, "list_actions", new JsonObject()))["actions"]!;
+        var odtListed = listedActions.Single(a => (string?)a!["id"] == "document.odt")!;
+        string bigDoc = @"C:\Users\me\big.rtf"; paper.Files[bigDoc] = new FileStamp(1, 999, 8 * 1024 * 1024 + 1, 1000, 2000);
+        var tooBig = Call(papers, "plan_action", new JsonObject { ["action"] = "document.txt", ["paths"] = Paths(bigDoc) });
+        check(IsError(tooBig) && ((string)Body(tooBig)["error"]!).Contains("limited to 8 MiB"), "MCP plan_action refuses a document over 8 MiB at planning");
+        paper.Files[bigDoc] = paper.Files[bigDoc] with { Size = 8 * 1024 * 1024 };
+        check(!IsError(Call(papers, "plan_action", new JsonObject { ["action"] = "document.txt", ["paths"] = Paths(bigDoc) })), "MCP plan_action accepts a document of exactly 8 MiB");
+        paper.Files.Remove(bigDoc);
+        check(((string)odtListed["inputs"]!).Contains("DOCX, ODT, RTF, or static HTML/HTM") && ((string)odtListed["writes"]!).Contains("A new ODT file holding only the document's text") && ((string)odtListed["writes"]!).Contains("'<name> text.odt'"), "MCP list_actions describes the document actions");
+        int docSaves = paper.Saves;
+        var docPlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "document.docx", ["paths"] = Paths(doc) }));
+        check((string?)docPlan["inputs"]![0]!["output"] == @"C:\Users\me\notes text.docx (or the next free numbered name)" && ((string)docPlan["note"]!).StartsWith("Only the text is kept") && paper.Saves == docSaves, "MCP plan_action plans a document's text as DOCX: " + docPlan.ToJsonString());
+        var docApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)docPlan["plan_id"]! }));
+        check((string?)docApplied["outputs"]![0] == @"C:\Users\me\notes text.docx" && paper.Ran[^1] == ("document.docx", doc) && (string?)docApplied["action"] == "document.docx", "MCP apply runs the document action");
+        check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\notes text.docx") && paper.Files.ContainsKey(doc), "MCP undo recycles a document conversion");
+        string grayFirst = @"C:\Users\me\a1.png", grayLater = @"C:\Users\me\a2.png"; paper.Add(grayFirst); paper.Add(grayLater);
+        var heldPlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "image.gray", ["paths"] = Paths(grayFirst, grayLater) }));
+        bool touched = false;
+        paper.DuringRun = () => { if (!touched) { touched = true; paper.Files[grayLater] = paper.Files[grayLater] with { Size = 77 }; } };
+        var grayHeld = Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)heldPlan["plan_id"]! });
+        paper.DuringRun = null;
+        check(IsError(grayHeld) && (int)Body(grayHeld)["completed"]! == 1 && ((string)Body(grayHeld)["error"]!).StartsWith(grayLater + ": The file changed since planning", StringComparison.Ordinal) && Body(grayHeld)["entry_id"] is JsonValue,
+            "MCP plan_action rechecks each file once held, so one edited during an earlier file's work is refused: " + Body(grayHeld).ToJsonString());
+        Call(papers, "undo", new JsonObject());
         int savesBefore = host.Saves;
         var plan = Body(Call(session, "plan_action", new JsonObject { ["action"] = "convert.png", ["paths"] = Paths(photo) }));
         check(plan["plan_id"]!.ToString().Length == 32 && ((string)plan["inputs"]![0]!["output"]!).StartsWith(@"C:\Users\me\Pictures\photo converted.png", StringComparison.Ordinal) && host.Saves == savesBefore && host.Files.Count == 2, "MCP plan writes nothing and predicts the output");
