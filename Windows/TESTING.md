@@ -1331,6 +1331,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Core 4,519,767 on Mac; native compiled 0 warnings/errors (not run here).
 - Native `CommonSimilarityNativeChecks` additions: in both text and image modes and four languages, a cross-root pair lists its two files, Move stays disabled until one is chosen and is disabled again when the pair is cleared; after the fixture folder is renamed, a fresh two-root text comparison records stamps for both opaque keys, moves the file in one root while keeping the other root's file intact, and Undo restores it.
+- Real-Windows CI 40443965440 (covers 0.96–0.98): core 4,519,768 and native 5,218 checks passed, including the real cross-root duplicate UI checks, the similar-pair refusals, moves keeping the other file (single folder and cross-root) and Undo.
 - Independent review: no P1/P2. Fixed P3: scope sentence wording. Accepted: single-folder Similar windows now name files by full path in moved/problem lines (512-unit visible cap covers root plus relative path).
 
 ## Windows0.97 — Move one file of a similar pair to the Recycle Bin (F04 part, 2026-10-27)
