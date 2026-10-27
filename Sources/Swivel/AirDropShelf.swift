@@ -31,6 +31,13 @@ final class AirDropShelf {
     private var started = Date()
     private var scan: Task<Void, Never>?
     private var generation = 0
+    /// At most one check is waiting and one listing is running. Events that arrive meanwhile fold into a single
+    /// follow-up, so a busy Downloads folder can't start a recheck loop per event.
+    private var checkScheduled = false
+    private var scanning = false
+    private var rescan = false
+    /// Listings taken so far, for tests.
+    private(set) var scans = 0
     private let queue = DispatchQueue(label: "local.swivel.airdrop-shelf")
 
     init(folder: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads"),
@@ -107,13 +114,17 @@ final class AirDropShelf {
         scan?.cancel(); scan = nil
         source?.cancel(); source = nil
         known = []; waiting = [:]
+        checkScheduled = false; scanning = false; rescan = false
     }
 
     private func schedule(after delay: Double) {
+        guard !checkScheduled else { return }
+        checkScheduled = true
         let generation = self.generation
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.generation == generation else { return }
+                self.checkScheduled = false
                 self.check()
             }
         }
@@ -121,10 +132,14 @@ final class AirDropShelf {
 
     private func check() {
         guard source != nil else { return }
+        guard !scanning else { rescan = true; return }
+        scanning = true
+        scans += 1
         let folder = self.folder, generation = self.generation, started = self.started
         scan = Task { [weak self] in
             let entries = await Self.list(folder, on: self?.queue ?? .global())
             guard let self, self.generation == generation else { return }
+            self.scanning = false
             var ready: [URL] = []
             for item in entries where !self.known.contains(item.entry) {
                 if let previous = self.waiting[item.entry], previous.snapshot.size == item.snapshot.size,
@@ -140,7 +155,10 @@ final class AirDropShelf {
             // Names that disappeared while waiting are forgotten.
             let present = Set(entries.map(\.entry))
             self.waiting = self.waiting.filter { present.contains($0.key) }
-            if !self.waiting.isEmpty { self.schedule(after: 1) }
+            if !self.waiting.isEmpty || self.rescan {
+                self.schedule(after: self.waiting.isEmpty ? 0.4 : 1)
+                self.rescan = false
+            }
             if !ready.isEmpty { self.deliver(ready) }
         }
     }

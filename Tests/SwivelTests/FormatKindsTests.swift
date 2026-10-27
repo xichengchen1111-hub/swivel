@@ -357,6 +357,41 @@ struct FormatKindsTests {
 
     // MARK: AirDrop
 
+    @Test func manyFolderEventsWhileAFileGrowsShareOneRecheck() async throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        var delivered: [String] = []
+        let watcher = AirDropShelf(folder: dir) { delivered += $0.map(\.lastPathComponent) }
+        watcher.start()
+        defer { watcher.stop() }
+        let ready = Date().addingTimeInterval(2)
+        while !watcher.isWatching && Date() < ready { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(watcher.isWatching)
+        try await Task.sleep(for: .milliseconds(600))  // let the start-up check finish
+
+        let growing = dir.appendingPathComponent("clip.mov")
+        try Data("x".utf8).write(to: growing)
+        let value = "0083;\(String(UInt64(Date().timeIntervalSince1970), radix: 16));sharingd;1234"
+        #expect(setxattr(growing.path, "com.apple.quarantine", value, value.utf8.count, 0, 0) == 0)
+        let handle = try FileHandle(forWritingTo: growing)
+        try handle.seekToEnd()
+        let before = watcher.scans
+        // 40 folder events in two seconds while the file keeps growing.
+        for tick in 0..<40 {
+            try handle.write(contentsOf: Data(count: 4096))
+            let marker = dir.appendingPathComponent(".tick\(tick)")
+            try Data().write(to: marker)
+            try FileManager.default.removeItem(at: marker)
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try handle.close()
+        let during = watcher.scans - before
+        #expect(during >= 1 && during <= 8, "\(during) listings for 40 events")
+        for _ in 0..<60 where delivered.isEmpty { try await Task.sleep(for: .milliseconds(100)) }
+        try await Task.sleep(for: .milliseconds(1500))
+        #expect(delivered == ["clip.mov"])
+    }
+
     @Test func onlyRecentSharingdQuarantineCountsAsAirDrop() {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let hex = { (t: Double) in String(UInt64(t), radix: 16) }
