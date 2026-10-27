@@ -120,10 +120,59 @@ public sealed class McpHost : IMcpHost
         return session.Execute(plan, token);
     }
 
+    // The Move Files leases: the folder chain, and each file with its folder, held as the move holds them.
+    public MoveIdentity CheckFolder(string folder)
+    {
+        try { using var lease = NativeFiles.MoveDirectoryLease.Open(folder, CancellationToken.None); return lease.Snapshot.LeafIdentity; }
+        catch (UserError error) when (error.Message == NativeFiles.LocalOnly)
+        { throw new McpToolError("Choose a plain folder on a local drive; files, links, junctions, network drives and cloud placeholders are not supported."); }
+        catch (UserError error) { throw ForAgent(error); }
+    }
+
+    public bool CheckMove(string path, string folder)
+    {
+        try { using var session = MoveSession.Open(new[] { path }, folder, CancellationToken.None); return session.Plan[0].Changed; }
+        catch (UserError error) { throw ForAgent(error); }
+    }
+
+    // Move Files speaks to someone looking at its preview window; an agent gets the facts.
+    private static McpToolError ForAgent(Exception error) => new(error.Message switch
+    {
+        "Move Files does not accept read-only files or hard links." => "Swivel does not move read-only or hard-linked files.",
+        "Move Files currently requires source and destination on the same NTFS volume. Nothing was copied or deleted." => "Swivel moves files only within one NTFS drive.",
+        "Move Files requires complete Windows file identities." => "Swivel needs complete Windows file identities to move a file.",
+        string message => message.Replace(" Create a new move preview.", "").Replace("; create a new preview.", "."),
+    });
+
+    // While the leases are held nobody else can rename, move or delete these files, so their
+    // stamps and stored names are checked once here, then the Move Files transaction runs.
+    public RenameOutcome Move(IReadOnlyList<RenamePair> plan, IReadOnlyList<FileStamp> expected, MoveIdentity? folder, CancellationToken token)
+    {
+        string destination = MoveRules.Parent(plan[0].Destination);
+        if (plan.Any(p => MoveRules.Parent(p.Destination) != destination || MoveRules.FileName(p.Destination) != MoveRules.FileName(p.Source)))
+            throw new ArgumentException("A move goes into one folder and keeps names.");
+        MoveSession session;
+        try { session = MoveSession.Open(plan.Select(p => p.Source).ToArray(), destination, token); }
+        catch (UserError error) { throw ForAgent(error); }
+        using (session)
+        {
+            if (folder is not null && session.DestinationIdentity != folder) throw new McpToolError("The destination folder was replaced since planning.");
+            if (session.Plan.Where((pair, i) => pair.Destination != plan[i].Destination).Any()) throw new McpToolError("A file is already in that folder.");
+            var stamps = session.Stamps;
+            if (stamps.Where((stamp, i) => !stamp.SameObjectAndContent(expected[i])).Any()) throw new McpToolError("A file changed just now.");
+            if (session.StoredNames.Where((name, i) => name != MoveRules.FileName(plan[i].Source)).Any()) throw new McpToolError("A file's name changed just now.");
+            var outcome = session.Execute(token);
+            return new RenameOutcome(outcome.Locations.Select((l, i) => new RenameLocation(l.Original, l.Current, stamps[i])).ToArray(),
+                outcome.Error is UserError failed ? ForAgent(failed) : outcome.Error, outcome.Cancelled);
+        }
+    }
+
     public FileStamp? Stamp(string path)
     {
         try { return NativeFiles.InspectStamp(path); }
         catch (Win32Exception error) when (error.NativeErrorCode is 2 or 3) { return null; }
+        // A folder there now: no file to compare (it still takes the name, which NameTaken reports).
+        catch (Win32Exception error) when (error.NativeErrorCode == 5 && Directory.Exists(path)) { return null; }
     }
 
     public void Recycle(string path, FileStamp expected)

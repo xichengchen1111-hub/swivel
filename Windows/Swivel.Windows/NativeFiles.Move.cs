@@ -77,6 +77,9 @@ public static partial class NativeFiles
         public string CurrentPath { get; private set; }
         public MoveFileStamp? VerifiedStamp { get; private set; }
         public MoveDirectorySnapshot CurrentDirectory { get; private set; }
+        /// The held file's stamp and stored name (long name, exact case), as the agent tools compare them.
+        public FileStamp FileStamp => ReadStamp(handle);
+        public string StoredName => Leaf(FinalPath(handle));
         private MoveLease(string path, SafeFileHandle handle, MoveDirectoryLease start, MoveDirectoryLease destination, MoveFileStamp stamp)
         {
             CurrentPath = path; this.handle = handle; this.start = start; this.destination = destination;
@@ -182,6 +185,10 @@ public sealed class MoveSession : IDisposable
     private readonly List<NativeFiles.MoveLease> leases = new();
     private bool executed, disposed;
     public IReadOnlyList<MovePair> Plan { get; private set; } = Array.Empty<MovePair>();
+    public IReadOnlyList<FileStamp> Stamps => leases.Select(x => x.FileStamp).ToArray();
+    public IReadOnlyList<string> StoredNames => leases.Select(x => x.StoredName).ToArray();
+    /// The held destination folder of a move (not of an undo, which may return to several).
+    public MoveIdentity? DestinationIdentity { get; private set; }
     private MoveSession() { }
     private NativeFiles.MoveDirectoryLease Directory(string path, CancellationToken token)
     {
@@ -207,7 +214,7 @@ public sealed class MoveSession : IDisposable
                 var lease = NativeFiles.MoveLease.Open(path, source, destination); session.leases.Add(lease);
                 plan.Add(new(path, source.Snapshot.LeafIdentity == destination.Snapshot.LeafIdentity ? path : MoveRules.Destination(path, destinationDirectory)));
             }
-            session.Plan = plan.AsReadOnly(); session.Preflight(token); return session;
+            session.Plan = plan.AsReadOnly(); session.DestinationIdentity = destination.Snapshot.LeafIdentity; session.Preflight(token); return session;
         }
         catch (Exception error) { session.DisposeAfterFailure(error); throw; }
     }

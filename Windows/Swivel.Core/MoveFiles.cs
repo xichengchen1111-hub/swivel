@@ -88,10 +88,12 @@ public static class MoveRules
     {
         ValidateDirectory(snapshot); return new(snapshot.Path, Array.AsReadOnly(snapshot.Ancestors.ToArray()));
     }
-    // A rename updates change time, and NTFS name tunnelling can replace creation time with
-    // that of a recently vacated name; identity, length, write time, attributes and links remain.
+    // A rename updates change time, NTFS name tunnelling can replace creation time with that
+    // of a recently vacated name, and the archive bit may be set; identity, length, write time,
+    // the other attributes and links remain.
     public static bool SameRenameMetadata(MoveFileStamp before, MoveFileStamp after)
-        => before with { ChangeTime = after.ChangeTime, CreationTime = after.CreationTime } == after;
+        => before with { ChangeTime = after.ChangeTime, CreationTime = after.CreationTime, Attributes = before.Attributes | Archive } == after with { Attributes = after.Attributes | Archive };
+    private const uint Archive = 0x20;
 }
 
 // A lease owns its source object and both complete directory chains. MoveTo updates

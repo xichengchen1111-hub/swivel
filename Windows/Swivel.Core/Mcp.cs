@@ -39,6 +39,17 @@ public interface IMcpHost
     /// anything) only if each is still exactly the file expected; a failed step rolls back. The
     /// outcome says where each file is afterwards.
     RenameOutcome Rename(IReadOnlyList<RenamePair> plan, IReadOnlyList<FileStamp> expected, CancellationToken token);
+    /// Throws unless this is an existing local NTFS folder Swivel can move files into; returns
+    /// its identity, so a folder replaced before the move can be told apart.
+    MoveIdentity CheckFolder(string folder);
+    /// False when the file is already in that folder; throws when Swivel cannot move it there
+    /// (another drive or file system, a read-only file, a hard link).
+    bool CheckMove(string path, string folder);
+    /// Moves files into the one folder their destinations name, keeping their names and never
+    /// replacing anything, only if each is still exactly the file expected; a failed step moves
+    /// the others back. With `folder`, the destination must still be that folder. The outcome
+    /// says where each file is afterwards.
+    RenameOutcome Move(IReadOnlyList<RenamePair> plan, IReadOnlyList<FileStamp> expected, MoveIdentity? folder, CancellationToken token);
     /// The identity of a file Swivel created, or null when it no longer exists.
     FileStamp? Stamp(string path);
     /// Moves a file Swivel created to the Recycle Bin only if it is still exactly that file.
@@ -87,8 +98,9 @@ public sealed class McpSession
     private readonly string version;
     private readonly Dictionary<string, Plan> plans = new(StringComparer.Ordinal);
 
-    /// An action plan has Action; a rename plan has Renames (one pair per input, in order).
-    private sealed record Plan(string Id, McpAction? Action, IReadOnlyList<RenamePair>? Renames, IReadOnlyList<(string Path, FileStamp Stamp)> Inputs, DateTime Expires);
+    /// An action plan has Action; a rename plan has Renames and a move plan Moves (one pair per
+    /// input, in order).
+    private sealed record Plan(string Id, McpAction? Action, IReadOnlyList<RenamePair>? Renames, IReadOnlyList<(string Path, FileStamp Stamp)> Inputs, DateTime Expires, IReadOnlyList<RenamePair>? Moves = null, MoveIdentity? Folder = null);
 
     public McpSession(IMcpHost host, string version) { this.host = host; this.version = version; }
 
@@ -136,7 +148,7 @@ public sealed class McpSession
             ["protocolVersion"] = Versions.Contains(requested) ? requested : Versions[0],
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false } },
             ["serverInfo"] = new JsonObject { ["name"] = "swivel-windows", ["title"] = "Swivel (Windows preview)", ["version"] = version },
-            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action or plan_rename, then apply_plan with the returned plan_id; outputs are new files beside the originals, renames stay in each file's folder, and nothing is overwritten. undo moves the files an apply created to the Recycle Bin, or renames files back, if they are unchanged.",
+            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action, plan_rename or plan_move, then apply_plan with the returned plan_id; outputs are new files beside the originals, renames stay in each file's folder, moves stay on one drive and keep names, and nothing is overwritten. undo moves the files an apply created to the Recycle Bin, or renames or moves files back, if they are unchanged.",
         };
     }
 
@@ -170,11 +182,13 @@ public sealed class McpSession
                     ["start"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 99_999_999, ["description"] = "First number (default 1)" },
                     ["digits"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 8, ["description"] = "Digits in each number (default 3)" },
                 }, new[] { "paths" }, true, false),
-            Tool("apply_plan", "Apply plan", "Runs a plan from plan_action or plan_rename. Refused if any input changed since planning. Creates new files beside the originals, or renames files within their folders; never overwrites. Logged for undo.",
+            Tool("plan_move", "Plan moving files", "Plans moving 1–100 files into an existing folder on the same NTFS drive, keeping their names. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Files already in that folder, names already taken there (nothing is overwritten or renumbered), two files with one name, and files on another drive, read-only or hard-linked are reported on their rows; folders are not moved. Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
+                new JsonObject { ["paths"] = Paths(), ["destination"] = new JsonObject { ["type"] = "string", ["description"] = "Absolute path of an existing local folder" } }, new[] { "paths", "destination" }, true, false),
+            Tool("apply_plan", "Apply plan", "Runs a plan from plan_action, plan_rename or plan_move. Refused if any input changed since planning. Creates new files beside the originals, renames files within their folders, or moves files into the planned folder; never overwrites. Logged for undo.",
                 new JsonObject { ["plan_id"] = new JsonObject { ["type"] = "string" } }, new[] { "plan_id" }, false, false),
-            Tool("undo", "Undo", "Moves the files created by one logged apply to the Recycle Bin, only if each is unchanged; for a rename, renames all its files back together, only if none changed and every old name is free. Without entry_id it takes the newest apply that is not fully undone; to reach an older one, pass its entry_id from history. dry_run reports without changing anything.",
+            Tool("undo", "Undo", "Moves the files created by one logged apply to the Recycle Bin, only if each is unchanged; for a rename, renames all its files back together, only if none changed and every old name is free; for a move, moves each unchanged file back to its old folder if its old name is free, leaving the others where they are. Without entry_id it takes the newest apply that is not fully undone; to reach an older one, pass its entry_id from history. dry_run reports without changing anything.",
                 new JsonObject { ["entry_id"] = new JsonObject { ["type"] = "string" }, ["dry_run"] = new JsonObject { ["type"] = "boolean" } }, Array.Empty<string>(), false, true),
-            Tool("history", "History", "Lists logged applies, newest first, with their outputs and whether they were undone.",
+            Tool("history", "History", "Lists logged applies, newest first, with their outputs, renames or moves and whether they were undone.",
                 new JsonObject { ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = MaxHistory } }, Array.Empty<string>(), true, false));
     }
 
@@ -186,7 +200,7 @@ public sealed class McpSession
         if (parameters["arguments"] is not null and not JsonObject) throw new McpInvalidParams("Tool arguments must be an object.");
         Func<JsonObject, CancellationToken, JsonObject> tool = name switch
         {
-            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction, "plan_rename" => PlanRename,
+            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction, "plan_rename" => PlanRename, "plan_move" => PlanMove,
             "apply_plan" => ApplyPlan, "undo" => Undo, "history" => History,
             _ => throw new McpInvalidParams("Unknown tool: " + name),
         };
@@ -240,7 +254,7 @@ public sealed class McpSession
                 {
                     ["path"] = path, ["ok"] = true, ["size"] = stamp.Size,
                     ["actions"] = new JsonArray((Catalog.IsImage(path) ? Actions.Select(a => (JsonNode)a.Id) : Enumerable.Empty<JsonNode>()).ToArray()),
-                    ["tools"] = new JsonArray((Catalog.IsImage(path) ? ((ocr ??= host.TextLanguages.Count > 0) ? new[] { "extract_text", "read_codes" } : new[] { "read_codes" }) : IsDocument(path) ? new[] { "extract_text" } : Array.Empty<string>()).Append("plan_rename").Select(t => (JsonNode)t).ToArray()),
+                    ["tools"] = new JsonArray((Catalog.IsImage(path) ? ((ocr ??= host.TextLanguages.Count > 0) ? new[] { "extract_text", "read_codes" } : new[] { "read_codes" }) : IsDocument(path) ? new[] { "extract_text" } : Array.Empty<string>()).Append("plan_rename").Append("plan_move").Select(t => (JsonNode)t).ToArray()),
                 });
             }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { files.Add(new JsonObject { ["path"] = path, ["ok"] = false, ["error"] = error.Message }); }
@@ -339,12 +353,12 @@ public sealed class McpSession
         };
     }
 
-    private Plan Store(McpAction? action, IReadOnlyList<RenamePair>? renames, IReadOnlyList<(string, FileStamp)> inputs)
+    private Plan Store(McpAction? action, IReadOnlyList<RenamePair>? renames, IReadOnlyList<(string, FileStamp)> inputs, IReadOnlyList<RenamePair>? moves = null, MoveIdentity? folder = null)
     {
         DateTime now = host.UtcNow;
         foreach (var stale in plans.Values.Where(p => p.Expires <= now).ToArray()) plans.Remove(stale.Id);
         if (plans.Count >= MaxPlans) throw new McpToolError("Too many unused plans. Apply or let some expire first.");
-        var plan = new Plan(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(), action, renames, inputs, now + PlanLifetime);
+        var plan = new Plan(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(), action, renames, inputs, now + PlanLifetime, moves, folder);
         plans[plan.Id] = plan;
         return plan;
     }
@@ -386,17 +400,7 @@ public sealed class McpSession
         if (rules.Base.Length == 0 && rules.Find.Length == 0 && rules.Prefix.Length == 0 && rules.Suffix.Length == 0 && !rules.Number)
             throw new McpToolError("Give at least one of base_name, find, prefix, suffix or number.");
         rules.CheckLimits(paths.Length);
-        var inputs = new List<(string, FileStamp)>();
-        foreach (string path in paths)
-        {
-            token.ThrowIfCancellationRequested();
-            string stored;
-            try { inputs.Add((path, host.Inspect(path))); stored = host.StoredName(path); }
-            catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }
-            // New names (and the names undo restores) are built from the path as given, so it
-            // must spell the file's own name: not another case, not an 8.3 short name.
-            if (stored != path[(path.LastIndexOf('\\') + 1)..]) throw new McpToolError(path + ": on disk this file is named " + stored + ". Pass the path with that exact name.");
-        }
+        var inputs = SpeltInputs(paths, token);
         var destinations = paths.Select(rules.Destination).ToArray();
         var rows = new JsonArray(); bool problems = false;
         for (int i = 0; i < paths.Length; i++)
@@ -444,6 +448,76 @@ public sealed class McpSession
         return new JsonObject { ["plan_id"] = plan.Id, ["action"] = "rename", ["expires"] = plan.Expires.ToString("O"), ["can_apply"] = true, ["renames"] = rows };
     }
 
+    /// Each file's stamp, with its path spelling its stored name: new names (and the names undo
+    /// restores) are built from the path as given, so not another case, not an 8.3 short name.
+    private List<(string, FileStamp)> SpeltInputs(string[] paths, CancellationToken token)
+    {
+        var inputs = new List<(string, FileStamp)>();
+        foreach (string path in paths)
+        {
+            token.ThrowIfCancellationRequested();
+            string stored;
+            try { inputs.Add((path, host.Inspect(path))); stored = host.StoredName(path); }
+            catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }
+            if (stored != path[(path.LastIndexOf('\\') + 1)..]) throw new McpToolError(path + ": on disk this file is named " + stored + ". Pass the path with that exact name.");
+        }
+        return inputs;
+    }
+
+    private JsonObject PlanMove(JsonObject arguments, CancellationToken token)
+    {
+        foreach (var (key, _) in arguments)
+            if (key is not ("paths" or "destination")) throw new McpToolError("Unknown argument " + key + ". plan_move takes paths and destination.");
+        var paths = PathsArgument(arguments);
+        if (arguments["destination"] is not JsonValue d || d.GetValueKind() != JsonValueKind.String || !IsWellFormed((string)d!))
+            throw new McpToolError("destination must be the absolute path of an existing folder.");
+        string folder; MoveIdentity folderIdentity;
+        try { folder = MoveRules.DirectoryPath((string)d!); folderIdentity = host.CheckFolder(folder); }
+        catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError("destination: " + error.Message); }
+        var inputs = SpeltInputs(paths, token);
+        // Names are kept, so the moved file is named as the path spells it.
+        var destinations = paths.Select(p => folder.TrimEnd('\\') + p[p.LastIndexOf('\\')..]).ToArray();
+        var rows = new JsonArray(); bool problems = false;
+        for (int i = 0; i < paths.Length; i++)
+        {
+            token.ThrowIfCancellationRequested();
+            string from = paths[i], to = destinations[i];
+            string? issue = null;
+            if (string.Equals(MoveRules.Parent(from), folder, StringComparison.OrdinalIgnoreCase)) issue = "Already in this folder.";
+            else
+            {
+                try { WindowsPathPolicy.Validate(to); }
+                catch (UserError error) { issue = error.Message; }
+            }
+            if (issue is null && destinations.Where((x, j) => j != i && string.Equals(x, to, StringComparison.OrdinalIgnoreCase)).Any())
+                issue = "Another file in this plan has the same name; Swivel keeps names, so only one could go there.";
+            if (issue is null)
+            {
+                // Through an 8.3 spelling of its own folder, the name a file "takes" is its own.
+                try { if (host.NameTaken(to)) issue = IsItself(to, inputs[i].Item2) ? "Already in this folder." : "A file or folder with this name is already in the destination; nothing is overwritten."; }
+                catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { issue = "Could not check whether this name is free: " + error.Message; }
+            }
+            if (issue is null)
+            {
+                // The same folder spelt another way (an 8.3 short name) is caught here.
+                try { if (!host.CheckMove(from, folder)) issue = "Already in this folder."; }
+                catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { issue = "Swivel can't move this file there: " + error.Message; }
+            }
+            var row = new JsonObject { ["from"] = from, ["to"] = to };
+            if (issue is not null) { row["issue"] = issue; problems = true; }
+            rows.Add(row);
+        }
+        if (problems) return new JsonObject { ["can_apply"] = false, ["destination"] = folder, ["moves"] = rows, ["next"] = "Resolve the issues (or leave those files out) and plan again." };
+        var plan = Store(null, null, inputs, paths.Select((p, i) => new RenamePair(p, destinations[i])).ToArray(), folderIdentity);
+        return new JsonObject { ["plan_id"] = plan.Id, ["action"] = "move", ["expires"] = plan.Expires.ToString("O"), ["can_apply"] = true, ["destination"] = folder, ["moves"] = rows };
+    }
+
+    private bool IsItself(string path, FileStamp stamp)
+    {
+        try { return host.Stamp(path) is { } there && there.SameObjectAndContent(stamp); }
+        catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { return false; }
+    }
+
     /// The first character that hides, disguises or reorders part of a name: controls, format
     /// and text-direction marks, line and paragraph separators, spaces other than U+0020,
     /// Unicode's default-ignorable fillers and selectors, and the braille blank.
@@ -477,7 +551,7 @@ public sealed class McpSession
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message + " Nothing was applied."); }
             if (!now.SameObjectAndContent(stamp)) throw new McpToolError(path + " changed since planning. Nothing was applied; plan again.");
         }
-        if (plan.Renames is not null) return ApplyRename(plan, token);
+        if (plan.Renames is not null || plan.Moves is not null) return ApplyRename(plan, token);
         var action = plan.Action!;
         var outputs = new JsonArray();
         var entry = new JsonObject
@@ -525,19 +599,26 @@ public sealed class McpSession
         throw new McpPartial(body);
     }
 
+    /// A rename or move plan: both log where each file went, under "renames" or "moves".
     private JsonObject ApplyRename(Plan plan, CancellationToken token)
     {
-        var pairs = plan.Renames!;
+        bool move = plan.Moves is not null;
+        var pairs = plan.Moves ?? plan.Renames!;
+        string action = move ? "move" : "rename", list = move ? "moves" : "renames", done = move ? "moved" : "renamed";
         RenameOutcome outcome;
-        try { outcome = host.Rename(pairs, plan.Inputs.Select(i => i.Stamp).ToArray(), token); }
-        catch (Exception error) when (McpToolError.Expected(error)) { throw new McpToolError((error is OperationCanceledException ? "Cancelled." : error.Message) + " Nothing was renamed."); }
+        try
+        {
+            var expected = plan.Inputs.Select(i => i.Stamp).ToArray();
+            outcome = move ? host.Move(pairs, expected, plan.Folder, token) : host.Rename(pairs, expected, token);
+        }
+        catch (Exception error) when (McpToolError.Expected(error)) { throw new McpToolError((error is OperationCanceledException ? "Cancelled." : error.Message) + " Nothing was " + done + "."); }
         // Only files away from their old names are logged; a rolled-back step leaves none.
         var moved = outcome.Remaining;
         var entry = new JsonObject
         {
             ["id"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), ["time"] = host.UtcNow.ToString("O"),
-            ["action"] = "rename", ["outputs"] = new JsonArray(), // kept for older versions, which read only outputs
-            ["renames"] = new JsonArray(moved.Select(m => { var node = StampNode(m.Current, m.Stamp); node["from"] = m.Original; return (JsonNode)node; }).ToArray()),
+            ["action"] = action, ["outputs"] = new JsonArray(), // kept for older versions, which read only outputs
+            [list] = new JsonArray(moved.Select(m => { var node = StampNode(m.Current, m.Stamp); node["from"] = m.Original; return (JsonNode)node; }).ToArray()),
         };
         string? unlogged = null;
         if (moved.Count > 0)
@@ -546,26 +627,27 @@ public sealed class McpSession
             catch (Exception error) when (McpToolError.Expected(error)) { unlogged = error.Message; }
         }
         string? failure = outcome.Error is null ? null : outcome.Cancelled ? "Cancelled." : outcome.Error.Message;
-        if (failure is not null && moved.Count == 0) throw new McpToolError(failure + " Every name was restored; nothing was renamed.");
+        if (failure is not null && moved.Count == 0) throw new McpToolError(failure + (move ? " Every file was moved back; nothing was moved." : " Every name was restored; nothing was renamed."));
         var body = new JsonObject
         {
-            ["entry_id"] = moved.Count > 0 && unlogged is null ? (string)entry["id"]! : null, ["action"] = "rename",
-            ["renames"] = new JsonArray(moved.Select(m => (JsonNode)new JsonObject { ["from"] = m.Original, ["to"] = m.Current }).ToArray()),
+            ["entry_id"] = moved.Count > 0 && unlogged is null ? (string)entry["id"]! : null, ["action"] = action,
+            [list] = new JsonArray(moved.Select(m => (JsonNode)new JsonObject { ["from"] = m.Original, ["to"] = m.Current }).ToArray()),
             ["completed"] = moved.Count(m => pairs.Any(p => p.Source == m.Original && p.Destination == m.Current)), ["total"] = pairs.Count(p => p.Changed),
         };
         if (unlogged is not null)
         {
-            body["error"] = (failure is null ? "" : failure + " ") + "The files were renamed but could not be logged for undo (" + unlogged + "); rename them back yourself if that is not wanted.";
+            body["error"] = (failure is null ? "" : failure + " ") + "The files were " + done + " but could not be logged for undo (" + unlogged + "); " + (move ? "move" : "rename") + " them back yourself if that is not wanted.";
             throw new McpPartial(body);
         }
         if (failure is null) return body;
-        body["error"] = failure + " Some names could not be restored; where each of these files is now is listed and logged for undo.";
+        body["error"] = failure + (move ? " Some files could not be moved back" : " Some names could not be restored") + "; where each of these files is now is listed and logged for undo.";
         throw new McpPartial(body);
     }
 
     private static bool Pending(JsonObject entry)
         => ((JsonArray)entry["outputs"]!).Any(o => o!["undone"]?.GetValue<bool>() != true)
-        || entry["renames"] is JsonArray renames && renames.Any(r => r!["undone"]?.GetValue<bool>() != true);
+        || entry["renames"] is JsonArray renames && renames.Any(r => r!["undone"]?.GetValue<bool>() != true)
+        || entry["moves"] is JsonArray moves && moves.Any(m => m!["undone"]?.GetValue<bool>() != true);
 
     private JsonObject Undo(JsonObject arguments, CancellationToken token)
     {
@@ -579,6 +661,7 @@ public sealed class McpSession
             : entries.OfType<JsonObject>().FirstOrDefault(e => (string?)e["id"] == wanted))
             ?? throw new McpToolError(wanted is null ? "Nothing to undo." : "Unknown entry_id. Use history.");
         if (entry["renames"] is JsonArray { Count: > 0 } renames) return UndoRename(history, entry, renames, dryRun, token);
+        if (entry["moves"] is JsonArray { Count: > 0 } moves) return UndoMove(history, entry, moves, dryRun, token);
         var results = new JsonArray();
         bool changed = false;
         try
@@ -628,17 +711,19 @@ public sealed class McpSession
             try
             {
                 var expected = ReadStamp(row);
-                // Already at its old name, spelt exactly so: an earlier undo whose log could not be
-                // saved, or by hand. Checked first, as in a chain or swap another file holds `path` again.
-                // The same file still at `path` too (a hard link made since) is not back.
-                back = host.Stamp(from) is { } there && there.SameObjectAndContent(expected) && host.StoredName(from) == from[(from.LastIndexOf('\\') + 1)..]
-                    && (string.Equals(from, path, StringComparison.OrdinalIgnoreCase) || host.Stamp(path) is not { } at || !at.SameObjectAndContent(expected));
+                // Checked first, as in a chain or swap another file holds `path` again.
+                back = Back(path, from, expected);
                 var current = back ? null : host.Stamp(path);
                 if (back) { }
                 else if (current is null) problem = "missing; left as is";
                 else if (!current.Value.SameObjectAndContent(expected)) problem = "changed since the rename; left alone";
                 else if (!string.Equals(from, path, StringComparison.OrdinalIgnoreCase) && !rows.Any(r => string.Equals((string)r["path"]!, from, StringComparison.OrdinalIgnoreCase)) && host.NameTaken(from))
                     problem = "its old name is taken now; left alone";
+                else if (dryRun)
+                {
+                    try { host.CheckRename(path); }
+                    catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { problem = "would not be renamed back: " + error.Message; }
+                }
             }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { problem = "not checked: " + error.Message; }
             var result = new JsonObject { ["path"] = path, ["from"] = from, ["result"] = problem ?? (back ? "already back at its old name" : dryRun ? "would be renamed back" : "renamed back") };
@@ -687,6 +772,81 @@ public sealed class McpSession
         return Reply(outcome.Error is null ? null : "The undo stopped; files that did not go back are where results say, and stay logged.");
     }
 
+    /// The file is already at its old path, spelt exactly so: an earlier undo whose log could not
+    /// be saved, or by hand. The same file still at `path` too (a hard link made since) is not back.
+    private bool Back(string path, string from, FileStamp expected)
+        => host.Stamp(from) is { } there && there.SameObjectAndContent(expected) && host.StoredName(from) == from[(from.LastIndexOf('\\') + 1)..]
+            && (string.Equals(from, path, StringComparison.OrdinalIgnoreCase) || host.Stamp(path) is not { } at || !at.SameObjectAndContent(expected));
+
+    /// Each moved file goes back on its own, like the files an action created: one that changed,
+    /// is missing or whose old name is taken stays where it is, and the others still go back.
+    private JsonObject UndoMove(JsonObject history, JsonObject entry, JsonArray moves, bool dryRun, CancellationToken token)
+    {
+        var results = new JsonArray();
+        bool changed = false, cancelled = false;
+        foreach (var row in moves.OfType<JsonObject>())
+        {
+            string path = (string)row["path"]!, from = (string)row["from"]!, result;
+            if (row["undone"]?.GetValue<bool>() == true) { results.Add(new JsonObject { ["path"] = path, ["from"] = from, ["result"] = "already undone" }); continue; }
+            if (cancelled || token.IsCancellationRequested) { cancelled = true; results.Add(new JsonObject { ["path"] = path, ["from"] = from, ["result"] = "not moved back: Cancelled." }); continue; }
+            try
+            {
+                var expected = ReadStamp(row);
+                if (Back(path, from, expected))
+                {
+                    result = "already back in its old folder";
+                    if (!dryRun) { row["undone"] = true; changed = true; }
+                }
+                else if (host.Stamp(path) is not { } current) result = "missing; left as is";
+                else if (!current.SameObjectAndContent(expected)) result = "changed since the move; left alone";
+                else if (FolderProblem(MoveRules.Parent(from)) is { } gone) result = "its old folder is unavailable (" + gone + "); left alone";
+                else if (host.NameTaken(from)) result = "its old name is taken now; left alone";
+                else if (dryRun) result = Unmovable(path, from) is { } why ? "would not be moved back: " + why : "would be moved back";
+                else
+                {
+                    var outcome = host.Move(new[] { new RenamePair(path, from) }, new[] { expected }, null, token);
+                    string now = outcome.Locations[0].Current;
+                    if (now == from) { row["undone"] = true; changed = true; result = "moved back"; }
+                    else
+                    {
+                        // A failed step whose rollback also failed: the log follows the file.
+                        if (now != path) { row["path"] = now; path = now; changed = true; }
+                        if (outcome.Cancelled) cancelled = true;
+                        result = "not moved back: " + (outcome.Cancelled ? "Cancelled." : outcome.Error?.Message ?? "it did not move.");
+                    }
+                }
+            }
+            catch (Exception error) when (McpToolError.Expected(error))
+            {
+                if (error is OperationCanceledException) cancelled = true;
+                result = "not moved back: " + (error is OperationCanceledException ? "Cancelled." : error.Message);
+            }
+            results.Add(new JsonObject { ["path"] = path, ["from"] = from, ["result"] = result });
+        }
+        var body = new JsonObject { ["entry_id"] = (string?)entry["id"], ["dry_run"] = dryRun, ["complete"] = moves.All(m => m!["undone"]?.GetValue<bool>() == true), ["results"] = results };
+        if (!changed) return body;
+        try { Save(history); return body; }
+        catch (Exception error) when (McpToolError.Expected(error))
+        {
+            body["error"] = "The files in results are where it says, but the history could not be updated (" + error.Message + "). A later undo finds files already back in their old folders and marks them done.";
+            throw new McpPartial(body);
+        }
+    }
+
+    /// Why a file can't go back into this folder (deleted, or no longer a plain local folder), or null.
+    private string? FolderProblem(string folder)
+    {
+        try { host.CheckFolder(folder); return null; }
+        catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { return error.Message; }
+    }
+
+    /// Why the move back would be refused (the same leases, opened and closed), or null.
+    private string? Unmovable(string path, string from)
+    {
+        try { return host.CheckMove(path, MoveRules.Parent(from)) ? null : "It is already in that folder."; }
+        catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { return error.Message; }
+    }
+
     private JsonObject History(JsonObject arguments, CancellationToken token)
     {
         int limit = arguments["limit"] is JsonValue v && v.GetValueKind() == JsonValueKind.Number && v.TryGetValue(out int n) ? Math.Clamp(n, 1, MaxHistory) : 20;
@@ -700,8 +860,9 @@ public sealed class McpSession
                     ["entry_id"] = (string?)e["id"], ["time"] = (string?)e["time"], ["action"] = (string?)e["action"],
                     ["outputs"] = new JsonArray(((JsonArray)e["outputs"]!).OfType<JsonObject>().Select(o => (JsonNode)new JsonObject { ["path"] = (string?)o["path"], ["undone"] = o["undone"]?.GetValue<bool>() == true }).ToArray()),
                 };
-                if (e["renames"] is JsonArray renames)
-                    item["renames"] = new JsonArray(renames.OfType<JsonObject>().Select(r => (JsonNode)new JsonObject { ["from"] = (string?)r["from"], ["path"] = (string?)r["path"], ["undone"] = r["undone"]?.GetValue<bool>() == true }).ToArray());
+                foreach (string list in new[] { "renames", "moves" })
+                    if (e[list] is JsonArray rows)
+                        item[list] = new JsonArray(rows.OfType<JsonObject>().Select(r => (JsonNode)new JsonObject { ["from"] = (string?)r["from"], ["path"] = (string?)r["path"], ["undone"] = r["undone"]?.GetValue<bool>() == true }).ToArray());
                 return (JsonNode)item;
             }).ToArray()),
         };
@@ -728,15 +889,23 @@ public sealed class McpSession
             foreach (var entry in entries)
             {
                 if (entry is not JsonObject e || !IsString(e["id"]) || !IsString(e["action"]) || e["time"] is not null && !IsString(e["time"]) || e["outputs"] is not JsonArray outputs) throw new FormatException();
-                if (e["renames"] is not null and not JsonArray) throw new FormatException();
-                foreach (var output in outputs.Concat(e["renames"] as JsonArray ?? new JsonArray()))
+                if (e["renames"] is not null and not JsonArray || e["moves"] is not null and not JsonArray) throw new FormatException();
+                var renames = e["renames"] as JsonArray ?? new JsonArray();
+                var moves = e["moves"] as JsonArray ?? new JsonArray();
+                foreach (var output in outputs.Concat(renames).Concat(moves))
                 {
                     if (output is not JsonObject o || !IsString(o["path"]) || o["undone"] is not null && o["undone"]!.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False)) throw new FormatException();
                     ReadStamp(o);
                 }
-                if (e["renames"] is JsonArray renames && renames.Any(r => !IsString(r!["from"]))) throw new FormatException();
-                // Swivel never writes renames beside outputs; such an entry could never finish undoing.
-                if (e["renames"] is JsonArray { Count: > 0 } && (outputs.Count > 0 || (string)e["action"]! != "rename")) throw new FormatException();
+                if (renames.Concat(moves).Any(r => !IsString(r!["from"]))) throw new FormatException();
+                // Swivel writes outputs, renames or moves, never two of them in one entry; such an
+                // entry could never finish undoing.
+                if (renames.Count > 0 && (outputs.Count > 0 || moves.Count > 0 || (string)e["action"]! != "rename")) throw new FormatException();
+                if (moves.Count > 0 && (outputs.Count > 0 || (string)e["action"]! != "move")) throw new FormatException();
+                // A move keeps names and goes into one folder; it is logged there, or back where it was.
+                static string Leaf(JsonNode? row, string key) { string p = (string)row![key]!; return p[(p.LastIndexOf('\\') + 1)..]; }
+                static string Folder(JsonNode? row) { string p = (string)row!["path"]!; return p[..p.LastIndexOf('\\')]; }
+                if (moves.Any(m => Leaf(m, "path") != Leaf(m, "from")) || moves.Select(Folder).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1) throw new FormatException();
             }
             return root;
         }

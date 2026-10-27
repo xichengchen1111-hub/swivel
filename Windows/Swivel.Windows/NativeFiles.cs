@@ -17,7 +17,7 @@ public static partial class NativeFiles
     private const uint Traverse = 0x20, ReadAttributes = 0x80, GenericRead = 0x80000000, GenericWrite = 0x40000000, DeleteAccess = 0x10000;
     private const uint OpenReparse = 0x00200000, BackupSemantics = 0x02000000;
     private const uint UnsafeAttributes = 0x400 | 0x1000 | 0x40000 | 0x400000; // reparse, offline, recall-on-open/data-access
-    private const string LocalOnly = "Choose a local regular file. Links, network drives and cloud placeholders are not supported yet.";
+    internal const string LocalOnly = "Choose a local regular file. Links, network drives and cloud placeholders are not supported yet.";
 
     public sealed class Input : IDisposable
     {

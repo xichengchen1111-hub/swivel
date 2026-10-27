@@ -70,6 +70,8 @@ internal static class MoveFilesChecks
         check(updated1[0].Stamp != batch1.Remaining[0].Stamp && updated1[0].Current == batch1.Remaining[0].Current && updated1[0].BeforeStamp == batch1.Remaining[0].BeforeStamp, "Trusted undo bridge refreshes earlier ChangeTime without changing the original baseline");
         check(history.Undo(updated1).Error is null && history.Files.ContainsKey(@"C:\one\0.dat"), "A to B to C to undo2 to undo1 succeeds");
         var referenceStamp = undo2.Locations[0].Stamp!.Value;
+        check(MoveRules.SameRenameMetadata(referenceStamp with { Attributes = 0 }, referenceStamp with { Attributes = 0x20 }) && MoveRules.SameRenameMetadata(referenceStamp with { Attributes = 0x20 }, referenceStamp with { Attributes = 0 })
+            && !MoveRules.SameRenameMetadata(referenceStamp with { Attributes = 0x20 }, referenceStamp with { Attributes = 0x22 }), "A rename may set the archive bit; other attribute changes still count");
         check(MoveRules.SameRenameMetadata(referenceStamp, referenceStamp with { CreationTime = 77, ChangeTime = 78 }) && !MoveRules.SameRenameMetadata(referenceStamp, referenceStamp with { WriteTime = 88 }), "NTFS name tunnelling may change creation time on rename; write time still counts");
         foreach (var changedStamp in new[] { referenceStamp with { Length = referenceStamp.Length + 1 }, referenceStamp with { WriteTime = 88 }, referenceStamp with { Attributes = 2 }, referenceStamp with { Links = 2 } })
         {

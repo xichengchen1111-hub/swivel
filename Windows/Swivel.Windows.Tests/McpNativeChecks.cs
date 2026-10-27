@@ -13,6 +13,9 @@ internal static class McpNativeChecks
 {
     [System.Runtime.InteropServices.DllImport("kernel32.dll", EntryPoint = "GetShortPathNameW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
     private static extern uint GetShortPathName(string longPath, System.Text.StringBuilder shortPath, uint length);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", EntryPoint = "CreateHardLinkW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool CreateHardLink(string newLink, string existing, IntPtr security);
 
     internal static void Run(string directory, Action<bool, string> check, Action<Action, string> reject)
     {
@@ -106,7 +109,7 @@ internal static class McpNativeChecks
             string longName = Path.Combine(names, "long name 2026.txt"); File.WriteAllText(longName, "long");
             var shortBuffer = new System.Text.StringBuilder(1024);
             string shortName = GetShortPathName(longName, shortBuffer, (uint)shortBuffer.Capacity) > 0 ? shortBuffer.ToString() : longName;
-            if (shortName != longName)
+            if (Path.GetFileName(shortName) != Path.GetFileName(longName))
             {
                 var viaShort = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(shortName), ["prefix"] = "x" });
                 check(viaShort["isError"]!.GetValue<bool>() && ((string)viaShort["structuredContent"]!["error"]!).Contains("named long name 2026.txt"), "Native MCP plan_rename refuses an 8.3 short name: " + viaShort.ToJsonString());
@@ -149,6 +152,102 @@ internal static class McpNativeChecks
             File.Delete(r1); File.AppendAllText(Path.Combine(names, "e r-002.txt"), "+");
             blocked = Call("undo", new JsonObject())["structuredContent"]!;
             check((string?)blocked["results"]![1]!["result"] == "changed since the rename; left alone" && File.Exists(Path.Combine(names, "e r-001.txt")), "Native MCP undo refuses every file when one was edited: " + blocked.ToJsonString());
+
+            // plan_move on real files: two folders into a third, row issues, refusals, apply and undo.
+            string moves = Path.Combine(root, "move"), in1 = Path.Combine(moves, "in1"), in2 = Path.Combine(moves, "in2"), dest = Path.Combine(moves, "out");
+            foreach (string folder in new[] { in1, in2, dest }) Directory.CreateDirectory(folder);
+            string ma = Path.Combine(in1, "a.txt"), mb = Path.Combine(in2, "b.txt"), mc = Path.Combine(in1, "c.txt"), here = Path.Combine(dest, "here.txt");
+            File.WriteAllText(ma, "a"); File.WriteAllText(mb, "b"); File.WriteAllText(mc, "c"); File.WriteAllText(here, "here");
+            JsonObject Move(params string[] paths) => (JsonObject)Call("plan_move", new JsonObject { ["paths"] = new JsonArray(paths.Select(x => (JsonNode)x).ToArray()), ["destination"] = dest })["structuredContent"]!;
+            var nowhere = Call("plan_move", new JsonObject { ["paths"] = new JsonArray(ma), ["destination"] = Path.Combine(moves, "none") });
+            var ontoFile = Call("plan_move", new JsonObject { ["paths"] = new JsonArray(ma), ["destination"] = here });
+            check(nowhere["isError"]!.GetValue<bool>() && ontoFile["isError"]!.GetValue<bool>() && ((string)ontoFile["structuredContent"]!["error"]!).StartsWith("destination: ") && File.Exists(ma),
+                "Native MCP plan_move refuses a missing folder and a file as the destination: " + nowhere.ToJsonString() + " " + ontoFile.ToJsonString());
+            var moveRespelt = Call("plan_move", new JsonObject { ["paths"] = new JsonArray(Path.Combine(in1, "A.TXT")), ["destination"] = dest });
+            check(moveRespelt["isError"]!.GetValue<bool>() && ((string)moveRespelt["structuredContent"]!["error"]!).Contains("named a.txt"), "Native MCP plan_move refuses a path spelt in another case: " + moveRespelt.ToJsonString());
+            string longMove = Path.Combine(in1, "long move name 2026.txt"); File.WriteAllText(longMove, "long");
+            string shortMove = GetShortPathName(longMove, shortBuffer, (uint)shortBuffer.Capacity) > 0 ? shortBuffer.ToString() : longMove;
+            if (Path.GetFileName(shortMove) != Path.GetFileName(longMove))
+            {
+                var moveViaShort = Call("plan_move", new JsonObject { ["paths"] = new JsonArray(shortMove), ["destination"] = dest });
+                check(moveViaShort["isError"]!.GetValue<bool>() && ((string)moveViaShort["structuredContent"]!["error"]!).Contains("named long move name 2026.txt"), "Native MCP plan_move refuses an 8.3 short name: " + moveViaShort.ToJsonString());
+            }
+            File.Delete(longMove);
+
+            // Row issues: already there (also through the folder's 8.3 spelling), a name taken by a file or a folder, a read-only file.
+            File.WriteAllText(Path.Combine(dest, "c.txt"), "taken"); Directory.CreateDirectory(Path.Combine(dest, "d.txt"));
+            string md = Path.Combine(in2, "d.txt"), ro = Path.Combine(in2, "ro.txt"); File.WriteAllText(md, "d"); File.WriteAllText(ro, "ro"); File.SetAttributes(ro, FileAttributes.ReadOnly);
+            var rowsMove = Move(ma, here, mc, md, ro);
+            check(!rowsMove["can_apply"]!.GetValue<bool>() && rowsMove["plan_id"] is null && rowsMove["moves"]![0]!["issue"] is null && (string?)rowsMove["moves"]![1]!["issue"] == "Already in this folder."
+                && ((string)rowsMove["moves"]![2]!["issue"]!).Contains("already in the destination") && ((string)rowsMove["moves"]![3]!["issue"]!).Contains("already in the destination")
+                && ((string)rowsMove["moves"]![4]!["issue"]!).Contains("can't move") && File.Exists(ma), "Native MCP plan_move reports each problem on its row: " + rowsMove.ToJsonString());
+            string shortDest = GetShortPathName(dest, shortBuffer, (uint)shortBuffer.Capacity) > 0 ? shortBuffer.ToString() : dest;
+            var viaShortDest = (JsonObject)Call("plan_move", new JsonObject { ["paths"] = new JsonArray(here), ["destination"] = shortDest.ToUpperInvariant() == dest.ToUpperInvariant() ? dest : shortDest })["structuredContent"]!;
+            check((string?)viaShortDest["moves"]![0]!["issue"] == "Already in this folder.", "Native MCP plan_move sees a file already in the folder however the folder is spelt: " + viaShortDest.ToJsonString());
+            File.SetAttributes(ro, FileAttributes.Normal); File.Delete(ro); File.Delete(md); File.Delete(Path.Combine(dest, "c.txt")); Directory.Delete(Path.Combine(dest, "d.txt"));
+
+            // Apply, a dry run of its undo, and the undo.
+            var movePlan = Move(ma, mb);
+            check(movePlan["can_apply"]!.GetValue<bool>() && (string?)movePlan["moves"]![1]!["to"] == Path.Combine(dest, "b.txt") && File.Exists(ma), "Native MCP plan_move lists the new paths and changes nothing: " + movePlan.ToJsonString());
+            var moveApplied = Call("apply_plan", new JsonObject { ["plan_id"] = (string)movePlan["plan_id"]! })["structuredContent"]!;
+            check((int)moveApplied["completed"]! == 2 && !File.Exists(ma) && !File.Exists(mb) && File.ReadAllText(Path.Combine(dest, "a.txt")) == "a" && File.ReadAllText(Path.Combine(dest, "b.txt")) == "b",
+                "Native MCP apply_plan moves the files on real disks: " + moveApplied.ToJsonString());
+            var dryMove = Call("undo", new JsonObject { ["dry_run"] = true })["structuredContent"]!;
+            check(((JsonArray)dryMove["results"]!).All(r => (string?)r!["result"] == "would be moved back") && !File.Exists(ma), "Native MCP undo dry run of a move changes nothing: " + dryMove.ToJsonString());
+            var movedBack = Call("undo", new JsonObject())["structuredContent"]!;
+            check(movedBack["complete"]!.GetValue<bool>() && File.ReadAllText(ma) == "a" && File.ReadAllText(mb) == "b" && !File.Exists(Path.Combine(dest, "a.txt")), "Native MCP undo moves the files back: " + movedBack.ToJsonString());
+
+            // After planning: a destination name taken, or a file edited, refuses the apply without moving anything.
+            var lateMove = Move(ma, mb);
+            File.WriteAllText(Path.Combine(dest, "b.txt"), "planted");
+            var plantedMove = Call("apply_plan", new JsonObject { ["plan_id"] = (string)lateMove["plan_id"]! });
+            check(plantedMove["isError"]!.GetValue<bool>() && File.Exists(ma) && File.Exists(mb) && !File.Exists(Path.Combine(dest, "a.txt")) && File.ReadAllText(Path.Combine(dest, "b.txt")) == "planted",
+                "Native MCP apply_plan refuses a move onto a name taken after planning: " + plantedMove.ToJsonString());
+            File.Delete(Path.Combine(dest, "b.txt"));
+            lateMove = Move(ma, mb); File.AppendAllText(mb, "+");
+            var editedMove = Call("apply_plan", new JsonObject { ["plan_id"] = (string)lateMove["plan_id"]! });
+            check(editedMove["isError"]!.GetValue<bool>() && File.Exists(ma) && File.Exists(mb) && !File.Exists(Path.Combine(dest, "a.txt")), "Native MCP apply_plan refuses a file edited after planning: " + editedMove.ToJsonString());
+
+            // Undo goes file by file: an old name taken, or a hard link left at it, keeps that file where it is.
+            var three = Move(ma, mb, mc);
+            Call("apply_plan", new JsonObject { ["plan_id"] = (string)three["plan_id"]! });
+            File.WriteAllText(ma, "new file at the old name");
+            check(CreateHardLink(mc, Path.Combine(dest, "c.txt"), IntPtr.Zero), "Native MCP test makes a hard link at an old path");
+            var someBack = Call("undo", new JsonObject())["structuredContent"]!;
+            check((string?)someBack["results"]![0]!["result"] == "its old name is taken now; left alone" && (string?)someBack["results"]![1]!["result"] == "moved back"
+                && (string?)someBack["results"]![2]!["result"] == "its old name is taken now; left alone" && !someBack["complete"]!.GetValue<bool>()
+                && File.ReadAllText(mb) == "b+" && File.ReadAllText(Path.Combine(dest, "a.txt")) == "a", "Native MCP undo moves back what it can, file by file: " + someBack.ToJsonString());
+            File.Delete(ma); File.Delete(mc); File.AppendAllText(Path.Combine(dest, "a.txt"), "+");
+            var restMove = Call("undo", new JsonObject())["structuredContent"]!;
+            check((string?)restMove["results"]![0]!["result"] == "changed since the move; left alone" && (string?)restMove["results"]![1]!["result"] == "already undone"
+                && (string?)restMove["results"]![2]!["result"] == "moved back" && File.ReadAllText(mc) == "c" && File.Exists(Path.Combine(dest, "a.txt")), "Native MCP undo leaves an edited file and moves the rest: " + restMove.ToJsonString());
+
+            // A file with its archive bit cleared still moves (a rename may set it); a folder made at its old path takes the name.
+            string me = Path.Combine(in1, "e.txt"); File.WriteAllText(me, "e"); File.SetAttributes(me, FileAttributes.Normal);
+            var plainMoved = Call("apply_plan", new JsonObject { ["plan_id"] = (string)Move(me)["plan_id"]! })["structuredContent"]!;
+            check((int?)plainMoved["completed"] == 1 && File.ReadAllText(Path.Combine(dest, "e.txt")) == "e" && !File.Exists(me), "Native MCP apply_plan moves a file whose archive bit is cleared: " + plainMoved.ToJsonString());
+            Directory.CreateDirectory(me);
+            var folderThere = Call("undo", new JsonObject())["structuredContent"]!;
+            check((string?)folderThere["results"]![0]!["result"] == "its old name is taken now; left alone" && File.Exists(Path.Combine(dest, "e.txt")), "Native MCP undo of a move sees a folder now at the old path: " + folderThere.ToJsonString());
+            Directory.Delete(me);
+            var eBack = Call("undo", new JsonObject())["structuredContent"]!;
+            check(eBack["complete"]!.GetValue<bool>() && File.ReadAllText(me) == "e", "Native MCP undo moves it back once the folder is gone: " + eBack.ToJsonString());
+
+            // The destination spelt in capitals, or by its 8.3 short path where it has one: the same folder, by identity.
+            foreach (string spelling in new[] { dest.ToUpperInvariant(), shortDest }.Where(x => x != dest).Distinct())
+            {
+                var spelt = (JsonObject)Call("plan_move", new JsonObject { ["paths"] = new JsonArray(me), ["destination"] = spelling })["structuredContent"]!;
+                var speltMoved = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)spelt["plan_id"] })["structuredContent"]!;
+                check((int?)speltMoved["completed"] == 1 && Name(dest, "e.txt") == "e.txt" && !File.Exists(me), "Native MCP apply_plan moves into a destination spelt " + spelling + ": " + speltMoved.ToJsonString());
+                var speltBack = Call("undo", new JsonObject())["structuredContent"]!;
+                check(speltBack["complete"]!.GetValue<bool>() && File.ReadAllText(me) == "e", "Native MCP undo of a move into a destination spelt another way: " + speltBack.ToJsonString());
+            }
+            // Undo leaves a file whose old folder is gone, and says so.
+            var orphan = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)Move(me)["plan_id"] })["structuredContent"]!;
+            Directory.Delete(in1, true);
+            var noFolder = Call("undo", new JsonObject { ["dry_run"] = true })["structuredContent"]!;
+            check((int?)orphan["completed"] == 1 && ((string)noFolder["results"]![0]!["result"]!).StartsWith("its old folder is unavailable") && File.Exists(Path.Combine(dest, "e.txt")),
+                "Native MCP undo of a move says when the old folder is gone: " + noFolder.ToJsonString());
         }
         finally
         {
