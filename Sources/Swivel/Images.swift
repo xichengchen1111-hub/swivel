@@ -304,17 +304,20 @@ enum Images {
     }
 
     /// Decodes the image upright (EXIF orientation applied), optionally capped in size.
-    static func load(_ url: URL, maxPixels: Int? = nil) throws -> CGImage {
+    /// Tools that save a new image refuse sources whose precision or HDR data they would lose. `readOnly` is for
+    /// tools that only look at the picture (text and code recognition, previews of them): any bit depth is fine
+    /// there, but the pixel-flood guard applies even to a capped decode, which can still read every pixel.
+    static func load(_ url: URL, maxPixels: Int? = nil, readOnly: Bool = false) throws -> CGImage {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             throw ToolError("Couldn't read \(url.lastPathComponent)")
         }
         try requireSingleImage(source)
-        try validatePrecision(source)
+        if !readOnly { try validatePrecision(source) }
         let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
         let width = props[kCGImagePropertyPixelWidth] as? Int ?? 4096
         let height = props[kCGImagePropertyPixelHeight] as? Int ?? 4096
         // A full-size decode of a crafted "pixel flood" file would claim many gigabytes.
-        if maxPixels == nil, Double(width) * Double(height) > maxDecodePixels {
+        if maxPixels == nil || readOnly, Double(width) * Double(height) > maxDecodePixels {
             throw ToolError("\(url.lastPathComponent) is too large to open (\(width) × \(height) px)")
         }
         let options: [CFString: Any] = [

@@ -151,6 +151,30 @@ struct NativeToolsTests {
         } catch { }
     }
 
+    @Test func testOCRReadsSixteenBitImagesThatSavingToolsStillProtect() async throws {
+        let folder = try temporaryFolder(); defer { try? FileManager.default.removeItem(at: folder) }
+        let eight = folder.appendingPathComponent("eight.png")
+        try makeImage(at: eight, width: 1000, height: 400, text: "SWIVEL 3410")
+        // The same picture re-encoded at 16 bits per channel, as screenshots exported by some apps are.
+        let picture = try #require(CGImageSourceCreateWithURL(eight as CFURL, nil).flatMap { CGImageSourceCreateImageAtIndex($0, 0, nil) })
+        let context = try #require(CGContext(data: nil, width: picture.width, height: picture.height, bitsPerComponent: 16, bytesPerRow: 0,
+                                             space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder16Little.rawValue))
+        context.draw(picture, in: CGRect(x: 0, y: 0, width: picture.width, height: picture.height))
+        let deep = folder.appendingPathComponent("deep.png")
+        let destination = try #require(CGImageDestinationCreateWithURL(deep as CFURL, "public.png" as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try #require(context.makeImage()), nil)
+        #expect(CGImageDestinationFinalize(destination))
+        let props = CGImageSourceCreateWithURL(deep as CFURL, nil).flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) } as? [CFString: Any]
+        #expect(props?[kCGImagePropertyDepth] as? Int == 16)
+
+        let text = try await TextRecognition.recognize(deep)
+        #expect(text.uppercased().contains("SWIVEL") && text.contains("3410"))
+        _ = try await CodeRecognition.recognize([deep])
+        // Tools that write a new image keep refusing what they would silently reduce to 8 bits.
+        #expect(throws: ToolError.self) { try Images.load(deep) }
+    }
+
     @Test func testTwoHotkeysDoNotReplaceEachOtherAndConflictsAreReported() async throws {
         let first = HotKey(keyCode: 40, modifiers: 4096 | 512 | 2048) { }
         defer { first.unregister() }
