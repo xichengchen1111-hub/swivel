@@ -421,8 +421,8 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested();var selected=chooser.Selected;if(selected.Length is <1 or >6)throw new UserError("Choose an available common folder first.");
                 if(!ShowOperationDialog(new CommonDuplicateConfirmation(this,selected),owner,token))return;token.ThrowIfCancellationRequested();
                 report(L("Comparing selected common folders…"));var commonDuplicateResult=await AwaitDoctorReadAsync(Task.Run(()=>CommonDuplicateReader.Read(selected,token),token),token);
-                token.ThrowIfCancellationRequested();ShowOperationDialog(new CommonDuplicatesDialog(this,commonDuplicateResult),owner,token);
-                report(token.IsCancellationRequested?L("Cancelled."):L("Common-folder comparison closed. No files were changed."));return;
+                token.ThrowIfCancellationRequested();var commonDuplicateDialog=new CommonDuplicatesDialog(this,commonDuplicateResult);ShowOperationDialog(commonDuplicateDialog,owner,token);
+                report(commonDuplicateDialog.Moved>0?string.Format(L("Duplicate comparison finished. Files moved to the Recycle Bin or removed: {0}"),commonDuplicateDialog.Moved):token.IsCancellationRequested?L("Cancelled."):L("Common-folder comparison closed. No files were changed."));return;
             }
             if(action.Id=="doctor.commonfolders")
             {

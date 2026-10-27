@@ -8494,10 +8494,10 @@
     "請只選擇一張圖片進行裁切。",
     "切り抜く画像を 1 枚だけ選んでください。"
   ],
-  "Select one to six Windows-reported common folders for one exact-content comparison across them. Nothing is selected initially. Reviewing locations does not read child files; the next confirmation lists every selected path before content reading. Existing local path, system, link and cloud protections remain in force. No deletion, opening files, permission change or assistant upload is performed.": [
-    "选择 Windows 报告的一至六个常用文件夹，在它们之间进行一次精确内容比较。初始不选中任何目录，审阅位置不读取子文件。下一步确认会先列出所有所选路径，再开始读取内容。仍执行原有本地路径及系统、链接、云占位符保护。不删除或打开文件，不更改权限，不上传给助手。",
-    "選擇 Windows 回報的一至六個常用資料夾，在它們之間進行一次精確內容比較。初始不選取任何目錄，檢閱位置不讀取子檔案。下一步確認會先列出所有所選路徑，再開始讀取內容。仍執行既有本機路徑及系統、連結、雲端預留位置保護。不刪除或開啟檔案，不變更權限，不上傳給助理。",
-    "Windows が報告した 1～6 のフォルダーを選び、その間で内容を厳密に比較します。初期選択はなく、場所の確認だけでは子ファイルを読みません。次の確認画面ですべての選択パスを示してから内容を読みます。従来のローカルパス、システム項目、リンク、クラウドの保護を維持します。削除、ファイルの起動、権限変更、アシスタントへの送信は行いません。"
+  "Select one to six Windows-reported common folders for one exact-content comparison across them. Nothing is selected initially. Reviewing locations does not read child files; the next confirmation lists every selected path before content reading. Existing local path, system, link and cloud protections remain in force. The comparison itself deletes or opens no file, changes no permission and uploads nothing to the assistant.": [
+    "选择 Windows 报告的一至六个常用文件夹，在它们之间进行一次精确内容比较。初始不选中任何目录，审阅位置不读取子文件。下一步确认会先列出所有所选路径，再开始读取内容。仍执行原有本地路径及系统、链接、云占位符保护。比较本身不删除或打开文件，不更改权限，不上传给助手。",
+    "選擇 Windows 回報的一至六個常用資料夾，在它們之間進行一次精確內容比較。初始不選取任何目錄，檢閱位置不讀取子檔案。下一步確認會先列出所有所選路徑，再開始讀取內容。仍執行既有本機路徑及系統、連結、雲端預留位置保護。比較本身不刪除或開啟檔案，不變更權限，不上傳給助理。",
+    "Windows が報告した 1～6 のフォルダーを選び、その間で内容を厳密に比較します。初期選択はなく、場所の確認だけでは子ファイルを読みません。次の確認画面ですべての選択パスを示してから内容を読みます。従来のローカルパス、システム項目、リンク、クラウドの保護を維持します。比較そのものでは削除、ファイルの起動、権限変更、アシスタントへの送信は行いません。"
   ],
   "Select one to six Windows-reported common folders for one similarity comparison across them. Nothing is selected initially. Reviewing locations does not read child files; the next confirmation lists every selected path before reading contents. Existing local path, system, link and cloud protections remain in force. No files are opened in another app, changed, deleted or sent to an assistant.": [
     "选择 Windows 报告的 1 至 6 个常用文件夹，在这些位置之间进行一次相似比较。初始不选择任何位置。查看位置不会读取子文件；下一步会列出全部已选路径，确认后才读取内容。现有本地路径、系统项目、链接和云文件保护仍然适用。不在其他应用中打开、修改、删除文件，也不发送给助手。",
@@ -12833,5 +12833,10 @@
     "已在此窗口中移走或移除",
     "已在此視窗中移走或移除",
     "このウィンドウで移動または削除済み"
+  ],
+  "The kept copy can be in another selected folder or on another drive, including a removable one; check where it is before moving.": [
+    "保留的副本可能在另一个所选文件夹或另一个磁盘上，包括可移动磁盘；移动前请确认它的位置。",
+    "保留的副本可能在另一個所選資料夾或另一個磁碟上，包括卸除式磁碟；移動前請確認它的位置。",
+    "残すコピーは、選択した別のフォルダーや、リムーバブルを含む別のドライブにある場合があります。移動する前に場所を確認してください。"
   ]
 }

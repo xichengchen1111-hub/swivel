@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.96 — Common-folder duplicates to the Recycle Bin (F04 part, 2026-10-27)
+
+- Core 4,519,745 on Mac; native compiled 0 warnings/errors (native suite not run here).
+- Native `CommonDuplicateNativeChecks` additions: the cross-root results window shows Move Selected to Recycle Bin… and Undo Move disabled until used, with the keep-a-copy notice; selecting every file of a two-root group keeps Move disabled; selecting one enables it; nothing is reported moved before a confirmed move. The real move/refusal paths are the 0.95 `RecycleDuplicate` checks.
+- Independent review: no P1/P2 (only `Absolute()` raw paths reach file APIs; at-least-one-kept rule is root-independent; kept copy on another volume passes the identity check correctly). Fixed P3: added a notice that the kept copy can be in another selected folder or drive, including a removable one. Kept as documented limits: the full report lists moved paths twice (larger copies refused sooner under the 4 Mi cap); status after undoing everything says no files were changed.
+
 ## Windows0.95 — Duplicate files to the Recycle Bin, keeping a verified copy (F04 part, 2026-10-26)
 
 - Core 4,519,740 on Mac; native compiled 0 warnings/errors.

@@ -1047,6 +1047,10 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.96 常用目录跨根重复移入回收站（F04 部分）
+
+批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。`CommonDuplicatesDialog` 复用 0.95 的 `RecycleBinSession<T>` 与 `NativeFiles.RecycleDuplicate`：成员是不透明键，经 `result.Sources` 映射为（根类型、相对路径），真实路径为所读根 `Choice.Path` 加未转义相对路径；转义的显示路径只用于列表、确认、报告和复制。至少保留一个组内成员，保留候选排除已移走与当前批次；保留副本可在其他根或其他卷（卷+文件ID不同即可），被移文件仍须在有回收站的固定盘。范围文字改为“比较本身不删除……”。限制同 0.95，另：保留副本可能位于可移动盘，事后可被拔出；完整报告对已移文件会列两次（行内标注与移动小节），大量移动后更易触及 4 Mi 复制上限而整份拒绝；全部撤销后状态行仍为“未更改文件”。
+
 ## 0.95 重复文件保留已复核副本后移入回收站（F04 部分）
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。Duplicate Files 窗口的组内文件列表改为多选，复用 `RecycleBinSession<T>`（新增 `Batch`：当前批次，供“保留副本”排除）。选择必须留下至少一个组内未移走成员，否则按钮禁用。新 `NativeFiles.RecycleDuplicate(file, length, sha256, keep, owner)`：按组内顺序尝试保留候选，`GENERIC_READ` + 仅 `FILE_SHARE_READ` 打开（拒绝写入者，移动期间不能被改写、改名或删除），须为磁盘普通文件、非目录、无重解析／离线／召回／系统／设备属性、长度与组一致，`RandomAccess` 64KiB 读取重算 SHA-256 一致；找不到即拒绝。随后进入通用 `Recycle`：持有父目录、被移文件 `nFileLinks == 1`、长度一致、文件 ID 与保留副本不同，另开共享 7 的数据句柄并核对同一文件 ID 后重算 SHA-256，一致才交给 Windows 移入回收站。Mac 同样要求一个未选、内容重新哈希相同的保留副本。限制：哈希后到 `SHFileOperation` 之间被移文件仍可被改写（保留副本已锁定，因此至少一份组内容存在）；保留副本被别的程序以写入打开时无法锁定而拒绝；常用目录跨根比较与相似配对窗口仍只读。

@@ -32,6 +32,15 @@ internal static class CommonDuplicateNativeChecks
                 check(!report.Contains("0\\same.txt")&&!report.Contains("1\\same.txt")&&report.Contains("16"),"Opaque namespace never leaks as file path; original shared sample/full-hash byte accounting shown");
                 dialog.Close();consent.Close();compare.Close();measure.Close();
             }
+            {
+                var dialog=new CommonDuplicatesDialog(app,result);var panel=(DockPanel)dialog.Content;var buttons=panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().ToArray();
+                var move=buttons.Single(b=>(string)b.Content==app.L("Move Selected to Recycle Bin…"));var undo=buttons.Single(b=>(string)b.Content==app.L("Undo Move"));
+                var matches=(StackPanel)((ScrollViewer)((TabItem)panel.Children.OfType<TabControl>().Single().Items[1]).Content).Content;var lists=matches.Children.OfType<ListView>().ToArray();
+                check(!move.IsEnabled&&!undo.IsEnabled&&buttons.Last().IsCancel&&matches.Children.OfType<TextBlock>().Any(t=>t.Text==app.L(DuplicateNotices.Recycle)),"Common duplicate results offer Recycle Bin cleanup, disabled until a selection, with the keep-a-copy notice");
+                lists[0].SelectedIndex=0;lists[1].SelectAll();check(lists[1].Items.Count==2&&!move.IsEnabled,"Selecting every file of a cross-root group cannot move them: one copy must stay");
+                lists[1].SelectedIndex=1;check(move.IsEnabled&&lists[1].SelectionMode==SelectionMode.Extended,"Selecting fewer files than the group holds enables the move");
+                check(!dialog.CurrentReport.Contains(app.L("moved or removed in this window"))&&dialog.Moved==0,"Nothing is reported moved before a confirmed move");dialog.Close();
+            }
             var root=result.Roots[0];string relative=new string('x',235);var sources=new Dictionary<string,CommonDuplicateFileRef>(StringComparer.Ordinal);var paths=new List<string>();
             for(int i=0;i<20000;i++){string path=relative+i.ToString("D5");string key="0\\"+path;sources.Add(key,new(root.Choice.Kind,path,4));paths.Add(key);}
             var huge=new CommonDuplicateResult(Array.AsReadOnly(new[]{root}),new(Array.AsReadOnly(new[]{new DuplicateGroup(4,paths.AsReadOnly(),new string('A',64))}),Array.Empty<DuplicateIssue>(),20000,20000,160000,false,false),new ReadOnlyDictionary<string,CommonDuplicateFileRef>(sources));
