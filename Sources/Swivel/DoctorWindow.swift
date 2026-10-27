@@ -32,6 +32,14 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     private var askButton: NSButton!
     private var selected: DoctorSection = .summary
     private var rows: [DoctorRow] = []
+    /// Every row of the page before groups are folded; `rows` is what the table shows.
+    private var allRows: [DoctorRow] = []
+    /// Rows ticked on pages with checkboxes, by id: they survive the live refresh and folding a group.
+    private var checked: Set<String> = []
+    /// Group headings opened on Clean Up Files; groups start folded so the page reads as a summary first.
+    private var expanded: Set<String> = []
+    /// The note above the live app list ("Updates every two seconds" / paused).
+    private weak var liveNote: NSTextField?
     private var observers: [NSObjectProtocol] = []
     private var resultMessage: String?
     private var showsCommands = false
@@ -58,6 +66,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     /// The result each page last chose its suggested selection for, so a new check suggests again.
     private var suggestedFor: [DoctorSection: Date] = [:]
     private weak var cardTitle: NSTextField?
+    private weak var cardIcon: NSImageView?
     private weak var cardDetail: NSTextField?
     private weak var cardButton: NSButton?
     /// Background Items: Login Items settings, next to the main button.
@@ -116,10 +125,11 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         detailScroll.drawsBackground = false
         document.widthAnchor.constraint(equalTo: detailScroll.contentView.widthAnchor).isActive = true
 
-        for (id, title, width) in [("item", "Item", 380.0), ("value", "Status", 200.0)] {
+        for (id, title, width) in [("check", "", 24.0), ("item", "Item", 360.0), ("value", "Status", 200.0)] {
             let column = NSTableColumn(identifier: .init(id))
             column.title = L(title)
             column.width = width
+            if id == "check" { column.minWidth = 24; column.maxWidth = 24; column.isHidden = true }
             rowsTable.addTableColumn(column)
         }
         rowsTable.style = .inset
@@ -220,22 +230,25 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         // A selection is kept only for the same result: row ids are positions, so a new check or another app could
         // put a different file under the same id.
         let shownResult = "\(selected.rawValue)|\(center.results[selected]?.checked.timeIntervalSince1970 ?? 0)|\(center.uninstallApp?.path ?? "")|\(showsDetails.contains(selected))|\(DoctorSweep.selectsApps)"
-        let keep = shownResult == keptFor ? Set(rowsTable.selectedRowIndexes.compactMap { $0 < rows.count ? rows[$0].id : nil }) : []
+        let keep = shownResult == keptFor ? chosenIDs : []
+        if shownResult != keptFor { expanded = [] }
         keptFor = shownResult
-        rows = visible(withOwners(center.results[selected]?.rows ?? []))
+        rowsTable.tableColumn(withIdentifier: .init("check"))?.isHidden = !usesCheckboxes
+        allRows = visible(withOwners(center.results[selected]?.rows ?? []))
+        rows = folded(allRows)
         rowsTable.reloadData()
-        var chosen = IndexSet(rows.indices.filter { keep.contains(rows[$0].id) })
-        // Uninstall: what is named after the app's identifier is selected for you. Clean Up Files: what is safe to
-        // remove (apps only when the user turned that on).
+        var chosen = Set(allRows.map(\.id).filter(keep.contains))
+        // Uninstall: what is named after the app's identifier is ticked for you. Clean Up Files: what is safe by
+        // nature (caches, old leftovers; apps only when the user turned that on).
         if selected == .uninstall, keep.isEmpty {
-            chosen = IndexSet(rows.indices.filter { rows[$0].trash != nil && rows[$0].severity == .info })
+            chosen = Set(allRows.filter { $0.trash != nil && $0.severity == .info }.map(\.id))
         }
         // Guided pages suggest a selection once per new result; the user changes it freely afterwards.
         if Self.guided.contains(selected), let checked = center.results[selected]?.checked, suggestedFor[selected] != checked {
             suggestedFor[selected] = checked
             chosen = suggestion(selected)
         }
-        rowsTable.selectRowIndexes(chosen, byExtendingSelection: false)
+        choose(chosen)
         rebuildDetail()
         updateRowButtons()
     }
@@ -249,7 +262,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
                      "\(result?.speedReport.count ?? 0)", "\(result?.notes.count ?? 0)", "\(center.searchingFiles)",
                      "\(center.duplicateFolders.count)", "\(center.projectFolders.count)", center.uninstallApp?.path ?? "",
                      "\(showsDetails.contains(selected))", center.cleanUpPending.joined(), "\(center.cleanUpMode)",
-                     "\(DoctorSweep.months)\(DoctorSweep.selectsApps)"]
+                     "\(DoctorSweep.months)\(DoctorSweep.selectsApps)", DoctorApps.Sort.current.rawValue]
         if selected == .summary {
             parts += DoctorSection.allCases.map { "\(center.results[$0]?.checked.timeIntervalSince1970 ?? 0)\(center.running.contains($0))" }
         }
@@ -355,14 +368,81 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         }
     }
 
-    /// What a guided page selects for you: caches and leftovers that can go, and apps not used for the chosen time. Other
-    /// apps are never preselected: only the user knows which ones they are using right now.
-    private func suggestion(_ section: DoctorSection) -> IndexSet {
+    /// What a guided page selects for you: caches and leftovers that can go. Apps are never preselected: only the
+    /// user knows which ones they are using right now.
+    private func suggestion(_ section: DoctorSection) -> Set<String> {
         switch section {
-        case .caches, .background: IndexSet(rows.indices.filter { rows[$0].trash != nil })
-        case .performance: IndexSet(rows.indices.filter { rows[$0].quit?.idle == true })
-        default: IndexSet()
+        case .caches, .background: Set(allRows.filter { $0.trash != nil }.map(\.id))
+        default: []
         }
+    }
+
+    // MARK: Choosing rows
+
+    /// Slow or Hot and Clean Up Files tick rows with checkboxes; other pages choose rows by selecting them.
+    private var usesCheckboxes: Bool { [.performance, .uninstall].contains(selected) }
+
+    /// Groups fold only on the Clean Up Files list.
+    private var folds: Bool { selected == .uninstall && center.cleanUpMode && center.uninstallApp == nil }
+
+    /// The ids of the rows chosen now: ticked, or selected.
+    private var chosenIDs: Set<String> {
+        usesCheckboxes ? checked : Set(rowsTable.selectedRowIndexes.compactMap { $0 < rows.count ? rows[$0].id : nil })
+    }
+
+    /// Chooses exactly these rows (ids from `allRows`).
+    private func choose(_ ids: Set<String>) {
+        if usesCheckboxes {
+            checked = ids
+            refreshChecks()
+        } else {
+            rowsTable.selectRowIndexes(IndexSet(rows.indices.filter { ids.contains(rows[$0].id) }), byExtendingSelection: false)
+        }
+        updateRowButtons()
+    }
+
+    /// The rows a checkbox stands for: the row itself, or for a group heading, every row of its group that can be
+    /// acted on.
+    private func checkable(_ index: Int) -> [String] {
+        guard index < rows.count else { return [] }
+        let row = rows[index]
+        if row.trash != nil || row.quit != nil { return [row.id] }
+        guard row.level == 0, let start = allRows.firstIndex(where: { $0.id == row.id }) else { return [] }
+        return allRows[(start + 1)...].prefix { $0.level > 0 }.filter { $0.trash != nil || $0.quit != nil }.map(\.id)
+    }
+
+    /// Group rows whose heading isn't open are left out of the table (still ticked or not as before).
+    private func folded(_ all: [DoctorRow]) -> [DoctorRow] {
+        guard folds else { return all }
+        var out: [DoctorRow] = []
+        var open = true
+        for row in all {
+            if row.level == 0 { open = expanded.contains(row.id); out.append(row) } else if open { out.append(row) }
+        }
+        return out
+    }
+
+    private func refreshChecks() {
+        guard let column = rowsTable.tableColumns.firstIndex(where: { $0.identifier.rawValue == "check" }), !rows.isEmpty else { return }
+        rowsTable.reloadData(forRowIndexes: IndexSet(integersIn: 0..<rows.count), columnIndexes: IndexSet(integer: column))
+    }
+
+    @objc private func toggleCheck(_ sender: NSButton) {
+        let ids = checkable(sender.tag)
+        guard !ids.isEmpty else { return }
+        if ids.allSatisfy(checked.contains) { checked.subtract(ids) } else { checked.formUnion(ids) }
+        refreshChecks()
+        updateRowButtons()
+    }
+
+    @objc private func toggleGroup(_ sender: NSButton) {
+        guard sender.tag < rows.count else { return }
+        let id = rows[sender.tag].id
+        if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
+        let highlighted = Set(rowsTable.selectedRowIndexes.compactMap { $0 < rows.count ? rows[$0].id : nil })
+        rows = folded(allRows)
+        rowsTable.reloadData()
+        rowsTable.selectRowIndexes(IndexSet(rows.indices.filter { highlighted.contains(rows[$0].id) }), byExtendingSelection: false)
     }
 
     /// One card that says what to do, the list to adjust it, and everything else behind More Details.
@@ -405,11 +485,12 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         add(card)
         card.widthAnchor.constraint(equalTo: self.detail.widthAnchor, constant: -16).isActive = true
         cardTitle = title
+        cardIcon = icon
         cardDetail = detail
         cardButton = button
         icon.isHidden = running
 
-        rowsTable.tableColumns.last?.title = section == .performance ? L("Memory · Last used") : L("Status")
+        rowsTable.tableColumns.last?.title = section == .performance ? L("Memory · Processor") : L("Status")
         if let result, !result.rows.isEmpty, !running {
             rowsHeight.constant = max(min(CGFloat(rows.count) * 40 + 30, 340), 120)
             if section == .performance { add(appOrderRow()) }
@@ -466,7 +547,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
             switch selected {
             case .performance:
                 title.stringValue = L("Is your Mac slow or short of memory?")
-                detail.stringValue = L("Mac Doctor shows how much memory each app uses and when you last used it, and suggests quitting apps you haven’t used for a while.")
+                detail.stringValue = L("Mac Doctor shows which apps use the most memory, and you choose which to quit.")
             case .caches:
                 title.stringValue = L("Free up space safely")
                 detail.stringValue = L("Mac Doctor finds caches that apps rebuild by themselves, and you choose which to clean.")
@@ -486,21 +567,28 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
             if apps.isEmpty {
                 let big = result.rows.filter { $0.quit != nil && ($0.bytes ?? 0) >= 1_000_000_000 }.prefix(3)
                 let any = result.rows.contains { $0.quit != nil }
-                if big.isEmpty {
-                    title.stringValue = result.headline
-                } else {
-                    title.stringValue = L("%@ use the most memory: about %@.", big.map(\.title).joined(separator: ", "),
-                                          DoctorFormat.memory(big.reduce(0) { $0 + ($1.bytes ?? 0) }))
+                // One plain sentence first, from macOS's own memory pressure (as Activity Monitor colours it).
+                let level: DoctorSeverity?
+                switch memoryState.pressure {
+                case 4: title.stringValue = L("Memory is short. Quit some apps you aren’t using."); level = .problem
+                case 2: title.stringValue = L("Memory is getting tight. The apps below use the most."); level = .review
+                case 1: title.stringValue = L("Memory is fine. Nothing needs quitting."); level = .ok
+                default: title.stringValue = result.headline; level = nil
                 }
-                detail.stringValue = any ? L("Click the apps you aren’t using right now (hold Command to pick several), then choose Quit Selected Apps. Each asks you to save open work first.") : ""
+                // The icon says the same as the sentence.
+                if let level, let icon = cardIcon {
+                    icon.image = NSImage(systemSymbolName: level.symbol, accessibilityDescription: L(level.word))
+                    icon.contentTintColor = level.tint
+                    icon.toolTip = L(level.word)
+                }
+                let most = big.isEmpty ? "" : L("%@ use the most memory: about %@.", big.map(\.title).joined(separator: ", "),
+                                                 DoctorFormat.memory(big.reduce(0) { $0 + ($1.bytes ?? 0) })) + " "
+                detail.stringValue = any ? most + L("Tick the apps you aren’t using right now, then choose Quit Selected Apps. Each asks you to save open work first.") : ""
                 button.title = L("Quit Selected Apps")
                 button.isEnabled = false
                 button.isHidden = !any
             } else {
-                title.stringValue = apps.allSatisfy({ $0.quit?.idle == true })
-                    ? L("%@ haven’t been used for %@ or longer. Quit them to free about %@ of memory.", apps.map(\.title).joined(separator: ", "),
-                        DoctorAppActivity.idleName(DoctorAppActivity.idleAfter), DoctorFormat.memory(bytes))
-                    : L("Quit %@ to free about %@ of memory.", apps.map(\.title).joined(separator: ", "), DoctorFormat.memory(bytes))
+                title.stringValue = L("Quit %@ to free about %@ of memory.", apps.map(\.title).joined(separator: ", "), DoctorFormat.memory(bytes))
                 detail.stringValue = L("Each app asks you to save open work first. You can open it again any time.")
                 button.title = apps.count == 1 ? L("Quit 1 App") : L("Quit %d Apps", apps.count)
             }
@@ -542,12 +630,13 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
 
     @objc private func toggleDetails() {
         if showsDetails.contains(selected) { showsDetails.remove(selected) } else { showsDetails.insert(selected) }
+        choose([])
         rowsTable.deselectAll(nil)
         suggestedFor[selected] = nil
         reload()
     }
 
-    @objc private func selectNone() { rowsTable.deselectAll(nil) }
+    @objc private func selectNone() { choose([]) }
     @objc private func openLoginItems() { DoctorSettingsPane.loginItems.open() }
 
     /// Before any check: what Mac Doctor does and one button. Afterwards: only what is worth a look.
@@ -621,7 +710,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         case .folders: L("Choose a folder to see what takes up its space.")
         case .duplicates: L("Choose Scan Common Folders to look through Downloads, Desktop, Documents, Pictures, Movies and Music, or choose a folder yourself. You see identical copies and files that are nearly the same, with how alike they are.")
         case .projects: L("How to use it: choose the folder that holds your code projects (for example ~/Developer). Mac Doctor lists folders such as node_modules or .build that the project’s tools recreate by themselves; select the ones you don’t need now and move them to the Trash. The next build or install makes them again.")
-        case .uninstall: L("Not searched yet. Choose Find Things to Clean, then select what to remove and choose Clean Up.")
+        case .uninstall: L("Not searched yet. Choose Find Things to Clean, then tick what to remove and choose Move to Trash.")
         default: L("Not checked yet. Choose Check, or Check This Mac to check everything at once.")
         }
     }
@@ -644,8 +733,16 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
                 buttons.append(ToolUI.button("Clear Folders", target: self, action: #selector(clearSearchFolders)))
             }
         case .uninstall:
+            // After a search, the main button is the one that cleans, with its size on it.
+            let found = center.cleanUpMode && center.uninstallApp == nil && result?.rows.contains { $0.trash != nil } == true
+            if found {
+                let clean = ToolUI.button("Move to Trash…", target: self, action: #selector(cleanSelected))
+                clean.bezelColor = .controlAccentColor
+                cleanButton = clean
+                buttons.append(clean)
+            }
             let find = ToolUI.button(center.cleanUpMode ? "Find Again…" : "Find Things to Clean…", target: self, action: #selector(findThingsToClean))
-            find.bezelColor = .controlAccentColor
+            if !found { find.bezelColor = .controlAccentColor }
             buttons.append(find)
             buttons.append(ToolUI.button("Choose App…", target: self, action: #selector(chooseUninstall)))
             if center.uninstallApp != nil { buttons.append(ToolUI.button("Check Again", target: self, action: #selector(checkSelected))) }
@@ -683,36 +780,42 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         return row
     }
 
-    /// Above the app list: which order, and how long unused counts as "not used".
+    /// Above the app list: busiest or largest first.
     private func appOrderRow() -> NSStackView {
-        let sort = NSSegmentedControl(labels: [L("Longest Unused First"), L("Most Memory First")], trackingMode: .selectOne,
+        let sort = NSSegmentedControl(labels: [L("Busiest First"), L("Most Memory First")], trackingMode: .selectOne,
                                       target: self, action: #selector(changeAppSort(_:)))
-        sort.selectedSegment = DoctorApps.Sort.current == .lastUsed ? 0 : 1
-        let idle = NSPopUpButton(frame: .zero, pullsDown: false)
-        for seconds in DoctorAppActivity.idleChoices {
-            idle.addItem(withTitle: DoctorAppActivity.idleName(seconds))
-            idle.lastItem?.representedObject = seconds
-        }
-        idle.selectItem(at: DoctorAppActivity.idleChoices.firstIndex(of: DoctorAppActivity.idleAfter) ?? 1)
-        idle.target = self
-        idle.action = #selector(changeIdleAfter(_:))
-        idle.isEnabled = !isBusy && Feature.doctor.isOn
-        let label = NSTextField(labelWithString: L("Suggest apps not used for"))
-        label.textColor = .secondaryLabelColor
-        return ToolUI.stack([sort, NSView(), label, idle], vertical: false, spacing: 8)
+        sort.selectedSegment = DoctorApps.Sort.current == .cpu ? 0 : 1
+        let note = NSTextField(labelWithString: L(checked.isEmpty ? "Updates every two seconds" : "Paused while you choose"))
+        note.textColor = .secondaryLabelColor
+        note.font = .systemFont(ofSize: 11)
+        liveNote = note
+        return ToolUI.stack([sort, NSView(), note], vertical: false, spacing: 8)
     }
 
     @objc private func changeAppSort(_ sender: NSSegmentedControl) {
-        UserDefaults.standard.set(sender.selectedSegment == 0 ? DoctorApps.Sort.lastUsed.rawValue : DoctorApps.Sort.memory.rawValue,
+        UserDefaults.standard.set(sender.selectedSegment == 0 ? DoctorApps.Sort.cpu.rawValue : DoctorApps.Sort.memory.rawValue,
                                   forKey: DoctorApps.Sort.key)
         reload()
     }
 
-    /// A new time changes which apps are suggested: check again, which suggests a fresh selection.
-    @objc private func changeIdleAfter(_ sender: NSPopUpButton) {
-        guard let seconds = sender.selectedItem?.representedObject as? TimeInterval, Feature.doctor.isOn else { return }
-        UserDefaults.standard.set(seconds, forKey: DoctorAppActivity.idleKey)
-        center.run(.performance)
+    /// True while the pointer is over the results list.
+    private var pointerInList: Bool {
+        guard rowsScroll.window === window, rowsScroll.superview != nil else { return false }
+        let frame = window.convertToScreen(rowsScroll.convert(rowsScroll.bounds, to: nil))
+        return frame.contains(NSEvent.mouseLocation)
+    }
+
+    /// The live app list: new numbers in the same table, keeping the selection and the scroll position.
+    private func refreshAppRows() {
+        guard selected == .performance, !isBusy else { return }
+        let highlighted = Set(rowsTable.selectedRowIndexes.compactMap { $0 < rows.count ? rows[$0].id : nil })
+        allRows = visible(withOwners(center.results[.performance]?.rows ?? []))
+        rows = allRows
+        // An app that quit can't stay ticked.
+        checked.formIntersection(allRows.map(\.id))
+        rowsTable.reloadData()
+        rowsTable.selectRowIndexes(IndexSet(rows.indices.filter { highlighted.contains(rows[$0].id) }), byExtendingSelection: false)
+        updateRowButtons()
     }
 
     /// How long unopened counts as unused, and whether such apps are selected for you.
@@ -753,6 +856,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         alert.beginSheetModal(for: window) { [weak self] response in
             MainActor.assumeIsolated {
                 guard response == .alertFirstButtonReturn, Feature.doctor.isOn, let self else { return }
+                self.choose([])
                 self.rowsTable.deselectAll(nil)
                 self.center.findThingsToClean()
             }
@@ -793,12 +897,9 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     private func rowActionRow(_ section: DoctorSection) -> NSStackView {
         var buttons: [NSButton] = []
         if section == .uninstall, center.uninstallApp == nil {
-            let clean = ToolUI.button("Clean Up…", target: self, action: #selector(cleanSelected))
-            clean.bezelColor = .controlAccentColor
-            cleanButton = clean
             let reveal = ToolUI.button("Show in Finder", target: self, action: #selector(reveal))
             revealButton = reveal
-            return ToolUI.stack([clean, reveal, ToolUI.button("Select All", target: self, action: #selector(selectAllTrashable)),
+            return ToolUI.stack([reveal, ToolUI.button("Select All", target: self, action: #selector(selectAllTrashable)),
                                  ToolUI.button("Select None", target: self, action: #selector(selectNone))], vertical: false, spacing: 8)
         }
         if section == .uninstall {
@@ -914,7 +1015,8 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
             let movable = chosen.filter { $0.trash != nil }
             let bytes = movable.reduce(Int64(0)) { $0 + ($1.bytes ?? 0) }
             cleanButton.isEnabled = !isBusy && !movable.isEmpty && Feature.doctor.isOn
-            cleanButton.title = movable.isEmpty ? L("Clean Up…") : L("Clean Up %d Items (%@)…", movable.count, DoctorFormat.bytes(bytes))
+            cleanButton.title = movable.isEmpty ? L("Move to Trash…")
+                : bytes > 0 ? L("Move to Trash (%d, %@)…", movable.count, DoctorFormat.bytes(bytes)) : L("Move to Trash (%d)…", movable.count)
         }
         if let uninstallButton {
             let info = center.results[.uninstall]
@@ -924,12 +1026,20 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         }
         showCharts()
         updateCard()
-        revealButton?.isEnabled = chosen.contains { $0.location != nil }
+        let shown = highlightedRows
+        revealButton?.isEnabled = shown.contains { $0.location != nil }
         ejectButton?.isEnabled = !isBusy && !ejecting && chosen.count == 1 && chosen[0].id.hasPrefix("drive.")
-        rowDetail?.stringValue = chosen.count == 1 ? chosen[0].detail : (chosen.isEmpty ? "" : L("%d selected", chosen.count))
+        rowDetail?.stringValue = shown.count == 1 ? shown[0].detail : (shown.isEmpty ? "" : L("%d selected", shown.count))
     }
 
+    /// The rows chosen for an action: ticked (also inside folded groups), or selected.
     private var selectedRows: [DoctorRow] {
+        usesCheckboxes ? allRows.filter { checked.contains($0.id) }
+            : rowsTable.selectedRowIndexes.compactMap { $0 < rows.count ? rows[$0] : nil }
+    }
+
+    /// The rows highlighted in the table, for their details and Show in Finder.
+    private var highlightedRows: [DoctorRow] {
         rowsTable.selectedRowIndexes.compactMap { $0 < rows.count ? rows[$0] : nil }
     }
 
@@ -995,7 +1105,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     @objc private func clearFolders() { center.removeFolders() }
 
     @objc private func selectAllTrashable() {
-        rowsTable.selectRowIndexes(IndexSet(rows.indices.filter { rows[$0].trash != nil }), byExtendingSelection: false)
+        choose(Set(allRows.filter { $0.trash != nil }.map(\.id)))
     }
 
     @objc private func moveToTrash() {
@@ -1090,6 +1200,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         panel.beginSheetModal(for: window) { [weak self] response in
             MainActor.assumeIsolated {
                 guard let self, response == .OK, let url = panel.url, Feature.doctor.isOn else { return }
+                self.choose([])
                 self.rowsTable.deselectAll(nil)
                 if !self.center.chooseUninstall(url) { self.status.stringValue = L("That isn’t an app.") }
             }
@@ -1099,14 +1210,14 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     /// Every copy except the first (oldest) of each group.
     @objc private func selectDuplicates() {
         var seen = Set<String>()
-        var picks = IndexSet()
-        for (index, row) in rows.enumerated() where row.level == 1 {
+        var picks = Set<String>()
+        for row in allRows where row.level == 1 {
             // Identical copies only: similar files are the user's call.
             guard let group = row.group, group.hasPrefix("dup.") else { continue }
             if seen.insert(group).inserted { continue }
-            if row.trash != nil { picks.insert(index) }
+            if row.trash != nil { picks.insert(row.id) }
         }
-        rowsTable.selectRowIndexes(picks, byExtendingSelection: false)
+        choose(picks)
     }
 
     @objc private func uninstallApp() {
@@ -1138,8 +1249,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     }
 
     @objc private func selectInstallers() {
-        let installers = rows.indices.filter { rows[$0].trash != nil && DoctorLargeFiles.installerExtensions.contains(rows[$0].location?.pathExtension.lowercased() ?? "") }
-        rowsTable.selectRowIndexes(IndexSet(installers), byExtendingSelection: false)
+        choose(Set(allRows.filter { $0.trash != nil && DoctorLargeFiles.installerExtensions.contains($0.location?.pathExtension.lowercased() ?? "") }.map(\.id)))
     }
 
     @objc private func quitApps() {
@@ -1165,6 +1275,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
                         ? L("Asked %@ to quit. Memory is checked again in a moment.", outcome.asked.joined(separator: ", "))
                         : L("Asked %@ to quit; %d had changed since the check and were left alone.", outcome.asked.joined(separator: ", "), outcome.skipped.count)
                 }
+                self.choose([])
                 self.rowsTable.deselectAll(nil)
             }
         }
@@ -1195,7 +1306,16 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
                     self.liveTask = nil
                     return
                 }
-                if self.window.occlusionState.contains(.visible) { self.sampleLive(); self.showCharts() }
+                if self.window.occlusionState.contains(.visible) {
+                    self.sampleLive()
+                    self.showCharts()
+                    if self.selected == .performance, !self.isBusy {
+                        // Keep the list still while the user is aiming at it or has ticked apps.
+                        let paused = self.pointerInList || !self.checked.isEmpty
+                        self.liveNote?.stringValue = L(paused ? "Paused while you choose" : "Updates every two seconds")
+                        if !paused, await self.center.refreshApps() { self.refreshAppRows() }
+                    }
+                }
             }
         }
     }
@@ -1283,7 +1403,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     }
 
     @objc private func reveal() {
-        let urls = selectedRows.compactMap(\.location)
+        let urls = highlightedRows.compactMap(\.location)
         guard !urls.isEmpty else { return }
         NSWorkspace.shared.activateFileViewerSelecting(urls)
     }
@@ -1342,6 +1462,18 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         if tableView === sections { return sectionCell(DoctorSection.allCases[row]) }
         guard row < rows.count else { return nil }
         let item = rows[row]
+        if tableColumn?.identifier.rawValue == "check" {
+            let ids = checkable(row)
+            guard usesCheckboxes, !ids.isEmpty else { return nil }
+            let box = NSButton(checkboxWithTitle: "", target: self, action: #selector(toggleCheck(_:)))
+            box.allowsMixedState = true
+            let on = ids.filter(checked.contains).count
+            box.state = on == 0 ? .off : on == ids.count ? .on : .mixed
+            box.tag = row
+            box.isEnabled = !isBusy && Feature.doctor.isOn
+            box.setAccessibilityLabel(item.title)
+            return box
+        }
         if tableColumn?.identifier.rawValue == "value" {
             let value = NSTextField(labelWithString: item.value)
             value.lineBreakMode = .byTruncatingTail
@@ -1359,7 +1491,20 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         let text = ToolUI.stack([title, sub], spacing: 1)
         let icon = severityIcon(item.severity)
         icon.symbolConfiguration = .init(pointSize: 12, weight: .regular)
-        let stack = ToolUI.stack([icon, text], vertical: false, spacing: 6)
+        var parts: [NSView] = [icon, text]
+        // A group heading on Clean Up Files opens and folds its group.
+        if folds, item.level == 0, let start = allRows.firstIndex(where: { $0.id == item.id }),
+           start + 1 < allRows.count, allRows[start + 1].level > 0 {
+            let disclosure = NSButton(title: "", target: self, action: #selector(toggleGroup(_:)))
+            disclosure.bezelStyle = .disclosure
+            disclosure.setButtonType(.pushOnPushOff)
+            disclosure.state = expanded.contains(item.id) ? .on : .off
+            disclosure.tag = row
+            disclosure.setAccessibilityLabel(L(expanded.contains(item.id) ? "Hide items" : "Show items"))
+            title.font = .systemFont(ofSize: 13, weight: .semibold)
+            parts = [disclosure, text]
+        }
+        let stack = ToolUI.stack(parts, vertical: false, spacing: 6)
         stack.edgeInsets = NSEdgeInsets(top: 0, left: CGFloat(item.level) * 18, bottom: 0, right: 0)
         let cell = DoctorCell(stack, primary: [title], secondary: [sub])
         cell.setAccessibilityElement(true)

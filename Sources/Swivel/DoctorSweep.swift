@@ -193,7 +193,7 @@ enum DoctorSweep {
         if !outcome.apps.isEmpty {
             let total = outcome.apps.reduce(Int64(0)) { $0 + $1.app.bytes + $1.leftoverBytes }
             result.rows.append(DoctorRow(id: "cleanup.apps", title: L("Apps not opened for %@", monthsName(months)),
-                                         value: DoctorFormat.bytes(total),
+                                         value: L("%d items · %@", outcome.apps.count, DoctorFormat.bytes(total)),
                                          detail: L("Each app goes to the Trash with the settings, caches and support files named after it."),
                                          severity: .info))
             for (index, item) in outcome.apps.enumerated() {
@@ -214,7 +214,7 @@ enum DoctorSweep {
         }
         if !outcome.orphans.isEmpty {
             result.rows.append(DoctorRow(id: "cleanup.orphans", title: L("Left behind by apps you removed"),
-                                         value: DoctorFormat.bytes(outcome.orphans.reduce(0) { $0 + $1.bytes }),
+                                         value: L("%d items · %@", outcome.orphans.count, DoctorFormat.bytes(outcome.orphans.reduce(0) { $0 + $1.bytes })),
                                          detail: L("Named after an app that is no longer installed. Items untouched for %@ are selected for you.", monthsName(months)),
                                          severity: .info))
             for (index, item) in outcome.orphans.enumerated() {
@@ -256,7 +256,8 @@ enum DoctorSweep {
         func add(_ id: String, _ title: String, _ detail: String, _ rows: [DoctorRow], selected: (DoctorRow) -> Bool = { _ in true }) {
             guard !rows.isEmpty else { return }
             result.rows.append(DoctorRow(id: "cleanup." + id, title: title,
-                                         value: DoctorFormat.bytes(rows.reduce(0) { $0 + ($1.bytes ?? 0) }), detail: detail, severity: .info))
+                                         value: L("%d items · %@", rows.count, DoctorFormat.bytes(rows.reduce(0) { $0 + ($1.bytes ?? 0) })),
+                                         detail: detail, severity: .info))
             result.rows += rows.map { row in
                 var row = row
                 row.level = 1
@@ -270,28 +271,36 @@ enum DoctorSweep {
             if let heading = result.rows.firstIndex(where: { $0.id == "cleanup.orphans" }) {
                 let end = result.rows[(heading + 1)...].firstIndex { $0.level == 0 } ?? result.rows.endIndex
                 result.rows.insert(contentsOf: agents.map { var row = $0; row.level = 1; row.severity = .info; return row }, at: end)
+                let group = result.rows[(heading + 1)...].prefix { $0.level > 0 }
+                result.rows[heading].value = L("%d items · %@", group.count, DoctorFormat.bytes(group.reduce(0) { $0 + ($1.bytes ?? 0) }))
             } else {
                 add("agents", L("Left behind by apps you removed"), L("Small programs that would start by themselves, from apps that are gone."), agents)
             }
         }
         add("caches", L("Caches"), L("Apps rebuild them when needed."),
             (caches?.rows ?? []).filter { $0.id.hasPrefix("cache.") && ($0.trash != nil || !$0.bundleIDs.isEmpty) })
+        // Personal files (installers, copies) and folders that may need the network to rebuild are listed for the user
+        // to tick; only what is safe by nature is ticked for them.
         add("installers", L("Installers and disk images"), L("In Downloads, Desktop and Documents. Once an app is installed they are usually no longer needed."),
-            (installers?.rows ?? []).filter { $0.id.hasPrefix("file.") && DoctorLargeFiles.installerExtensions.contains($0.location?.pathExtension.lowercased() ?? "") })
+            (installers?.rows ?? []).filter { $0.id.hasPrefix("file.") && DoctorLargeFiles.installerExtensions.contains($0.location?.pathExtension.lowercased() ?? "") },
+            selected: { _ in false })
         // Every copy but the first (oldest) of identical files; similar files are listed but never selected.
         let copies = (duplicates?.rows ?? []).filter { $0.level == 1 && $0.trash != nil && !$0.id.hasSuffix(".0") }
         add("duplicates", L("Duplicate files"), L("Extra copies; the oldest copy of each file stays. Similar files are listed to compare, not selected."),
-            copies, selected: { $0.trash?.origin == .duplicate })
-        add("builds", L("Project build folders"), L("Folders such as node_modules that the project’s tools build again next time."),
-            (projects?.rows ?? []).filter { $0.trash != nil })
+            copies, selected: { _ in false })
+        add("builds", L("Project build folders"), L("Folders such as node_modules that the project’s tools build again next time, which may need the network."),
+            (projects?.rows ?? []).filter { $0.trash != nil }, selected: { _ in false })
+        // A group still being searched shows as its own line until it is done.
+        for (index, name) in pending.enumerated() {
+            result.rows.append(DoctorRow(id: "cleanup.pending.\(index)", title: name, value: L("Looking…"), detail: "", severity: .info))
+        }
 
         let movable = result.rows.filter { $0.trash != nil }
         let total = movable.reduce(Int64(0)) { $0 + ($1.bytes ?? 0) }
         result.badge = movable.isEmpty ? (pending.isEmpty ? L("None found") : "") : DoctorFormat.bytes(total)
         result.headline = movable.isEmpty ? (pending.isEmpty ? L("Nothing to clean up was found.") : L("Still looking…"))
             : L("Found %d things you may not need, together %@.", movable.count, DoctorFormat.bytes(total))
-        if !pending.isEmpty { result.notes.insert(L("Still looking for: %@.", pending.joined(separator: ", ")), at: 0) }
-        result.notes.append(L("Everything goes to the Trash, and Undo Last Move puts it back until you empty the Trash. Apps you may still use are listed, not selected, unless you turn on selecting them."))
+        result.notes.append(L("Caches and old leftovers are ticked for you. Installers, copies of your files, build folders and apps are only listed: tick a group to include all of it. Everything goes to the Trash, and Undo Last Move puts it back until you empty the Trash."))
         result.report += [caches, installers, duplicates, projects].compactMap { $0?.report.first }
         return result
     }

@@ -119,7 +119,7 @@ final class DoctorCenter {
                 }.value
             case .uninstall:
                 if uninstallApp == nil { await self?.findUnused(home: env.home) } else { await self?.inspectUninstall(uninstallApp, home: env.home) }
-            case .performance: await Self.performance(env)
+            case .performance: await self?.performance(env)
             case .power: await Self.power()
             case .network: await DoctorNetwork.check(dns: try? env.run(.dnsConfiguration), proxy: try? env.run(.proxySettings))
             case .drives: await Self.drives(env)
@@ -190,6 +190,23 @@ final class DoctorCenter {
         filesTask = nil
         searchingFiles = false
         post()
+    }
+
+    /// The previous reading of each process's processor time, for the live app list.
+    private var appSample: DoctorApps.CPUSample?
+
+    /// Reads apps' memory and processor use again for the live list on Slow or Hot (every two seconds while it is on
+    /// screen), replacing only the app rows. Returns false when nothing changed (no result yet, a check running).
+    func refreshApps() async -> Bool {
+        guard Feature.doctor.isOn, stored[.performance] != nil, !running.contains(.performance) else { return false }
+        let apps = DoctorApps.candidates()
+        let previous = appSample
+        let measured = await Task.detached(priority: .utility) { DoctorApps.usage(apps, previous: previous) }.value
+        appSample = measured.sample
+        guard previous != nil, var result = stored[.performance], !running.contains(.performance) else { return false }
+        result.rows = DoctorApps.rows(measured.usage) + result.rows.filter { $0.quit == nil && $0.id != "apps" }
+        stored[.performance] = result
+        return true
     }
 
     /// Asks the apps in these rows to quit, as their own Quit command would; checks memory again a moment later.
@@ -616,7 +633,7 @@ final class DoctorCenter {
 
     // MARK: Checks that need several steps
 
-    private static func performance(_ env: DoctorEnvironment) async -> DoctorResult {
+    private func performance(_ env: DoctorEnvironment) async -> DoctorResult {
         let cpu = (try? await env.run(.processCPU)).map { DoctorParse.processes($0.text) } ?? []
         let memory = (try? await env.run(.processMemory)).map { DoctorParse.processes($0.text) } ?? []
         var result = DoctorPerformance.check(cpu: cpu, memory: memory, state: DoctorPerformance.memory(),
@@ -624,18 +641,16 @@ final class DoctorCenter {
                                              uptime: DoctorPerformance.timeSinceRestart())
         result.ran = [DoctorCommand.processCPU.displayString, DoctorCommand.processMemory.displayString]
         let apps = DoctorApps.candidates()
-        let activity = DoctorAppActivity.shared
-        activity.start()
-        let now = Date()
-        let usage = await Task.detached(priority: .utility) { DoctorApps.usage(apps) }.value.map { item -> DoctorApps.Usage in
-            var item = item
-            item.lastUse = activity.lastUse(bundleID: item.app.bundleID, launched: item.app.launched, now: now)
-            return item
-        }
+        // Two readings a second apart, so processor use is known straight away.
+        let first = await Task.detached(priority: .utility) { DoctorApps.usage(apps, previous: nil).sample }.value
+        try? await Task.sleep(for: .seconds(1))
+        let measured = await Task.detached(priority: .utility) { DoctorApps.usage(apps, previous: first) }.value
+        let usage = measured.usage
+        appSample = measured.sample
         if !usage.isEmpty {
             // Apps the user can quit first, then every busy or large process (macOS's own included) below a heading.
             let processes = result.rows.map { row -> DoctorRow in var row = row; row.level = 1; return row }
-            result.rows = DoctorApps.rows(usage, now: now)
+            result.rows = DoctorApps.rows(usage)
             if !processes.isEmpty {
                 result.rows.append(DoctorRow(id: "processes", title: L("Busiest and largest processes, macOS included"), value: "",
                                              detail: L("For reading only: macOS restarts its own processes when they are needed."),
@@ -644,12 +659,6 @@ final class DoctorCenter {
             }
             result.report.append(L("Apps that could be quit: %d, together using %@ of memory.", usage.count,
                                    DoctorFormat.memory(usage.reduce(0) { $0 + $1.bytes })))
-            let idle = usage.filter { $0.lastUse?.idle(now: now) ?? false }
-            if !idle.isEmpty {
-                result.report.append(L("Apps not used for %@ or longer: %d, together using %@ of memory.",
-                                       DoctorAppActivity.idleName(DoctorAppActivity.idleAfter), idle.count,
-                                       DoctorFormat.memory(idle.reduce(0) { $0 + $1.bytes })))
-            }
         }
         return result
     }

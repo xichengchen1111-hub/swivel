@@ -168,106 +168,9 @@ struct DoctorQuitTarget: Sendable, Equatable {
     let pid: pid_t
     let bundleID: String
     let launched: Date?
-    /// Not used for at least `DoctorAppActivity.idleAfter`: suggested for quitting.
-    var idle = false
-    /// The latest moment the app is known to have been used (sorting).
-    var lastUsed: Date? = nil
-}
-
-/// Where `DoctorAppActivity` keeps its notes: Swivel's settings, or memory in tests.
-protocol DoctorActivityStore: AnyObject {
-    func object(forKey key: String) -> Any?
-    func set(_ value: Any?, forKey key: String)
-    func removeObject(forKey key: String)
-}
-
-extension UserDefaults: DoctorActivityStore {}
-
-/// When each app was last in front. macOS keeps no such record that Swivel may read, so Swivel notes it itself while
-/// Mac Doctor is on: bundle identifiers and times only, on this Mac, in Swivel's settings; turning Mac Doctor off
-/// forgets them. Before Swivel started noting, nothing is known, so an app counts as used then at the latest.
-@MainActor final class DoctorAppActivity {
-    static let shared = DoctorAppActivity()
-    /// How long counts as "not used", for the user to choose. Apps that hold memory are usually put to sleep after
-    /// hours (Edge's sleeping tabs: 2 hours; Quitter: 10 minutes); days to a month leave out anything in recent use.
-    nonisolated static let idleChoices: [TimeInterval] = [24 * 3600, 7 * 24 * 3600, 30 * 24 * 3600]
-    nonisolated static let idleKey = "doctor.appIdleAfter"
-    /// Apps not used for this long are suggested for quitting.
-    nonisolated static var idleAfter: TimeInterval {
-        let stored = UserDefaults.standard.double(forKey: idleKey)
-        return idleChoices.contains(stored) ? stored : idleChoices[1]
-    }
-    /// "1 day", "1 week", "1 month".
-    nonisolated static func idleName(_ seconds: TimeInterval) -> String {
-        switch seconds {
-        case idleChoices[0]: L("1 day")
-        case idleChoices[2]: L("1 month")
-        default: L("1 week")
-        }
-    }
-    static let usedKey = "doctor.appsLastUsed"
-    static let sinceKey = "doctor.appsNotedSince"
-    static let maxApps = 500
-
-    struct LastUse: Sendable, Equatable {
-        /// The latest moment the app is known to have been used (or could have been, unseen).
-        let date: Date
-        /// `date` is a time Swivel saw the app in front; otherwise it's a lower bound (launch, or when noting began).
-        let exact: Bool
-        let front: Bool
-        func idle(now: Date, after: TimeInterval = DoctorAppActivity.idleAfter) -> Bool {
-            !front && now.timeIntervalSince(date) >= after
-        }
-    }
-
-    private let defaults: DoctorActivityStore
-    private var observer: NSObjectProtocol?
-    private var front: String?
-
-    init(defaults: DoctorActivityStore = UserDefaults.standard) { self.defaults = defaults }
-
-    func start() {
-        guard observer == nil else { return }
-        activated(NSWorkspace.shared.frontmostApplication?.bundleIdentifier, at: Date(), enabled: Feature.doctor.isOn)
-        observer = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
-                                                                     object: nil, queue: .main) { [weak self] note in
-            let id = (note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
-            MainActor.assumeIsolated { self?.activated(id, at: Date(), enabled: Feature.doctor.isOn) }
-        }
-    }
-
-    /// The app coming to the front and the one leaving it were both in use until now.
-    func activated(_ id: String?, at now: Date, enabled: Bool) {
-        let previous = front
-        front = id
-        guard enabled else {
-            defaults.removeObject(forKey: Self.usedKey)
-            defaults.removeObject(forKey: Self.sinceKey)
-            return
-        }
-        if defaults.object(forKey: Self.sinceKey) == nil { defaults.set(now.timeIntervalSince1970, forKey: Self.sinceKey) }
-        var used = defaults.object(forKey: Self.usedKey) as? [String: Double] ?? [:]
-        for key in [previous, id].compactMap({ $0 }) { used[key] = now.timeIntervalSince1970 }
-        if used.count > Self.maxApps {
-            used = Dictionary(uniqueKeysWithValues: used.sorted { $0.value > $1.value }.prefix(Self.maxApps).map { ($0.key, $0.value) })
-        }
-        defaults.set(used, forKey: Self.usedKey)
-    }
-
-    func lastUse(bundleID: String, launched: Date?, now: Date = Date()) -> LastUse {
-        let used = (defaults.object(forKey: Self.usedKey) as? [String: Double])?[bundleID].map(Date.init(timeIntervalSince1970:))
-        let since = (defaults.object(forKey: Self.sinceKey) as? Double).map(Date.init(timeIntervalSince1970:))
-        return Self.lastUse(seen: used, since: since, launched: launched, front: front == bundleID, now: now)
-    }
-
-    /// Launching an app counts as using it; before noting began (or with nothing noted yet) it may have been used
-    /// at any time, so the bound is then.
-    nonisolated static func lastUse(seen: Date?, since: Date?, launched: Date?, front: Bool, now: Date) -> LastUse {
-        if front { return LastUse(date: now, exact: true, front: true) }
-        let known = seen ?? min(since ?? now, now)
-        guard let launched, launched > known else { return LastUse(date: known, exact: seen != nil, front: false) }
-        return LastUse(date: min(launched, now), exact: false, front: false)
-    }
+    /// Processor use over the last reading, in percent of one core (as Activity Monitor shows it); nil before the
+    /// second reading. For sorting only.
+    var cpu: Double? = nil
 }
 
 enum DoctorApps {
@@ -282,7 +185,15 @@ enum DoctorApps {
     struct Usage: Sendable {
         let app: App
         var bytes: Int64
-        var lastUse: DoctorAppActivity.LastUse? = nil
+        /// Percent of one core since the previous reading, app and helpers together; nil on the first reading.
+        var cpu: Double? = nil
+    }
+
+    /// Processor time each process had used, to measure the next reading against.
+    struct CPUSample: Sendable {
+        var times: [pid_t: UInt64] = [:]
+        /// `mach_absolute_time`, the same units as the processes' times.
+        var at: UInt64 = 0
     }
 
     /// Apps macOS needs to keep running, which Mac Doctor never offers to quit.
@@ -291,27 +202,28 @@ enum DoctorApps {
                                          "com.apple.notificationcenterui", "com.apple.Spotlight", "com.apple.WindowManager",
                                          "com.apple.TextInputMenuAgent", "com.apple.coreservices.uiagent"]
     static let smallest: Int64 = 50_000_000
+    /// An app using this much processor is listed even when it uses little memory.
+    static let busy: Double = 5
     static let maxRows = 20
 
     /// The two orders the user picks between on the page.
     enum Sort: String, Sendable {
-        /// Longest unused first.
-        case lastUsed
+        /// Busiest first.
+        case cpu
         /// Most memory first.
         case memory
         static let key = "doctor.appSort"
-        static var current: Sort { UserDefaults.standard.string(forKey: key).flatMap(Sort.init) ?? .lastUsed }
+        static var current: Sort { UserDefaults.standard.string(forKey: key).flatMap(Sort.init) ?? .cpu }
     }
 
     /// App rows in the chosen order; every other row keeps its place.
     static func sorted(_ rows: [DoctorRow], by sort: Sort) -> [DoctorRow] {
         let slots = rows.indices.filter { rows[$0].quit != nil }
         let apps = slots.map { rows[$0] }.sorted { a, b in
+            let cpu = (a.quit?.cpu ?? 0, b.quit?.cpu ?? 0), bytes = (a.bytes ?? 0, b.bytes ?? 0)
             switch sort {
-            case .memory: return (a.bytes ?? 0) > (b.bytes ?? 0)
-            case .lastUsed:
-                let x = a.quit?.lastUsed ?? .distantFuture, y = b.quit?.lastUsed ?? .distantFuture
-                return x != y ? x < y : (a.bytes ?? 0) > (b.bytes ?? 0)
+            case .cpu: return cpu.0 != cpu.1 ? cpu.0 > cpu.1 : bytes.0 > bytes.1
+            case .memory: return bytes.0 != bytes.1 ? bytes.0 > bytes.1 : cpu.0 > cpu.1
             }
         }
         var out = rows
@@ -341,14 +253,19 @@ enum DoctorApps {
     /// Memory each app uses with its helpers: every process of this user that descends from the app or runs from
     /// inside its bundle counts towards it (Chrome's and Electron apps' helpers are where most of it goes). Uses the
     /// same "memory footprint" Activity Monitor shows. Blocking.
-    static func usage(_ apps: [App]) -> [Usage] {
-        guard !apps.isEmpty else { return [] }
+    static func usage(_ apps: [App]) -> [Usage] { usage(apps, previous: nil).usage }
+
+    /// The same, with processor use since `previous` (a process that started since then counts from zero), and this
+    /// reading to measure the next one against.
+    static func usage(_ apps: [App], previous: CPUSample?) -> (usage: [Usage], sample: CPUSample) {
+        var sample = CPUSample(at: mach_absolute_time())
+        guard !apps.isEmpty else { return ([], sample) }
         let uid = getuid()
         var parent: [pid_t: pid_t] = [:]
         var footprint: [pid_t: Int64] = [:]
         var path: [pid_t: String] = [:]
         let count = proc_listallpids(nil, 0)
-        guard count > 0 else { return [] }
+        guard count > 0 else { return ([], sample) }
         var pids = [pid_t](repeating: 0, count: Int(count) + 64)
         let filled = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
         for pid in pids.prefix(Int(max(filled, 0))) where pid > 0 {
@@ -360,11 +277,15 @@ enum DoctorApps {
             let ok = withUnsafeMutablePointer(to: &usage) {
                 $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V2, $0) }
             }
-            if ok == 0 { footprint[pid] = Int64(usage.ri_phys_footprint) }
+            if ok == 0 {
+                footprint[pid] = Int64(usage.ri_phys_footprint)
+                sample.times[pid] = usage.ri_user_time &+ usage.ri_system_time
+            }
             var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
             if proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 { path[pid] = String(cString: buffer) }
         }
         var totals = Dictionary(uniqueKeysWithValues: apps.map { ($0.pid, Int64(0)) })
+        var cpuTimes = Dictionary(uniqueKeysWithValues: apps.map { ($0.pid, UInt64(0)) })
         let byPID = Dictionary(uniqueKeysWithValues: apps.map { ($0.pid, $0) })
         for (pid, bytes) in footprint {
             var owner: pid_t?
@@ -377,41 +298,53 @@ enum DoctorApps {
             if owner == nil, let executable = path[pid] {
                 owner = apps.first { executable.hasPrefix($0.bundlePath + "/") }?.pid
             }
-            if let owner { totals[owner, default: 0] += bytes }
+            if let owner {
+                totals[owner, default: 0] += bytes
+                if let now = sample.times[pid], let before = previous?.times[pid], now >= before { cpuTimes[owner, default: 0] += now - before }
+            }
         }
-        return apps.compactMap { app in
-            guard let bytes = totals[app.pid], bytes >= smallest else { return nil }
-            return Usage(app: app, bytes: bytes)
-        }.sorted { $0.bytes > $1.bytes }.prefix(maxRows).map { $0 }
+        let elapsed = previous.map { sample.at > $0.at ? sample.at - $0.at : 0 } ?? 0
+        let all = apps.compactMap { app -> Usage? in
+            guard let bytes = totals[app.pid] else { return nil }
+            let cpu = elapsed > 0 ? Double(cpuTimes[app.pid] ?? 0) / Double(elapsed) * 100 : nil
+            return Usage(app: app, bytes: bytes, cpu: cpu)
+        }
+        // The largest by memory, and any app that is busy now however little memory it uses.
+        let large = all.filter { $0.bytes >= smallest }.sorted { $0.bytes > $1.bytes }.prefix(maxRows)
+        let kept = Set(large.map(\.app.pid))
+        let busyNow = all.filter { ($0.cpu ?? 0) >= busy && !kept.contains($0.app.pid) }
+        return (Array(large) + busyNow, sample)
     }
 
-    static func rows(_ usage: [Usage], now: Date = Date()) -> [DoctorRow] {
+    static func rows(_ usage: [Usage]) -> [DoctorRow] {
         guard !usage.isEmpty else { return [] }
         var rows = [DoctorRow(id: "apps", title: L("Apps you can quit to free memory"),
                               value: DoctorFormat.memory(usage.reduce(0) { $0 + $1.bytes }),
-                              detail: L("Memory each app uses together with its helper processes, and when you last used it. Apps you haven’t used for %@ or longer are selected for you.", DoctorAppActivity.idleName(DoctorAppActivity.idleAfter)),
+                              detail: L("Memory and processor each app uses right now, together with its helper processes. Updated every two seconds while this page is open. Select apps and choose Quit Apps."),
                               severity: .info)]
+        let physical = Double(ProcessInfo.processInfo.physicalMemory)
         for item in usage {
-            let idle = item.lastUse?.idle(now: now) ?? false
             let memory = DoctorFormat.memory(item.bytes)
+            let level = impact(bytes: item.bytes, cpu: item.cpu, physical: physical)
+            let notes = [level.memory ? L("Uses a lot of memory") : nil, level.cpu ? L("Busy: uses a lot of processor") : nil].compactMap { $0 }
             rows.append(DoctorRow(id: "app.\(item.app.pid)", title: DoctorText.visible(item.app.name),
-                                  value: item.lastUse.map { memory + " · " + lastUsed($0, now: now) } ?? memory,
-                                  detail: idle ? L("Not used for %@ or longer. Quitting it frees about %@; it asks you to save open work first.",
-                                                   DoctorAppActivity.idleName(DoctorAppActivity.idleAfter), memory) : "",
-                                  severity: item.bytes >= 2_000_000_000 || idle ? .review : .info, bytes: item.bytes,
-                                  quit: DoctorQuitTarget(pid: item.app.pid, bundleID: item.app.bundleID, launched: item.app.launched, idle: idle,
-                                                         lastUsed: item.lastUse?.date),
+                                  value: item.cpu.map { memory + " · " + L("%d%% CPU", Int($0.rounded())) } ?? memory,
+                                  detail: notes.joined(separator: " · "),
+                                  severity: level.severity, bytes: item.bytes,
+                                  quit: DoctorQuitTarget(pid: item.app.pid, bundleID: item.app.bundleID, launched: item.app.launched, cpu: item.cpu),
                                   level: 1))
         }
         return rows
     }
 
-    /// "Last used 3 days ago", or "Not used for at least 3 days" when Swivel didn't see it.
-    static func lastUsed(_ use: DoctorAppActivity.LastUse, now: Date) -> String {
-        let ago = now.timeIntervalSince(use.date)
-        if use.front { return L("In use now") }
-        if ago < 60 { return use.exact ? L("Used just now") : L("No record yet") }
-        return use.exact ? L("Last used %@ ago", DoctorFormat.duration(ago)) : L("Not used for at least %@", DoctorFormat.duration(ago))
+    /// How much an app weighs on the Mac, in plain levels rather than raw numbers: a fifth of the memory or half a
+    /// core is a lot (yellow), twice that is very high (red). Processor in percent of one core.
+    static func impact(bytes: Int64, cpu: Double?, physical: Double) -> (severity: DoctorSeverity, memory: Bool, cpu: Bool) {
+        let share = physical > 0 ? Double(bytes) / physical : 0
+        let busy = cpu ?? 0
+        let memory = share >= 0.2, processor = busy >= 50
+        let severity: DoctorSeverity = share >= 0.4 || busy >= 100 ? .problem : memory || processor ? .review : .info
+        return (severity, memory, processor)
     }
 
     /// Asks each app to quit, as choosing Quit in it would (never forced). Only an app that is still the one the
