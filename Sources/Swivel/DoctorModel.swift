@@ -14,7 +14,7 @@ enum DoctorSection: String, CaseIterable, Sendable {
         case .folders: "Folder Sizes"
         case .duplicates: "Duplicate Files"
         case .projects: "Project Builds"
-        case .uninstall: "Uninstall Apps"
+        case .uninstall: "Clean Up Files"
         case .performance: "Slow or Hot"
         case .app: "Apps That Won’t Open"
         case .drives: "External Drives"
@@ -58,7 +58,7 @@ enum DoctorSection: String, CaseIterable, Sendable {
         case .projects:
             "Folders that build tools recreate by themselves (node_modules, Rust target, Swift .build, Gradle build and others) in a folder you choose. Each is recognised by the project file next to it."
         case .uninstall:
-            "Remove an app together with the caches, settings and support files it left in your Library. Everything goes to the Trash and can be put back."
+            "Everything this Mac may no longer need, in one list: apps you haven’t opened for months, files left by apps you removed, caches, installers, extra copies of files and rebuildable project folders. Or choose one app to remove with its files. Everything goes to the Trash and can be put back."
         case .performance:
             "Which apps use the most memory and processor, and whether the Mac is short of memory or too hot."
         case .app:
@@ -199,6 +199,10 @@ struct DoctorTrashTarget: Sendable, Equatable {
         case build
         /// A removed app's file or folder in ~/Library.
         case leftover
+        /// An app bundle in an Applications folder, uninstalled with its own Library items.
+        case app
+        /// A file or folder in ~/Library named after an app that is no longer installed.
+        case orphan
     }
 }
 
@@ -264,6 +268,18 @@ enum DoctorFormat {
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+
+    /// "3 days", "5 hours" in the app's language: the largest unit only.
+    static func duration(_ seconds: TimeInterval) -> String {
+        let formatter = DateComponentsFormatter()
+        var calendar = Calendar.current
+        calendar.locale = Locale(identifier: Language.resolved == .en ? "en" : Language.resolved.rawValue)
+        formatter.calendar = calendar
+        formatter.unitsStyle = .full
+        formatter.maximumUnitCount = 1
+        formatter.allowedUnits = [.day, .hour, .minute]
+        return formatter.string(from: max(60, seconds)) ?? ""
     }
 
     /// "~/Library/Caches/…" for paths inside the home folder.

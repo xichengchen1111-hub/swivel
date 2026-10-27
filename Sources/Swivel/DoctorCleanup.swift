@@ -168,6 +168,9 @@ struct DoctorQuitTarget: Sendable, Equatable {
     let pid: pid_t
     let bundleID: String
     let launched: Date?
+    /// Processor use over the last reading, in percent of one core (as Activity Monitor shows it); nil before the
+    /// second reading. For sorting only.
+    var cpu: Double? = nil
 }
 
 enum DoctorApps {
@@ -182,6 +185,15 @@ enum DoctorApps {
     struct Usage: Sendable {
         let app: App
         var bytes: Int64
+        /// Percent of one core since the previous reading, app and helpers together; nil on the first reading.
+        var cpu: Double? = nil
+    }
+
+    /// Processor time each process had used, to measure the next reading against.
+    struct CPUSample: Sendable {
+        var times: [pid_t: UInt64] = [:]
+        /// `mach_absolute_time`, the same units as the processes' times.
+        var at: UInt64 = 0
     }
 
     /// Apps macOS needs to keep running, which Mac Doctor never offers to quit.
@@ -190,7 +202,34 @@ enum DoctorApps {
                                          "com.apple.notificationcenterui", "com.apple.Spotlight", "com.apple.WindowManager",
                                          "com.apple.TextInputMenuAgent", "com.apple.coreservices.uiagent"]
     static let smallest: Int64 = 50_000_000
-    static let maxRows = 8
+    /// An app using this much processor is listed even when it uses little memory.
+    static let busy: Double = 5
+    static let maxRows = 20
+
+    /// The two orders the user picks between on the page.
+    enum Sort: String, Sendable {
+        /// Busiest first.
+        case cpu
+        /// Most memory first.
+        case memory
+        static let key = "doctor.appSort"
+        static var current: Sort { UserDefaults.standard.string(forKey: key).flatMap(Sort.init) ?? .cpu }
+    }
+
+    /// App rows in the chosen order; every other row keeps its place.
+    static func sorted(_ rows: [DoctorRow], by sort: Sort) -> [DoctorRow] {
+        let slots = rows.indices.filter { rows[$0].quit != nil }
+        let apps = slots.map { rows[$0] }.sorted { a, b in
+            let cpu = (a.quit?.cpu ?? 0, b.quit?.cpu ?? 0), bytes = (a.bytes ?? 0, b.bytes ?? 0)
+            switch sort {
+            case .cpu: return cpu.0 != cpu.1 ? cpu.0 > cpu.1 : bytes.0 > bytes.1
+            case .memory: return bytes.0 != bytes.1 ? bytes.0 > bytes.1 : cpu.0 > cpu.1
+            }
+        }
+        var out = rows
+        for (slot, app) in zip(slots, apps) { out[slot] = app }
+        return out
+    }
 
     /// Running apps that may be offered, read on the main thread.
     @MainActor static func candidates() -> [App] {
@@ -214,14 +253,19 @@ enum DoctorApps {
     /// Memory each app uses with its helpers: every process of this user that descends from the app or runs from
     /// inside its bundle counts towards it (Chrome's and Electron apps' helpers are where most of it goes). Uses the
     /// same "memory footprint" Activity Monitor shows. Blocking.
-    static func usage(_ apps: [App]) -> [Usage] {
-        guard !apps.isEmpty else { return [] }
+    static func usage(_ apps: [App]) -> [Usage] { usage(apps, previous: nil).usage }
+
+    /// The same, with processor use since `previous` (a process that started since then counts from zero), and this
+    /// reading to measure the next one against.
+    static func usage(_ apps: [App], previous: CPUSample?) -> (usage: [Usage], sample: CPUSample) {
+        var sample = CPUSample(at: mach_absolute_time())
+        guard !apps.isEmpty else { return ([], sample) }
         let uid = getuid()
         var parent: [pid_t: pid_t] = [:]
         var footprint: [pid_t: Int64] = [:]
         var path: [pid_t: String] = [:]
         let count = proc_listallpids(nil, 0)
-        guard count > 0 else { return [] }
+        guard count > 0 else { return ([], sample) }
         var pids = [pid_t](repeating: 0, count: Int(count) + 64)
         let filled = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
         for pid in pids.prefix(Int(max(filled, 0))) where pid > 0 {
@@ -233,11 +277,15 @@ enum DoctorApps {
             let ok = withUnsafeMutablePointer(to: &usage) {
                 $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V2, $0) }
             }
-            if ok == 0 { footprint[pid] = Int64(usage.ri_phys_footprint) }
+            if ok == 0 {
+                footprint[pid] = Int64(usage.ri_phys_footprint)
+                sample.times[pid] = usage.ri_user_time &+ usage.ri_system_time
+            }
             var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
             if proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 { path[pid] = String(cString: buffer) }
         }
         var totals = Dictionary(uniqueKeysWithValues: apps.map { ($0.pid, Int64(0)) })
+        var cpuTimes = Dictionary(uniqueKeysWithValues: apps.map { ($0.pid, UInt64(0)) })
         let byPID = Dictionary(uniqueKeysWithValues: apps.map { ($0.pid, $0) })
         for (pid, bytes) in footprint {
             var owner: pid_t?
@@ -250,29 +298,53 @@ enum DoctorApps {
             if owner == nil, let executable = path[pid] {
                 owner = apps.first { executable.hasPrefix($0.bundlePath + "/") }?.pid
             }
-            if let owner { totals[owner, default: 0] += bytes }
+            if let owner {
+                totals[owner, default: 0] += bytes
+                if let now = sample.times[pid], let before = previous?.times[pid], now >= before { cpuTimes[owner, default: 0] += now - before }
+            }
         }
-        return apps.compactMap { app in
-            guard let bytes = totals[app.pid], bytes >= smallest else { return nil }
-            return Usage(app: app, bytes: bytes)
-        }.sorted { $0.bytes > $1.bytes }.prefix(maxRows).map { $0 }
+        let elapsed = previous.map { sample.at > $0.at ? sample.at - $0.at : 0 } ?? 0
+        let all = apps.compactMap { app -> Usage? in
+            guard let bytes = totals[app.pid] else { return nil }
+            let cpu = elapsed > 0 ? Double(cpuTimes[app.pid] ?? 0) / Double(elapsed) * 100 : nil
+            return Usage(app: app, bytes: bytes, cpu: cpu)
+        }
+        // The largest by memory, and any app that is busy now however little memory it uses.
+        let large = all.filter { $0.bytes >= smallest }.sorted { $0.bytes > $1.bytes }.prefix(maxRows)
+        let kept = Set(large.map(\.app.pid))
+        let busyNow = all.filter { ($0.cpu ?? 0) >= busy && !kept.contains($0.app.pid) }
+        return (Array(large) + busyNow, sample)
     }
 
     static func rows(_ usage: [Usage]) -> [DoctorRow] {
         guard !usage.isEmpty else { return [] }
         var rows = [DoctorRow(id: "apps", title: L("Apps you can quit to free memory"),
                               value: DoctorFormat.memory(usage.reduce(0) { $0 + $1.bytes }),
-                              detail: L("Memory each app uses together with its helper processes. Select apps and choose Quit Apps."),
+                              detail: L("Memory and processor each app uses right now, together with its helper processes. Updated every two seconds while this page is open. Select apps and choose Quit Apps."),
                               severity: .info)]
+        let physical = Double(ProcessInfo.processInfo.physicalMemory)
         for item in usage {
+            let memory = DoctorFormat.memory(item.bytes)
+            let level = impact(bytes: item.bytes, cpu: item.cpu, physical: physical)
+            let notes = [level.memory ? L("Uses a lot of memory") : nil, level.cpu ? L("Busy: uses a lot of processor") : nil].compactMap { $0 }
             rows.append(DoctorRow(id: "app.\(item.app.pid)", title: DoctorText.visible(item.app.name),
-                                  value: DoctorFormat.memory(item.bytes),
-                                  detail: "",
-                                  severity: item.bytes >= 2_000_000_000 ? .review : .info, bytes: item.bytes,
-                                  quit: DoctorQuitTarget(pid: item.app.pid, bundleID: item.app.bundleID, launched: item.app.launched),
+                                  value: item.cpu.map { memory + " · " + L("%d%% CPU", Int($0.rounded())) } ?? memory,
+                                  detail: notes.joined(separator: " · "),
+                                  severity: level.severity, bytes: item.bytes,
+                                  quit: DoctorQuitTarget(pid: item.app.pid, bundleID: item.app.bundleID, launched: item.app.launched, cpu: item.cpu),
                                   level: 1))
         }
         return rows
+    }
+
+    /// How much an app weighs on the Mac, in plain levels rather than raw numbers: a fifth of the memory or half a
+    /// core is a lot (yellow), twice that is very high (red). Processor in percent of one core.
+    static func impact(bytes: Int64, cpu: Double?, physical: Double) -> (severity: DoctorSeverity, memory: Bool, cpu: Bool) {
+        let share = physical > 0 ? Double(bytes) / physical : 0
+        let busy = cpu ?? 0
+        let memory = share >= 0.2, processor = busy >= 50
+        let severity: DoctorSeverity = share >= 0.4 || busy >= 100 ? .problem : memory || processor ? .review : .info
+        return (severity, memory, processor)
     }
 
     /// Asks each app to quit, as choosing Quit in it would (never forced). Only an app that is still the one the

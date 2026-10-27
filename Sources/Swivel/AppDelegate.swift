@@ -48,6 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         CustomWheelLauncher.shared.sync()
         Clothesline.shared.start()
         AirDropShelf.shared.sync()
+        // A development build noted when apps were last in front; Mac Doctor no longer does. Forget what it noted.
+        for key in ["doctor.appsLastUsed", "doctor.appsNotedSince", "doctor.appIdleAfter"] { UserDefaults.standard.removeObject(forKey: key) }
         if ProcessInfo.processInfo.environment["SWIVEL_SHOW_ROPE"] != nil {  // for testing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { Clothesline.shared.toggle() }
         }
