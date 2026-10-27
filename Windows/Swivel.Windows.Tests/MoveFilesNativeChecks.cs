@@ -102,7 +102,12 @@ internal static class MoveFilesNativeChecks
 
         foreach (var drive in DriveInfo.GetDrives())
             if ((drive.DriveType is DriveType.Fixed or DriveType.Removable) && drive.IsReady && !string.Equals(drive.RootDirectory.FullName, Path.GetPathRoot(root), StringComparison.OrdinalIgnoreCase))
-            { reject(() => MoveSession.Open(new[] { movedFirst }, drive.RootDirectory.FullName, default), "Native cross-volume move refused without copy/delete"); break; }
+            {
+                reject(() => MoveSession.Open(new[] { movedFirst }, drive.RootDirectory.FullName, default), "Native cross-volume move refused without copy/delete");
+                if (drive.DriveFormat != "NTFS") Console.WriteLine("SKIP: the other drive is not NTFS, so the volume count is not checked.");
+                else check(NativeFiles.CountOnVolumeOf(new[] { movedFirst }, drive.RootDirectory.FullName) == 0, "A file on another NTFS drive is counted as not on the destination volume, so Move Files offers a copy instead");
+                break;
+            }
         check(!Directory.EnumerateFiles(root, ".swivel-*", SearchOption.AllDirectories).Any(), "Move never creates a temporary copy or staging file");
         Directory.Move(root, root + " released"); check(Directory.Exists(root + " released"), "All native file and directory leases are released after every failure and success");
     }

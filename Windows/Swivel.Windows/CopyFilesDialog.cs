@@ -6,12 +6,15 @@ using System.Windows.Controls;
 
 namespace Swivel.Windows;
 
-/// Full review before copying: every source path and the destination folder.
+/// Full review before copying: every source path and the destination folder. Move Files
+/// opens it too when every file is on another drive than the destination (`crossDrive`).
 internal sealed class CopyFilesDialog : Window
 {
-    public CopyFilesDialog(App app, CopySession session)
+    internal const string CrossDrive = "The destination is on another drive. Swivel does not move files between drives: it copies them and keeps every original, so a stopped copy never loses a file. After checking the copies you can move the originals to the Recycle Bin yourself.";
+
+    public CopyFilesDialog(App app, CopySession session, bool crossDrive = false)
     {
-        Title = app.L("Copy to Folder…");
+        Title = app.L(crossDrive ? "Copy Instead of Move" : "Copy to Folder…");
         MoveFilesLayout.Configure(this);
         var root = new DockPanel { Margin = new Thickness(20) };
         var buttons = new WrapPanel();
@@ -20,6 +23,7 @@ internal sealed class CopyFilesDialog : Window
         cancel.IsCancel = true; buttons.Children.Add(copy); buttons.Children.Add(cancel);
         DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
         var top = new StackPanel();
+        if (crossDrive) top.Children.Add(UI.Text(app.L(CrossDrive), 14));
         top.Children.Add(UI.Text(string.Format(CultureInfo.CurrentCulture, app.L("{0} file(s), {1} MB, into:"), session.Sources.Count,
             (session.TotalBytes / 1_000_000.0).ToString("0.##", CultureInfo.CurrentCulture)), 18));
         top.Children.Add(UI.Text(session.Directory));

@@ -1306,17 +1306,23 @@ public sealed partial class App : Application
             finished.SetResult();
         }
     }
-    private async Task RunCopyAsync(string[] files, Window owner, Action<string> report, CancellationToken token)
+    // `directory` is given when Move Files found every file on another drive: then it copies
+    // instead, keeping every original.
+    private async Task RunCopyAsync(string[] files, Window owner, Action<string> report, CancellationToken token, string? directory = null)
     {
         token.ThrowIfCancellationRequested();
-        var picker = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose Destination Folder…"), Multiselect = false };
-        if (picker.ShowDialog(owner) != true) return;
-        token.ThrowIfCancellationRequested(); string directory = picker.FolderName;
+        bool crossDrive = directory is not null;
+        if (directory is null)
+        {
+            var picker = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose Destination Folder…"), Multiselect = false };
+            if (picker.ShowDialog(owner) != true) return;
+            token.ThrowIfCancellationRequested(); directory = picker.FolderName;
+        }
         CopyOutcome outcome;
         using (var session = await Task.Run(() => CopySession.Open(files, directory, token), token))
         {
             token.ThrowIfCancellationRequested();
-            if (!ShowOperationDialog(new CopyFilesDialog(this, session), owner, token)) return;
+            if (!ShowOperationDialog(new CopyFilesDialog(this, session, crossDrive), owner, token)) return;
             token.ThrowIfCancellationRequested();
             if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
             report(L("Processing…"));
@@ -1324,9 +1330,17 @@ public sealed partial class App : Application
                 Dispatcher.InvokeAsync(() => report(string.Format(L("Copying file {0} of {1}…"), done, total)))));
         }
         string summary = string.Format(L("Copied {0} of {1} file(s). Originals were not changed."), outcome.Copied.Count, outcome.Total);
+        if (crossDrive) summary = L("The destination is on another drive, so the files were copied instead of moved.") + " " + summary;
         if (outcome.Cancelled) summary += " " + L("Cancelled. Completed files were kept.");
         report(summary); Home.ShowResults(outcome.Copied.Select(x => x.Destination), summary);
-        if (outcome.Error is not null && !exiting) ShowError(outcome.Error);
+        if (exiting || token.IsCancellationRequested) return;
+        if (outcome.Copied.Count == 0) { if (outcome.Error is not null) ShowError(outcome.Error); return; }
+        // The results window shows any problem and can undo copies while it is open.
+        var results = new CopyFilesResultDialog(this, outcome, crossDrive);
+        ShowOperationDialog(results, owner, token);
+        if (results.Moved == 0) return;
+        summary += " " + string.Format(L("Copies moved to the Recycle Bin or removed: {0}"), results.Moved);
+        report(summary); Home.ShowResults(results.Remaining, summary);
     }
 
     private async Task RunMoveAsync(string[] files, Window owner, Action<string> report, CancellationToken token, bool undo)
@@ -1334,7 +1348,6 @@ public sealed partial class App : Application
         if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
         workFeature = Feature.FileMoves; token.ThrowIfCancellationRequested();
         if (undo && MoveHistory.Count == 0) throw new UserError("There is no file move to undo in this session.");
-        if (!undo && MoveHistory.Count >= 20) throw new UserError("Undo or forget move history before starting another batch (20 batches maximum).");
         var receipt = undo ? MoveHistory[^1] : Array.Empty<MoveLocation>();
         string directory = "";
         if (!undo)
@@ -1343,6 +1356,15 @@ public sealed partial class App : Application
             var picker = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose Destination Folder…"), Multiselect = false };
             if (picker.ShowDialog(owner) != true) return;
             token.ThrowIfCancellationRequested(); directory = picker.FolderName;
+            // Between drives a move would be a copy followed by deleting the original; Swivel
+            // only offers the copy (as on Mac), and a mix of drives is refused.
+            int? onDestination = await OnSta(() => NativeFiles.CountOnVolumeOf(files, directory));
+            token.ThrowIfCancellationRequested();
+            if (onDestination == 0) { await RunCopyAsync(files, owner, report, token, directory); return; }
+            if (onDestination < files.Length)
+                throw new UserError("Some selected files are on the destination drive and some are on another drive. Move them in separate batches; files on another drive are copied instead and their originals stay.");
+            // Only real moves add to the history; a copy instead does not.
+            if (MoveHistory.Count >= 20) throw new UserError("Undo or forget move history before starting another batch (20 batches maximum).");
         }
         MoveOutcome? outcome = null;
         IReadOnlyList<MovePair> plan;

@@ -1054,10 +1054,10 @@
     "為草稿選擇 1–100 個本機檔案。",
     "下書き用に1～100個のローカルファイルを選択してください。"
   ],
-  "Choose 1–100 ordinary files on the same NTFS volume as the destination. Hard links, read-only files, cross-volume moves, cloud placeholders and linked paths are not supported. Files already in the destination folder stay in place and are marked as unchanged.": [
-    "选择与目标文件夹位于同一 NTFS 卷的 1–100 个普通文件。不支持硬链接、只读文件、跨卷移动、云占位文件和包含链接的路径。已在目标文件夹中的文件会留在原处，并标记为未改变。",
-    "選擇與目標資料夾位於同一 NTFS 磁碟區的 1–100 個一般檔案。不支援硬連結、唯讀檔案、跨磁碟區移動、雲端預留位置檔案和包含連結的路徑。已在目標資料夾中的檔案會留在原處，並標記為未變更。",
-    "移動先と同じ NTFS ボリュームにある通常のファイルを 1～100 個選択してください。ハードリンク、読み取り専用ファイル、ボリューム間の移動、クラウドのプレースホルダー、リンクを含むパスには対応していません。既に移動先フォルダーにあるファイルはそのまま残り、変更なしと表示されます。"
+  "Choose 1–100 ordinary files on the same NTFS volume as the destination. When every selected file is on another drive, Swivel offers to copy them instead and keeps the originals; a mix of drives is refused. Hard links, read-only files, cloud placeholders and linked paths are not supported. Files already in the destination folder stay in place and are marked as unchanged.": [
+    "选择与目标文件夹位于同一 NTFS 卷的 1–100 个普通文件。若所选文件全部位于其他驱动器，Swivel 会改为提供复制并保留原文件；混合多个驱动器的选择会被拒绝。不支持硬链接、只读文件、云占位文件和包含链接的路径。已在目标文件夹中的文件会留在原处，并标记为未改变。",
+    "選擇與目標資料夾位於同一 NTFS 磁碟區的 1–100 個一般檔案。若所選檔案全部位於其他磁碟機，Swivel 會改為提供複製並保留原始檔案；混合多個磁碟機的選擇會被拒絕。不支援硬連結、唯讀檔案、雲端預留位置檔案和包含連結的路徑。已在目標資料夾中的檔案會留在原處，並標記為未變更。",
+    "移動先と同じ NTFS ボリュームにある通常のファイルを 1～100 個選択してください。選択したファイルがすべて別のドライブにある場合は、代わりにコピーを提案し、元のファイルは残します。複数のドライブが混在する選択は拒否されます。ハードリンク、読み取り専用ファイル、クラウドのプレースホルダー、リンクを含むパスには対応していません。既に移動先フォルダーにあるファイルはそのまま残り、変更なしと表示されます。"
   ],
   "Choose 1–100 ordinary local files. The complete draft is limited to 12,000 UTF-8 bytes; long or escaped paths can fit fewer files. Open Draft additionally requires a complete link of at most 2,048 characters. Longer links disable opening while Copy Draft retains the full text. No folder permission, file attachment or automatic submission is requested.": [
     "选择 1–100 个普通本地文件。完整草稿最多 12,000 个 UTF-8 字节；长路径或转义较多时，能容纳的文件会更少。“打开草稿”另要求完整链接不超过 2,048 个字符。链接过长将禁用打开，但“复制草稿”保留全文。不请求文件夹权限、文件附件或自动提交。",
@@ -12953,5 +12953,95 @@
     "只列出所配置临时文件夹中的直接项目，且该项目及其中测量到的所有内容的创建、写入和改动时间都在 7 天以前（最近复制或解压到这里的文件即使修改日期较旧，也算最近）。跳过的、不完整的、没有日期的项目以及最近改动过的都不会列出。不会替你预先选择。应用可能仍需要旧文件，请先检查列表。每次移动前会再次检查：文件的大小和修改时间必须不变且没有其他硬链接；文件夹的修改时间必须不变，并重新完整测量，其中 7 天内没有任何改动。正在使用的项目可能留在原处。如果 Windows 只移走或删除了文件夹的一部分（例如询问是否永久删除而其中有文件正在使用），结果会说明；请检查回收站。只使用有回收站的固定磁盘；项目太大放不进回收站时，Windows 会先询问是否永久删除。窗口打开期间，“撤销移动”可放回最近移走的项目，除非原位置已有别的东西；还原的项目算作最近改动，会从列表中移除。之后请从回收站还原。",
     "只列出所設定暫存資料夾中的直接項目，且該項目及其中測量到的所有內容的建立、寫入和變動時間都在 7 天以前（最近複製或解壓縮到這裡的檔案即使修改日期較舊，也算最近）。略過的、不完整的、沒有日期的項目以及最近變動過的都不會列出。不會替你預先選取。應用程式可能仍需要舊檔案，請先檢查清單。每次移動前會再次檢查：檔案的大小和修改時間必須不變且沒有其他硬式連結；資料夾的修改時間必須不變，並重新完整測量，其中 7 天內沒有任何變動。正在使用的項目可能留在原處。如果 Windows 只移走或刪除了資料夾的一部分（例如詢問是否永久刪除而其中有檔案正在使用），結果會說明；請檢查資源回收筒。只使用有資源回收筒的固定磁碟；項目太大放不進資源回收筒時，Windows 會先詢問是否永久刪除。視窗開啟期間，「復原移動」可放回最近移走的項目，除非原位置已有其他項目；還原的項目算作最近變動，會從清單中移除。之後請從資源回收筒還原。",
     "設定された一時フォルダーの直下の項目のうち、その項目と中で計測したすべての内容の作成・書き込み・変更が 7 日より前のものだけを一覧します（最近ここへコピーや展開されたファイルは、更新日が古くても最近とみなします）。スキップ・不完全・日付不明の項目や最近変更されたものは一覧しません。あらかじめ選択はしません。アプリが古いファイルをまだ必要とする場合があるので、先に一覧を確認してください。移動の前に毎回もう一度確認します。ファイルはサイズと更新日時が同じでほかのハードリンクがないこと、フォルダーは更新日時が同じで、もう一度完全に計測して中に 7 日以内の変更がないことが必要です。使用中の項目はそのまま残る場合があります。Windows がフォルダーの一部だけを移動または削除した場合（たとえば完全に削除するか確認され、中のファイルが使用中だったとき）は結果に表示しますので、ごみ箱を確認してください。ごみ箱のある固定ドライブだけを使います。ごみ箱に入らない大きさの場合、Windows が完全に削除するか確認します。このウィンドウを開いている間は「移動を取り消す」で最後に移動した項目を戻せます（元の場所に別の項目がない場合）。戻した項目は最近変更されたものとして一覧から外れます。その後はごみ箱から復元してください。"
+  ],
+  "The destination is on another drive. Swivel does not move files between drives: it copies them and keeps every original, so a stopped copy never loses a file. After checking the copies you can move the originals to the Recycle Bin yourself.": [
+    "目标位于另一个驱动器。Swivel 不在驱动器之间移动文件：它会复制文件并保留所有原文件，因此复制中途停止也不会丢失文件。检查副本后，你可以自行将原文件移到回收站。",
+    "目標位於另一個磁碟機。Swivel 不在磁碟機之間移動檔案：它會複製檔案並保留所有原始檔案，因此複製中途停止也不會遺失檔案。檢查副本後，你可以自行將原始檔案移到資源回收筒。",
+    "移動先は別のドライブにあります。Swivel はドライブ間でファイルを移動しません。ファイルをコピーし、元のファイルはすべて残すため、コピーが途中で止まってもファイルは失われません。コピーを確認した後、元のファイルはご自身でごみ箱に移動できます。"
+  ],
+  "Copy Instead of Move": [
+    "改为复制而不移动",
+    "改為複製而不移動",
+    "移動の代わりにコピー"
+  ],
+  "The destination is on another drive, so the files were copied instead of moved.": [
+    "目标位于另一个驱动器，因此文件已复制而未移动。",
+    "目標位於另一個磁碟機，因此檔案已複製而未移動。",
+    "移動先が別のドライブにあるため、ファイルは移動せずにコピーしました。"
+  ],
+  "Copies moved to the Recycle Bin or removed: {0}": [
+    "已移到回收站或已移除的副本：{0}",
+    "已移到資源回收筒或已移除的副本：{0}",
+    "ごみ箱に移動または削除されたコピー：{0}"
+  ],
+  "Some selected files are on the destination drive and some are on another drive. Move them in separate batches; files on another drive are copied instead and their originals stay.": [
+    "所选文件中有些位于目标驱动器，有些位于其他驱动器。请分批移动；位于其他驱动器的文件会改为复制，原文件保留。",
+    "所選檔案中有些位於目標磁碟機，有些位於其他磁碟機。請分批移動；位於其他磁碟機的檔案會改為複製，原始檔案保留。",
+    "選択したファイルの一部は移動先のドライブにあり、一部は別のドライブにあります。別々に移動してください。別のドライブにあるファイルは代わりにコピーされ、元のファイルは残ります。"
+  ],
+  "To undo the copy, select copies (or Select All Copies) and move them with Move Selected to Recycle Bin…, which asks first. A copy is moved only while it is still the file Swivel created, with the size and modified time recorded right after copying and no other hard link; a copy that was renamed or replaced, or whose size, modified time or links changed, is left alone (its contents are not read again). Originals are never opened or changed. Only fixed drives with a Recycle Bin are used; if a copy is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move puts the last moved copies back while this window is open, unless something now exists at their place; afterwards, restore them from the Recycle Bin.": [
+    "要撤销复制，请选择副本（或全选副本），再用“将所选项移到回收站…”移走，移动前会先询问。只有副本仍是 Swivel 创建的那个文件、大小和修改时间与复制后立即记录的一致且没有其他硬链接时才会移动；已被重命名或替换，或大小、修改时间、链接数已改变的副本会保持不动（不会重新读取内容）。原文件不会被打开或更改。仅使用带回收站的固定驱动器；如果副本太大无法放入回收站，Windows 会在永久删除前询问。窗口打开期间，“撤销移动”可放回最近移走的副本，除非其原位置现在已有内容；之后请从回收站还原。",
+    "要復原複製，請選擇副本（或全選副本），再用「將所選項目移到資源回收筒…」移走，移動前會先詢問。只有副本仍是 Swivel 建立的那個檔案、大小和修改時間與複製後立即記錄的一致且沒有其他硬連結時才會移動；已被重新命名或取代，或大小、修改時間、連結數已變更的副本會保持不動（不會重新讀取內容）。原始檔案不會被開啟或變更。僅使用具有資源回收筒的固定磁碟機；如果副本太大無法放入資源回收筒，Windows 會在永久刪除前詢問。視窗開啟期間，「復原移動」可放回最近移走的副本，除非其原位置現在已有內容；之後請從資源回收筒還原。",
+    "コピーを取り消すには、コピーを選択し（または「すべてのコピーを選択」）、「選択項目をごみ箱に移動…」で移動します（移動前に確認します）。コピーが Swivel の作成したファイルのままで、サイズと更新日時がコピー直後に記録した値と同じで、ほかのハードリンクがない場合にのみ移動します。名前変更や置き換えをされたコピー、サイズ・更新日時・リンク数が変わったコピーはそのままにします（内容は読み直しません）。元のファイルを開いたり変更したりすることはありません。ごみ箱のある固定ドライブのみを使います。コピーが大きすぎてごみ箱に入らない場合、Windows は完全に削除する前に確認します。このウィンドウを開いている間は、「移動を取り消す」で最後に移動したコピーを元に戻せます（元の場所に何かがある場合を除く）。その後はごみ箱から復元してください。"
+  ],
+  "Copy Results": [
+    "复制结果",
+    "複製結果",
+    "コピーの結果"
+  ],
+  "Move 1 copy to the Recycle Bin?": [
+    "将 1 个副本移到回收站？",
+    "將 1 個副本移到資源回收筒？",
+    "1 個のコピーをごみ箱に移動しますか？"
+  ],
+  "Move {0} copies to the Recycle Bin?": [
+    "将 {0} 个副本移到回收站？",
+    "將 {0} 個副本移到資源回收筒？",
+    "{0} 個のコピーをごみ箱に移動しますか？"
+  ],
+  "Only the copies are moved; their originals stay where they are.": [
+    "只移动副本，原文件留在原处。",
+    "只移動副本，原始檔案留在原處。",
+    "移動するのはコピーだけで、元のファイルはそのまま残ります。"
+  ],
+  "Select All Copies": [
+    "全选副本",
+    "全選副本",
+    "すべてのコピーを選択"
+  ],
+  "Not verified; not offered for undo": [
+    "未验证；不提供撤销",
+    "未驗證；不提供復原",
+    "未確認のため取り消し対象外"
+  ],
+  "Can be moved to the Recycle Bin": [
+    "可移到回收站",
+    "可移到資源回收筒",
+    "ごみ箱に移動可能"
+  ],
+  "It was renamed, removed or replaced since Swivel copied it, or its size, modified time or links changed, so it was left alone.": [
+    "自 Swivel 复制以来它已被重命名、移除或替换，或大小、修改时间、链接数已改变，因此保持不动。",
+    "自 Swivel 複製以來它已被重新命名、移除或取代，或大小、修改時間、連結數已變更，因此保持不動。",
+    "Swivel がコピーした後に名前変更、削除、置き換えされたか、サイズ・更新日時・リンク数が変わったため、そのままにしました。"
+  ],
+  "Copied File": [
+    "副本",
+    "副本",
+    "コピーしたファイル"
+  ],
+  "Original File": [
+    "原文件",
+    "原始檔案",
+    "元のファイル"
+  ],
+  "Verified; its attributes (such as System) keep it out of undo": [
+    "已验证；其属性（如“系统”）使其不在撤销范围内",
+    "已驗證；其屬性（如「系統」）使其不在復原範圍內",
+    "確認済み。属性（システムなど）のため取り消し対象外"
+  ],
+  "This drive has no Recycle Bin; not offered for undo": [
+    "此驱动器没有回收站；不提供撤销",
+    "此磁碟機沒有資源回收筒；不提供復原",
+    "このドライブにはごみ箱がないため取り消し対象外"
   ]
 }

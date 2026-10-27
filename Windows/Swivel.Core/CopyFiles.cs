@@ -5,7 +5,15 @@ using System.Linq;
 
 namespace Swivel.Core;
 
-public sealed record CopyResult(string Source, string Destination);
+public sealed record CopyResult(string Source, string Destination)
+{
+    /// The copy as verified right after copying (identity, length, last write); null when it
+    /// could not be verified or has attributes other tools skip (system, offline…), so it is
+    /// never offered for undo.
+    public DuplicateStamp? Stamp { get; init; }
+    /// The copy's streams were checked against its original.
+    public bool Verified { get; init; }
+}
 public sealed record CopyOutcome(IReadOnlyList<CopyResult> Copied, int Total, Exception? Error, bool Cancelled);
 
 /// Copy to Folder: originals stay; each copy claims a free name in the chosen folder.

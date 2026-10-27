@@ -151,6 +151,24 @@ public static partial class NativeFiles
         }
     }
 
+    internal const string CopyChanged = "It was renamed, removed or replaced since Swivel copied it, or its size, modified time or links changed, so it was left alone.";
+
+    /// Undoes one copy from Copy to Folder by moving it to the Recycle Bin: it must still be the
+    /// object the copy created, with the length and last write recorded right after copying and
+    /// one link. Its original is not opened.
+    internal static string RecycleCopy(string copy, DuplicateStamp made, IntPtr owner = default)
+    {
+        try
+        {
+            return Recycle(copy, false, held =>
+            {
+                if (!GetFileInformationByHandle(held, out var info) || info.Links != 1 || !StillCompared(held, made)) throw new UserError(CopyChanged);
+            }, owner);
+        }
+        // Recycle's own refusals before the move (missing, a link or a system item now) speak of a scan.
+        catch (UserError error) when (error.Message == RecycleChanged) { throw new UserError(CopyChanged); }
+    }
+
     private static bool StillCompared(SafeFileHandle handle, DuplicateStamp compared)
     {
         try { return ReadDuplicateStamp(handle, ReadIdentity(handle).Volume) == compared; }

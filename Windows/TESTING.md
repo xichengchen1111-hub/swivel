@@ -1327,6 +1327,13 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.100 — Undo copies, copy instead of a cross-drive move (B06 part, 2026-10-27)
+
+- Version 0.100.0 follows 0.99.0 (MSIX identity versions allow no leading zero, so `1.00.0.0` is invalid; 1.0 is kept for real-Windows acceptance).
+- Core 4,519,836 on Mac; native compiled 0 warnings/errors (not run here).
+- Native `CopyFilesNativeChecks` additions: each verified copy records Verified plus identity, length and modified time matching the file; CountOnVolumeOf counts files on the destination's volume and returns unknown for a missing file; RecycleCopy refuses a copy edited after copying, the original passed with the copy's stamp, and a copy that gained a hard link; refused copies and originals stay. Copy Results lists every copy unselected with Move disabled, keeps an unverified row out of the move, enables Move on a fixed drive only, and its report names copies, originals and states. With a Recycle Bin: a copy and a read-only copy move to the Recycle Bin leaving the originals, and Undo restores both. `MoveFilesNativeChecks`: a file on another NTFS drive counts as not on the destination volume (SKIP line when that drive is not NTFS).
+- Independent review: no P1/P2. Fixed and rechecked P3: verified copies with System-like attributes were labelled unverified; copies on a drive without a Recycle Bin were offered; CountOnVolumeOf could open a network drive before the drive-type check; the 20-batch move history blocked a copy instead; a too-broad test; wording, a generic "Copy" key and the copy-changed message. Second pass P3 fixed: Recycle Bin query no longer runs while the window is built (drive type only; each move checks again), stale comment. Not tested: RunMoveAsync's two new branches through the real folder picker. Inherited limitation: between Recycle's checks and the shell move by path, a same-user process could swap the file (the final-path check reports it, cannot prevent it).
+
 ## Windows0.99 — Old temporary files to the Recycle Bin (F06 part, 2026-10-27)
 
 - Core 4,519,805 on Mac (new `TempCleanupChecks`: creation/write/change parsing, Touched/Newest propagation, 7-day plan incl. copied-today file and undated descendant); native compiled 0 warnings/errors (not run here).

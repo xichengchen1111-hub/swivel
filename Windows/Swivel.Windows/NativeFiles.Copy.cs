@@ -55,8 +55,8 @@ public sealed class CopySession : IDisposable
             for (int i = 0; i < sources.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
-                var (copy, unverified) = NativeFiles.CopyInto(sources[i], Directory, token);
-                copied.Add(new(sources[i].Path, copy));
+                var (copy, stamp, unverified) = NativeFiles.CopyInto(sources[i], Directory, token);
+                copied.Add(new(sources[i].Path, copy) { Stamp = stamp, Verified = unverified is null });
                 if (unverified is not null) return new(copied, sources.Count, unverified, false);
                 progress?.Invoke(i + 1, sources.Count);
             }
@@ -87,8 +87,31 @@ public static partial class NativeFiles
         return available >= needed;
     }
 
-    /// Returns the new copy and, when it exists but could not be confirmed, a warning.
-    internal static (string Destination, UserError? Unverified) CopyInto(Input source, string directory, CancellationToken token)
+    /// How many of `files` are on the volume of `directory` (FILE_ID_INFO volume serial), or
+    /// null when that cannot be read. Only chooses between moving and offering a copy: the move
+    /// itself refuses another volume again. Like the move, nothing is opened on a network or
+    /// optical drive, so an unreachable server cannot stall the choice.
+    internal static int? CountOnVolumeOf(IReadOnlyList<string> files, string directory)
+    {
+        try
+        {
+            ulong Volume(string path, bool folder)
+            {
+                if (GetDriveType(path[..3]) is not 2 and not 3 and not 6) throw new UserError(LocalOnly);
+                using var handle = Open(path, ReadAttributes, 7, 3, OpenReparse | (folder ? BackupSemantics : 0));
+                return ReadIdentity(handle).Volume;
+            }
+            ulong target = Volume(MoveRules.DirectoryPath(directory), true);
+            int count = 0;
+            foreach (string file in files) if (Volume(WindowsPathPolicy.Validate(file), false) == target) count++;
+            return count;
+        }
+        catch (Exception error) when (error is Win32Exception or UserError or IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// Returns the new copy, its stamp once verified and, when it exists but could not be
+    /// confirmed, a warning.
+    internal static (string Destination, DuplicateStamp? Stamp, UserError? Unverified) CopyInto(Input source, string directory, CancellationToken token)
     {
         string leaf = System.IO.Path.GetFileName(source.Path);
         var expected = Streams(source.Stream.SafeFileHandle);
@@ -128,7 +151,7 @@ public static partial class NativeFiles
                 };
                 int result = CopyFile2(source.Path, destination, ref parameters);
                 GC.KeepAlive(progress);
-                if (result == 0) return (destination, Verify(destination, expected, created));
+                if (result == 0) { var (unverified, stamp) = Verify(destination, expected, created); return (destination, stamp, unverified); }
                 if (callbackFailed && !token.IsCancellationRequested) throw new UserError("The copy could not be verified.");
                 if (unchecked((uint)result & 0xFFFF0000) != 0x80070000) throw Marshal.GetExceptionForHR(result)!;
                 int error = result & 0xFFFF;
@@ -142,26 +165,33 @@ public static partial class NativeFiles
     }
 
     // Only the object CopyFile2 created is checked or removed. Its stream names and sizes must
-    // match the source; a mismatch removes it through this handle (read-only included).
-    private static UserError? Verify(string destination, IReadOnlyList<(string, long)> expected, string? created)
+    // match the source; a mismatch removes it through this handle (read-only included). A kept
+    // copy's stamp is read through the same handle, so undoing the copy recognises that object.
+    private static (UserError? Unverified, DuplicateStamp? Stamp) Verify(string destination, IReadOnlyList<(string, long)> expected, string? created)
     {
-        if (created is null) return new UserError("A copy was made but could not be verified. Check it in the destination folder before relying on it.");
+        const string unverified = "A copy was made but could not be verified. Check it in the destination folder before relying on it.";
+        if (created is null) return (new UserError(unverified), null);
         SafeFileHandle handle;
         try { handle = Open(destination, ReadAttributes | DeleteAccess, 7, 3, OpenReparse); }
-        catch (Win32Exception) { return new UserError("A copy was made but could not be verified. Check it in the destination folder before relying on it."); }
+        catch (Win32Exception) { return (new UserError(unverified), null); }
         using (handle)
         {
             string? current;
             try { current = Identity(handle); }
             catch (Win32Exception) { current = null; }
-            if (current is null) return new UserError("A copy was made but could not be verified. Check it in the destination folder before relying on it.");
+            if (current is null) return (new UserError(unverified), null);
             if (current != created)
                 throw new UserError("A copy was moved or replaced by another app before it could be verified. Swivel left it alone; check the destination folder.");
             bool keep;
             try { Check(handle, false); keep = CopyRules.SameStreams(expected, Streams(handle)); }
             catch (UserError) { keep = false; }
-            catch (Win32Exception) { return new UserError("A copy was made but could not be verified. Check it in the destination folder before relying on it."); }
-            if (keep) return null;
+            catch (Win32Exception) { return (new UserError(unverified), null); }
+            if (keep)
+            {
+                // A copy with attributes other tools skip (system, offline…) is simply not offered for undo.
+                try { return (null, ReadDuplicateStamp(handle, ReadIdentity(handle).Volume)); }
+                catch (Exception error) when (error is Win32Exception or UserError) { return (null, null); }
+            }
             var disposition = 0x1u | 0x2u | 0x10u; // DELETE | POSIX_SEMANTICS | IGNORE_READONLY_ATTRIBUTE
             if (!SetDispositionEx(handle, 21, ref disposition, 4))
                 throw new UserError("A copy did not match its original and could not be removed. Check the destination folder. The original is unchanged.");
