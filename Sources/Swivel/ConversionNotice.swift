@@ -49,6 +49,9 @@ enum ConversionNotice {
             }
             if exts.contains("plist"), title != "PLIST" { notes.append("Dates become ISO 8601 text and binary data becomes Base64.") }
         }
+        if kinds.contains(.subtitle) || kinds.contains(.data) && !Set(urls.map { $0.pathExtension.lowercased() }).isDisjoint(with: ["csv", "tsv"]) {
+            notes.append("Text that isn't UTF-8 is read in the encoding macOS detects. Check the result; very short files can be misread.")
+        }
         if kinds.contains(.model3D) {
             notes.append("Only the geometry is converted. Materials, textures and animation are not carried over.")
         }

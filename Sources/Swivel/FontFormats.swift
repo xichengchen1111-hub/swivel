@@ -63,11 +63,14 @@ enum FontFormats {
     static func parseSFNT(_ data: Data) throws -> Font {
         let count = Int(data.u16(4))
         guard count > 0, count <= 1024, data.count >= 12 + count * 16 else { throw ToolError(L("This font file is damaged.")) }
-        var tables: [(UInt32, Data, UInt32)] = []
+        var tables: [(UInt32, Data, UInt32)] = [], total = 0
         for i in 0..<count {
             let at = 12 + i * 16
             let offset = Int(data.u32(at + 8)), length = Int(data.u32(at + 12))
             guard offset >= 0, length >= 0, offset <= data.count, length <= data.count - offset else { throw ToolError(L("This font file is damaged.")) }
+            // Entries may point at the same bytes; copied out, they must still fit the budget.
+            total += length
+            guard total <= maximumBytes else { throw ToolError(L("This font file is damaged.")) }
             tables.append((data.u32(at), data.subdata(in: data.startIndex + offset..<data.startIndex + offset + length), data.u32(at + 4)))
         }
         return try validated(Font(flavor: data.u32(0) == 0x7472_7565 ? 0x0001_0000 : data.u32(0), tables: tables))
@@ -76,6 +79,7 @@ enum FontFormats {
     private static func validated(_ font: Font) throws -> Font {
         let tags = font.tables.map(\.tag)
         guard Set(tags).count == tags.count, tags.contains(0x6865_6164), // 'head'
+              sfntSize(font) <= maximumBytes,  // Keeps every offset well inside 32 bits.
               font.tables.first(where: { $0.tag == 0x6865_6164 })!.data.count >= 54 else { throw ToolError(L("This font file is damaged.")) }
         return font
     }
@@ -150,6 +154,9 @@ enum FontFormats {
     static func decodeWOFF(_ data: Data) throws -> Font {
         let count = Int(data.u16(12))
         guard data.count >= 44 + 20 * count, count > 0, count <= 1024 else { throw ToolError(L("This font file is damaged.")) }
+        // Every table's unpacked size is declared up front: refuse a decompression bomb before inflating anything.
+        let declared = (0..<count).reduce(0) { $0 + (Int(data.u32(44 + 20 * $1 + 12)) + 3) & ~3 }
+        guard declared <= maximumBytes else { throw ToolError(L("This font file is damaged.")) }
         var tables: [(UInt32, Data, UInt32)] = []
         for i in 0..<count {
             let at = 44 + 20 * i
@@ -224,7 +231,10 @@ enum FontFormats {
 
     /// WOFF2 usually stores glyphs in a transformed form; CoreText decodes it and hands back the sfnt tables.
     private static func decodeWithCoreText(_ data: Data) throws -> Font {
-        guard let descriptors = CTFontManagerCreateFontDescriptorsFromData(data as CFData) as? [CTFontDescriptor], descriptors.count == 1 else {
+        // The unpacked size is declared in the header; refuse a bomb before CoreText inflates it.
+        guard data.count >= 48, data.u32(16) <= maximumBytes else { throw ToolError(L("This font file is damaged.")) }
+        // A variable font lists one descriptor per named instance; the tables belong to the file.
+        guard let descriptors = CTFontManagerCreateFontDescriptorsFromData(data as CFData) as? [CTFontDescriptor], !descriptors.isEmpty else {
             throw ToolError(L("This font file is damaged."))
         }
         let font = CTFontCreateWithFontDescriptor(descriptors[0], 12, nil)

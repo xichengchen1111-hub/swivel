@@ -184,6 +184,177 @@ struct FormatKindsTests {
         }
     }
 
+    // MARK: Review findings (hostile and edge-case inputs)
+
+    @Test func aMeshNestedDeeplyCannotPackALocalFileIntoAUSDZ() async throws {
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let secret = dir.appendingPathComponent("secret.png")
+        try Data("not really an image".utf8).write(to: secret)
+        let mesh = """
+        def Mesh "M"
+        {
+            int[] faceVertexCounts = [4]
+            int[] faceVertexIndices = [0, 1, 2, 3]
+            point3f[] points = [(0,0,0), (1,0,0), (1,1,0), (0,1,0)]
+            texCoord2f[] primvars:st = [(0,0), (1,0), (1,1), (0,1)] ( interpolation = "vertex" )
+            rel material:binding = </Root/Mat>
+        }
+
+        """
+        var inner = mesh
+        for level in stride(from: 300, through: 1, by: -1) { inner = "def Xform \"L\(level)\"\n{\n\(inner)}\n" }
+        let material = """
+        def Material "Mat"
+        {
+            token outputs:surface.connect = </Root/Mat/PBR.outputs:surface>
+            def Shader "PBR"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </Root/Mat/Tex.outputs:rgb>
+                token outputs:surface
+            }
+            def Shader "Tex"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @\(secret.path)@
+                float3 outputs:rgb
+            }
+        }
+
+        """
+        let source = dir.appendingPathComponent("deep.usda")
+        try ("#usda 1.0\n(\n    defaultPrim = \"Root\"\n)\ndef Xform \"Root\"\n{\n" + inner + material + "}\n")
+            .write(to: source, atomically: true, encoding: .utf8)
+        let out = try await Models3D.convert(source, to: Models3D.formats.first { $0.ext == "usdz" }!)[0]
+        #expect(Models3D.zipEntries(out) == 1)
+        #expect(try Data(contentsOf: out).range(of: Data("not really an image".utf8)) == nil)
+
+        let referencing = dir.appendingPathComponent("ref.usda")
+        try "#usda 1.0\ndef Xform \"A\" (\n    references = </B>\n)\n{\n}\n".write(to: referencing, atomically: true, encoding: .utf8)
+        await #expect(throws: ToolError.self) { try await Models3D.convert(referencing, to: Models3D.formats[1]) }
+
+        let obj = try await Models3D.convert(source, to: Models3D.formats.first { $0.ext == "obj" }!)[0]
+        #expect(!(try String(contentsOf: obj, encoding: .utf8)).contains("mtllib"))
+    }
+
+    @Test func dataValuesThatWouldCrashOrExplodeAreRefused() throws {
+        let nan: [String: Any] = ["a": Double.nan, "b": [Double.infinity]]
+        for ext in ["json", "jsonl", "csv"] {
+            #expect(throws: ToolError.self) { try DataFormats.write(.tree(nan), as: ext) }
+        }
+        #expect(String(decoding: try DataFormats.write(.tree(nan), as: "yaml"), as: UTF8.self) == "---\n\"a\": .nan\n\"b\":\n  - .inf\n")
+        // A binary plist can share one array at every level: tiny on disk, doubling with each level when written.
+        var shared = NSArray(object: "x")
+        for _ in 0..<30 { shared = NSArray(array: [shared, shared]) }
+        for ext in ["json", "yaml", "plist"] {
+            #expect(throws: ToolError.self) { try DataFormats.write(.tree(shared), as: ext) }
+        }
+        let big = try JSONSerialization.jsonObject(with: Data("[12345678901234567890123]".utf8))
+        #expect(throws: ToolError.self) { try DataFormats.write(.tree(big), as: "plist") }
+        // Many records with different keys would make a huge, mostly empty table.
+        let sparse = (0..<5000).map { ["k\($0)": 1] }
+        #expect(throws: ToolError.self) { try DataFormats.write(.tree(sparse), as: "csv") }
+    }
+
+    @Test func deepWideAndLargeDataFollowTheBudgets() throws {
+        // Deeper than Foundation's JSON writer can recurse on a worker thread: refused, not a crash.
+        var deep: Any = "x"
+        for _ in 0..<200 { deep = [deep] }
+        #expect(throws: ToolError.self) { try DataFormats.write(.tree(deep), as: "json") }
+        // A wide header over many short rows would be padded into a huge result.
+        let header = (0..<10_000).map { "c\($0)" }
+        #expect(throws: ToolError.self) { try DataFormats.write(.table([header] + Array(repeating: ["x"], count: 2_000)), as: "json") }
+        // Ordinary flat data with millions of values is fine.
+        try DataFormats.check(Array(repeating: NSNumber(value: 1), count: 3_000_000), json: true)
+    }
+
+    @Test func binaryUSDAndPackagesAreCheckedForCompositionByContent() async throws {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/usdcat"), FileManager.default.isExecutableFile(atPath: "/usr/bin/usdzip") else { return }
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let mesh = "    def Mesh \"M\"\n    {\n        int[] faceVertexCounts = [3]\n        int[] faceVertexIndices = [0, 1, 2]\n        point3f[] points = [(0,0,0), (1,0,0), (0,1,0)]\n    }\n"
+        try "#usda 1.0\ndef Xform \"P\"\n{\n\(mesh)}\n".write(to: dir.appendingPathComponent("plain.usda"), atomically: true, encoding: .utf8)
+        try "#usda 1.0\ndef Xform \"B\"\n{\n\(mesh)}\ndef Xform \"A\" (\n    references = </B>\n)\n{\n}\n"
+            .write(to: dir.appendingPathComponent("ref.usda"), atomically: true, encoding: .utf8)
+        func tool(_ path: String, _ arguments: [String]) throws {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: path)
+            process.arguments = arguments
+            process.currentDirectoryURL = dir
+            process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
+            try process.run(); process.waitUntilExit()
+            #expect(process.terminationStatus == 0, "\(path) \(arguments)")
+        }
+        for name in ["plain", "ref"] {
+            try tool("/usr/bin/usdcat", ["\(name).usda", "-o", "\(name).usdc"])
+            try tool("/usr/bin/usdzip", ["\(name).usdz", "\(name).usdc"])
+        }
+        try FileManager.default.copyItem(at: dir.appendingPathComponent("ref.usda"), to: dir.appendingPathComponent("renamed.usd"))
+        let stl = Models3D.formats.first { $0.ext == "stl" }!
+        for name in ["ref.usdc", "ref.usdz", "renamed.usd"] {
+            await #expect(throws: ToolError.self, "\(name)") { try await Models3D.convert(dir.appendingPathComponent(name), to: stl) }
+        }
+        for name in ["plain.usdc", "plain.usdz"] {
+            #expect(try await Models3D.convert(dir.appendingPathComponent(name), to: stl).count == 1, "\(name)")
+        }
+        // Swivel's own USDZ (SceneKit writes a binary layer) reads back.
+        let ours = try await Models3D.convert(dir.appendingPathComponent("plain.usda"), to: Models3D.formats.first { $0.ext == "usdz" }!)[0]
+        #expect(try await Models3D.convert(ours, to: stl).count == 1)
+    }
+
+    @Test func tablesKeepQuotesInTSVLineBreaksAndCombiningMarks() throws {
+        #expect(try DataFormats.table("a\tb\n1\t\"Hi\" she said\n", separator: "\t") == [["a", "b"], ["1", "\"Hi\" she said"]])
+        #expect(try DataFormats.table("a,b,c\n1,\u{301}x,3\n", separator: ",") == [["a", "b", "c"], ["1", "\u{301}x", "3"]])
+        #expect(try DataFormats.table("a,b\r\n\"line\r\nbreak\",2\r\n", separator: ",") == [["a", "b"], ["line\r\nbreak", "2"]])
+        #expect(throws: ToolError.self) { try DataFormats.write(.table([["a"], ["x\ty"]]), as: "tsv") }
+        let yaml = String(decoding: try DataFormats.write(.tree(["\u{90}\u{85}\u{2028}\u{FFFE}"]), as: "yaml"), as: UTF8.self)
+        #expect(yaml == "---\n- \"\\x90\\x85\\u2028\\uFFFE\"\n")
+    }
+
+    @Test func fontBudgetsAndVariableFonts() async throws {
+        // 20 directory entries all covering one 4 MiB file add up to 80 MiB once copied out.
+        var ttf = Data([0, 1, 0, 0, 0, 20, 0, 0, 0, 0, 0, 0])
+        for i in 0..<20 {
+            let tag: UInt32 = i == 0 ? 0x6865_6164 : 0x7400_0000 + UInt32(i)
+            for v in [tag, 0, 0, UInt32(4 << 20)] { ttf.append(contentsOf: withUnsafeBytes(of: v.bigEndian, Array.init)) }
+        }
+        ttf.append(Data(count: (4 << 20) - ttf.count))
+        #expect(throws: ToolError.self) { try FontFormats.parseSFNT(ttf) }
+        // A WOFF declaring 16 × 64 MiB tables is refused before anything is inflated.
+        var woff = Data([0x77, 0x4F, 0x46, 0x46, 0, 1, 0, 0])
+        woff.append(Data(count: 4)); woff.append(contentsOf: [0, 16]); woff.append(Data(count: 30))
+        for i in 0..<16 {
+            for v in [0x7400_0000 + UInt32(i), UInt32(44 + 320), 8, UInt32(64 << 20), 0] { woff.append(contentsOf: withUnsafeBytes(of: v.bigEndian, Array.init)) }
+        }
+        woff.append(Data(count: 8))
+        #expect(throws: ToolError.self) { try FontFormats.decodeWOFF(woff) }
+
+        let skia = URL(fileURLWithPath: "/System/Library/Fonts/Supplemental/Skia.ttf")
+        guard FileManager.default.fileExists(atPath: skia.path) else { return }
+        let dir = try folder()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let source = dir.appendingPathComponent("Skia.ttf")
+        try FileManager.default.copyItem(at: skia, to: source)
+        let packed = try await FontFormats.convert(source, to: FontFormats.woff2)[0]
+        let back = try await FontFormats.convert(packed, to: FontFormats.desktop)[0]
+        #expect(try tables(Data(contentsOf: back)).count == tables(Data(contentsOf: source)).count)
+    }
+
+    @Test func lyricsCannotMultiplyAndKeepTheirOwnBrackets() throws {
+        let stamps = (0..<1000).map { String(format: "[%02d:%02d.00]", $0 / 60, $0 % 60) }.joined()
+        let bomb = stamps + String(repeating: "la ", count: 20_000) + "\n"
+        #expect(throws: ToolError.self) { try SubtitleFormats.parse(bomb, ext: "lrc") }
+        #expect(try SubtitleFormats.parse("[offset:500]\n[00:02.00]Hi\n", ext: "lrc").first?.start == 1.5)
+        let cues = [SubtitleCue(start: 1, end: 2, text: "[00:09.00] is the time")]
+        #expect(try SubtitleFormats.parse(SubtitleFormats.write(cues, as: "lrc"), ext: "lrc").map(\.start) == [1])
+        let long = [SubtitleCue(start: 400_000, end: 400_001, text: "late")]
+        #expect(try SubtitleFormats.parse(SubtitleFormats.write(long, as: "srt"), ext: "srt") == long)
+        let korean = "1\n00:00:01,000 --> 00:00:02,000\n안녕하세요 세계\n"
+        let euckr = try #require(korean.data(using: String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.EUC_KR.rawValue)))))
+        #expect(try TextFile.decode(euckr) == korean)
+    }
+
     // MARK: AirDrop
 
     @Test func onlyRecentSharingdQuarantineCountsAsAirDrop() {

@@ -44,6 +44,8 @@ enum Images {
 
     static func makeIcon(_ url: URL, as format: IconFormat) async throws -> [URL] {
         try await detached {
+            // A thumbnail decode of some formats still reads every pixel: refuse a pixel flood first.
+            guard let pixels = claimedPixels(url), pixels <= maxDecodePixels else { throw ToolError(L("Image too large")) }
             let image = try load(url, maxPixels: format.sizes.last!)
             let longest = max(image.width, image.height)
             let sizes = format.sizes.filter { $0 <= longest }.isEmpty ? [format.sizes[0]] : format.sizes.filter { $0 <= longest }

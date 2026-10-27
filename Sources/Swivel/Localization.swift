@@ -56,6 +56,14 @@ func L(_ english: String, _ args: CVarArg...) -> String {
 /// English → [简体中文, 繁體中文, 日本語].
 enum Strings {
     static let table: [String: [String]] = [
+        "Couldn't write this data. It may contain text the chosen format can't hold.": ["无法写出这些数据，其中可能有目标格式无法保存的文字。", "無法寫出這些資料，其中可能有目標格式無法儲存的文字。", "このデータを書き出せませんでした。選んだ形式では保持できないテキストが含まれている可能性があります。"],
+        "This file expands to too many values to convert.": ["此文件展开后的值太多，无法转换。", "此檔案展開後的值太多，無法轉換。", "このファイルは展開すると値が多すぎるため変換できません。"],
+        "This file contains NaN or infinite numbers, which this format can't hold.": ["此文件含有 NaN 或无穷大数值，目标格式无法保存。", "此檔案含有 NaN 或無窮大數值，目標格式無法儲存。", "このファイルには NaN または無限大の数値があり、この形式では保持できません。"],
+        "This file has too many columns.": ["此文件的列数太多。", "此檔案的欄數太多。", "このファイルは列が多すぎます。"],
+        "TSV can't hold tabs or line breaks inside a cell. Choose CSV instead.": ["TSV 的单元格里不能有制表符或换行。请改选 CSV。", "TSV 的儲存格裡不能有定位字元或換行。請改選 CSV。", "TSV のセルにはタブや改行を入れられません。CSV を選んでください。"],
+        "A number in this file is too large or precise for a property list.": ["此文件中有数字太大或太精确，属性列表（plist）无法准确保存。", "此檔案中有數字太大或太精確，屬性列表（plist）無法準確儲存。", "このファイルの数値は大きすぎるか精度が高すぎて、プロパティリスト（plist）では正確に保持できません。"],
+        "USD files that reference other layers or prims aren't supported.": ["不支持引用其他图层或对象的 USD 文件。", "不支援引用其他圖層或物件的 USD 檔案。", "他のレイヤーやプリムを参照する USD ファイルには対応していません。"],
+        "Text that isn't UTF-8 is read in the encoding macOS detects. Check the result; very short files can be misread.": ["不是 UTF-8 的文字会按 macOS 识别出的编码读取。请检查结果；很短的文件可能识别错误。", "不是 UTF-8 的文字會按 macOS 辨識出的編碼讀取。請檢查結果；很短的檔案可能辨識錯誤。", "UTF-8 以外のテキストは macOS が判別した文字コードで読み込みます。結果を確認してください。ごく短いファイルは誤判別されることがあります。"],
         "Also add files received by AirDrop": ["AirDrop 收到的文件也放进暂存架", "AirDrop 收到的檔案也放進暫存架", "AirDrop で受け取ったファイルもシェルフに追加"],
         "AirDrop still saves to Downloads; the shelf just shows each new arrival beside it. Swivel watches the Downloads folder for this, so macOS asks once for access.": ["AirDrop 仍然保存到“下载”；暂存架只是在旁边同时显示每个新收到的文件。为此 Swivel 需要查看“下载”文件夹，macOS 会询问一次访问权限。", "AirDrop 仍然儲存到「下載項目」；暫存架只是在旁邊同時顯示每個新收到的檔案。為此 Swivel 需要查看「下載項目」檔案夾，macOS 會詢問一次取用權限。", "AirDrop の保存先は引き続き「ダウンロード」です。シェルフには新しく届いたファイルが並んで表示されます。そのため Swivel が「ダウンロード」フォルダを監視し、macOS から一度だけアクセスの確認があります。"],
         "Data files": ["数据文件", "資料檔案", "データファイル"],

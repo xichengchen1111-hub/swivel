@@ -2,26 +2,37 @@ import Foundation
 
 /// Shared by the text-based converters (subtitles, data): bounded reads and honest encoding detection.
 enum TextFile {
-    /// UTF-8 (with or without BOM) and UTF-16 with a BOM are read directly. Anything else is offered to the
-    /// system's detector (GBK, Big5, Shift JIS, CP949, Latin-1…) and refused if it can only be read lossily.
-    static func read(_ url: URL, limit: Int) throws -> String {
+    /// UTF-8 (with or without BOM) and UTF-16 with a BOM are read directly. Anything else goes to the system's
+    /// detector, limited to the common legacy encodings (left free, it picks Baltic code pages for Korean), and is
+    /// refused if it can only be read lossily.
+    static func read(_ url: URL, limit: Int, normalizeNewlines: Bool = true) throws -> String {
         let data = try FileSafety.read(url, limit: limit)
-        return try decode(data)
+        return try decode(data, normalizeNewlines: normalizeNewlines)
     }
 
-    static func decode(_ data: Data) throws -> String {
+    private static let legacyEncodings: [NSNumber] = {
+        let cf: [CFStringEncodings] = [.GB_18030_2000, .big5_HKSCS_1999, .EUC_KR]
+        return (cf.map { CFStringConvertEncodingToNSStringEncoding(CFStringEncoding($0.rawValue)) }
+                + [String.Encoding.shiftJIS.rawValue, String.Encoding.windowsCP1252.rawValue, String.Encoding.windowsCP1251.rawValue])
+            .map { NSNumber(value: $0) }
+    }()
+
+    /// CSV keeps carriage returns: a CR LF inside a quoted cell is part of the cell.
+    static func decode(_ data: Data, normalizeNewlines: Bool = true) throws -> String {
         var text: String?
         if data.starts(with: [0xEF, 0xBB, 0xBF]) { text = String(data: data.dropFirst(3), encoding: .utf8) }
         else if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]) { text = String(data: data, encoding: .utf16) }
         else if let utf8 = String(data: data, encoding: .utf8) { text = utf8 }
         else {
             var converted: NSString?, lossy: ObjCBool = false
-            let options: [StringEncodingDetectionOptionsKey: Any] = [.allowLossyKey: false]
+            let options: [StringEncodingDetectionOptionsKey: Any] = [.allowLossyKey: false, .suggestedEncodingsKey: legacyEncodings,
+                                                                     .useOnlySuggestedEncodingsKey: true]
             let found = NSString.stringEncoding(for: data, encodingOptions: options, convertedString: &converted, usedLossyConversion: &lossy)
             if found != 0, !lossy.boolValue { text = converted as String? }
         }
         guard var result = text, !result.contains("\0") else { throw ToolError(L("Couldn't work out this file's text encoding.")) }
         if result.first == "\u{FEFF}" { result.removeFirst() }
+        guard normalizeNewlines else { return result }
         return result.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
     }
 }
@@ -36,6 +47,8 @@ enum SubtitleFormats {
     ]
     static let maximumBytes = 8 * 1024 * 1024
     static let maximumCues = 100_000
+    /// All cue text together; LRC can repeat one line under many timestamps.
+    static let maximumTextBytes = 32 * 1024 * 1024
 
     static func items(sourceExt: Set<String>) -> [FileOption] {
         formats.filter { sourceExt != [$0.ext] }.map { format in
@@ -57,7 +70,7 @@ enum SubtitleFormats {
         var cues: [SubtitleCue]
         switch ext {
         case "ass", "ssa": cues = try parseASS(text)
-        case "lrc": cues = parseLRC(text)
+        case "lrc": cues = try parseLRC(text)
         case "sbv": cues = parseBlocks(text, timing: { line in
             let parts = line.split(separator: ",", omittingEmptySubsequences: false)
             guard parts.count == 2, let a = time(parts[0]), let b = time(parts[1]) else { return nil }
@@ -72,7 +85,9 @@ enum SubtitleFormats {
         }
         cues = cues.filter { $0.end > $0.start && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         guard !cues.isEmpty else { throw ToolError(L("No subtitles with timing were found in this file.")) }
-        guard cues.count <= maximumCues else { throw ToolError(L("This subtitle file has too many cues.")) }
+        guard cues.count <= maximumCues, cues.reduce(0, { $0 + $1.text.utf8.count }) <= maximumTextBytes else {
+            throw ToolError(L("This subtitle file has too many cues."))
+        }
         return cues.sorted { $0.start < $1.start }
     }
 
@@ -166,19 +181,29 @@ enum SubtitleFormats {
         return cues
     }
 
-    /// Each lyric runs until the next timestamp; the last one gets four seconds.
-    private static func parseLRC(_ text: String) -> [SubtitleCue] {
-        var stamps: [(Double, String)] = []
+    /// Each lyric runs until the next timestamp; the last one gets four seconds. `[offset:+500]` moves every
+    /// lyric 0.5 s earlier.
+    private static func parseLRC(_ text: String) throws -> [SubtitleCue] {
+        var stamps: [(Double, String)] = [], bytes = 0, offset = 0.0
         for raw in text.components(separatedBy: "\n") {
             var line = Substring(raw.trimmingCharacters(in: .whitespaces)), times: [Double] = []
             while line.first == "[", let close = line.firstIndex(of: "]") {
                 let tag = line[line.index(after: line.startIndex)..<close]
+                if tag.lowercased().hasPrefix("offset:"), let ms = Double(tag.dropFirst(7).trimmingCharacters(in: .whitespaces)), ms.isFinite {
+                    offset = ms / 1000
+                }
                 guard let t = time(tag) else { break }  // [ar:…], [ti:…] and other metadata.
                 times.append(t); line = line[line.index(after: close)...]
             }
-            for t in times { stamps.append((t, plain(String(line)).trimmingCharacters(in: .whitespaces))) }
+            guard !times.isEmpty else { continue }
+            let lyric = plain(String(line)).trimmingCharacters(in: .whitespaces)
+            bytes += lyric.utf8.count * times.count
+            guard stamps.count + times.count <= maximumCues, bytes <= maximumTextBytes else {
+                throw ToolError(L("This subtitle file has too many cues."))
+            }
+            for t in times { stamps.append((t, lyric)) }
         }
-        stamps.sort { $0.0 < $1.0 }
+        stamps = stamps.map { (max(0, $0.0 - offset), $0.1) }.sorted { $0.0 < $1.0 }
         return stamps.enumerated().compactMap { i, stamp in
             let end = i + 1 < stamps.count ? stamps[i + 1].0 : stamp.0 + 4
             return stamp.1.isEmpty ? nil : SubtitleCue(start: stamp.0, end: end, text: stamp.1)
@@ -223,7 +248,9 @@ enum SubtitleFormats {
         case "lrc":
             var lines: [String] = []
             for (i, cue) in cues.enumerated() {
-                lines.append("[\(lrcStamp(cue.start))]" + cue.text.replacingOccurrences(of: "\n", with: " "))
+                // A lyric that itself starts with "[" would be read back as another tag.
+                let lyric = cue.text.replacingOccurrences(of: "\n", with: " ")
+                lines.append("[\(lrcStamp(cue.start))]" + (lyric.hasPrefix("[") ? "\u{200B}" : "") + lyric)
                 // An empty line ends the lyric when the next one doesn't start right away.
                 let next = i + 1 < cues.count ? cues[i + 1].start : .infinity
                 if next - cue.end > 0.05 { lines.append("[\(lrcStamp(cue.end))]") }
@@ -240,7 +267,7 @@ enum SubtitleFormats {
     }
 
     private static func milliseconds(_ seconds: Double) -> Int64 {
-        Int64((min(359_999.999, max(0, seconds.isFinite ? seconds : 0)) * 1000).rounded())
+        Int64((min(35_999_999.999, max(0, seconds.isFinite ? seconds : 0)) * 1000).rounded())
     }
     static func stamp(_ seconds: Double, _ separator: String) -> String {
         let ms = milliseconds(seconds)
