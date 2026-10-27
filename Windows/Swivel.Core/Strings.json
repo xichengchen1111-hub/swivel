@@ -11529,10 +11529,10 @@
     "此 ZIP 壓縮檔是空的。",
     "この ZIP アーカイブは空です。"
   ],
-  "This ZIP archive needs features beyond ZIP 2.0 and was not extracted.": [
-    "此 ZIP 压缩包需要 ZIP 2.0 以外的功能，未解压。",
-    "此 ZIP 壓縮檔需要 ZIP 2.0 以外的功能，未解壓縮。",
-    "この ZIP アーカイブは ZIP 2.0 を超える機能が必要なため、展開しませんでした。"
+  "This ZIP archive needs features beyond ZIP64 and was not extracted.": [
+    "此 ZIP 压缩包需要 ZIP64 以外的功能，未解压。",
+    "此 ZIP 壓縮檔需要 ZIP64 以外的功能，未解壓縮。",
+    "この ZIP アーカイブは ZIP64 を超える機能が必要なため、展開しませんでした。"
   ],
   "This ZIP archive nests folders more than 32 levels deep.": [
     "此 ZIP 压缩包的文件夹嵌套超过 32 层。",
@@ -11588,11 +11588,6 @@
     "ZIP 解压仅支持 2 GB 以内的压缩包。",
     "ZIP 解壓縮僅支援 2 GB 以內的壓縮檔。",
     "ZIP の展開は 2 GB までのアーカイブに対応しています。"
-  ],
-  "ZIP64 archives are not supported in the Windows preview yet.": [
-    "Windows 预览版暂不支持 ZIP64 压缩包。",
-    "Windows 預覽版暫不支援 ZIP64 壓縮檔。",
-    "Windows プレビュー版は ZIP64 アーカイブにまだ対応していません。"
   ],
   "{0} file(s) and {1} folder(s), {2} MB after extraction.": [
     "{0} 个文件和 {1} 个文件夹，解压后 {2} MB。",
@@ -11824,10 +11819,10 @@
     "解壓縮目前需要 NTFS 磁碟，以便解壓縮出的檔案保留下載警告。",
     "展開したファイルにダウンロードの警告を残すため、展開には現在 NTFS ドライブが必要です。"
   ],
-  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP (Store/Deflate), TAR (POSIX ustar/pax or GNU), .tar.gz/.tgz and single-file .gz archives, up to 2 GB and 10,000 entries, into a new folder on NTFS. TAR links, devices and sparse files are refused; macOS ._ attribute files are left out. 7z/RAR extraction, ZIP64, encryption and archiving folder trees are still planned.": [
-    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP（存储/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及单文件 .gz（最多 2 GB、10,000 个条目）解压到新文件夹。TAR 中的链接、设备和稀疏文件会被拒绝；macOS 的 ._ 属性文件不解压。7z/RAR 解压、ZIP64、加密及文件夹树归档仍待实现。",
-    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP（儲存/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及單檔 .gz（最多 2 GB、10,000 個項目）解壓縮到新資料夾。TAR 中的連結、裝置和稀疏檔案會被拒絕；macOS 的 ._ 屬性檔案不解壓縮。7z/RAR 解壓縮、ZIP64、加密及資料夾樹封存仍待實作。",
-    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP（格納/Deflate）、TAR（POSIX ustar/pax または GNU）、.tar.gz/.tgz、単一ファイル .gz（2 GB・10,000 項目まで）を新しいフォルダーに展開できます。TAR 内のリンク、デバイス、スパースファイルは拒否し、macOS の ._ 属性ファイルは展開しません。7z/RAR の展開、ZIP64、暗号化、フォルダー構造のアーカイブは実装予定です。"
+  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP and ZIP64 (Store/Deflate), TAR (POSIX ustar/pax or GNU), .tar.gz/.tgz and single-file .gz archives, up to 2 GB and 10,000 entries, into a new folder on NTFS. TAR links, devices and sparse files are refused; macOS ._ attribute files are left out. 7z/RAR extraction, encryption and archiving folder trees are still planned.": [
+    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP 和 ZIP64（存储/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及单文件 .gz（最多 2 GB、10,000 个条目）解压到新文件夹。TAR 中的链接、设备和稀疏文件会被拒绝；macOS 的 ._ 属性文件不解压。7z/RAR 解压、加密及文件夹树归档仍待实现。",
+    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP 和 ZIP64（儲存/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及單檔 .gz（最多 2 GB、10,000 個項目）解壓縮到新資料夾。TAR 中的連結、裝置和稀疏檔案會被拒絕；macOS 的 ._ 屬性檔案不解壓縮。7z/RAR 解壓縮、加密及資料夾樹封存仍待實作。",
+    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP と ZIP64（格納/Deflate）、TAR（POSIX ustar/pax または GNU）、.tar.gz/.tgz、単一ファイル .gz（2 GB・10,000 項目まで）を新しいフォルダーに展開できます。TAR 内のリンク、デバイス、スパースファイルは拒否し、macOS の ._ 属性ファイルは展開しません。7z/RAR の展開、暗号化、フォルダー構造のアーカイブは実装予定です。"
   ],
   "Files are extracted into a new folder beside the archive, named after it. Existing files and folders are never overwritten. TAR stores no file checksums, so each file is checked against its size and the CRC-32 Swivel recorded while reviewing the archive; a compressed archive's own checksum is checked too.": [
     "文件会解压到压缩包旁边以其命名的新文件夹，绝不覆盖已有文件和文件夹。TAR 不保存文件校验值，因此每个文件都会按大小以及 Swivel 审查压缩包时记录的 CRC-32 核对；压缩过的包还会核对其自身校验值。",

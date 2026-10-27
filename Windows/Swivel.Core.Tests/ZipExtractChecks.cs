@@ -34,6 +34,58 @@ internal static class ZipExtractChecks
         w.Write((uint)central.Length); w.Write(cdOffset); w.Write((ushort)0); if (after is not null) w.Write(after);
         return output.ToArray();
     }
+    // A ZIP64 archive by hand: sizes and offsets in ZIP64 fields, end records in ZIP64 form; each
+    // option breaks or varies one part.
+    private sealed record Z64(bool MarkEnd = true, uint Disks = 1, long LocatorShift = 0, ulong RecordSize = 44, ushort RecordNeeded = 45, long EntriesDelta = 0,
+        uint End32Delta = 0, bool WideLocal = true, bool WideCentral = true, bool Descriptor = false, bool DiskMarker = false, uint DiskValue = 0,
+        int ExtraPadding = 0, byte[]? Gap = null, bool DropLocator = false, long LocalDelta = 0, ulong? CentralSize = null,
+        bool MarkSize = true, bool MarkCompressed = true, bool MarkOffset = true, bool EndOffsetOnly = false, bool LocalRepeated = false, bool DuplicateField = false);
+
+    private static byte[] Build64(IReadOnlyList<Entry> entries, Z64 z)
+    {
+        var output = new MemoryStream(); var central = new MemoryStream(); var w = new BinaryWriter(output); var c = new BinaryWriter(central);
+        foreach (var entry in entries)
+        {
+            byte[] stored = entry.Method == 8 ? Deflate(entry.Data) : entry.Data, name = Encoding.UTF8.GetBytes(entry.Name);
+            uint crc = ZipExtract.Crc32(0xFFFFFFFF, entry.Data) ^ 0xFFFFFFFF;
+            ulong offset = (ulong)output.Position, size = (ulong)entry.Data.Length, packed = (ulong)stored.Length;
+            ushort flags = (ushort)(0x0800 | (z.Descriptor ? 8 : 0));
+            var local = new MemoryStream(); var l = new BinaryWriter(local);
+            // LocalRepeated: no markers, but a 16-byte field repeating the real sizes (older Python, Commons Compress).
+            bool localField = z.WideLocal || z.LocalRepeated, localMarks = z.WideLocal && !z.LocalRepeated;
+            if (localField) { l.Write((ushort)1); l.Write((ushort)16); l.Write(z.Descriptor ? 0UL : (ulong)((long)size + z.LocalDelta)); l.Write(z.Descriptor ? 0UL : packed); }
+            w.Write(0x04034b50u); w.Write((ushort)45); w.Write(flags); w.Write(entry.Method); w.Write((ushort)0x6000); w.Write((ushort)0x5A21);
+            w.Write(z.Descriptor ? 0u : crc);
+            w.Write(localMarks ? uint.MaxValue : z.Descriptor ? 0u : (uint)packed); w.Write(localMarks ? uint.MaxValue : z.Descriptor ? 0u : (uint)size);
+            w.Write((ushort)name.Length); w.Write((ushort)local.Length); w.Write(name); w.Write(local.ToArray()); w.Write(stored);
+            if (z.Descriptor) { w.Write(0x08074b50u); w.Write(crc); w.Write(packed); w.Write(size); }
+            var extra = new MemoryStream(); var x = new BinaryWriter(extra);
+            bool markSize = z.WideCentral && z.MarkSize, markCompressed = z.WideCentral && z.MarkCompressed, markOffset = z.WideCentral && z.MarkOffset;
+            for (int copy = 0; copy < (z.DuplicateField ? 2 : 1); copy++)
+                if (z.WideCentral)
+                {
+                    x.Write((ushort)1); x.Write((ushort)((markSize ? 8 : 0) + (markCompressed ? 8 : 0) + (markOffset ? 8 : 0) + (z.DiskMarker ? 4 : 0) + z.ExtraPadding));
+                    if (markSize) x.Write(z.CentralSize ?? size); if (markCompressed) x.Write(packed); if (markOffset) x.Write(offset);
+                    if (z.DiskMarker) x.Write(z.DiskValue); x.Write(new byte[z.ExtraPadding]);
+                }
+            c.Write(0x02014b50u); c.Write((ushort)0x031E); c.Write((ushort)45); c.Write(flags); c.Write(entry.Method); c.Write((ushort)0x6000); c.Write((ushort)0x5A21);
+            c.Write(crc); c.Write(markCompressed ? uint.MaxValue : (uint)packed); c.Write(markSize ? uint.MaxValue : (uint)size);
+            c.Write((ushort)name.Length); c.Write((ushort)extra.Length); c.Write((ushort)0); c.Write(z.DiskMarker ? (ushort)0xFFFF : (ushort)0); c.Write((ushort)0);
+            c.Write(0x81A40000u); c.Write(markOffset ? uint.MaxValue : (uint)offset); c.Write(name); c.Write(extra.ToArray());
+        }
+        ulong cdOffset = (ulong)output.Position, cdSize = (ulong)central.Length, count = (ulong)entries.Count;
+        w.Write(central.ToArray()); if (z.Gap is not null) w.Write(z.Gap);
+        long record = output.Position;
+        w.Write(0x06064b50u); w.Write(z.RecordSize); w.Write((ushort)45); w.Write(z.RecordNeeded); w.Write(0u); w.Write(0u);
+        w.Write(count); w.Write((ulong)((long)count + z.EntriesDelta)); w.Write(cdSize); w.Write(cdOffset);
+        if (!z.DropLocator) { w.Write(0x07064b50u); w.Write(0u); w.Write((ulong)(record + z.LocatorShift)); w.Write(z.Disks); }
+        w.Write(0x06054b50u); w.Write((ushort)0); w.Write((ushort)0);
+        bool markCounts = z.MarkEnd && !z.EndOffsetOnly;
+        w.Write(markCounts ? (ushort)0xFFFF : (ushort)count); w.Write(markCounts ? (ushort)0xFFFF : (ushort)count);
+        w.Write(markCounts ? uint.MaxValue : (uint)cdSize + z.End32Delta); w.Write(z.MarkEnd ? uint.MaxValue : (uint)cdOffset); w.Write((ushort)0);
+        return output.ToArray();
+    }
+
     private static byte[] Deflate(byte[] data) { var m = new MemoryStream(); using (var d = new DeflateStream(m, CompressionLevel.Optimal, true)) d.Write(data); return m.ToArray(); }
     private static ZipPlan Plan(byte[] zip) => ZipExtract.Read(new MemoryStream(zip), CancellationToken.None);
     private static byte[] Contents(byte[] zip, ZipMember member)
@@ -92,9 +144,12 @@ internal static class ZipExtractChecks
         reject(() => Plan(Build(new[] { new Entry("e.txt", big, Flags: 0x0841) })), "ZIP rejects strong encryption");
         reject(() => Plan(Build(new[] { new Entry("e.txt", big, Extra: new byte[] { 0x01, 0x99, 0, 0 }) })), "ZIP rejects AES extra");
         reject(() => Plan(Build(new[] { new Entry("m.txt", big, 12) })), "ZIP rejects other compression methods");
-        reject(() => Plan(Build(new[] { new Entry("n.txt", big, Needed: 45) })), "ZIP rejects newer version needed");
-        reject(() => Plan(Build(new[] { new Entry("z.txt", big, Extra: new byte[] { 1, 0, 0, 0 }) })), "ZIP rejects ZIP64 extra");
-        reject(() => Plan(Build(new[] { new Entry("z.txt", big, Size: uint.MaxValue) })), "ZIP rejects ZIP64 size marker");
+        reject(() => Plan(Build(new[] { new Entry("n.txt", big, Needed: 46) })), "ZIP rejects version needed beyond ZIP64");
+        check(Plan(Build(new[] { new Entry("n.txt", big, Needed: 45) })).Files.Count == 1, "ZIP accepts version 4.5 (ZIP64) needed");
+        reject(() => Plan(Build(new[] { new Entry("p.txt", big, Flags: 0x0820) })), "ZIP rejects patch data");
+        check(Plan(Build(new[] { new Entry("z.txt", big, Extra: new byte[] { 1, 0, 0, 0 }) })).Files.Count == 1, "ZIP accepts an empty ZIP64 field when nothing is marked");
+        reject(() => Plan(Build(new[] { new Entry("z.txt", big, Extra: new byte[] { 1, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0 }) })), "ZIP rejects ZIP64 values no field marks");
+        reject(() => Plan(Build(new[] { new Entry("z.txt", big, Size: uint.MaxValue) })), "ZIP rejects ZIP64 size marker without its field");
         reject(() => Plan(Build(new[] { new Entry("l", Encoding.ASCII.GetBytes("/etc"), MadeBy: 0x031E, External: 0xA1FF0000) })), "ZIP rejects Unix symlink");
         reject(() => Plan(Build(new[] { new Entry("f", Array.Empty<byte>(), MadeBy: 0x031E, External: 0x11B60000) })), "ZIP rejects Unix FIFO");
         reject(() => Plan(Build(new[] { new Entry("r.txt", big, External: 0x400) })), "ZIP rejects DOS reparse attribute");
@@ -117,6 +172,42 @@ internal static class ZipExtractChecks
         trap[^2] = 22; trap[^1] = 0;
         var trapped = trap.Concat(new byte[] { 0x50, 0x4b, 5, 6 }).Concat(new byte[18]).ToArray();
         reject(() => Plan(trapped), "ZIP rejects ambiguous end record");
+
+        // ZIP64 (0.101): end records, locator and 0x0001 fields, within the same limits.
+        var pair = new[] { new Entry("wide/a.bin", big, 8), new Entry("wide/b.txt", Encoding.UTF8.GetBytes("zip64")) };
+        foreach (var (z, label) in new[] { (new Z64(), "markers"), (new Z64(MarkEnd: false), "real values in the 32-bit end record too"), (new Z64(Descriptor: true), "data descriptors"),
+            (new Z64(DiskMarker: true), "disk marker with disk 0"), (new Z64(WideCentral: false), "ZIP64 local headers only"),
+            (new Z64(MarkCompressed: false, MarkOffset: false), "only the size marked (Info-ZIP)"), (new Z64(MarkSize: false, MarkCompressed: false), "only the offset marked"),
+            (new Z64(EndOffsetOnly: true), "only the directory offset marked in the end record"), (new Z64(WideLocal: false, LocalRepeated: true), "local field repeating real sizes (older Python)"),
+            (new Z64(WideLocal: false, LocalRepeated: true, Descriptor: true), "local field repeating zero sizes before a data descriptor") })
+        {
+            byte[] wide = Build64(pair, z); var widePlan = Plan(wide);
+            check(widePlan.Files.Count == 2 && widePlan.Directories.SequenceEqual(new[] { "wide" }) && Contents(wide, widePlan.Files[0]).SequenceEqual(big)
+                && Encoding.UTF8.GetString(Contents(wide, widePlan.Files[1])) == "zip64", "ZIP64 archive extracts exactly: " + label);
+        }
+        foreach (var (z, label) in new[] { (new Z64(Disks: 2), "two disks"), (new Z64(LocatorShift: 1), "locator pointing elsewhere"), (new Z64(RecordSize: 52), "version 2 end record"),
+            (new Z64(RecordNeeded: 46), "end record needing more than ZIP64"), (new Z64(EntriesDelta: 1), "entry counts that disagree"), (new Z64(MarkEnd: false, End32Delta: 1), "32-bit end record disagreeing"),
+            (new Z64(DiskMarker: true, DiskValue: 1), "member on another disk"), (new Z64(ExtraPadding: 8), "ZIP64 field longer than the marked values"), (new Z64(Gap: new byte[] { 1, 2 }), "data before the ZIP64 end record"),
+            (new Z64(DropLocator: true), "ZIP64 end record without locator"), (new Z64(LocalDelta: 1), "local ZIP64 size differing from the directory"), (new Z64(CentralSize: 3UL << 30), "declared size over 2 GB"),
+            (new Z64(WideLocal: false, LocalRepeated: true, LocalDelta: 1), "local field repeating different sizes"), (new Z64(DuplicateField: true), "two ZIP64 fields in one entry") })
+            reject(() => Plan(Build64(pair, z)), "ZIP64 rejects " + label);
+        var plainHeaders = Build64(new[] { new Entry("d.txt", big) }, new Z64(WideCentral: false, WideLocal: false));
+        check(Plan(plainHeaders).Files.Single().Size == big.Length && Contents(plainHeaders, Plan(plainHeaders).Files[0]).SequenceEqual(big), "ZIP64 end records with plain local and directory entries");
+        if (Environment.GetEnvironmentVariable("SWIVEL_ZIP64_FIXTURES") is { Length: > 0 } fixtures)
+        {
+            Directory.CreateDirectory(fixtures);
+            File.WriteAllBytes(Path.Combine(fixtures, "markers.zip"), Build64(pair, new Z64()));
+            File.WriteAllBytes(Path.Combine(fixtures, "descriptor.zip"), Build64(pair, new Z64(Descriptor: true)));
+            File.WriteAllBytes(Path.Combine(fixtures, "realvalues.zip"), Build64(pair, new Z64(MarkEnd: false)));
+        }
+        // Archives made by other tools, checked against them on the development Mac (not shipped).
+        if (Environment.GetEnvironmentVariable("SWIVEL_ZIP_ORACLE_DIR") is { Length: > 0 } oracle)
+            foreach (string file in Directory.GetFiles(oracle, "*.zip").OrderBy(x => x, StringComparer.Ordinal))
+            {
+                byte[] zip = File.ReadAllBytes(file); var oraclePlan = Plan(zip); long bytes = 0;
+                foreach (var member in oraclePlan.Files) bytes += Contents(zip, member).Length;
+                Console.WriteLine("ZIP oracle " + Path.GetFileName(file) + ": files=" + oraclePlan.Files.Count + " folders=" + oraclePlan.Directories.Count + " bytes=" + bytes);
+            }
 
         // Data checks happen while extracting.
         var badCrc = Build(new[] { new Entry("c.txt", big, 8, Crc: 1234) });

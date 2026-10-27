@@ -26,15 +26,16 @@ public sealed class ZipPlan
     public int SkippedAppleDouble { get; init; }
 }
 
-/// Original ZIP32 reader for extraction: Store and Deflate only, central directory first,
-/// every member validated before anything is written. No encryption, ZIP64, multi-disk,
-/// links, devices or ambiguous names. Data integrity is the exact size plus CRC-32.
+/// Original ZIP reader for extraction: Store and Deflate only, central directory first,
+/// every member validated before anything is written. ZIP64 records are read within the same
+/// 2 GB / 10,000-entry limits. No encryption, multi-disk, links, devices or ambiguous names.
+/// Data integrity is the exact size plus CRC-32.
 public static class ZipExtract
 {
     public const int MaxEntries = 10000, MaxDepth = 32;
     public const long MaxTotalBytes = 2L * 1024 * 1024 * 1024, MaxArchiveBytes = 2L * 1024 * 1024 * 1024;
     private const long MaxDirectoryBytes = 64L * 1024 * 1024;
-    private const int EndRecord = 22, CentralRecord = 46, LocalRecord = 30;
+    private const int EndRecord = 22, CentralRecord = 46, LocalRecord = 30, Zip64EndRecord = 56, Zip64Locator = 20;
 
     public static ZipPlan Read(Stream archive, CancellationToken token)
     {
@@ -58,20 +59,36 @@ public static class ZipExtract
         if (found < 0) throw new UserError("This file is not a supported ZIP archive.");
         var record = end.AsSpan(found);
         long endOffset = length - tail + found;
-        ushort disk = U16(record, 4), cdDisk = U16(record, 6), diskEntries = U16(record, 8), entries = U16(record, 10);
-        uint cdSize = U32(record, 12), cdOffset = U32(record, 16);
-        if (entries == 0xFFFF || cdSize == uint.MaxValue || cdOffset == uint.MaxValue)
-            throw new UserError("ZIP64 archives are not supported in the Windows preview yet.");
-        if (disk != 0 || cdDisk != 0 || diskEntries != entries) throw new UserError("Split or multi-disk ZIP archives are not supported.");
+        ushort disk = U16(record, 4), cdDisk = U16(record, 6), diskEntries32 = U16(record, 8), entries32 = U16(record, 10);
+        uint cdSize32 = U32(record, 12), cdOffset32 = U32(record, 16);
+        // The central directory must end exactly where the end records begin: no hidden data in between.
+        long entries, cdSize, cdOffset, directoryEnd;
+        var wide = Zip64End(archive, endOffset, token);
+        if (wide is { } z)
+        {
+            // Each 32-bit field holds its marker or the same value as the ZIP64 record.
+            if (disk is not 0 and not 0xFFFF || cdDisk is not 0 and not 0xFFFF || z.Disk != 0 || z.CdDisk != 0 || z.DiskEntries != z.Entries)
+                throw new UserError("Split or multi-disk ZIP archives are not supported.");
+            if (entries32 != 0xFFFF && entries32 != z.Entries || diskEntries32 != 0xFFFF && diskEntries32 != z.DiskEntries
+                || cdSize32 != uint.MaxValue && cdSize32 != z.CdSize || cdOffset32 != uint.MaxValue && cdOffset32 != z.CdOffset)
+                throw new UserError("This ZIP archive's directory is damaged.");
+            if (z.Entries > MaxEntries) throw new UserError("ZIP extraction is limited to 10,000 entries.");
+            if (z.CdSize > MaxDirectoryBytes || z.CdOffset > (ulong)length) throw new UserError("This ZIP archive's directory is damaged.");
+            entries = (long)z.Entries; cdSize = (long)z.CdSize; cdOffset = (long)z.CdOffset; directoryEnd = z.RecordOffset;
+        }
+        else
+        {
+            if (entries32 == 0xFFFF || cdSize32 == uint.MaxValue || cdOffset32 == uint.MaxValue) throw new UserError("This ZIP archive's directory is damaged.");
+            if (disk != 0 || cdDisk != 0 || diskEntries32 != entries32) throw new UserError("Split or multi-disk ZIP archives are not supported.");
+            entries = entries32; cdSize = cdSize32; cdOffset = cdOffset32; directoryEnd = endOffset;
+        }
         if (entries == 0) throw new UserError("This ZIP archive is empty.");
         if (entries > MaxEntries) throw new UserError("ZIP extraction is limited to 10,000 entries.");
-        // The central directory must end exactly at the end record: no hidden data in between.
-        // ZIP64 end records would sit here too, so this also refuses ZIP64 archives without markers.
-        if ((long)cdOffset + cdSize != endOffset) throw new UserError("This ZIP archive has unexpected data around its directory and was not extracted.");
+        if (cdOffset + cdSize != directoryEnd) throw new UserError("This ZIP archive has unexpected data around its directory and was not extracted.");
         if (cdSize > MaxDirectoryBytes) throw new UserError("This ZIP archive's directory is damaged.");
 
         byte[] directory = ReadAt(archive, cdOffset, checked((int)cdSize), token);
-        var members = new List<ZipMember>(entries);
+        var members = new List<ZipMember>((int)entries);
         var kinds = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase); // path → is directory
         var directories = new List<string>();
         var spellings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); // NFC form → name as stored
@@ -84,9 +101,9 @@ public static class ZipExtract
             var header = directory.AsSpan(position);
             ushort madeBy = U16(header, 4), needed = U16(header, 6), flags = U16(header, 8), method = U16(header, 10);
             ushort time = U16(header, 12), date = U16(header, 14);
-            uint crc = U32(header, 16), compressed = U32(header, 20), size = U32(header, 24);
+            uint crc = U32(header, 16), compressed32 = U32(header, 20), size32 = U32(header, 24);
             ushort nameLength = U16(header, 28), extraLength = U16(header, 30), commentLength = U16(header, 32), startDisk = U16(header, 34);
-            uint external = U32(header, 38), offset = U32(header, 42);
+            uint external = U32(header, 38), offset32 = U32(header, 42);
             int next = position + CentralRecord + nameLength + extraLength + commentLength;
             if (next > directory.Length) throw new UserError("This ZIP archive's directory is damaged.");
             byte[] raw = directory.AsSpan(position + CentralRecord, nameLength).ToArray();
@@ -95,12 +112,14 @@ public static class ZipExtract
 
             if ((flags & 0x0041) != 0 || (flags & 0x2000) != 0) throw new UserError("Encrypted ZIP archives are not supported.");
             if (method is not 0 and not 8) throw new UserError("This ZIP archive uses a compression method other than Store or Deflate.");
-            if ((needed & 0xFF) > 20) throw new UserError("This ZIP archive needs features beyond ZIP 2.0 and was not extracted.");
-            if (startDisk != 0) throw new UserError("Split or multi-disk ZIP archives are not supported.");
-            if (compressed == uint.MaxValue || size == uint.MaxValue || offset == uint.MaxValue)
-                throw new UserError("ZIP64 archives are not supported in the Windows preview yet.");
+            // 4.5 is ZIP64. The features between 2.0 and 4.5 are other methods (refused above) and
+            // patch data (flag bit 5, refused here).
+            if ((needed & 0xFF) > 45 || (flags & 0x0020) != 0) throw new UserError("This ZIP archive needs features beyond ZIP64 and was not extracted.");
+            if (startDisk is not 0 and not 0xFFFF) throw new UserError("Split or multi-disk ZIP archives are not supported.");
+            var values = CheckExtra(extra, (flags & 0x0800) != 0, size32 == uint.MaxValue, compressed32 == uint.MaxValue, offset32 == uint.MaxValue, startDisk == 0xFFFF);
+            ulong size = values.Size ?? size32, compressed = values.Compressed ?? compressed32, offset = values.Offset ?? offset32;
+            if (compressed > (ulong)length || offset > (ulong)length) throw new UserError("This ZIP archive's directory is damaged.");
             if (method == 0 && compressed != size) throw new UserError("This ZIP archive's directory is damaged.");
-            CheckExtra(extra, (flags & 0x0800) != 0);
 
             string name = DecodeName(raw, (flags & 0x0800) != 0);
             int host = madeBy >> 8;
@@ -128,9 +147,9 @@ public static class ZipExtract
             CheckSpelling(path);
             if (kinds.ContainsKey(path)) throw new UserError("This ZIP archive contains duplicate names (letter case is ignored on Windows) and was not extracted.");
             kinds[path] = false;
-            if (size > MaxTotalBytes - total) throw new UserError("ZIP extraction is limited to 2 GB of extracted data.");
-            total += size; longest = Math.Max(longest, path.Length);
-            members.Add(new(path, false, crc, compressed, size, method, flags, offset, raw, DosTime(date, time)));
+            if (size > (ulong)(MaxTotalBytes - total)) throw new UserError("ZIP extraction is limited to 2 GB of extracted data.");
+            total += (long)size; longest = Math.Max(longest, path.Length);
+            members.Add(new(path, false, crc, (long)compressed, (long)size, method, flags, (long)offset, raw, DosTime(date, time)));
         }
         if (position != directory.Length) throw new UserError("This ZIP archive has unexpected data around its directory and was not extracted.");
         CheckLayout(archive, members, cdOffset, token);
@@ -166,8 +185,9 @@ public static class ZipExtract
         foreach (var member in members)
         {
             token.ThrowIfCancellationRequested();
-            long dataStart = LocalDataStart(archive, member, token);
-            long end = dataStart + member.CompressedSize + ((member.Flags & 8) != 0 ? 12 : 0);
+            var (dataStart, wide) = LocalData(archive, member, token);
+            // A data descriptor follows the data: at least CRC and two sizes, 8 bytes each with ZIP64.
+            long end = dataStart + member.CompressedSize + ((member.Flags & 8) == 0 ? 0 : wide ? 20 : 12);
             if (end > cdOffset) throw new UserError("This ZIP archive's directory is damaged.");
             ranges.Add((member.LocalOffset, end));
         }
@@ -176,20 +196,45 @@ public static class ZipExtract
             if (ranges[i].Start < ranges[i - 1].End) throw new UserError("This ZIP archive reuses data between entries and was not extracted.");
     }
 
-    private static long LocalDataStart(Stream archive, ZipMember member, CancellationToken token)
+    private static long LocalDataStart(Stream archive, ZipMember member, CancellationToken token) => LocalData(archive, member, token).Start;
+
+    // The local header must agree with the directory; ZIP64 sizes come from its own 0x0001 field.
+    private static (long Start, bool Wide) LocalData(Stream archive, ZipMember member, CancellationToken token)
     {
         if (member.LocalOffset + LocalRecord > archive.Length) throw new UserError("This ZIP archive's directory is damaged.");
         byte[] local = ReadAt(archive, member.LocalOffset, LocalRecord, token);
         if (U32(local, 0) != 0x04034b50) throw new UserError("This ZIP archive's directory is damaged.");
         ushort flags = U16(local, 6), method = U16(local, 8), nameLength = U16(local, 26), extraLength = U16(local, 28);
+        uint compressed32 = U32(local, 18), size32 = U32(local, 22);
         if (method != member.Method || (flags & 0x0849) != (member.Flags & 0x0849)) throw new UserError("This ZIP archive's directory is damaged.");
-        if ((flags & 8) == 0 && (U32(local, 14) != member.Crc || U32(local, 18) != member.CompressedSize || U32(local, 22) != member.Size))
-            throw new UserError("This ZIP archive's directory is damaged.");
         if (member.LocalOffset + LocalRecord + nameLength + extraLength > archive.Length) throw new UserError("This ZIP archive's directory is damaged.");
         byte[] name = ReadAt(archive, member.LocalOffset + LocalRecord, nameLength, token);
         if (!name.AsSpan().SequenceEqual(member.RawName)) throw new UserError("This ZIP archive's directory is damaged.");
-        CheckExtra(ReadAt(archive, member.LocalOffset + LocalRecord + nameLength, extraLength, token), (flags & 0x0800) != 0);
-        return member.LocalOffset + LocalRecord + nameLength + extraLength;
+        bool wideSize = size32 == uint.MaxValue, wideCompressed = compressed32 == uint.MaxValue;
+        var values = CheckExtra(ReadAt(archive, member.LocalOffset + LocalRecord + nameLength, extraLength, token), (flags & 0x0800) != 0,
+            wideSize, wideCompressed, plainLocal: wideSize || wideCompressed ? null : (size32, compressed32));
+        if ((flags & 8) == 0 && (U32(local, 14) != member.Crc || (values.Compressed ?? compressed32) != (ulong)member.CompressedSize || (values.Size ?? size32) != (ulong)member.Size))
+            throw new UserError("This ZIP archive's directory is damaged.");
+        return (member.LocalOffset + LocalRecord + nameLength + extraLength, values.WideSizes);
+    }
+
+    private readonly record struct Zip64Record(long RecordOffset, uint Disk, uint CdDisk, ulong DiskEntries, ulong Entries, ulong CdSize, ulong CdOffset);
+
+    // A ZIP64 end record and its locator sit directly before the end record, in that order.
+    // Null when there is no locator there (an ordinary ZIP).
+    private static Zip64Record? Zip64End(Stream archive, long endOffset, CancellationToken token)
+    {
+        if (endOffset < Zip64Locator) return null;
+        byte[] locator = ReadAt(archive, endOffset - Zip64Locator, Zip64Locator, token);
+        if (U32(locator, 0) != 0x07064b50) return null;
+        if (U32(locator, 4) != 0 || U32(locator, 16) != 1) throw new UserError("Split or multi-disk ZIP archives are not supported.");
+        long recordOffset = endOffset - Zip64Locator - Zip64EndRecord;
+        if (recordOffset < 0 || U64(locator, 8) != (ulong)recordOffset) throw new UserError("This ZIP archive has unexpected data around its directory and was not extracted.");
+        byte[] record = ReadAt(archive, recordOffset, Zip64EndRecord, token);
+        if (U32(record, 0) != 0x06064b50) throw new UserError("This ZIP archive's directory is damaged.");
+        // Version 2 records (central directory encryption) carry extra data; only the plain record is read.
+        if (U64(record, 4) != Zip64EndRecord - 12 || (U16(record, 14) & 0xFF) > 45) throw new UserError("This ZIP archive needs features beyond ZIP64 and was not extracted.");
+        return new(recordOffset, U32(record, 16), U32(record, 20), U64(record, 24), U64(record, 32), U64(record, 40), U64(record, 48));
     }
 
     /// Writes exactly one member's contents. Output that is too long, too short or fails
@@ -284,20 +329,45 @@ public static class ZipExtract
 
     internal static readonly System.Text.RegularExpressions.Regex ShortName = new(@"^[^.~]{0,7}~[0-9]+(\.[^.]{0,3})?$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
-    private static void CheckExtra(ReadOnlySpan<byte> extra, bool utf8)
+    /// WideSizes: the field carries 8-byte sizes, so a data descriptor has 8-byte sizes too.
+    private readonly record struct Zip64Values(ulong? Size, ulong? Compressed, ulong? Offset, bool Present, bool WideSizes);
+
+    // The ZIP64 field (0x0001) holds exactly the values whose 32-bit fields carry the marker, in
+    // the fixed order size, compressed size, local header offset (8 bytes each), disk (4 bytes).
+    // A marker without that field, a field of any other length or a second one is damage. One
+    // exception, for local headers only (`plainLocal`): with no marker, a 16-byte field repeating
+    // the header's own two sizes (older Python, Commons Compress) adds nothing and is accepted.
+    private static Zip64Values CheckExtra(ReadOnlySpan<byte> extra, bool utf8, bool wideSize = false, bool wideCompressed = false, bool wideOffset = false, bool wideDisk = false,
+        (uint Size, uint Compressed)? plainLocal = null)
     {
-        int at = 0;
+        int at = 0; var values = new Zip64Values(null, null, null, false, false);
         while (at < extra.Length)
         {
             if (at + 4 > extra.Length) throw new UserError("This ZIP archive's directory is damaged.");
             ushort id = BinaryPrimitives.ReadUInt16LittleEndian(extra[at..]), size = BinaryPrimitives.ReadUInt16LittleEndian(extra[(at + 2)..]);
             if (at + 4 + size > extra.Length) throw new UserError("This ZIP archive's directory is damaged.");
-            if (id == 0x0001) throw new UserError("ZIP64 archives are not supported in the Windows preview yet.");
+            if (id == 0x0001)
+            {
+                int expected = (wideSize ? 8 : 0) + (wideCompressed ? 8 : 0) + (wideOffset ? 8 : 0) + (wideDisk ? 4 : 0);
+                var field = extra.Slice(at + 4, size); int read = 0;
+                bool repeated = plainLocal is { } plain && expected == 0 && size == 16
+                    && BinaryPrimitives.ReadUInt64LittleEndian(field) == plain.Size && BinaryPrimitives.ReadUInt64LittleEndian(field[8..]) == plain.Compressed;
+                if (values.Present || size != expected && !repeated) throw new UserError("This ZIP archive's directory is damaged.");
+                if (repeated) { values = new(null, null, null, true, true); at += 4 + size; continue; }
+                ulong? wide = null, compressed = null, offset = null;
+                if (wideSize) { wide = BinaryPrimitives.ReadUInt64LittleEndian(field[read..]); read += 8; }
+                if (wideCompressed) { compressed = BinaryPrimitives.ReadUInt64LittleEndian(field[read..]); read += 8; }
+                if (wideOffset) { offset = BinaryPrimitives.ReadUInt64LittleEndian(field[read..]); read += 8; }
+                if (wideDisk && BinaryPrimitives.ReadUInt32LittleEndian(field[read..]) != 0) throw new UserError("Split or multi-disk ZIP archives are not supported.");
+                values = new(wide, compressed, offset, true, wideSize || wideCompressed);
+            }
             if (id is 0x0017 or 0x9901) throw new UserError("Encrypted ZIP archives are not supported.");
             // A second, possibly different Unicode name is ambiguous unless the header itself is UTF-8.
             if (id == 0x7075 && !utf8) throw new UserError("This ZIP archive uses legacy non-Unicode names. Re-create it with Unicode (UTF-8) names.");
             at += 4 + size;
         }
+        if ((wideSize || wideCompressed || wideOffset || wideDisk) && !values.Present) throw new UserError("This ZIP archive's directory is damaged.");
+        return values;
     }
 
     private static DateTime? DosTime(ushort date, ushort time)
@@ -329,6 +399,7 @@ public static class ZipExtract
     private static uint U32(ReadOnlySpan<byte> data, int at) => BinaryPrimitives.ReadUInt32LittleEndian(data[at..]);
     private static ushort U16(byte[] data, int at) => BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(at));
     private static uint U32(byte[] data, int at) => BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(at));
+    private static ulong U64(byte[] data, int at) => BinaryPrimitives.ReadUInt64LittleEndian(data.AsSpan(at));
 
     /// Exactly the member's compressed bytes; reads beyond them return end of stream.
     private sealed class Slice(Stream inner, long length, CancellationToken token) : Stream
