@@ -21,40 +21,52 @@ struct RopeStitchIntent {
     func ready(at now: CFTimeInterval) -> Bool { target != nil && now - since >= Self.delay }
 }
 
-/// Preview-only liquid join: rounded lobes fill their narrow waist as the two photos become one.
-/// The saved pixels are never masked or deformed.
+/// Geometry for two independently moving photo bodies and their soft connecting neck.
+/// This never touches exported pixels.
 enum RopeStitchJelly {
-    static let response: CGFloat = 0.42
-    static let damping: CGFloat = 0.7
+    static let response: CGFloat = 0.38
+    static let damping: CGFloat = 0.72
+    static let reach: CGFloat = 30
 
-    static func outline(in bounds: CGRect, seam: CGFloat, progress: CGFloat) -> CGPath {
-        let p = min(max(progress, 0), 1)
-        let w = bounds.width, h = bounds.height
-        guard w > 0, h > 0 else { return CGPath(rect: .zero, transform: nil) }
-        let radius = min(min(w, h) / 2, 3 + min(w, h) * 0.15 * (1 - p))
-        let y = min(max(bounds.minY + h * seam, bounds.minY + radius), bounds.maxY - radius)
-        let band = max(0, min(h * 0.2, min(y - bounds.minY - radius, bounds.maxY - radius - y)))
-        let neck = w * 0.16 * (1 - p)
-        let l = bounds.minX, r = bounds.maxX, t = bounds.minY, b = bounds.maxY
-        let k: CGFloat = 0.55228475
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: l + radius, y: t))
-        path.addLine(to: CGPoint(x: r - radius, y: t))
-        path.addCurve(to: CGPoint(x: r, y: t + radius), control1: CGPoint(x: r - radius * (1 - k), y: t), control2: CGPoint(x: r, y: t + radius * (1 - k)))
-        path.addLine(to: CGPoint(x: r, y: y - band))
-        path.addCurve(to: CGPoint(x: r - neck, y: y), control1: CGPoint(x: r, y: y - band * 0.35), control2: CGPoint(x: r - neck, y: y - band * 0.35))
-        path.addCurve(to: CGPoint(x: r, y: y + band), control1: CGPoint(x: r - neck, y: y + band * 0.35), control2: CGPoint(x: r, y: y + band * 0.35))
-        path.addLine(to: CGPoint(x: r, y: b - radius))
-        path.addCurve(to: CGPoint(x: r - radius, y: b), control1: CGPoint(x: r, y: b - radius * (1 - k)), control2: CGPoint(x: r - radius * (1 - k), y: b))
-        path.addLine(to: CGPoint(x: l + radius, y: b))
-        path.addCurve(to: CGPoint(x: l, y: b - radius), control1: CGPoint(x: l + radius * (1 - k), y: b), control2: CGPoint(x: l, y: b - radius * (1 - k)))
-        path.addLine(to: CGPoint(x: l, y: y + band))
-        path.addCurve(to: CGPoint(x: l + neck, y: y), control1: CGPoint(x: l, y: y + band * 0.35), control2: CGPoint(x: l + neck, y: y + band * 0.35))
-        path.addCurve(to: CGPoint(x: l, y: y - band), control1: CGPoint(x: l + neck, y: y - band * 0.35), control2: CGPoint(x: l, y: y - band * 0.35))
-        path.addLine(to: CGPoint(x: l, y: t + radius))
-        path.addCurve(to: CGPoint(x: l + radius, y: t), control1: CGPoint(x: l, y: t + radius * (1 - k)), control2: CGPoint(x: l + radius * (1 - k), y: t))
-        path.closeSubpath()
-        return path
+    static func gap(_ a: CGRect, _ b: CGRect) -> CGFloat {
+        hypot(max(0, max(a.minX - b.maxX, b.minX - a.maxX)),
+              max(0, max(a.minY - b.maxY, b.minY - a.maxY)))
+    }
+
+    static func mix(_ a: CGRect, _ b: CGRect, _ amount: CGFloat) -> CGRect {
+        let t = min(max(amount, 0), 1)
+        return CGRect(x: a.minX + (b.minX - a.minX) * t, y: a.minY + (b.minY - a.minY) * t,
+                      width: a.width + (b.width - a.width) * t, height: a.height + (b.height - a.height) * t)
+    }
+
+    static func bridge(_ a: CGRect, _ b: CGRect, strength: CGFloat) -> CGPath? {
+        let distance = hypot(b.midX - a.midX, b.midY - a.midY)
+        let amount = min(max(strength, 0), 1)
+        guard distance > 1, amount > 0, a.width > 0, a.height > 0, b.width > 0, b.height > 0 else { return nil }
+        let ux = (b.midX - a.midX) / distance, uy = (b.midY - a.midY) / distance
+        let nx = -uy, ny = ux
+        func edge(_ r: CGRect) -> CGFloat {
+            min(r.width / (2 * max(abs(ux), 0.0001)), r.height / (2 * max(abs(uy), 0.0001)))
+        }
+        let small = min(min(a.width, a.height), min(b.width, b.height))
+        let first = CGPoint(x: a.midX + ux * max(0, edge(a) - small * 0.2), y: a.midY + uy * max(0, edge(a) - small * 0.2))
+        let second = CGPoint(x: b.midX - ux * max(0, edge(b) - small * 0.2), y: b.midY - uy * max(0, edge(b) - small * 0.2))
+        let mid = CGPoint(x: (first.x + second.x) / 2, y: (first.y + second.y) / 2)
+        let width = small * (0.18 + 0.12 * amount)
+        let neck = small * 0.2 * amount
+        let length = hypot(second.x - first.x, second.y - first.y) * 0.24
+        func point(_ c: CGPoint, side: CGFloat, along: CGFloat = 0) -> CGPoint {
+            CGPoint(x: c.x + nx * side + ux * along, y: c.y + ny * side + uy * along)
+        }
+        let p = CGMutablePath()
+        p.move(to: point(first, side: width))
+        p.addCurve(to: point(mid, side: neck), control1: point(first, side: width, along: length), control2: point(mid, side: neck, along: -length))
+        p.addCurve(to: point(second, side: width), control1: point(mid, side: neck, along: length), control2: point(second, side: width, along: -length))
+        p.addLine(to: point(second, side: -width))
+        p.addCurve(to: point(mid, side: -neck), control1: point(second, side: -width, along: -length), control2: point(mid, side: -neck, along: length))
+        p.addCurve(to: point(first, side: -width), control1: point(mid, side: -neck, along: -length), control2: point(first, side: -width, along: length))
+        p.closeSubpath()
+        return p
     }
 }
 

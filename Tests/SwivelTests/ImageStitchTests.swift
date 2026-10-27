@@ -39,17 +39,15 @@ struct ImageStitchTests {
     }
 
     @Test func jellyFillsItsWaistAndSettlesWithOneSmallRebound() {
-        let bounds = CGRect(x: 0, y: 0, width: 100, height: 120)
-        let contact = RopeStitchJelly.outline(in: bounds, seam: 0.5, progress: 0)
-        let merged = RopeStitchJelly.outline(in: bounds, seam: 0.5, progress: 1)
-        #expect(!contact.contains(CGPoint(x: 5, y: 60)))
-        #expect(merged.contains(CGPoint(x: 5, y: 60)))
-        for seam: CGFloat in [0.01, 0.5, 0.99] {
-            for step in 0...20 {
-                let path = RopeStitchJelly.outline(in: bounds, seam: seam, progress: CGFloat(step) / 20)
-                #expect(bounds.contains(path.boundingBoxOfPath))
-            }
-        }
+        let first = CGRect(x: 0, y: 0, width: 100, height: 120)
+        let second = CGRect(x: 120, y: 10, width: 100, height: 120)
+        #expect(RopeStitchJelly.gap(first, second) == 20)
+        let bridge = RopeStitchJelly.bridge(first, second, strength: 0.6)
+        #expect(bridge?.contains(CGPoint(x: 110, y: 65)) == true)
+        #expect(RopeStitchJelly.bridge(first, second, strength: 0) == nil)
+        #expect(RopeStitchJelly.bridge(first, first, strength: 1) == nil)
+        #expect(RopeStitchJelly.mix(first, second, 0) == first)
+        #expect(RopeStitchJelly.mix(first, second, 1) == second)
         var spring = Spring(0, response: RopeStitchJelly.response, damping: RopeStitchJelly.damping)
         spring.target = 1
         var peak: CGFloat = 0
@@ -106,9 +104,17 @@ struct ImageStitchTests {
             let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
             let previewPosition = overlay.position
             view.markNew(output, arrival: .inPlace, thumbnail: try ImageStitch.render(top: thumb, bottom: thumb))
+            var handedOff = false
+            view.onStitchHandoff = { [weak view] in
+                handedOff = true
+                view?.setItems([output])
+            }
             view.finishStitchPreview(output: output)
-            view.setItems([output])
-            #expect(!view.isCommittingStitch)
+            if !reduced {
+                #expect(view.isCommittingStitch) // disk completion does not cut short the physical joining
+                _ = view.advance(1 / 120)
+            }
+            #expect(handedOff && !view.isCommittingStitch)
             let result = try #require(view.layer?.sublayers?.last)
             let firstPosition = result.position
             if reduced {
