@@ -15,7 +15,11 @@ public sealed record SimilarPhotoPair(string First, string Second, int Different
 }
 public sealed record PhotoSimilarityResult(IReadOnlyList<SimilarPhotoPair> Pairs, IReadOnlyList<DuplicateIssue> Issues,
     int Candidates, int Attempted, int Loaded, int ComparedPairs, int MatchingPairs, long BytesRead,
-    bool FileLimit, bool ByteLimit, bool TimeLimit);
+    bool FileLimit, bool ByteLimit, bool TimeLimit)
+{
+    /// The identity, length and last write recorded for each compared file, by relative path.
+    public IReadOnlyDictionary<string, DuplicateStamp> Stamps { get; init; } = new Dictionary<string, DuplicateStamp>();
+}
 public sealed record PhotoSimilarityLimits(int MaxFiles = 200, int MaxFileBytes = 16 * 1024 * 1024,
     int MaxReadBytes = 128 * 1024 * 1024, int MaxPairs = 1000, int Seconds = 60);
 
@@ -171,6 +175,7 @@ public static class PhotoSimilarity
         catch (Stopped) { }
         token.ThrowIfCancellationRequested();
         return new(pairs.AsReadOnly(), Array.AsReadOnly(items.Where(x => x.Issue is not null).Select(x => new DuplicateIssue(x.Candidate.RelativePath, x.Issue!)).ToArray()),
-            items.Length, attempted, loaded.Length, compared, matching, bytesRead, fileLimit, byteLimit, timeLimit);
+            items.Length, attempted, loaded.Length, compared, matching, bytesRead, fileLimit, byteLimit, timeLimit)
+        { Stamps = identities.Values.Where(x => x.Item.Hash is not null && x.Item.Issue is null).ToDictionary(x => x.Item.Candidate.RelativePath, x => x.Stamp, StringComparer.Ordinal) };
     }
 }

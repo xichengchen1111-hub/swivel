@@ -17,6 +17,7 @@ internal static class TextSimilarityChecks
         string Five = "one\ntwo\nthree\nfour\nfive";
         var scan = Run(new() { ["a.txt"] = Text(Five), ["b.TXT"] = Text(" five \r\n\tthree\t\rone\ntwo\rfour\nfour\n\u3000\n") });
         check(scan.Pairs.Count==1 && scan.Pairs[0]==new SimilarTextPair("a.txt","b.TXT",5,5) && scan.Pairs[0].Percent==100 && scan.Loaded==2 && scan.ComparedPairs==1,"Ordinal lines trim Unicode whitespace, ignore order/repetition/blank rows, split CRLF/CR/LF; extension case ignored");
+        check(scan.Stamps.Count==2 && scan.Stamps["a.txt"]==new DuplicateStamp("a.txt",Five.Length,1) && scan.Stamps.ContainsKey("b.TXT"),"Each compared file's scan stamp is recorded for a later cleanup check");
         check(scan.BytesRead==source.Bytes.Values.Sum(x=>x.Length) && source.Active==0 && source.Opened==source.Disposed && source.MaxActive==1,"One exact bounded read per file; at most one held input and every lease disposed");
         scan=Run(new(){["a.md"]=Text(Five),["b.markdown"]=Text(Five),["c.txt"]=Text(Five),["d.TXT"]=Text(Five.ToUpperInvariant()),["e.bin"]=Text(Five)});
         check(scan.Pairs.Count==0 && scan.Loaded==4 && scan.ComparedPairs==1 && source.Opened==4 && scan.Issues.Single().Reason=="Not a supported plain-text extension","Extension aliases remain separate, text case is significant, unsupported extension never opens");

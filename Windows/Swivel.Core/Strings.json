@@ -9679,15 +9679,15 @@
     "這是目前使用者作用中連線的 Internet Proxy 設定。應用程式和系統服務可能採用不同設定。不顯示或複製 Proxy 網址、認證資訊和略過清單，也未下載或執行任何指令碼。",
     "現在のユーザーのアクティブ接続用Internetプロキシ設定です。アプリやサービスは別の設定を使う場合があります。URL・資格情報・除外一覧は表示もコピーもせず、スクリプトの取得や実行もしていません。"
   ],
-  "These are historical grid-similarity hints, not identical-image proof or cleanup advice. Even 100% agreement can describe different colors, details or aspect ratios. Each pair stands alone; matches do not form related groups. Rotation, crop and composition changes can be missed. No images are previewed, opened, copied or deleted, and files may change afterward.": [
-    "这些是读取时的网格相似线索，不证明图片相同，也不是清理建议。即使一致率 100%，颜色、细节或宽高比也可能不同。每对独立，匹配不构成关联分组；旋转、裁剪和构图变化可能漏检。不会预览、打开、复制或删除图片，文件之后也可能改变。",
-    "這些是讀取當時的網格相似線索，不證明圖片相同，也不是清理建議。即使一致率 100%，顏色、細節或長寬比也可能不同。每對獨立，相符不構成關聯分組；旋轉、裁剪和構圖變化可能漏檢。不會預覽、開啟、複製或刪除圖片，檔案之後也可能變更。",
-    "読み取り時点のグリッド類似の手がかりであり、同一画像の証明や削除の推奨ではありません。一致率100%でも色、細部、縦横比は異なる場合があります。各ペアは独立し、一致しても関連グループは形成しません。回転、切り抜き、構図の変化は見逃す場合があります。画像のプレビュー、開く、コピー、削除は行わず、ファイルは後で変更される場合があります。"
+  "These are historical grid-similarity hints, not identical-image proof or cleanup advice. Even 100% agreement can describe different colors, details or aspect ratios. Each pair stands alone; matches do not form related groups. Rotation, crop and composition changes can be missed. The comparison itself does not preview, open, copy or delete images, and files may change afterward.": [
+    "这些是读取时的网格相似线索，不证明图片相同，也不是清理建议。即使一致率 100%，颜色、细节或宽高比也可能不同。每对独立，匹配不构成关联分组；旋转、裁剪和构图变化可能漏检。比较本身不预览、打开、复制或删除图片，文件之后也可能改变。",
+    "這些是讀取當時的網格相似線索，不證明圖片相同，也不是清理建議。即使一致率 100%，顏色、細節或長寬比也可能不同。每對獨立，相符不構成關聯分組；旋轉、裁剪和構圖變化可能漏檢。比較本身不預覽、開啟、複製或刪除圖片，檔案之後也可能變更。",
+    "読み取り時点のグリッド類似の手がかりであり、同一画像の証明や削除の推奨ではありません。一致率100%でも色、細部、縦横比は異なる場合があります。各ペアは独立し、一致しても関連グループは形成しません。回転、切り抜き、構図の変化は見逃す場合があります。比較そのものでは画像のプレビュー、開く、コピー、削除は行わず、ファイルは後で変更される場合があります。"
   ],
-  "These are historical text-similarity hints, not identical-file proof, related groups or cleanup advice. Even 100% can have different bytes, order or repeated lines. Each pair stands alone; one match does not imply another. Files may change afterward. No image similarity, content preview, deletion or opening is performed.": [
-    "这些是读取时的文本相似线索，不证明文件相同、不构成关联分组，也不是清理建议。即使 100%，字节、顺序或重复次数也可能不同。每对结果独立，一对匹配不代表其他配对匹配。文件之后可能改变。不会比较图片、预览原文、删除或打开文件。",
-    "這些是讀取當時的文字相似線索，不證明檔案相同、不構成關聯分組，也不是清理建議。即使 100%，位元組、順序或重複次數也可能不同。每對結果獨立，一對相符不代表其他配對相符。檔案之後可能變更。不會比較圖片、預覽原文、刪除或開啟檔案。",
-    "読み取り時点のテキスト類似の手がかりであり、同一ファイルの証明、関連グループや削除の推奨ではありません。100%でもバイト、順序、重複回数は異なる場合があります。各ペアは独立し、ある一致から別の一致は推論できません。ファイルは後から変更される場合があります。画像比較、本文プレビュー、削除、ファイルを開く操作は行いません。"
+  "These are historical text-similarity hints, not identical-file proof, related groups or cleanup advice. Even 100% can have different bytes, order or repeated lines. Each pair stands alone; one match does not imply another. Files may change afterward. The comparison itself does no image comparison, content preview, deletion or opening.": [
+    "这些是读取时的文本相似线索，不证明文件相同、不构成关联分组，也不是清理建议。即使 100%，字节、顺序或重复次数也可能不同。每对结果独立，一对匹配不代表其他配对匹配。文件之后可能改变。比较本身不比较图片、不预览原文、不删除或打开文件。",
+    "這些是讀取當時的文字相似線索，不證明檔案相同、不構成關聯分組，也不是清理建議。即使 100%，位元組、順序或重複次數也可能不同。每對結果獨立，一對相符不代表其他配對相符。檔案之後可能變更。比較本身不比較圖片、不預覽原文、不刪除或開啟檔案。",
+    "読み取り時点のテキスト類似の手がかりであり、同一ファイルの証明、関連グループや削除の推奨ではありません。100%でもバイト、順序、重複回数は異なる場合があります。各ペアは独立し、ある一致から別の一致は推論できません。ファイルは後から変更される場合があります。比較そのものでは画像比較、本文プレビュー、削除、ファイルを開く操作は行いません。"
   ],
   "These are reported registry values, not proof that an app exists, is enabled, will run, is trusted or slows startup. RunOnce behavior depends on Windows conditions. StartupApproved, startup folders, scheduled tasks, services, Store apps, other users, signatures and executable files are not inspected. No environment expansion, command parsing or execution is performed. Views may share entries or resolve through registry links; key identity and link targets are not verified, records are not merged and ARM32-specific views may be missing.": [
     "这些只是报告的注册表值，不能证明应用存在、已启用、将运行、可信或拖慢启动。RunOnce 行为取决于 Windows 条件。不检查 StartupApproved、启动文件夹、计划任务、服务、商店应用、其他用户、签名或可执行文件。不展开环境变量，不解析或执行命令。视图可能共享记录或经注册表链接解析；不验证键身份或链接目标，不合并记录，可能遗漏 ARM32 专用视图。",
@@ -12838,5 +12838,50 @@
     "保留的副本可能在另一个所选文件夹或另一个磁盘上，包括可移动磁盘；移动前请确认它的位置。",
     "保留的副本可能在另一個所選資料夾或另一個磁碟上，包括卸除式磁碟；移動前請確認它的位置。",
     "残すコピーは、選択した別のフォルダーや、リムーバブルを含む別のドライブにある場合があります。移動する前に場所を確認してください。"
+  ],
+  "To clean up a pair, select it, then select one of its two files below and choose Move Selected to Recycle Bin…. Similar files are not identical: compare them yourself first. The other file of the pair is kept, and stays kept: it cannot be moved through another pair while this window is open. Before the move it must still be the same file with the size and modified time recorded by the comparison, and it is held open until the move ends so other programs cannot newly open it for writing, rename or delete it. The selected file must also be unchanged since the comparison (same file, size and modified time; its contents are not read again) and have no other hard link. Only fixed drives with a Recycle Bin are used; if a file is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move restores the last moved file while this window is open, unless something now exists at its place; afterwards, restore it from the Recycle Bin.": [
+    "要清理一对，先选中它，再在下方选择其中一个文件，然后点“将所选项移到回收站…”。相似文件并不相同，请先自己比较。这一对中的另一个文件会保留，且在本窗口打开期间不能再通过其他配对移走。移动前它必须仍是同一个文件，大小和修改时间与比较时记录的一致，并在移动结束前保持打开，其他程序无法再以写入方式打开、改名或删除它。所选文件也必须自比较后未变（同一文件、大小和修改时间相同；不会重新读取内容），且没有其他硬链接。只使用有回收站的固定磁盘；文件太大放不进回收站时，Windows 会先询问是否永久删除。窗口打开期间，“撤销移动”可放回最近移走的文件，除非原位置已有别的东西；之后请从回收站还原。",
+    "要清理一對，先選取它，再在下方選擇其中一個檔案，然後點「將所選項目移到資源回收筒…」。相似檔案並不相同，請先自行比較。這一對中的另一個檔案會保留，且在本視窗開啟期間不能再透過其他配對移走。移動前它必須仍是同一個檔案，大小和修改時間與比較時記錄的一致，並在移動結束前保持開啟，其他程式無法再以寫入方式開啟、重新命名或刪除它。所選檔案也必須自比較後未變（同一檔案、大小和修改時間相同；不會重新讀取內容），且沒有其他硬式連結。只使用有資源回收筒的固定磁碟；檔案太大放不進資源回收筒時，Windows 會先詢問是否永久刪除。視窗開啟期間，「復原移動」可放回最近移走的檔案，除非原位置已有其他項目；之後請從資源回收筒還原。",
+    "ペアを整理するには、ペアを選び、下でその2つのファイルの一方を選んで「選択項目をごみ箱に移動…」を選びます。類似ファイルは同一ではないので、先にご自身で比べてください。ペアのもう一方は残し、このウィンドウを開いている間は別のペアから移動することもできません。移動前に、比較時に記録した同じファイル・サイズ・更新日時のままである必要があり、移動が終わるまで開いたままにするため、他のプログラムは新たに書き込み用に開いたり、名前を変えたり、削除したりできません。選んだファイルも比較後に変わっていない（同じファイル、サイズ、更新日時。内容は読み直しません）こと、ほかのハードリンクがないことが必要です。ごみ箱のある固定ドライブだけを使います。ごみ箱に入らない大きさの場合、Windows が完全に削除するか確認します。このウィンドウを開いている間は「移動を取り消す」で最後に移動したファイルを戻せます（元の場所に別の項目がない場合）。その後はごみ箱から復元してください。"
+  ],
+  "Files in Selected Pair": [
+    "所选配对中的文件",
+    "所選配對中的檔案",
+    "選択したペアのファイル"
+  ],
+  "Move 1 similar file to the Recycle Bin?": [
+    "将 1 个相似文件移到回收站？",
+    "將 1 個相似檔案移到資源回收筒？",
+    "類似ファイル 1 個をごみ箱へ移動しますか？"
+  ],
+  "Move {0} similar files to the Recycle Bin?": [
+    "将 {0} 个相似文件移到回收站？",
+    "將 {0} 個相似檔案移到資源回收筒？",
+    "類似ファイル {0} 個をごみ箱へ移動しますか？"
+  ],
+  "The other file of the pair is kept. Similar files are not identical; check which one you want to keep before moving.": [
+    "这一对中的另一个文件会保留。相似文件并不相同，移动前请确认要保留哪一个。",
+    "這一對中的另一個檔案會保留。相似檔案並不相同，移動前請確認要保留哪一個。",
+    "ペアのもう一方は残ります。類似ファイルは同一ではないので、移動する前にどちらを残すか確認してください。"
+  ],
+  "It changed since the comparison (another file, size or modified time), so it was left alone.": [
+    "它在比较后已改变（文件、大小或修改时间不同），因此未移动。",
+    "它在比較後已變更（檔案、大小或修改時間不同），因此未移動。",
+    "比較後に変わったため（別のファイル、サイズ、更新日時）、そのままにしました。"
+  ],
+  "The other file of the pair is missing or changed since the comparison, so this file was left alone.": [
+    "这一对中的另一个文件已不存在或在比较后改变，因此此文件未移动。",
+    "這一對中的另一個檔案已不存在或在比較後變更，因此此檔案未移動。",
+    "ペアのもう一方がないか比較後に変わったため、このファイルはそのままにしました。"
+  ],
+  "Similar-file comparison finished. Files moved to the Recycle Bin or removed: {0}": [
+    "相似文件比较已完成。已移到回收站或已移除的文件：{0}",
+    "相似檔案比較已完成。已移到資源回收筒或已移除的檔案：{0}",
+    "類似ファイルの比較が終わりました。ごみ箱に移動または削除されたファイル: {0}"
+  ],
+  "kept for a file moved in this window": [
+    "已为本窗口中移走的文件保留",
+    "已為本視窗中移走的檔案保留",
+    "このウィンドウで移動したファイルのために残しています"
   ]
 }

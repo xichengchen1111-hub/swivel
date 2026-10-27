@@ -14,7 +14,12 @@ public sealed record SimilarTextPair(string First, string Second, int CommonLine
 }
 public sealed record TextSimilarityResult(IReadOnlyList<SimilarTextPair> Pairs, IReadOnlyList<DuplicateIssue> Issues,
     int Candidates, int Attempted, int Loaded, int ComparedPairs, int MatchingPairs, long BytesRead,
-    bool FileLimit, bool ByteLimit, bool LineLimit, bool TimeLimit);
+    bool FileLimit, bool ByteLimit, bool LineLimit, bool TimeLimit)
+{
+    /// The identity, length and last write recorded for each compared file, by relative path,
+    /// so a later cleanup can tell whether a file is still the one compared.
+    public IReadOnlyDictionary<string, DuplicateStamp> Stamps { get; init; } = new Dictionary<string, DuplicateStamp>();
+}
 public sealed record TextSimilarityLimits(int MaxFiles = 200, int MaxFileBytes = 1024 * 1024,
     int MaxReadBytes = 16 * 1024 * 1024, int MaxLines = 20000, int MaxRetainedLines = 200000, int MaxPairs = 1000, int Seconds = 60);
 
@@ -164,6 +169,7 @@ public static class TextSimilarity
         catch (Stopped) { }
         token.ThrowIfCancellationRequested();
         return new(pairs.AsReadOnly(), Array.AsReadOnly(items.Where(x => x.Issue is not null).Select(x => new DuplicateIssue(x.Candidate.RelativePath, x.Issue!)).ToArray()),
-            items.Length, attempted, loaded.Length, compared, matching, readBytes, fileLimit, byteLimit, lineLimit, timeLimit);
+            items.Length, attempted, loaded.Length, compared, matching, readBytes, fileLimit, byteLimit, lineLimit, timeLimit)
+        { Stamps = identities.Values.Where(x => x.Item.Lines is not null && x.Item.Issue is null).ToDictionary(x => x.Item.Candidate.RelativePath, x => x.Stamp, StringComparer.Ordinal) };
     }
 }

@@ -79,6 +79,35 @@ public static partial class NativeFiles
         finally { kept?.Dispose(); }
     }
 
+    internal const string SimilarChanged = "It changed since the comparison (another file, size or modified time), so it was left alone.";
+    internal const string NoSimilarKept = "The other file of the pair is missing or changed since the comparison, so this file was left alone.";
+
+    /// Moves one file of a similar pair to the Recycle Bin while the other file of the pair is
+    /// held open without write or delete sharing. Both must still have the identity, length and
+    /// last write recorded by the comparison; their contents are not read again (they are not
+    /// identical anyway). The moved file must also have one link.
+    internal static string RecycleSimilar(string file, DuplicateStamp compared, string keep, DuplicateStamp keptCompared, IntPtr owner = default)
+    {
+        if (compared.Identity == keptCompared.Identity) throw new UserError(NoSimilarKept);
+        SafeFileHandle kept;
+        try { WindowsPathPolicy.Validate(keep); kept = Open(keep, GenericRead | ReadAttributes, 1, 3, OpenReparse); }
+        catch (Exception error) when (error is Win32Exception or UserError) { throw new UserError(NoSimilarKept); }
+        using (kept)
+        {
+            if (!StillCompared(kept, keptCompared)) throw new UserError(NoSimilarKept);
+            return Recycle(file, false, held =>
+            {
+                if (!GetFileInformationByHandle(held, out var info) || info.Links != 1 || !StillCompared(held, compared)) throw new UserError(SimilarChanged);
+            }, owner);
+        }
+    }
+
+    private static bool StillCompared(SafeFileHandle handle, DuplicateStamp compared)
+    {
+        try { return ReadDuplicateStamp(handle, ReadIdentity(handle).Volume) == compared; }
+        catch (Exception error) when (error is Win32Exception or UserError or System.IO.IOException) { return false; }
+    }
+
     private static string Sha256(SafeFileHandle handle, long length)
     {
         using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);

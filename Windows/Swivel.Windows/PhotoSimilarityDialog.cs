@@ -15,7 +15,7 @@ internal static class PhotoSimilarityNotices
     internal const string Limits = "The chosen folder plus 4 levels: up to 20,000 metadata entries and about 30 seconds. Image comparison: up to 200 file attempts, 16 MiB per file, 128 MiB read and about 60 seconds including decoding and grid comparisons. Decoded images are limited to 16 megapixels and 16,384 pixels per side. Blocked system or codec calls may return later.";
     internal const string Rules = "Only single-frame SDR PNG, JPEG, BMP, TIFF and supported static GIF are decoded. Alpha is composited onto white, then integer brightness averages are calculated in a 9-by-8 grid. The 64 horizontal comparisons produce a signature. At most 6 differing bits qualify (at least 90.625% agreement). Different image formats may be compared. Displayed percentages are truncated to two decimals. This is not an object, face or semantic recognition score.";
     internal const string Detail = "Images smaller than 9-by-8 pixels, grid brightness ranges below 16, or signatures with fewer than 4 or more than 60 set bits are skipped. These heuristics can miss valid images, including flat pictures and directional gradients. Animation, HDR, high bit depth, CMYK and unsupported formats are refused. HEIC, WebP and AVIF remain pending.";
-    internal const string Snapshot = "These are historical grid-similarity hints, not identical-image proof or cleanup advice. Even 100% agreement can describe different colors, details or aspect ratios. Each pair stands alone; matches do not form related groups. Rotation, crop and composition changes can be missed. No images are previewed, opened, copied or deleted, and files may change afterward.";
+    internal const string Snapshot = "These are historical grid-similarity hints, not identical-image proof or cleanup advice. Even 100% agreement can describe different colors, details or aspect ratios. Each pair stands alone; matches do not form related groups. Rotation, crop and composition changes can be missed. The comparison itself does not preview, open, copy or delete images, and files may change afterward.";
     internal const string Privacy = TextSimilarityNotices.Privacy;
     internal const string PairLimit = TextSimilarityNotices.PairLimit;
     internal const string Downgrade = TextSimilarityNotices.Downgrade;
@@ -51,6 +51,8 @@ internal sealed class PhotoSimilarityDialog : Window
     private readonly ListView pairs = NativeList(290);
     private readonly TextBox selected;
     private readonly Button copySelected;
+    private readonly SimilarPairCleanup cleanup;
+    internal int Moved => cleanup.Moved; // also those Windows removed outright
     internal string CurrentReport
     {
         get
@@ -60,6 +62,7 @@ internal sealed class PhotoSimilarityDialog : Window
             text.AppendLine(app.L("Skipped Items"));
             foreach (var issue in issues) text.AppendLine(issue.Path + " · " + issue.Reason);
             if (issues.Count == 0) text.AppendLine(app.L("No recorded skipped items."));
+            cleanup.AppendReport(text, result.Pairs.SelectMany(pair => new[] { pair.First, pair.Second }));
             return text.ToString();
         }
     }
@@ -85,6 +88,8 @@ internal sealed class PhotoSimilarityDialog : Window
         footer.Children.Add(UI.Button(app.L("Copy Report"), () => app.Try(() => Clipboard.SetText(CurrentReport))));
         copySelected = UI.Button(app.L("Copy Selected Pair"), () => { if (pairs.SelectedItem is PairRow) app.Try(() => Clipboard.SetText(SelectedReport)); });
         copySelected.IsEnabled = false; footer.Children.Add(copySelected);
+        cleanup = new SimilarPairCleanup(app, this, path, result.Stamps, pairs, () => pairs.SelectedItem is PairRow row ? (row.Pair.First, row.Pair.Second) : null);
+        footer.Children.Add(cleanup.Move); footer.Children.Add(cleanup.Undo);
         var close = UI.Button(app.L("Close"), () => DialogResult = false); close.IsCancel = true; footer.Children.Add(close);
         var tabs = new TabControl(); root.Children.Add(tabs);
         var body = new StackPanel { Margin = new Thickness(12) };
@@ -98,11 +103,14 @@ internal sealed class PhotoSimilarityDialog : Window
         selected = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxHeight = 190, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         AutomationProperties.SetName(selected, app.L("Selected Pair Details")); body.Children.Add(selected);
         body.Children.Add(UI.Text(app.L(PhotoSimilarityNotices.Privacy), 12));
-        pairs.SelectionChanged += (_, _) => {
+        body.Children.Add(UI.Text(app.L(SimilarPairCleanup.Notice), 12)); body.Children.Add(cleanup.Files); body.Children.Add(cleanup.Status);
+        void ShowSelected()
+        {
             copySelected.IsEnabled = pairs.SelectedItem is PairRow;
             if (pairs.SelectedItem is not PairRow row) { selected.Text = ""; return; }
             var text = new StringBuilder(); AppendPair(text, row.Pair); selected.Text = text.ToString();
-        };
+        }
+        pairs.SelectionChanged += (_, _) => ShowSelected(); cleanup.Changed += ShowSelected;
         tabs.Items.Add(new TabItem { Header = app.L("Matching Image Pairs"), Content = UI.Scroll(body) });
         var skipped = new StackPanel { Margin = new Thickness(12) };
         skipped.Children.Add(UI.Text(Status(), 12)); skipped.Children.Add(UI.Text(app.L(PhotoSimilarityNotices.Limits), 12));
@@ -140,7 +148,7 @@ internal sealed class PhotoSimilarityDialog : Window
     private void AppendPair(StringBuilder text, SimilarPhotoPair pair)
     {
         text.AppendLine(string.Format(app.L("Grid comparison agreement: {0}% · different bits: {1} of 64"), pair.Percent, pair.DifferentBits));
-        text.AppendLine(Visible(path.TrimEnd('\\') + "\\" + pair.First)); text.AppendLine(Visible(path.TrimEnd('\\') + "\\" + pair.Second));
+        text.AppendLine(cleanup.Line(pair.First)); text.AppendLine(cleanup.Line(pair.Second));
     }
     private static string Visible(string value) => DoctorFacts.VisibleBounded(value, 512);
     private GridView Columns(params (string Title, string Property, double Width)[] columns)

@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.97 — Move one file of a similar pair to the Recycle Bin (F04 part, 2026-10-27)
+
+- Core 4,519,763 on Mac (new: scan stamps recorded for compared text files); native compiled 0 warnings/errors (not run here).
+- Native `TextSimilarityNativeChecks` additions: stamps recorded for all three compared files; refuses keeping the moved file itself, a kept file that is not the compared one, a kept file open for writing, and a moved file whose modified time changed; then moves one file of the pair, leaves the other's bytes intact, and Undo restores it. Window: selecting a pair lists its two files, choosing one enables Move, clearing the pair disables it. `PhotoSimilarityNativeChecks` now expects the third (files) list.
+- Independent review: P2 fixed and rechecked — with overlapping pairs (A,B),(B,C) the file kept for an earlier move could be moved through another pair, leaving no file of the first pair; kept files are now refused and marked. P3 fixed: details box refreshes after a move; status and notice translations aligned. Documented limits: contents are not re-read (a change with its modified time set back is not detected); Undo covers the last batch only.
+
 ## Windows0.96 — Common-folder duplicates to the Recycle Bin (F04 part, 2026-10-27)
 
 - Core 4,519,745 on Mac; native compiled 0 warnings/errors (native suite not run here).

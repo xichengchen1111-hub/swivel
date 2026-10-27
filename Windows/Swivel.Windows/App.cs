@@ -586,8 +586,9 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested(); report(L("Reading images for similarity…"));
                 var similar = await AwaitDoctorReadAsync(OnSta(() => DoctorPhotoSimilarity.Run(directory, token)),token);
                 token.ThrowIfCancellationRequested();
-                await ShowDoctorOperationAsync(new PhotoSimilarityDialog(this,directory,similar.Folder,similar.Similar),DoctorAssistantSummary.Photos(similar.Folder,similar.Similar),owner,token);
-                report(token.IsCancellationRequested ? L("Cancelled.") : L("Read-only image comparison finished. No files were changed.")); return;
+                var similarDialog=new PhotoSimilarityDialog(this,directory,similar.Folder,similar.Similar);
+                await ShowDoctorOperationAsync(similarDialog,DoctorAssistantSummary.Photos(similar.Folder,similar.Similar),owner,token);
+                report(similarDialog.Moved>0?string.Format(L("Similar-file comparison finished. Files moved to the Recycle Bin or removed: {0}"),similarDialog.Moved):token.IsCancellationRequested ? L("Cancelled.") : L("Read-only image comparison finished. No files were changed.")); return;
             }
             if (action.Id == "doctor.textsimilar")
             {
@@ -600,8 +601,9 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested(); report(L("Reading files for text similarity…"));
                 var similar = await AwaitDoctorReadAsync(Task.Run(() => DoctorTextSimilarity.Run(directory, token), token),token);
                 token.ThrowIfCancellationRequested();
-                await ShowDoctorOperationAsync(new TextSimilarityDialog(this,directory,similar.Folder,similar.Similar),DoctorAssistantSummary.Text(similar.Folder,similar.Similar),owner,token);
-                report(token.IsCancellationRequested ? L("Cancelled.") : L("Read-only text comparison finished. No files were changed.")); return;
+                var similarDialog=new TextSimilarityDialog(this,directory,similar.Folder,similar.Similar);
+                await ShowDoctorOperationAsync(similarDialog,DoctorAssistantSummary.Text(similar.Folder,similar.Similar),owner,token);
+                report(similarDialog.Moved>0?string.Format(L("Similar-file comparison finished. Files moved to the Recycle Bin or removed: {0}"),similarDialog.Moved):token.IsCancellationRequested ? L("Cancelled.") : L("Read-only text comparison finished. No files were changed.")); return;
             }
             if (action.Id == "doctor.duplicates")
             {
