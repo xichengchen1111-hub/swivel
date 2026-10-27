@@ -10,6 +10,14 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.103 新增：关闭一个应用的全部窗口；缓存环形图
+
+Windows Doctor 的 **Close Windows…** 窗口里，选中某个窗口后，若列表中还有同一程序（程序路径完全相同）的其他窗口，可点 **Review All Listed Windows of This App…**：确认窗口列出程序路径和每个窗口的完整标题，Enter/Esc 默认取消；点 **Request Normal Close for All** 后，依次向每个窗口请求一次正常关闭（与单个窗口相同：发送前重新核对身份，变化的窗口跳过；每个窗口只请求一次，绝不重试、不强制结束）。某个窗口 1.5 秒内没有确认（例如正在问是否保存）时，同一进程的其余窗口暂缓、不请求；此后在本列表中再次全部请求也会继续暂缓该进程（单个窗口请求不确定时同样），仍可逐个审阅后单独请求。完成后显示已处理、已变化未发送、不确定、暂缓、未发送各几个，并逐个列出每个窗口的结果。辅助程序（路径不同）、对话框、未列出的窗口和其他用户／会话的窗口都不包括；应用可能询问保存、取消，或在后台／通知区域继续运行，不保证退出或释放内存。
+
+**Review Browser and App Caches…** 窗口新增环形图：每个已测得大小的应用一段，颜色与右侧图例一致（前 6 个应用各一色，其余合为“另外 N 个”）；未测得或为 0 的不画。选中列表行时，这些行所属应用保持高亮、其他变淡，中间显示所选大小，否则显示测得总量；有未测或只测到一部分的，标为“至少”。高对比度模式下全部不透明，所选应用用系统高亮色、其余用文字色；中间文字随深浅色主题；不做动画；读屏把它当作图片，读出各应用的大小。
+
+F07 仍为部分实现：可靠的应用／辅助进程归属仍缺。固定52项仍 27／23／0／2。原生测试只交叉编译，真实 Windows 未执行。
+
 ## 0.102 新增：清理浏览器和应用缓存
 
 Windows Doctor 的 Caches 区新增 **Review Browser and App Caches…**：在你的本地和漫游应用数据中，只查找一份固定清单里各应用的默认缓存文件夹——Chrome、Edge、Brave、Vivaldi（每个配置文件的 Cache、Code Cache、GPUCache 和 Dawn 着色器缓存，以及 User Data 下的 ShaderCache、GrShaderCache、GraphiteDawnCache；只把带 Preferences 文件的文件夹当作配置文件；与缓存同名但带 Preferences 的文件夹按配置文件处理）、Firefox（每个配置文件的 cache2、startupCache）、VS Code、Discord、Slack（Cache、Code Cache、GPUCache 等，VS Code 另含 CachedData）、Steam 内置浏览器数据文件夹 htmlcache 里的 Cache、Code Cache、GPUCache 等（htmlcache 本身含 Cookie，不整个移走）、npm 的 `_cacache`、pip 和 Yarn 的 Cache、NuGet 的 v3-cache／plugins-cache。查找和测量只读目录记录，不打开文件内容；大小共用 100,000 项、约 30 秒的预算，在各文件夹之间公平分配，没测完的标为“至少”。窗口列出应用、配置文件、文件夹、大小和状态，窗口开头列出查找的应用及移动前检查的程序文件名（如 npm 检查 node.exe），没找到的应用、找到了但没有缓存文件夹的应用、读不了的位置也分开写明，读不了与达到上限也分开提示。不替你预选，可 **Select All Listed**，再 **Move Selected to Recycle Bin…**。只有为该应用列出的程序都没有运行时才移动或撤销放回（Edge、Chrome 关窗后可能仍在后台；任何 node、python、dotnet 程序都计入 npm、Yarn、pip、NuGet；也计入其他用户的程序；列不出进程时一律不动），**Check Running Apps Again** 可在关闭应用后刷新；每次移动前再核对它仍是原位置的普通本地文件夹、所在固定盘有回收站；不在固定盘上的直接显示无法移动。书签、密码、历史记录、Cookie、扩展和设置都不在这些文件夹里，会保留；应用下次启动可能慢一些。窗口打开期间可撤销，应用已在原处新建文件夹时不覆盖。Beta／Dev／Canary／Insiders 等其他版本、Microsoft Store 版、便携版、其他 Windows 用户和自定义缓存位置找不到。F06 部分→已实现限定范围；固定 52 项为 27／23／0／2，普通剩余 23。

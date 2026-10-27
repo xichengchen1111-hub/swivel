@@ -1327,6 +1327,25 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.103 — Close all listed windows of one app; cache ring chart (F07 part, 2026-10-27)
+
+- Core 4,520,081 on Mac; native compiled 0 warnings/errors (not run here).
+- New core `CloseWindowsChecks` for one app's windows:
+  - `SameApp` takes exactly the same executable path: a helper with another path and another spelling of the same path are separate; finding them sends and inspects nothing;
+  - `RequestEach` requests in order, once each: a changed window is not sent, an uncertain result is kept, used entries stay used and other paths stay requestable; used, negative and out-of-range entries are skipped;
+  - a failed send, or a cancellation the caller did not ask for, counts as uncertain and the next process still runs;
+  - after an uncertain window (also from a failure), the other windows of that process are held back without a check or a request and stay requestable; a later request for all windows still holds that process back and reports a repeated entry once, while a single explicit request reaches it;
+  - an uncertain or failed single request marks its process for later batches; a cancellation the caller asked for does not;
+  - cancellation keeps the sent result and leaves the rest unused; cancellation after a window's last check sends nothing and uses up only that window; a pre-cancelled call uses nothing;
+  - a request already running makes the call skip without using an entry; a disposed session requests nothing;
+  - the summary counts every kind of result; result lines list each window's result, escaped title and process; the confirmation lists the path, the count and every title; every text is translated.
+- New core `AppCacheChecks` for the chart: shares add each app's folders, keep partial sizes, drop apps with nothing measured and order equal sizes by name; sweeps split the circle by positive sizes only, also for very large values; short sizes count 1 KB as 1,000 bytes.
+- Native (compiled only):
+  - `CloseWindowsNativeChecks`: with one window the close-all review stays disabled; with three listed windows (one a helper) it is enabled only for the app with two; its confirmation defaults to Cancel and lists both windows and not the helper; the results box is hidden until a batch ends; requests run once per window on a dedicated MTA thread and never repeat;
+  - `AppCacheNativeChecks`: the ring shows the measured total 337 B and two legend rows (an empty cache has no segment), the selected total after Select All, and Narrator reaches it as an image with its name and sizes.
+- Not tested: real `WM_CLOSE` delivery to other apps' windows and a real save prompt (fixtures use fake leases); the ring's look in light, dark and high contrast on real Windows.
+- Independent agent review: one P2 — a send that times out because the window is showing a save prompt keeps that prompt's message loop running, so the next request to a sibling window of the same process would run inside it. Fixed: the rest of that process is held back. P3s fixed: centre text now follows the inherited foreground (dark mode), "at least" for partial or unmeasured sizes, an Image automation peer with name and sizes, high-contrast colours and redraw on DPI change, summary wording and per-window results, button label, two translations. Recheck: no P1/P2 remain; its further P3s (hold-back lasting only one batch, a repeated index counted twice, the static high-contrast subscription keeping a never-shown dialog alive) were fixed as above. Still to look at on real Windows: the ring beside the legend in Fluent dark mode.
+
 ## Windows0.102 — Browser and app caches to the Recycle Bin (F06 now limited-implemented, 2026-10-27)
 
 - Core 4,519,998 on Mac; native compiled 0 warnings/errors (not run here).

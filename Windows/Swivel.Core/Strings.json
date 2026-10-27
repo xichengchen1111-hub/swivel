@@ -1484,10 +1484,10 @@
     "請選擇一張支援的本機圖片。",
     "対応するローカル画像を 1 枚選んでください。"
   ],
-  "Choose one visible desktop window, review its title and executable path, then explicitly request its normal Close action. Save your work first: the other app may close immediately without asking. This does not force a process to end or close every window of an app.": [
-    "选择一个可见的桌面窗口，核对其标题和程序路径，再明确请求执行正常关闭操作。请先保存工作：对方应用可能不询问就立即关闭。此操作不会强制结束进程，也不会关闭该应用的所有窗口。",
-    "選擇一個可見的桌面視窗，核對其標題和程式路徑，再明確要求執行正常關閉操作。請先儲存工作：對方應用程式可能不詢問就立即關閉。此操作不會強制結束處理程序，也不會關閉該應用程式的所有視窗。",
-    "表示されているデスクトップウィンドウを 1 つ選び、タイトルと実行ファイルのパスを確認してから、通常の閉じる操作を明示的に要求します。先に作業を保存してください。相手のアプリは確認せず直ちに閉じる場合があります。プロセスの強制終了や、アプリの全ウィンドウの終了は行いません。"
+  "Choose one visible desktop window, or every listed window of one app, review the titles and the executable path, then explicitly request the normal Close action. Save your work first: the other app may close immediately without asking. This does not force a process to end: an app can keep running in the background or in the notification area after its windows close.": [
+    "选择一个可见的桌面窗口，或某个应用列出的全部窗口，核对标题和程序路径，再明确请求执行正常关闭操作。请先保存工作：对方应用可能不询问就立即关闭。此操作不会强制结束进程：应用在窗口关闭后仍可能在后台或通知区域继续运行。",
+    "選擇一個可見的桌面視窗，或某個應用程式列出的全部視窗，核對標題和程式路徑，再明確要求執行正常關閉操作。請先儲存工作：對方應用程式可能不詢問就立即關閉。此操作不會強制結束處理程序：應用程式在視窗關閉後仍可能在背景或通知區域繼續執行。",
+    "表示されているデスクトップウィンドウを 1 つ、または 1 つのアプリの一覧内の全ウィンドウを選び、タイトルと実行ファイルのパスを確認してから、通常の閉じる操作を明示的に要求します。先に作業を保存してください。相手のアプリは確認せず直ちに閉じる場合があります。プロセスの強制終了は行いません。ウィンドウを閉じた後も、アプリがバックグラウンドや通知領域で動作を続ける場合があります。"
   ],
   "Choose opaque RGB menu colors.": [
     "请选择不透明 RGB 菜单颜色。",
@@ -13213,5 +13213,90 @@
     "它的应用正在运行，或者 Swivel 无法列出正在运行的程序，所以暂未放回。请关闭该应用，然后再次选择“撤销移动”。",
     "它的應用程式正在執行，或者 Swivel 無法列出正在執行的程式，所以暫未放回。請關閉該應用程式，然後再次選擇「復原移動」。",
     "アプリが動いているか、Swivel が実行中のプログラムを一覧できなかったため、まだ戻していません。アプリを終了してから、もう一度「移動を取り消す」を選んでください。"
+  ],
+  "Request the normal Close action for each of these recorded windows of one app, one after another? Save any needed work first. The app may close without a save prompt, ask you to save, cancel, or keep running in the background or in the notification area. A window that changed is skipped. If a window does not confirm its request within 1.5 seconds, for example because it is asking whether to save, the remaining windows of that process are not requested; check the app first. Only windows in this list with exactly this executable path are included: windows of helper programs, dialogs, windows left out of the list and those of other users or sessions are not. No memory release is guaranteed.": [
+    "依次请求对此应用记录的每个窗口执行正常关闭操作？请先保存需要的工作。应用可能不提示保存就关闭，也可能询问保存、取消，或在后台或通知区域继续运行。已变化的窗口会被跳过。若某个窗口在 1.5 秒内未确认请求（例如正在询问是否保存），该进程的其余窗口将不再请求；请先查看该应用。只包含此列表中程序路径与此完全相同的窗口：辅助程序的窗口、对话框、未列出的窗口以及其他用户或会话的窗口都不包含。不保证释放内存。",
+    "依次要求對此應用程式記錄的每個視窗執行正常關閉操作？請先儲存需要的工作。應用程式可能不提示儲存就關閉，也可能詢問儲存、取消，或在背景或通知區域繼續執行。已變更的視窗會被略過。若某個視窗在 1.5 秒內未確認要求（例如正在詢問是否儲存），該處理程序的其餘視窗將不再要求；請先查看該應用程式。只包含此清單中程式路徑與此完全相同的視窗：輔助程式的視窗、對話方塊、未列出的視窗以及其他使用者或工作階段的視窗都不包含。不保證釋放記憶體。",
+    "このアプリの記録された各ウィンドウに、順番に通常の閉じる操作を要求しますか？必要な作業は先に保存してください。アプリは保存確認なしで閉じる場合も、保存を尋ねる場合も、キャンセルする場合も、バックグラウンドや通知領域で動作を続ける場合もあります。変化したウィンドウはスキップされます。保存の確認中などでウィンドウが 1.5 秒以内に要求を確認しなかった場合、そのプロセスの残りのウィンドウには要求しません。先にアプリを確認してください。対象はこの一覧のうち実行ファイルのパスが完全に一致するウィンドウだけです。補助プログラムのウィンドウ、ダイアログ、一覧にないウィンドウ、ほかのユーザーやセッションのウィンドウは含まれません。メモリ解放は保証されません。"
+  ],
+  "Windows to request: {0}": [
+    "要请求的窗口：{0}",
+    "將要求關閉的視窗：{0}",
+    "要求するウィンドウ：{0}"
+  ],
+  "Close requests finished. Processed: {0}. Changed, not sent: {1}. Uncertain: {2}. Held back after an uncertain window of the same process: {3}. Not sent: {4}. Check the app; this does not confirm that it quit or released memory.": [
+    "关闭请求已结束。已处理：{0}。已变化、未发送：{1}。不确定：{2}。因同一进程有窗口不确定而暂缓：{3}。未发送：{4}。请查看该应用；这不能确认它已退出或释放了内存。",
+    "關閉要求已結束。已處理：{0}。已變更、未傳送：{1}。不確定：{2}。因同一處理程序有視窗不確定而暫緩：{3}。未傳送：{4}。請查看該應用程式；這無法確認它已結束或釋放了記憶體。",
+    "閉じる要求が終わりました。処理済み：{0}。変化のため未送信：{1}。不明：{2}。同じプロセスのウィンドウが不明のため保留：{3}。未送信：{4}。アプリを確認してください。終了やメモリ解放を確認するものではありません。"
+  ],
+  "Review All Listed Windows of This App…": [
+    "核对此应用列出的全部窗口…",
+    "核對此應用程式列出的全部視窗…",
+    "このアプリの一覧内の全ウィンドウを確認…"
+  ],
+  "Requesting the Close action of {0} windows, one after another…": [
+    "正在依次请求关闭 {0} 个窗口…",
+    "正在依次要求關閉 {0} 個視窗…",
+    "{0} 個のウィンドウに順番に閉じる操作を要求しています…"
+  ],
+  "Confirm Close Requests for One App": [
+    "确认对一个应用的关闭请求",
+    "確認對一個應用程式的關閉要求",
+    "1 つのアプリへの閉じる要求の確認"
+  ],
+  "Request Normal Close for All": [
+    "对全部窗口请求正常关闭",
+    "對全部視窗要求正常關閉",
+    "すべてのウィンドウに通常の閉じる操作を要求"
+  ],
+  "Cache sizes by app": [
+    "各应用的缓存大小",
+    "各應用程式的快取大小",
+    "アプリごとのキャッシュサイズ"
+  ],
+  "Selected": [
+    "已选",
+    "已選",
+    "選択中"
+  ],
+  "Measured": [
+    "已测量",
+    "已測量",
+    "測定済み"
+  ],
+  "{0} more · {1}": [
+    "另外 {0} 个 · {1}",
+    "另外 {0} 個 · {1}",
+    "ほか {0} 個 · {1}"
+  ],
+  "Processed": [
+    "已处理",
+    "已處理",
+    "処理済み"
+  ],
+  "Changed, not sent": [
+    "已变化、未发送",
+    "已變更、未傳送",
+    "変化のため未送信"
+  ],
+  "Uncertain": [
+    "不确定",
+    "不確定",
+    "不明"
+  ],
+  "Held back": [
+    "暂缓",
+    "暫緩",
+    "保留"
+  ],
+  "Not sent": [
+    "未发送",
+    "未傳送",
+    "未送信"
+  ],
+  "Close Request Results": [
+    "关闭请求结果",
+    "關閉要求結果",
+    "閉じる要求の結果"
   ]
 }

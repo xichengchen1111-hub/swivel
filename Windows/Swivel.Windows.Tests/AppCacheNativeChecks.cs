@@ -72,7 +72,17 @@ internal static class AppCacheNativeChecks
         var move = footer.Single(b => Equals(b.Content, app.L("Move Selected to Recycle Bin…")));
         var list = ((StackPanel)((ScrollViewer)((DockPanel)dialog.Content).Children.OfType<ScrollViewer>().Single()).Content).Children.OfType<ListView>().Single();
         check(!move.IsEnabled && list.Items.Count == 4 && list.SelectedItems.Count == 0 && footer.Last().IsCancel, "Browser and App Caches lists the found folders with nothing selected and Move disabled");
+        var cacheBody = (StackPanel)((ScrollViewer)((DockPanel)dialog.Content).Children.OfType<ScrollViewer>().Single()).Content;
+        var chart = cacheBody.Children.OfType<DockPanel>().Single(); var ring = chart.Children.OfType<CacheRing>().Single(); var legend = chart.Children.OfType<StackPanel>().Single();
+        string measured = System.Windows.Automation.AutomationProperties.GetHelpText(ring);
+        check(chart.Visibility == Visibility.Visible && legend.Children.Count == 2 && measured.StartsWith(app.L("Measured") + ": " + AppCaches.ShortSize(337), StringComparison.Ordinal)
+            && measured.Contains("Google Chrome", StringComparison.Ordinal) && measured.Contains("Firefox", StringComparison.Ordinal) && !measured.Contains("Visual Studio Code", StringComparison.Ordinal),
+            "The cache ring shows each app with measured bytes and the measured total; an empty cache has no segment");
+        var peer = System.Windows.Automation.Peers.UIElementAutomationPeer.CreatePeerForElement(ring);
+        check(peer is not null && peer.GetName() == app.L("Cache sizes by app") && peer.GetAutomationControlType() == System.Windows.Automation.Peers.AutomationControlType.Image
+            && peer.GetHelpText() == measured && peer.IsControlElement(), "Narrator can reach the cache ring as an image with its name and sizes");
         list.SelectAll(); check(move.IsEnabled, "Selecting listed folders enables the move");
+        check(System.Windows.Automation.AutomationProperties.GetHelpText(ring).StartsWith(app.L("Selected") + ": " + AppCaches.ShortSize(337), StringComparison.Ordinal), "Selecting rows shows their size in the ring's centre");
         string notFound = app.L("Not found at the default place: {0}").Replace("{0}", "");
         check(dialog.CurrentReport.Contains(target) && dialog.CurrentReport.Split('\n').Any(line => line.StartsWith(notFound, StringComparison.Ordinal) && line.Contains("Microsoft Edge"))
             && dialog.CurrentReport.Contains("Google Chrome (chrome.exe)") && dialog.CurrentReport.Contains(app.L(AppCaches.Notice)), "The report lists the folders, the apps looked for with their programs, the apps not found and the limits");

@@ -100,6 +100,123 @@ internal static class CloseWindowsChecks
             reject(() => CloseWindows.Scan(new Source(new(new nint[] { 1 }), _ => { cancellation.Cancel(); return lease; }), cancellation.Token), "Window scan propagates cancellation after process opening");
             check(lease.Disposals == 1, "Window scan cancellation disposes a newly opened lease");
         }
+        // Every listed window of one app: same exact executable path, one request each, in order.
+        Lease[] App(params Lease[] leases) => leases;
+        CloseWindowsSession Many(Lease[] leases) => CloseWindows.Scan(new Source(new(leases.Select(lease => lease.Info.Handle).ToArray()), window => leases.Single(lease => lease.Info.Handle == window)), default);
+        var group = App(new Lease(Info(1)), new Lease(Info(2)), new Lease(Info(3)), new Lease(Info(4) with { ExecutablePath = @"C:\Apps\Helper.exe" }), new Lease(Info(5) with { ExecutablePath = @"C:\APPS\SAMPLE.EXE" }));
+        using (var session = Many(group))
+        {
+            check(session.SameApp(0).SequenceEqual(new[] { 0, 1, 2 }) && session.SameApp(2).SequenceEqual(new[] { 0, 1, 2 }) && session.SameApp(3).SequenceEqual(new[] { 3 })
+                && session.SameApp(4).SequenceEqual(new[] { 4 }) && session.SameApp(-1).Count == 0 && session.SameApp(5).Count == 0,
+                "Windows of one app are those with exactly the same executable path: helper programs and other spellings are separate");
+            check(group.All(lease => lease.Sends == 0 && lease.Inspections == 0), "Finding an app's windows sends nothing and inspects nothing");
+            group[1].Current = () => group[1].Info with { Title = "Changed" }; group[2].Sender = () => CloseWindowsResult.Unknown;
+            var results = session.RequestEach(session.SameApp(0), default);
+            check(results.SequenceEqual(new CloseWindowsResult?[] { CloseWindowsResult.Processed, CloseWindowsResult.Changed, CloseWindowsResult.Unknown })
+                && group[0].Sends == 1 && group[1].Sends == 0 && group[2].Sends == 1 && group[3].Sends == 0 && group[4].Sends == 0,
+                "Each window of the app is requested once in order: a changed window is skipped and an uncertain result is kept");
+            check(session.SameApp(0).Count == 0 && !session.CanRequest(0) && !session.CanRequest(1) && !session.CanRequest(2) && session.CanRequest(3) && session.CanRequest(4),
+                "Requested windows are used up; windows of other paths stay requestable");
+            var again = session.RequestEach(new[] { 0, 1, 2, -1, 9 }, default);
+            check(again.All(result => result is null) && group[0].Sends == 1 && group[2].Sends == 1, "Used, negative and out-of-range entries are skipped without a request");
+        }
+        var failing = App(new Lease(Info(1)) { Sender = () => throw new InvalidOperationException("injected send") }, new Lease(Info(2)),
+            new Lease(Info(3)) { Sender = () => throw new OperationCanceledException() });
+        using (var session = Many(failing))
+            check(session.RequestEach(new[] { 0, 1, 2 }, default).SequenceEqual(new CloseWindowsResult?[] { CloseWindowsResult.Unknown, CloseWindowsResult.Processed, CloseWindowsResult.Unknown })
+                && failing.All(lease => lease.Sends == 1), "A failed request counts as uncertain and the next windows still run; an unrequested cancellation is uncertain too");
+        using (var cancel = new CancellationTokenSource())
+        {
+            var leases = App(new Lease(Info(1)), new Lease(Info(2)), new Lease(Info(3)));
+            leases[0].Sender = () => { cancel.Cancel(); return CloseWindowsResult.Processed; };
+            using var session = Many(leases);
+            var results = session.RequestEach(new[] { 0, 1, 2 }, cancel.Token);
+            check(results[0] == CloseWindowsResult.Processed && results[1] is null && results[2] is null && leases[1].Inspections == 0 && leases[2].Inspections == 0
+                && session.CanRequest(1) && session.CanRequest(2), "Cancellation keeps the sent result and leaves the remaining windows unrequested and unused");
+        }
+        using (var cancel = new CancellationTokenSource())
+        {
+            var leases = App(new Lease(Info(1)), new Lease(Info(2)));
+            leases[0].Current = () => { cancel.Cancel(); return leases[0].Info; };
+            using var session = Many(leases);
+            var results = session.RequestEach(new[] { 0, 1 }, cancel.Token);
+            check(results.All(result => result is null) && leases.All(lease => lease.Sends == 0) && !session.CanRequest(0) && session.CanRequest(1),
+                "Cancellation after a window's last check sends nothing, uses up only that window and stops");
+        }
+        using (var cancel = new CancellationTokenSource())
+        {
+            var leases = App(new Lease(Info(1)), new Lease(Info(2))); using var session = Many(leases); cancel.Cancel();
+            check(session.RequestEach(new[] { 0, 1 }, cancel.Token).All(result => result is null) && leases.All(lease => lease.Inspections == 0) && session.CanRequest(0) && session.CanRequest(1),
+                "A cancelled request for all windows uses nothing");
+        }
+        var nested = App(new Lease(Info(1)), new Lease(Info(2))); using (var session = Many(nested))
+        {
+            nested[0].Sender = () =>
+            {
+                check(session.RequestEach(new[] { 1 }, default).Single() is null && session.CanRequest(1) == false && nested[1].Inspections == 0, "A running request makes another request for all windows skip without using an entry");
+                return CloseWindowsResult.Processed;
+            };
+            _ = session.Request(0, default);
+            check(session.CanRequest(1), "The skipped window stays requestable afterwards");
+        }
+        var gone = App(new Lease(Info(1)), new Lease(Info(2))); var goneSession = Many(gone); goneSession.Dispose();
+        check(goneSession.RequestEach(new[] { 0, 1 }, default).All(result => result is null) && goneSession.SameApp(0).Count == 0 && gone.All(lease => lease.Sends == 0), "A disposed session requests nothing for all windows");
+        reject(() => goneSession.RequestEach(null!, default), "Requesting all windows needs a list");
+        // After an uncertain result, the rest of that process waits: a save prompt may be open.
+        var prompt = App(new Lease(Info(1)) { Sender = () => CloseWindowsResult.Unknown }, new Lease(Info(2) with { ProcessId = 101 }), new Lease(Info(3)), new Lease(Info(4) with { ProcessId = 101 }));
+        using (var session = Many(prompt))
+        {
+            var results = session.RequestEach(new[] { 0, 1, 2, 3 }, default);
+            check(results.SequenceEqual(new CloseWindowsResult?[] { CloseWindowsResult.Unknown, CloseWindowsResult.HeldBack, CloseWindowsResult.Processed, CloseWindowsResult.HeldBack })
+                && prompt[1].Inspections == 0 && prompt[3].Inspections == 0 && prompt[2].Sends == 1, "After an uncertain window, the other windows of that process are held back without a check or a request");
+            check(!session.CanRequest(0) && session.CanRequest(1) && session.CanRequest(3), "Held-back windows stay requestable later, one at a time");
+            check(session.HeldBack(1) && session.HeldBack(3) && !session.HeldBack(2) && !session.HeldBack(-1) && !session.HeldBack(9), "Held-back entries are those of a process with an uncertain request");
+            check(session.RequestEach(new[] { 3, 3 }, default).SequenceEqual(new CloseWindowsResult?[] { CloseWindowsResult.HeldBack, null }) && prompt[3].Inspections == 0,
+                "A later request for all windows still holds that process back, and a repeated entry is reported once");
+            check(session.Request(1, default) == CloseWindowsResult.Processed && prompt[1].Sends == 1, "A later explicit request for one window reaches a held-back window");
+        }
+        var single = App(new Lease(Info(1)) { Sender = () => CloseWindowsResult.Unknown }, new Lease(Info(2) with { ProcessId = 101 }), new Lease(Info(3)));
+        using (var session = Many(single))
+        {
+            check(session.Request(0, default) == CloseWindowsResult.Unknown && session.HeldBack(1), "An uncertain single request marks its process");
+            check(session.RequestEach(session.SameApp(1), default).SequenceEqual(new CloseWindowsResult?[] { CloseWindowsResult.HeldBack, CloseWindowsResult.Processed }) && single[1].Inspections == 0,
+                "A later request for all windows holds back the process of an uncertain single request");
+        }
+        var singleThrown = App(new Lease(Info(1)) { Sender = () => throw new InvalidOperationException("injected") }, new Lease(Info(2) with { ProcessId = 101 }));
+        using (var session = Many(singleThrown))
+        {
+            reject(() => session.Request(0, default), "A failed single request is reported to the caller");
+            check(session.HeldBack(1), "A failed single request marks its process as uncertain too");
+        }
+        using (var cancel = new CancellationTokenSource())
+        {
+            var leases = App(new Lease(Info(1)), new Lease(Info(2) with { ProcessId = 101 }));
+            leases[0].Sender = () => { cancel.Cancel(); throw new OperationCanceledException(cancel.Token); };
+            using var session = Many(leases);
+            reject(() => session.Request(0, cancel.Token), "A requested cancellation during a send is reported");
+            check(!session.HeldBack(1), "A requested cancellation does not mark the process");
+        }
+        var thrown = App(new Lease(Info(1)) { Sender = () => throw new InvalidOperationException("injected") }, new Lease(Info(2) with { ProcessId = 101 }));
+        using (var session = Many(thrown))
+            check(session.RequestEach(new[] { 0, 1 }, default).SequenceEqual(new CloseWindowsResult?[] { CloseWindowsResult.Unknown, CloseWindowsResult.HeldBack }), "A failed request holds back the rest of its process too");
+        check(CloseWindows.Summary(new CloseWindowsResult?[] { CloseWindowsResult.Processed, CloseWindowsResult.Changed, CloseWindowsResult.Unknown, CloseWindowsResult.HeldBack, null, null }, key => key)
+            .Contains("Processed: 1. Changed, not sent: 1. Uncertain: 1. Held back after an uncertain window of the same process: 1. Not sent: 2.", StringComparison.Ordinal)
+            && CloseWindows.Summary(Array.Empty<CloseWindowsResult?>(), key => key).StartsWith("Close requests finished.", StringComparison.Ordinal), "The summary counts every kind of result");
+        string lines = CloseWindows.ResultLines(new[] { Info(1), Info(2) with { Title = "B\u202e" }, Info(3), Info(4), Info(5) },
+            new CloseWindowsResult?[] { CloseWindowsResult.Processed, CloseWindowsResult.Changed, CloseWindowsResult.Unknown, CloseWindowsResult.HeldBack, null }, key => key);
+        check(lines.Split(Environment.NewLine).SequenceEqual(new[] { "Processed · Report 1 · 101", "Changed, not sent · B[U+202E] · 102", "Uncertain · Report 3 · 103", "Held back · Report 4 · 104", "Not sent · Report 5 · 105" }),
+            "Each requested window's result is listed with its visible title and process");
+        reject(() => CloseWindows.ResultLines(new[] { Info(1) }, Array.Empty<CloseWindowsResult?>(), key => key), "Results must match the windows");
+        foreach (string text in new[] { CloseWindows.AppConfirmation, CloseWindows.Scope, "Processed", "Changed, not sent", "Uncertain", "Held back", "Not sent", "Close Request Results", "Review All Listed Windows of This App…",
+                     "Confirm Close Requests for One App", "Request Normal Close for All", "Requesting the Close action of {0} windows, one after another…", "Windows to request: {0}" })
+            check(Strings.Table.ContainsKey(text), "Close-all text translated: " + text[..Math.Min(40, text.Length)]);
+        string details = CloseWindows.AppDetails(new[] { Info(1) with { Title = "A\nB" }, Info(2) }, key => key);
+        check(details.Contains(@"C:\Apps\Sample.exe", StringComparison.Ordinal) && details.Contains("Windows to request: 2", StringComparison.Ordinal) && details.Contains("A[U+000A]B", StringComparison.Ordinal)
+            && details.Contains("Report 2", StringComparison.Ordinal) && CloseWindows.AppDetails(Array.Empty<CloseWindowInfo>(), key => key) == "",
+            "The app confirmation lists the path, the count and every visible title");
+        check(CloseWindows.AppConfirmation.Contains("exactly this executable path", StringComparison.Ordinal) && CloseWindows.AppConfirmation.Contains("No memory release", StringComparison.Ordinal)
+            && CloseWindows.AppConfirmation.Contains("remaining windows of that process are not requested", StringComparison.Ordinal)
+            && CloseWindows.Scope.Contains("notification area", StringComparison.Ordinal), "The app confirmation says which windows are left out and that an app may keep running");
         foreach (var invalid in new[] { Info() with { Title = "" }, Info() with { Title = new string('x', 257) }, Info() with { ClassName = new string('x', 129) },
                      Info() with { ProcessId = 4 }, Info() with { ThreadId = 0 }, Info() with { Created = 0 }, Info() with { ExecutablePath = @"\\server\share\app.exe" }, Info() with { ExecutablePath = @"C:\Apps\..\app.exe" } })
             check(!CloseWindows.ValidInfo(invalid), "Window snapshot rejects invalid or oversized source metadata");

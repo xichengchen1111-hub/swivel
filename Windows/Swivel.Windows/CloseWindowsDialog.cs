@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
@@ -29,6 +30,7 @@ internal sealed class CloseWindowsDialog : Window
         var status = UI.Text(""); footer.Children.Add(status);
         var actions = new WrapPanel(); footer.Children.Add(actions);
         var request = UI.Button(app.L("Review Selected Window…"), () => { }); request.IsEnabled = false; actions.Children.Add(request);
+        var all = UI.Button(app.L("Review All Listed Windows of This App…"), () => { }); all.IsEnabled = false; actions.Children.Add(all);
         var close = UI.Button(app.L("Close"), Close); close.IsCancel = true; actions.Children.Add(close);
         var body = new StackPanel(); root.Children.Add(UI.Scroll(body)); Content = root;
         body.Children.Add(UI.Text(session.RecordedUtc.ToString("O", CultureInfo.InvariantCulture), 12));
@@ -48,11 +50,18 @@ internal sealed class CloseWindowsDialog : Window
         var details = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MinHeight = 130,
             MaxHeight = 230, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         AutomationProperties.SetName(details, app.L("Selected Window Details")); body.Children.Add(details);
+        // Filled after a request for all windows of an app: each window's result.
+        var outcomes = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxHeight = 200,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 8, 0, 0) };
+        AutomationProperties.SetName(outcomes, app.L("Close Request Results")); body.Children.Add(outcomes);
+        bool requesting = false; // `pending` is not complete yet in its own finally
         void UpdateSelection()
         {
             var row = list.SelectedItem as Row;
             details.Text = row is null ? app.L("Select a window to review its full title and executable path.") : CloseWindows.Details(session.Windows[row.Index], app.L);
-            request.IsEnabled = !closed && pending.IsCompleted && row is not null && session.CanRequest(row.Index);
+            request.IsEnabled = !closed && !requesting && row is not null && session.CanRequest(row.Index);
+            // Only when the app has more than one requestable window; one window is the single review.
+            all.IsEnabled = !closed && !requesting && row is not null && session.SameApp(row.Index).Count > 1;
         }
         list.SelectionChanged += (_, _) => UpdateSelection(); UpdateSelection();
         request.Click += (_, _) =>
@@ -63,12 +72,26 @@ internal sealed class CloseWindowsDialog : Window
             try { accepted = confirm.ShowDialog() == true; }
             finally { confirmation = null; }
             if (!accepted || closed || cancellation.IsCancellationRequested) return;
-            request.IsEnabled = false; list.IsEnabled = false;
+            requesting = true; request.IsEnabled = false; all.IsEnabled = false; list.IsEnabled = false;
             pending = Request(row.Index);
+        };
+        all.Click += (_, _) =>
+        {
+            if (closed || !pending.IsCompleted || cancellation.IsCancellationRequested || list.SelectedItem is not Row row) return;
+            var indices = session.SameApp(row.Index);
+            if (indices.Count < 2) return;
+            var confirm = new CloseAppWindowsConfirmDialog(app, indices.Select(index => session.Windows[index]).ToArray()) { Owner = this }; confirmation = confirm;
+            bool accepted;
+            try { accepted = confirm.ShowDialog() == true; }
+            finally { confirmation = null; }
+            if (!accepted || closed || cancellation.IsCancellationRequested) return;
+            requesting = true; request.IsEnabled = false; all.IsEnabled = false; list.IsEnabled = false;
+            pending = RequestAll(indices);
         };
         async Task Request(int index)
         {
             status.Text = app.L("Requesting the selected window's Close action…");
+            outcomes.Visibility = Visibility.Collapsed; outcomes.Text = "";
             try
             {
                 var result = await CloseWindowsReader.RequestAsync(session, index, cancellation.Token);
@@ -78,10 +101,32 @@ internal sealed class CloseWindowsDialog : Window
             catch (Exception) { if (!closed) status.Text = app.L(CloseWindows.Unknown); }
             finally
             {
-                if (!closed) { list.IsEnabled = true; request.IsEnabled = list.SelectedItem is Row row && session.CanRequest(row.Index); }
+                requesting = false;
+                if (!closed) { list.IsEnabled = true; UpdateSelection(); }
             }
         }
-        Closed += (_, _) => { if (closed || finished) return; closed = true; cancellation.Cancel(); confirmation?.Close(); request.IsEnabled = false; };
+        async Task RequestAll(IReadOnlyList<int> indices)
+        {
+            status.Text = string.Format(app.L("Requesting the Close action of {0} windows, one after another…"), indices.Count);
+            outcomes.Visibility = Visibility.Collapsed; outcomes.Text = "";
+            try
+            {
+                var results = await CloseWindowsReader.RequestEachAsync(session, indices, cancellation.Token);
+                if (!closed)
+                {
+                    status.Text = CloseWindows.Summary(results, app.L);
+                    outcomes.Text = CloseWindows.ResultLines(indices.Select(index => session.Windows[index]).ToArray(), results, app.L);
+                    outcomes.Visibility = Visibility.Visible;
+                }
+            }
+            catch (Exception) { if (!closed) status.Text = app.L(CloseWindows.Unknown); }
+            finally
+            {
+                requesting = false;
+                if (!closed) { list.IsEnabled = true; UpdateSelection(); }
+            }
+        }
+        Closed += (_, _) => { if (closed || finished) return; closed = true; cancellation.Cancel(); confirmation?.Close(); request.IsEnabled = false; all.IsEnabled = false; };
         registration = operationToken.Register(() => Dispatcher.BeginInvoke(new Action(() =>
         {
             // Cancellation may already be queued when FinishAsync disposes its
@@ -118,6 +163,27 @@ internal sealed class CloseWindowsConfirmDialog : Window
         var body = new StackPanel(); body.Children.Add(UI.Text(app.L(CloseWindows.Confirmation)));
         var details = new TextBox { Text = CloseWindows.Details(window, app.L), IsReadOnly = true,
             TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinHeight = 150 };
+        AutomationProperties.SetName(details, app.L("Selected Window Details")); body.Children.Add(details);
+        root.Children.Add(UI.Scroll(body)); Content = root;
+        SourceInitialized += (_, _) => WebRouteLayout.Fit(this, Owner ?? this); DpiChanged += (_, _) => WebRouteLayout.Fit(this, this);
+    }
+}
+
+/// The confirmation for requesting every listed window of one app to close, one after another.
+internal sealed class CloseAppWindowsConfirmDialog : Window
+{
+    internal CloseAppWindowsConfirmDialog(App app, IReadOnlyList<CloseWindowInfo> windows)
+    {
+        Title = app.L("Confirm Close Requests for One App"); Width = 680; Height = 560; MinWidth = 380; MinHeight = 320;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        var root = new DockPanel { Margin = new Thickness(20) };
+        var buttons = new WrapPanel(); DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
+        var cancel = UI.Button(app.L("Cancel"), () => DialogResult = false); cancel.IsCancel = true; cancel.IsDefault = true; buttons.Children.Add(cancel);
+        // As for one window: Enter cancels, and the requests need their own button.
+        buttons.Children.Add(UI.Button(app.L("Request Normal Close for All"), () => DialogResult = true));
+        var body = new StackPanel(); body.Children.Add(UI.Text(app.L(CloseWindows.AppConfirmation)));
+        var details = new TextBox { Text = CloseWindows.AppDetails(windows, app.L), IsReadOnly = true,
+            TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MinHeight = 150, MaxHeight = 320 };
         AutomationProperties.SetName(details, app.L("Selected Window Details")); body.Children.Add(details);
         root.Children.Add(UI.Scroll(body)); Content = root;
         SourceInitialized += (_, _) => WebRouteLayout.Fit(this, Owner ?? this); DpiChanged += (_, _) => WebRouteLayout.Fit(this, this);

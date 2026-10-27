@@ -47,6 +47,17 @@ internal static class CloseWindowsReader
         }) { IsBackground = true, Name = "Swivel window close request" };
         thread.SetApartmentState(ApartmentState.MTA); thread.Start(); return completion.Task;
     }
+    /// RequestEach on the same kind of dedicated MTA thread, one request at a time.
+    internal static Task<IReadOnlyList<CloseWindowsResult?>> RequestEachAsync(CloseWindowsSession session, IReadOnlyList<int> indices, CancellationToken token)
+    {
+        var completion = new TaskCompletionSource<IReadOnlyList<CloseWindowsResult?>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try { completion.TrySetResult(session.RequestEach(indices, token)); }
+            catch (Exception error) { completion.TrySetException(error); }
+        }) { IsBackground = true, Name = "Swivel window close requests" };
+        thread.SetApartmentState(ApartmentState.MTA); thread.Start(); return completion.Task;
+    }
     private sealed record Scope(byte[] Sid, uint Session, bool Elevated);
     private sealed class Source(uint self, Scope scope, string windows) : ICloseWindowsSource
     {

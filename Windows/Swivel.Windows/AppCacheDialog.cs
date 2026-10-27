@@ -6,7 +6,9 @@ using System.Text;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Automation.Peers;
 using System.Windows.Data;
+using System.Windows.Media;
 using Swivel.Core;
 
 namespace Swivel.Windows;
@@ -22,6 +24,9 @@ internal sealed class AppCacheDialog : Window
     private readonly RecycleBinSession<AppCacheItem> bin;
     private readonly TextBlock summary, running;
     private readonly Button selectAll, checkRunning;
+    private readonly CacheRing ring = new();
+    private readonly StackPanel legend = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 0, 0) };
+    private readonly DockPanel chart = new() { Margin = new Thickness(0, 8, 0, 0) };
     private IReadOnlySet<string>? processes;
     private Dictionary<string, bool> fixedDrives = new(StringComparer.OrdinalIgnoreCase);
     internal int Moved => bin.Gone.Count; // also those Windows removed outright
@@ -70,15 +75,22 @@ internal sealed class AppCacheDialog : Window
         body.Children.Add(UI.Text(app.L(AppCaches.Limits), 12));
         foreach (string line in AppLines()) body.Children.Add(UI.Text(line, 12));
         if (result.Items.Count == 0) body.Children.Add(UI.Text(app.L("No cache folders of the listed apps were found at their default places.")));
+        DockPanel.SetDock(ring, Dock.Left); chart.Children.Add(ring); chart.Children.Add(legend);
+        AutomationProperties.SetName(ring, app.L("Cache sizes by app")); body.Children.Add(chart);
         var view = new GridView();
         foreach (var (title, property, width) in new[] { ("App", "App", 170.0), ("Profile", "Profile", 130.0), ("Folder", "Folder", 160.0), ("Size", "Size", 170.0), ("Status", "Status", 330.0) })
             view.Columns.Add(new GridViewColumn { Header = app.L(title), DisplayMemberBinding = new Binding(property), Width = width });
         items.View = view; AutomationProperties.SetName(items, app.L("Browser and App Caches"));
-        items.SelectionChanged += (_, _) => bin.UpdateButtons();
+        items.SelectionChanged += (_, _) => { bin.UpdateButtons(); UpdateChart(); };
         body.Children.Add(items); body.Children.Add(bin.Status);
         root.Children.Add(UI.Scroll(body)); Content = root;
         Refresh();
-        SourceInitialized += (_, _) => WebRouteLayout.Fit(this, Owner ?? this); DpiChanged += (_, _) => WebRouteLayout.Fit(this, this);
+        // High contrast changes the ring's and legend's colours.
+        void SystemChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        { if (e.PropertyName == nameof(SystemParameters.HighContrast)) Dispatcher.BeginInvoke(new Action(UpdateChart)); }
+        // Subscribed once shown, so a dialog that never opens is not kept alive by the static event.
+        Closed += (_, _) => SystemParameters.StaticPropertyChanged -= SystemChanged;
+        SourceInitialized += (_, _) => { SystemParameters.StaticPropertyChanged += SystemChanged; WebRouteLayout.Fit(this, Owner ?? this); }; DpiChanged += (_, _) => WebRouteLayout.Fit(this, this);
     }
 
     private IEnumerable<AppCacheItem> Listed() => result.Items.Where(item => !bin.Gone.Contains(item));
@@ -124,6 +136,39 @@ internal sealed class AppCacheDialog : Window
         items.IsEnabled = selectAll.IsEnabled = checkRunning.IsEnabled = bin.Idle;
         summary.Text = Summary();
         bin.UpdateButtons();
+        UpdateChart();
+    }
+
+    // One ring segment per app by measured bytes; the apps of the selected rows stay bright,
+    // and the centre shows the selected or the total measured size.
+    private void UpdateChart()
+    {
+        var shares = AppCaches.Shares(Listed());
+        chart.Visibility = shares.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        var rows = items.SelectedItems.OfType<Row>().ToArray();
+        var chosen = rows.Select(row => row.Item.Folder.App).ToHashSet();
+        var counted = rows.Length > 0 ? rows.Select(row => row.Item).ToArray() : Listed().ToArray();
+        string Amount(decimal bytes, bool partial) => partial ? string.Format(app.L("at least {0}"), AppCaches.ShortSize(bytes)) : AppCaches.ShortSize(bytes);
+        string center = Amount(counted.Sum(item => item.Size?.Bytes ?? 0), counted.Any(item => item.Size is null || item.Size.Partial));
+        string caption = app.L(rows.Length > 0 ? "Selected" : "Measured");
+        bool[] bright = shares.Select(share => chosen.Count == 0 || chosen.Contains(share.App)).ToArray();
+        ring.Update(shares.Select(share => share.Bytes).ToArray(), bright, center, caption);
+        legend.Children.Clear();
+        void Entry(int index, string text, bool lit)
+        {
+            var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2), Opacity = CacheRing.Strength(lit, 0.55) };
+            line.Children.Add(new System.Windows.Shapes.Rectangle { Width = 10, Height = 10, Fill = CacheRing.SegmentBrush(index, lit), Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center });
+            line.Children.Add(UI.Text(text, 12)); legend.Children.Add(line);
+        }
+        for (int index = 0; index < Math.Min(CacheRing.Named, shares.Count); index++)
+            Entry(index, shares[index].App.Name + " · " + Amount(shares[index].Bytes, shares[index].Partial), bright[index]);
+        if (shares.Count > CacheRing.Named)
+        {
+            var rest = shares.Skip(CacheRing.Named).ToArray();
+            Entry(CacheRing.Named, string.Format(app.L("{0} more · {1}"), rest.Length, Amount(rest.Sum(share => share.Bytes), rest.Any(share => share.Partial))),
+                chosen.Count == 0 || rest.Any(share => chosen.Contains(share.App)));
+        }
+        AutomationProperties.SetHelpText(ring, caption + ": " + center + ". " + string.Join("; ", shares.Select(share => share.App.Name + " " + Amount(share.Bytes, share.Partial))));
     }
 
     private static bool Fixed(string root)
@@ -146,5 +191,89 @@ internal sealed class AppCacheDialog : Window
         public string Folder => Visible(Item.Folder.Folder);
         public string Size => AppCaches.Size(Item.Size, Owner.app.L);
         public string Status => Owner.Status(Item);
+    }
+}
+
+/// A ring of measured cache sizes: one segment per app, in the legend's order and colours,
+/// clockwise from the top. The first `Named` apps have their own colour; the rest share one.
+/// Nothing moves. In high contrast every segment is opaque: the apps of the selected rows use
+/// the highlight colour and the others the window text colour.
+internal sealed class CacheRing : FrameworkElement
+{
+    internal const int Named = 6;
+    private static readonly Brush[] Palette = new[] { "#0078D4", "#8764B8", "#00A3AE", "#C239B3", "#CA5010", "#498205" }
+        .Select(code => { var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(code)); brush.Freeze(); return (Brush)brush; }).ToArray();
+    private decimal[] values = Array.Empty<decimal>();
+    private bool[] bright = Array.Empty<bool>();
+    private string center = "", caption = "";
+
+    internal CacheRing() { Width = 140; Height = 140; }
+    internal static Brush SegmentBrush(int index, bool lit) => SystemParameters.HighContrast ? (lit ? SystemColors.HighlightBrush : SystemColors.WindowTextBrush)
+        : index < Named ? Palette[index] : SystemColors.GrayTextBrush;
+    internal static double Strength(bool lit, double dim) => SystemParameters.HighContrast || lit ? 1 : dim;
+
+    internal void Update(decimal[] values, bool[] bright, string center, string caption)
+    {
+        this.values = values; this.bright = bright; this.center = center; this.caption = caption; InvalidateVisual();
+    }
+    protected override Size MeasureOverride(Size availableSize) => new(140, 140);
+    protected override AutomationPeer OnCreateAutomationPeer() => new Peer(this);
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi) { base.OnDpiChanged(oldDpi, newDpi); InvalidateVisual(); }
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.Property == System.Windows.Documents.TextElement.ForegroundProperty) InvalidateVisual();
+    }
+    protected override void OnRender(DrawingContext dc)
+    {
+        base.OnRender(dc);
+        const double thickness = 14;
+        var middle = new Point(ActualWidth / 2, ActualHeight / 2);
+        double radius = Math.Min(ActualWidth, ActualHeight) / 2 - thickness / 2 - 1;
+        if (radius <= 0) return;
+        double[] sweeps = AppCaches.Sweeps(values);
+        if (sweeps.Sum() <= 0) dc.DrawEllipse(null, new Pen(SystemColors.GrayTextBrush, thickness), middle, radius, radius);
+        double start = -90;
+        for (int i = 0; i < sweeps.Length; i++)
+        {
+            double sweep = sweeps[i];
+            if (sweep <= 0) continue;
+            bool lit = i < bright.Length && bright[i];
+            // A thin gap between segments, so neighbours stay apart also in one colour.
+            double gap = sweeps.Count(value => value > 0) > 1 ? Math.Min(1.5, sweep / 3) : 0;
+            var pen = new Pen(SegmentBrush(i, lit), thickness);
+            dc.PushOpacity(Strength(lit, 0.3));
+            if (sweep - gap >= 359.9) dc.DrawEllipse(null, pen, middle, radius, radius);
+            else
+            {
+                Point At(double degrees) => new(middle.X + radius * Math.Cos(degrees * Math.PI / 180), middle.Y + radius * Math.Sin(degrees * Math.PI / 180));
+                var figure = new PathFigure { StartPoint = At(start), IsClosed = false };
+                figure.Segments.Add(new ArcSegment(At(start + sweep - gap), new Size(radius, radius), 0, sweep - gap > 180, SweepDirection.Clockwise, true));
+                var geometry = new PathGeometry(); geometry.Figures.Add(figure); geometry.Freeze();
+                dc.DrawGeometry(null, pen, geometry);
+            }
+            dc.Pop();
+            start += sweep;
+        }
+        // The text follows the window's theme like the legend's TextBlocks.
+        var foreground = GetValue(System.Windows.Documents.TextElement.ForegroundProperty) as Brush ?? SystemColors.WindowTextBrush;
+        double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip, width = Math.Max(1, 2 * (radius - thickness));
+        var big = new FormattedText(center, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface(SystemFonts.MessageFontFamily, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal), 15, foreground, dpi)
+            { MaxTextWidth = width, TextAlignment = TextAlignment.Center, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
+        var small = new FormattedText(caption, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface(SystemFonts.MessageFontFamily, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal), 11, foreground, dpi)
+            { MaxTextWidth = width, TextAlignment = TextAlignment.Center, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
+        double top = middle.Y - (big.Height + small.Height) / 2;
+        dc.DrawText(big, new Point(middle.X - width / 2, top));
+        dc.PushOpacity(SystemParameters.HighContrast ? 1 : 0.75); dc.DrawText(small, new Point(middle.X - width / 2, top + big.Height)); dc.Pop();
+    }
+    // Narrator reads the ring as an image, with the name and help text the window sets.
+    private sealed class Peer(CacheRing owner) : FrameworkElementAutomationPeer(owner)
+    {
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Image;
+        protected override string GetClassNameCore() => nameof(CacheRing);
+        protected override bool IsControlElementCore() => true;
+        protected override bool IsContentElementCore() => true;
     }
 }

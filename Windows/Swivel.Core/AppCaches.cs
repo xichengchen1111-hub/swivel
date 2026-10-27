@@ -30,6 +30,8 @@ public enum AppCacheAppState { Found, NotFound, Unavailable }
 public sealed record AppCacheAppResult(AppCacheApp App, string? Container, AppCacheAppState State, string? Issue, int Profiles, bool Partial, bool Unreadable);
 public sealed record AppCacheResult(IReadOnlyList<AppCacheAppResult> Apps, IReadOnlyList<AppCacheItem> Items, bool FolderLimit, bool DiscoveryLimit,
     bool MeasureEntryLimit, bool MeasureTimeLimit, DateTimeOffset Recorded);
+/// One app's measured cache bytes for the chart; Partial when some of its sizes are lower bounds or unmeasured.
+public sealed record AppCacheShare(AppCacheApp App, decimal Bytes, bool Partial);
 public sealed record AppCacheLimits(int DirectoryEntries = 4096, int DiscoveryEntries = 20000, int Profiles = 64, int Folders = 256,
     int MeasureEntries = 100000, int MeasureSeconds = 30);
 
@@ -72,6 +74,30 @@ public static class AppCaches
     /// The program files checked for the app, or only those in `running` when given.
     public static string Programs(AppCacheApp app, IReadOnlySet<string>? running = null)
         => string.Join(", ", app.Processes.Where(p => running is null || running.Contains(p)).Select(p => p + ".exe"));
+
+    /// Measured bytes per app, largest first (ties by name), leaving out apps with nothing measured.
+    public static IReadOnlyList<AppCacheShare> Shares(IEnumerable<AppCacheItem> items)
+        => Array.AsReadOnly(items.GroupBy(item => item.Folder.App)
+            .Select(group => new AppCacheShare(group.Key, group.Sum(item => item.Size?.Bytes ?? 0), group.Any(item => item.Size is null || item.Size.Partial)))
+            .Where(share => share.Bytes > 0).OrderByDescending(share => share.Bytes).ThenBy(share => share.App.Name, StringComparer.Ordinal).ToArray());
+
+    /// Each value's part of a full circle, in degrees (all zero when nothing is measured).
+    public static double[] Sweeps(IReadOnlyList<decimal> values)
+    {
+        decimal total = values.Where(value => value > 0).Sum();
+        return values.Select(value => total <= 0 || value <= 0 ? 0d : (double)(value / total) * 360).ToArray();
+    }
+
+    /// A short decimal size for the chart (1 KB = 1,000 bytes, as Windows Doctor's other sizes count).
+    public static string ShortSize(decimal bytes)
+    {
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        if (bytes < 1000) return Math.Max(0, bytes).ToString("N0", culture) + " B";
+        string[] units = { "KB", "MB", "GB", "TB" };
+        decimal value = bytes / 1000; int unit = 0;
+        while (value >= 999.95m && unit < units.Length - 1) { value /= 1000; unit++; }
+        return value.ToString("0.#", culture) + " " + units[unit];
+    }
 
     public static string Size(AppCacheSize? size, Func<string, string> L)
     {

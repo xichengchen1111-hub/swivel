@@ -101,6 +101,30 @@ internal static class AppCacheChecks
         check(AppCaches.Programs(AppCaches.Apps.Single(a => a.Id == "npm")) == "node.exe" && AppCaches.Programs(nuget, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "DOTNET", "chrome" }) == "dotnet.exe",
             "The checked programs are named with their file names, and only the running ones when asked");
 
+        // The ring chart's shares: one per app, measured bytes only, largest first.
+        AppCacheItem Measured(string id, decimal? bytes, bool partial = false) => new(new(AppCaches.Apps.Single(a => a.Id == id), null, "Cache", @"C:\Cache\" + id),
+            bytes is { } value ? new AppCacheSize(value, 1, 1, partial, null) : null);
+        var shares = AppCaches.Shares(new[] { Measured("chrome", 300), Measured("edge", 500), Measured("chrome", 200, partial: true), Measured("firefox", null),
+            Measured("npm", 0), Measured("yarn", 500), Measured("pip", 0, partial: true) });
+        check(shares.Select(s => (s.App.Id, s.Bytes, s.Partial)).SequenceEqual(new[] { ("chrome", 500m, true), ("edge", 500m, false), ("yarn", 500m, false) }),
+            "Chart shares add each app's folders, keep a partial size as partial, order equal sizes by app name and leave out apps with nothing measured");
+        check(AppCaches.Shares(Array.Empty<AppCacheItem>()).Count == 0, "No measured cache means no chart");
+        double[] sweeps = AppCaches.Sweeps(new decimal[] { 100, 300, 0, -5 });
+        check(sweeps.Length == 4 && Math.Abs(sweeps[0] - 90) < 1e-9 && Math.Abs(sweeps[1] - 270) < 1e-9 && sweeps[2] == 0 && sweeps[3] == 0
+            && AppCaches.Sweeps(new decimal[] { 0, 0 }).All(v => v == 0) && AppCaches.Sweeps(Array.Empty<decimal>()).Length == 0, "Chart segments split the full circle by size");
+        check(Math.Abs(AppCaches.Sweeps(new decimal[] { 1, decimal.MaxValue / 2 }).Sum() - 360) < 1e-6, "Very large sizes still fill the circle without overflow");
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            check(AppCaches.ShortSize(0) == "0 B" && AppCaches.ShortSize(999) == "999 B" && AppCaches.ShortSize(1000) == "1 KB" && AppCaches.ShortSize(1250) == "1.3 KB"
+                && AppCaches.ShortSize(999_949) == "999.9 KB" && AppCaches.ShortSize(999_950) == "1 MB" && AppCaches.ShortSize(2_500_000_000) == "2.5 GB"
+                && AppCaches.ShortSize(5_000_000_000_000_000) == "5000 TB" && AppCaches.ShortSize(-3) == "0 B", "Chart sizes count 1 KB as 1,000 bytes and round to one decimal");
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = culture; }
+        foreach (string text in new[] { "Cache sizes by app", "Selected", "Measured", "{0} more · {1}" })
+            check(Strings.Table.ContainsKey(text), "Cache chart text translated: " + text);
+
         var prefs = new Prefs(); var action = Catalog.Actions.Single(a => a.Id == "doctor.appcaches");
         check(action.Feature == Feature.Doctor && !action.RequiresFiles && !Catalog.Available(prefs, Array.Empty<string>()).Contains(action), "App-cache review is off by default and uses no selected files");
         prefs.Set(Feature.Doctor, true);
