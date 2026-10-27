@@ -1,0 +1,36 @@
+[
+  {
+    "format" : "jpeg",
+    "id" : "web",
+    "longEdge" : 1600,
+    "name" : "Web JPG",
+    "nameKey" : "Web JPG",
+    "quality" : 80,
+    "stripMetadata" : true
+  },
+  {
+    "format" : "png",
+    "id" : "图片",
+    "longEdge" : 0,
+    "name" : "图片 🦜",
+    "quality" : 100,
+    "stripMetadata" : true
+  },
+  {
+    "format" : "jpeg",
+    "id" : "full-jpg",
+    "longEdge" : 0,
+    "name" : "Full-size JPG",
+    "nameKey" : "Full-size JPG",
+    "quality" : 92,
+    "stripMetadata" : false
+  },
+  {
+    "format" : "heic",
+    "id" : "heic",
+    "longEdge" : 1200,
+    "name" : "HEIC",
+    "quality" : 90,
+    "stripMetadata" : true
+  }
+]

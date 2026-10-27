@@ -34,6 +34,27 @@ enum ConversionNotice {
         if kinds.contains(.audio), ["WAV", "AIFF", "CAF", "FLAC", "ALAC"].contains(title) {
             notes.append("Audio precision is preserved where supported. Tags, artwork and other metadata may not be retained.")
         }
+        if kinds.contains(.image), ["ICO", "ICNS"].contains(title) {
+            notes.append("The picture is centred on a transparent square and saved in several icon sizes, up to its own size.")
+        }
+        if kinds.contains(.subtitle) {
+            notes.append(title == "TXT" ? "Only the subtitle text is kept; timing is removed."
+                         : "Subtitle text and timing are kept. Styling, colours and positions are removed. The result is UTF-8.")
+        }
+        if kinds.contains(.data) {
+            let exts = Set(urls.map { $0.pathExtension.lowercased() })
+            if ["CSV", "TSV"].contains(title) { notes.append("Nested values are written as JSON text in their cells.") }
+            if !exts.isDisjoint(with: ["csv", "tsv"]), !["CSV", "TSV"].contains(title) {
+                notes.append("The first row names the columns, and every cell stays text.")
+            }
+            if exts.contains("plist"), title != "PLIST" { notes.append("Dates become ISO 8601 text and binary data becomes Base64.") }
+        }
+        if kinds.contains(.subtitle) || kinds.contains(.data) && !Set(urls.map { $0.pathExtension.lowercased() }).isDisjoint(with: ["csv", "tsv"]) {
+            notes.append("Text that isn't UTF-8 is read in the encoding macOS detects. Check the result; very short files can be misread.")
+        }
+        if kinds.contains(.model3D) {
+            notes.append("Only the geometry is converted. Materials, textures and animation are not carried over.")
+        }
         if title == "TAR.GZ" { notes.append("TAR is a portable archive. Files with Mac resource forks or custom extended attributes must use ZIP instead.") }
         return notes
     }

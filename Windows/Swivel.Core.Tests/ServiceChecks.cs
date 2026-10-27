@@ -1,0 +1,24 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Swivel.Core;
+
+internal static class ServiceChecks
+{
+    internal static void Run(Action<bool,string> check,Action<Action,string> reject)
+    {
+        string[] states={"Unknown Service State","Stopped (reported)","Start Pending (reported)","Stop Pending (reported)","Running (reported)","Continue Pending (reported)","Pause Pending (reported)","Paused (reported)"};
+        for(uint n=0;n<states.Length;n++)check(ServiceRecords.State(n)==states[n],"Reported SCM state matches published value without inferring startup enablement");check(ServiceRecords.State(uint.MaxValue)==states[0],"Unknown state kept unknown");
+        foreach(var phase in Enum.GetValues<ServiceIssuePhase>())check(!string.IsNullOrWhiteSpace(ServiceRecords.Phase(phase)),"Closed service issue labels");reject(()=>ServiceRecords.Phase((ServiceIssuePhase)999),"Unknown issue phase refused");
+        var rows=new[]{new ServiceRecord("z","",0x30,4,uint.MaxValue),new ServiceRecord("a","Name\r\n\u202e",0x10,uint.MaxValue,0)};var issues=new[]{new ServiceReadIssue(ServiceIssuePhase.Open,0),new ServiceReadIssue(ServiceIssuePhase.BufferLimit,234,NeededBytes:uint.MaxValue)};var snapshot=new ServiceSnapshot(rows,issues,DateTimeOffset.UnixEpoch);rows[0]=rows[1];issues[0]=issues[1];
+        check(snapshot.Services[0].Name=="a"&&snapshot.Services[1].Name=="z"&&snapshot.Services[1].ProcessId==uint.MaxValue&&snapshot.Services[0].State==uint.MaxValue,"Stable ordinal-insensitive ordering, copied lists and all raw uint facts retained");check(snapshot.Issues[0].Error==0&&snapshot.Issues[1].NeededBytes==uint.MaxValue&&snapshot.Partial,"Error zero and more-data needed byte fact preserved, not success/empty");reject(()=>((IList<ServiceRecord>)snapshot.Services).Clear(),"Service rows immutable");reject(()=>((IList<ServiceReadIssue>)snapshot.Issues).Clear(),"Issues immutable");
+        var countIssue=new ServiceSnapshot(Array.Empty<ServiceRecord>(),new[]{new ServiceReadIssue(ServiceIssuePhase.RecordLimit,ReportedRecords:4097)},default);check(countIssue.Partial&&countIssue.Issues[0].ReportedRecords==4097,"Valid native buffer above local record budget is a visible limit, not an invalid record claim");
+        var empty=new ServiceSnapshot(Array.Empty<ServiceRecord>(),Array.Empty<ServiceReadIssue>(),default);check(empty.Services.Count==0&&!empty.Partial&&ServiceRecords.Limits.Contains("not a complete inventory"),"No local issue does not establish complete inventory, including empty");
+        reject(()=>new ServiceSnapshot(new[]{new ServiceRecord("A","",0,0,0),new ServiceRecord("a","",0,0,0)},Array.Empty<ServiceReadIssue>(),default),"Duplicate case-insensitive service names rejected");
+        reject(()=>new ServiceSnapshot(new[]{new ServiceRecord("","",0,0,0)},Array.Empty<ServiceReadIssue>(),default),"Empty key refused");reject(()=>new ServiceSnapshot(new[]{new ServiceRecord(new string('x',1025),"",0,0,0)},Array.Empty<ServiceReadIssue>(),default),"Oversized key refused");reject(()=>new ServiceSnapshot(new[]{new ServiceRecord("x",new string('x',1025),0,0,0)},Array.Empty<ServiceReadIssue>(),default),"Oversized display refused");
+        reject(()=>new ServiceSnapshot(Enumerable.Range(0,4097).Select(i=>new ServiceRecord(i.ToString(),"",0,0,0)),Array.Empty<ServiceReadIssue>(),default),"Record budget enforced");reject(()=>new ServiceSnapshot(Enumerable.Range(0,257).Select(i=>new ServiceRecord(i.ToString(),new string('x',1024),0,0,0)),Array.Empty<ServiceReadIssue>(),default),"Global copied-name budget enforced independently of per-name limit");
+        reject(()=>new ServiceSnapshot(Array.Empty<ServiceRecord>(),new[]{new ServiceReadIssue((ServiceIssuePhase)999)},default),"Unknown issue refused");reject(()=>new ServiceSnapshot(Array.Empty<ServiceRecord>(),new[]{new ServiceReadIssue(ServiceIssuePhase.InvalidRecord,Record:0)},default),"Invalid zero issue record refused");
+        check(ServiceRecords.Visible("A\r\n\t\u202eB\u2028\ud800Z")=="A[U+000D][U+000A][U+0009][U+202E]B[U+2028][U+D800]Z","Report escapes exact raw control/format/separator/unpaired-surrogate values");check(ServiceRecords.Visible("😀\U000e0020文字")=="😀[U+E0020]文字","Supplementary format visible without losing ordinary emoji/text");
+        var prefs=new Prefs();var action=Catalog.Actions.Single(a=>a.Id=="doctor.services");check(action.Feature==Feature.Doctor&&!action.RequiresFiles&&!Catalog.Available(prefs,Array.Empty<string>()).Any(a=>a.Id==action.Id),"Service metadata default-off without file input");prefs.Set(Feature.Doctor,true);check(Catalog.Available(prefs,Array.Empty<string>()).Any(a=>a.Id==action.Id)&&WindowsDoctor.Areas.Single(a=>a.Id=="background").ActionIds.Contains(action.Id),"Explicit service snapshot reachable in Background area");
+    }
+}

@@ -20,7 +20,8 @@ final class TextCapturePane: Pane {
 
 final class ShelfPane: Pane {
     private var open: NSButton!
-    init() { super.init(size: NSSize(width: 760, height: 340)) }
+    private let airDrop = NSButton(checkboxWithTitle: L("Also add files received by AirDrop"), target: nil, action: nil)
+    init() { super.init(size: NSSize(width: 760, height: 410)) }
     required init?(coder: NSCoder) { fatalError() }
     override func build() {
         stack.addArrangedSubview(label("A place to gather your files", size: 17, weight: .semibold))
@@ -28,10 +29,18 @@ final class ShelfPane: Pane {
         open = ToolUI.button("Show Shelf", target: self, action: #selector(showShelf))
         stack.addArrangedSubview(open)
         stack.addArrangedSubview(label("Removing an item only clears its reference. Original files stay where they are. This shelf lasts until you quit.", secondary: true))
+        airDrop.target = self; airDrop.action = #selector(toggleAirDrop)
+        stack.addArrangedSubview(airDrop)
+        stack.addArrangedSubview(label("AirDrop still saves to Downloads; the shelf just shows each new arrival beside it. Swivel watches the Downloads folder for this, so macOS asks once for access.", size: 11, secondary: true))
         stack.addArrangedSubview(label("Turn this feature on above to get started.", size: 11, secondary: true))
     }
-    override func refresh() { open?.isEnabled = Feature.shelf.isOn }
+    override func refresh() {
+        open?.isEnabled = Feature.shelf.isOn
+        airDrop.isEnabled = Feature.shelf.isOn
+        airDrop.state = Prefs.shelfAirDrop ? .on : .off
+    }
     @objc private func showShelf() { Shelf.shared.show() }
+    @objc private func toggleAirDrop() { Prefs.shelfAirDrop = airDrop.state == .on }
 }
 
 final class ImagePresetsPane: Pane, NSTableViewDataSource, NSTableViewDelegate {

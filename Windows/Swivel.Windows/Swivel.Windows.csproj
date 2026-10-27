@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22000.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>Swivel</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <StartupObject>Swivel.Windows.App</StartupObject>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Update="Microsoft.NETCore.App;Microsoft.WindowsDesktop.App.WPF;Microsoft.WindowsDesktop.App.WindowsForms;Microsoft.WindowsDesktop.App" RuntimeFrameworkVersion="10.0.13" />
+  </ItemGroup>
+  <ItemGroup><ProjectReference Include="../Swivel.Core/Swivel.Core.csproj" /></ItemGroup>
+  <ItemGroup>
+    <None Include="../RuntimeNotices/*" Link="Licenses/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Pinned model fetched by ThirdParty/U2Net/fetch-model.*; builds without it still compile. -->
+    <None Include="../../build/models/u2net.onnx" Link="Models/u2net.onnx" Condition="Exists('../../build/models/u2net.onnx')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/U2Net/LICENSE" Link="Licenses/U2Net-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/U2Net/rembg-LICENSE.txt" Link="Licenses/rembg-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/U2Net/UPSTREAM.md" Link="Licenses/U2Net-UPSTREAM.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Pinned model converted by ThirdParty/RealESRGAN/fetch-model.*; builds without it still compile. -->
+    <None Include="../../build/models/realesrgan-x4plus.onnx" Link="Models/realesrgan-x4plus.onnx" Condition="Exists('../../build/models/realesrgan-x4plus.onnx')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/RealESRGAN/LICENSE" Link="Licenses/RealESRGAN-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/RealESRGAN/UPSTREAM.md" Link="Licenses/RealESRGAN-UPSTREAM.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Pinned speech model converted by ThirdParty/Whisper/fetch-model.*; builds without it still compile. -->
+    <None Include="../../build/models/whisper-base-encoder.onnx" Link="Models/whisper-base-encoder.onnx" Condition="Exists('../../build/models/whisper-base-encoder.onnx')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../build/models/whisper-base-decoder.onnx" Link="Models/whisper-base-decoder.onnx" Condition="Exists('../../build/models/whisper-base-decoder.onnx')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../build/models/whisper-multilingual.tiktoken" Link="Models/whisper-multilingual.tiktoken" Condition="Exists('../../build/models/whisper-multilingual.tiktoken')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/Whisper/LICENSE" Link="Licenses/Whisper-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/Whisper/NOTICE" Link="Licenses/Whisper-NOTICE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../ThirdParty/Whisper/UPSTREAM.md" Link="Licenses/Whisper-UPSTREAM.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,65 @@
+using System;
+using System.Buffers.Binary;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Swivel.Core;
+using Swivel.Windows;
+
+internal static class PngMetadataNativeChecks
+{
+    public static void Run(string directory,Action<bool,string> check,Action<Action,string> reject)
+    {
+        string folder=Path.Combine(directory,"png-metadata");Directory.CreateDirectory(folder);
+        string path=Path.Combine(folder,"private.png");
+        var pixels=Enumerable.Range(0,7*3*4).Select(i=>(byte)(i%4==3?255:i*13)).ToArray();
+        var bitmap=BitmapSource.Create(7,3,96,96,PixelFormats.Bgra32,null,pixels,28);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        byte[] original;using(var memory=new MemoryStream()){encoder.Save(memory);original=memory.ToArray();}
+        var unknown=Chunk("vpAg",new byte[]{1,2,3});
+        var strip=new[]{Chunk("tEXt",Encoding.ASCII.GetBytes("Author\0PRIVATE_AUTHOR")),Chunk("zTXt",new byte[]{65,0,0,255}),Chunk("iTXt",new byte[]{65,0,1,0,0,0,255}),Chunk("eXIf",new byte[]{73,73,42}),Chunk("tIME",new byte[]{7,234,10,24,1,2,3})};
+        byte[] decorated=original[..33].Concat(strip.SelectMany(x=>x)).Concat(unknown).Concat(original[33..]).ToArray();File.WriteAllBytes(path,decorated);
+        byte[] expected=original[..33].Concat(unknown).Concat(original[33..]).ToArray();string first;
+        using(var document=PngMetadataDocument.Open(path,default))
+        {
+            check(document.Plan.RemovedCount==5&&document.Plan.OutputBytes==expected.Length,"Native prepares a full cleanup plan without parsing invalid compressed text or EXIF");
+            reject(()=>File.Move(path,path+" moved"),"PNG source remains pinned during full preview/save session");reject(()=>Directory.Move(folder,folder+" moved"),"PNG ancestor remains pinned");
+            var app=Application.Current as App??new App();var dialog=new PngMetadataDialog(app,document);var children=Children(dialog).ToArray();
+            check(dialog.Content is DockPanel&&children.OfType<ListView>().Single().Items.Count==document.Plan.Chunks.Count&&children.OfType<Button>().Single(b=>Equals(b.Content,app.L("Save PNG Copy"))).IsEnabled,"Native Fluent chunk summary is complete and Save explicitly available");
+            check(children.OfType<TextBox>().All(t=>t.IsReadOnly)&&children.OfType<TextBlock>().All(t=>!t.Text.Contains("PRIVATE_AUTHOR")),"Preview does not display raw private payloads and source path is readonly JSON");dialog.Close();
+            first=document.Save(default);string second=document.Save(default);
+            check(first!=second&&File.ReadAllBytes(first).SequenceEqual(expected)&&File.ReadAllBytes(second).SequenceEqual(expected)&&File.ReadAllBytes(path).SequenceEqual(decorated),"Exclusive PNG copies preserve every retained byte and never replace source/previous copy");
+            var clean=ImageTools.DecodeSnapshot(File.ReadAllBytes(first),first,default);var actual=new byte[pixels.Length];clean.CopyPixels(actual,28,0);
+            check(clean.PixelWidth==7&&clean.PixelHeight==3&&actual.SequenceEqual(pixels),"Native PNG/WIC decoding of saved copy preserves unrotated source samples");
+            int before=Directory.GetFiles(folder).Length;reject(()=>document.Save(new CancellationToken(true)),"Canceled cleanup does not publish output");check(Directory.GetFiles(folder).Length==before,"Canceled save creates no file");
+        }
+        using(var noMatch=PngMetadataDocument.Open(first,default))
+        {
+            check(noMatch.Plan.RemovedCount==0,"Saved copy no longer contains matching text/EXIF/time blocks");
+            var app=Application.Current as App??new App();var dialog=new PngMetadataDialog(app,noMatch);
+            check(!Children(dialog).OfType<Button>().Single(b=>Equals(b.Content,app.L("Save PNG Copy"))).IsEnabled,"No-match preview disables Save");dialog.Close();
+            int before=Directory.GetFiles(folder).Length;reject(()=>noMatch.Save(default),"Programmatic no-match save also refused");check(Directory.GetFiles(folder).Length==before,"No-match refuses without staging/output");
+        }
+        using(var disposed=PngMetadataDocument.Open(path,default)){disposed.Dispose();reject(()=>disposed.Save(default),"Disposed source cannot publish stale prepared bytes");}
+        var corrupt=(byte[])decorated.Clone();corrupt[40]^=1;string damaged=Path.Combine(folder,"damaged.png");File.WriteAllBytes(damaged,corrupt);
+        reject(()=>PngMetadataDocument.Open(damaged,default),"CRC corruption fails preparation");File.Move(damaged,damaged+" released");
+        string bad=Path.Combine(folder,"bad-image.png");byte[] idat=Chunk("IDAT",new byte[]{1,2,3});File.WriteAllBytes(bad,original[..33].Concat(strip[0]).Concat(idat).Concat(original[^12..]).ToArray());
+        reject(()=>PngMetadataDocument.Open(bad,default),"Valid container with undecodable image data fails native validation before review/save");File.Move(bad,bad+" released");
+        reject(()=>PngMetadataDocument.Open(path,new CancellationToken(true)),"Pre-cancel precedes native input preparation");
+        check(!Directory.GetFiles(folder,".swivel-*.tmp").Any(),"No failed/canceled PNG stages left behind");
+        Directory.Move(folder,folder+" released");check(Directory.Exists(folder+" released"),"All success/failure/disposal input and ancestor leases released");
+        // No button is invoked; this fixture never opens Explorer or writes clipboard.
+    }
+    private static byte[] Chunk(string type,byte[] payload)
+    {
+        var b=new byte[payload.Length+12];BinaryPrimitives.WriteUInt32BigEndian(b,(uint)payload.Length);Encoding.ASCII.GetBytes(type).CopyTo(b,4);payload.CopyTo(b,8);uint c=uint.MaxValue;
+        foreach(byte x in b.AsSpan(4,payload.Length+4)){c^=x;for(int i=0;i<8;i++)c=(c&1)==0?c>>1:(c>>1)^0xedb88320;}BinaryPrimitives.WriteUInt32BigEndian(b.AsSpan(b.Length-4),~c);return b;
+    }
+    private static IEnumerable<DependencyObject> Children(DependencyObject root)
+    {yield return root;foreach(var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())foreach(var item in Children(child))yield return item;}
+}

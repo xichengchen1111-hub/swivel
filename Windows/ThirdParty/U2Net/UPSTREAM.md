@@ -1,0 +1,10 @@
+# U²-Net (background removal model)
+
+Used only by the Windows preview's **Remove Background** and **Blur Background** image tools, run on the device with the Windows ML runtime that ships with Windows (`Windows.AI.MachineLearning`). Approved by the owner on 2026-10-25 as a pinned local model for C10; nothing is uploaded and the app never downloads it.
+
+- Model and weights: U²-Net, Qin et al., "U²-Net: Going Deeper with Nested U-Structure for Salient Object Detection" (Pattern Recognition 2020). Repository https://github.com/xuebinqin/U-2-Net, licence Apache-2.0 (`LICENSE`, pinned commit `ac7e1c817ecab7c7dff5ce6b1abba61cd213ff29`). The upstream repository has no NOTICE file.
+- ONNX export: `u2net.onnx` from rembg (https://github.com/danielgatis/rembg, MIT, `rembg-LICENSE.txt`, commit `c5b48b0417a0254df7d461efa14573597f369a83`), release asset https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx, uploaded 2022-11-24.
+  - 175,997,641 bytes, SHA-256 `8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491`, MD5 `60024c5c889badc19c04ad937298a77b` (the checksum rembg itself pins).
+  - ONNX IR 6, opset 11, produced by PyTorch 1.9; input `input.1` float 1×3×320×320, first output `1959` float 1×1×320×320. Ops: Add, Cast, Concat, Constant, Conv, Gather, MaxPool, Relu, Resize, Shape, Sigmoid, Slice, Unsqueeze.
+- Not changed. The file is too large for the git repository, so it is not committed: `fetch-model.ps1` / `fetch-model.sh` download it at build time into the ignored `build/models/` and refuse it unless size and SHA-256 match. The app checks the same size and SHA-256 (compiled into `Swivel.Core/Cutout.cs`) on the bytes it loads, before Windows ML sees them.
+- Pre- and post-processing are reimplemented in C# after rembg's documented behaviour (no rembg code is used): RGB (transparent pixels shown on white, where rembg simply drops alpha) resized to 320×320 with Lanczos-3, divided by its maximum, ImageNet mean/std; the first output is min–max normalised and resized back as the alpha mask; mask values below 16/255 become fully transparent and transparent pixels lose their colour.

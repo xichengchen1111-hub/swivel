@@ -1,0 +1,11 @@
+# Whisper base (speech recognition)
+
+- Upstream: https://github.com/openai/whisper (MIT, see LICENSE), release v20250625, commit 31243bad24cc746f07d4c8bfdd2d974872cb1803.
+- Checkpoint: `base.pt` from the URL the release's `whisper/__init__.py` lists (`https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b…/base.pt`), 145,262,807 bytes, SHA-256 `ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e` (the hash is part of the upstream URL). Multilingual, 74 M parameters, float16.
+- Tokenizer: `whisper/assets/multilingual.tiktoken` at that commit, 816,730 bytes, SHA-256 `b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126`, shipped unchanged as `whisper-multilingual.tiktoken`.
+- Conversion: `../ModelConvert/` (subcommand `whisper`), the same C# build tool as Real-ESRGAN (no Python, PyTorch or ONNX packages), reads the checkpoint's `model_state_dict` (float16 tensors; strided views gathered into contiguous copies) and writes two ONNX IR 6 / opset 11 graphs following the published `whisper/model.py`, reimplemented, no code copied:
+  - `whisper-base-encoder.onnx` (47,506,111 bytes, SHA-256 `4af8caaa455d00dca07d6ebc6333479295ad3a7d738639120d0458f44bf9891f`): input `mel` float 1×80×3000 (a 30-second log-mel window), outputs `cross_k_0…5` (1×8×64×1500, already scaled by 64^−¼) and `cross_v_0…5` (1×8×1500×64), each decoder layer's cross-attention keys and values.
+  - `whisper-base-decoder.onnx` (98,544,010 bytes, SHA-256 `7d6f84754df3a51d65a5469608cd75c2addb687db51279acbd9235e3da41daf1`): inputs `tokens` int64 1×n (n ≤ 448, free) and the twelve cross tensors, output `logits` float 1×51865 for the last token. There is no key/value cache: the app re-runs the decoder on the growing prefix.
+- Weights are unchanged (float16 initializers, cast to float32 inside the graph); only the container format differs. Linear weights are stored transposed for MatMul.
+- Parity, checked on a Mac during development with the official `model.py` (PyTorch, float32) and ONNX Runtime 1.31 on a random 30-second mel and a 10-token prompt: largest logit difference 1.0 × 10⁻⁴ (logits up to 31.8), same arg-max at every position. Not part of the build.
+- The app's own code does the rest (log-mel spectrogram, greedy decoding with Whisper's timestamp rules, 30-second windows, byte-level token decoding); see `Swivel.Core/Transcribe.cs`.

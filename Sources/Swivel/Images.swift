@@ -22,10 +22,56 @@ enum Images {
             ImageFormat(name: "AVIF", type: UTType("public.avif") ?? .image, ext: "avif"),
             ImageFormat(name: "GIF", type: .gif, ext: "gif"),
             ImageFormat(name: "BMP", type: .bmp, ext: "bmp"),
+            ImageFormat(name: "JPEG 2000", type: UTType("public.jpeg-2000") ?? .image, ext: "jp2"),
+            ImageFormat(name: "PSD", type: UTType("com.adobe.photoshop-image") ?? .image, ext: "psd"),
+            ImageFormat(name: "TGA", type: UTType("com.truevision.tga-image") ?? .image, ext: "tga"),
+            ImageFormat(name: "EXR", type: UTType("com.ilm.openexr-image") ?? .image, ext: "exr"),
         ]
         list.removeAll { !writable.contains($0.type.identifier) }
         return list
     }()
+
+    /// Icon files hold several square sizes: at most six in an ICO (ImageIO's limit), the iconset sizes in an ICNS.
+    /// The picture is centred on a transparent square and never enlarged beyond its own size (except to reach the
+    /// smallest one).
+    struct IconFormat: Sendable { let name: String; let type: String; let ext: String; let sizes: [Int] }
+    static let iconFormats: [IconFormat] = {
+        let writable = Set(CGImageDestinationCopyTypeIdentifiers() as? [String] ?? [])
+        return [IconFormat(name: "ICO", type: "com.microsoft.ico", ext: "ico", sizes: [16, 32, 48, 64, 128, 256]),
+                IconFormat(name: "ICNS", type: "com.apple.icns", ext: "icns", sizes: [16, 32, 128, 256, 512, 1024])]
+            .filter { writable.contains($0.type) }
+    }()
+
+    static func makeIcon(_ url: URL, as format: IconFormat) async throws -> [URL] {
+        try await detached {
+            // A thumbnail decode of some formats still reads every pixel: refuse a pixel flood first.
+            guard let pixels = claimedPixels(url), pixels <= maxDecodePixels else { throw ToolError(L("Image too large")) }
+            let image = try load(url, maxPixels: format.sizes.last!)
+            let longest = max(image.width, image.height)
+            let sizes = format.sizes.filter { $0 <= longest }.isEmpty ? [format.sizes[0]] : format.sizes.filter { $0 <= longest }
+            return [try Paths.produce(Paths.preferred(for: url, ext: format.ext)) { out in
+                guard let dest = CGImageDestinationCreateWithURL(out as CFURL, format.type as CFString, sizes.count, nil) else {
+                    throw ToolError(L("Couldn't encode image"))
+                }
+                for size in sizes {
+                    try Task.checkCancellation()
+                    guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                          let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw ToolError(L("Couldn't encode image")) }
+                    let scale = Double(size) / Double(longest)
+                    let w = Double(image.width) * scale, h = Double(image.height) * scale
+                    context.interpolationQuality = .high
+                    context.draw(image, in: CGRect(x: (Double(size) - w) / 2, y: (Double(size) - h) / 2, width: w, height: h))
+                    guard let square = context.makeImage() else { throw ToolError(L("Couldn't encode image")) }
+                    CGImageDestinationAddImage(dest, square, nil)
+                }
+                guard CGImageDestinationFinalize(dest), let check = CGImageSourceCreateWithURL(out as CFURL, nil),
+                      CGImageSourceGetCount(check) >= 1, CGImageSourceGetStatus(check) == .statusComplete else {
+                    throw ToolError(L("Couldn't encode image"))
+                }
+            }]
+        }
+    }
 
     static let toolItems: [FileOption] = [
         FileOption(title: "Resize 50%") { url in
@@ -98,10 +144,11 @@ enum Images {
         guard !auxiliary.contains(where: { CGImageSourceCopyAuxiliaryDataInfoAtIndex(source, index, $0) != nil }) else {
             throw ToolError(L("This image contains HDR or auxiliary data that this operation cannot preserve."))
         }
-        if (props[kCGImagePropertyDepth] as? Int ?? 8) > 8, target != .png && target != .tiff {
+        let exr = target?.identifier == "com.ilm.openexr-image"
+        if (props[kCGImagePropertyDepth] as? Int ?? 8) > 8, target != .png && target != .tiff && !exr {
             throw ToolError(L("This image has more than 8 bits per channel. Convert to PNG or TIFF to preserve its precision."))
         }
-        if props[kCGImagePropertyIsFloat] as? Bool == true, target != .tiff {
+        if props[kCGImagePropertyIsFloat] as? Bool == true, target != .tiff && !exr {
             throw ToolError(L("This floating-point image requires TIFF to preserve its precision."))
         }
     }

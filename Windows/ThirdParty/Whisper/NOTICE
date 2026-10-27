@@ -1,0 +1,4 @@
+Swivel's Windows preview converts the official OpenAI Whisper base checkpoint (MIT, see LICENSE) into two
+ONNX graphs at build time with its own converter (../ModelConvert/), and ships Whisper's multilingual
+tokenizer file unchanged. The weights are unchanged; only their container format differs. The network
+layout follows Whisper's published model.py, reimplemented, no code copied.
