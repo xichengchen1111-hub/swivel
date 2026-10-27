@@ -21,7 +21,8 @@ struct ImageStitchTests {
         intent.update(a, now: 10)
         #expect(!intent.ready(at: 10.2))
         intent.update(a, now: 10.2) // updates must not restart the dwell
-        #expect(intent.ready(at: 10.3))
+        #expect(!intent.ready(at: 10.49))
+        #expect(intent.ready(at: 10.6))
         intent.update(b, now: 11)
         #expect(!intent.ready(at: 11.1))
         intent.update(nil, now: 11.4)
@@ -30,12 +31,24 @@ struct ImageStitchTests {
         #expect(!intent.ready(at: 20.1))
     }
 
-    @Test func anEngagedPreviewToleratesSmallPointerMovementWithoutWideningInitialEntry() {
-        let bounds = CGRect(x: 0, y: 0, width: 160, height: 100)
-        let edge = CGPoint(x: 10, y: 50)
-        #expect(!RopeStitchIntent.hitArea(in: bounds, engaged: false).contains(edge))
-        #expect(RopeStitchIntent.hitArea(in: bounds, engaged: true).contains(edge))
-        #expect(!RopeStitchIntent.hitArea(in: bounds, engaged: true).contains(CGPoint(x: -1, y: 50)))
+    @Test func attractionRequiresTheCursorAndBothSeamsBelowTheTarget() {
+        let top = CGRect(x: 200, y: 30, width: 180, height: 120)
+        let below = CGRect(x: 200, y: 165, width: 180, height: 120)
+        #expect(RopeStitchJelly.contact(below, below: top, pointer: CGPoint(x: 290, y: 210), engaged: false) != nil)
+        for engaged in [false, true] {
+            #expect(RopeStitchJelly.contact(below, below: top, pointer: CGPoint(x: 290, y: 149), engaged: engaged) == nil)
+            #expect(RopeStitchJelly.contact(below, below: top, pointer: CGPoint(x: 190, y: 210), engaged: engaged) == nil)
+            #expect(RopeStitchJelly.contact(top, below: top, pointer: CGPoint(x: 290, y: 90), engaged: engaged) == nil)
+            let side = CGRect(x: 10, y: 30, width: 180, height: 120)
+            #expect(RopeStitchJelly.contact(side, below: top, pointer: CGPoint(x: 100, y: 90), engaged: engaged) == nil)
+            #expect(RopeStitchJelly.contact(side, below: top, pointer: CGPoint(x: 290, y: 210), engaged: engaged) == nil)
+        }
+        let far = below.offsetBy(dx: 0, dy: 12)
+        #expect(RopeStitchJelly.contact(far, below: top, pointer: CGPoint(x: 290, y: 230), engaged: false) == nil)
+        let offset = below.offsetBy(dx: 25, dy: 0)
+        let attracted = RopeStitchJelly.attached(offset, below: top, strength: 1)
+        #expect(abs(attracted.midX - offset.midX) <= 8)
+        #expect(attracted.size == offset.size)
     }
 
     @Test func joiningEdgesStretchIntoOneSurfaceBeforeRelease() {
@@ -71,8 +84,8 @@ struct ImageStitchTests {
         spring.target = 1
         var peak: CGFloat = 0
         for _ in 0..<240 { spring.step(1 / 240); peak = max(peak, spring.value) }
-        #expect(peak > 1 && peak < 1.06)
-        #expect(abs(spring.value - 1) < 0.001)
+        #expect(peak <= 1.02)
+        #expect(abs(spring.value - 1) < 0.01)
         #expect(RopeStitchJelly.damping >= 0.6)
     }
 
@@ -118,12 +131,12 @@ struct ImageStitchTests {
             let match = layers.first { $0.contents != nil && $0.position.x > 200 }
             let target = try #require(match)
             let source = try #require(layers.first { $0.contents != nil && $0.position.x < 200 })
-            let point = target.convert(CGPoint(x: target.bounds.midX, y: target.bounds.midY), to: view.layer)
+            let point = CGPoint(x: target.frame.midX, y: target.frame.maxY + target.bounds.height / 2)
             view.updateStitchTarget(source: a, point: point)
             for _ in 0..<100 { _ = view.advance(1 / 120) }
             #expect(target.opacity < 0.01)
             // The wider exit area retains the selected target and its original dwell timestamp.
-            let edge = target.convert(CGPoint(x: 10, y: 40), to: view.layer)
+            let edge = CGPoint(x: point.x + 3, y: point.y + 3)
             view.updateStitchTarget(source: a, point: edge)
             #expect(view.stitchIntent.target == b)
             view.clearStitchTarget()
@@ -180,7 +193,7 @@ struct ImageStitchTests {
         for _ in 0..<240 { _ = view.advance(1 / 120) }
         let layers = view.layer?.sublayers ?? []
         let target = try #require(layers.first { $0.contents != nil && $0.position.x > 200 })
-        let point = target.convert(CGPoint(x: target.bounds.midX, y: target.bounds.midY), to: view.layer)
+        let point = CGPoint(x: target.frame.midX, y: target.frame.maxY + target.bounds.height / 2)
         for force in [false, true] {
             view.updateStitchTarget(source: a, point: point)
             view.commitStitchPreview(); _ = view.advance(1 / 60)
@@ -289,7 +302,7 @@ struct ImageStitchTests {
             let layers = view.layer?.sublayers ?? []
             let match = layers.first { $0.contents != nil && $0.zPosition < 20 && $0.position.x > 200 }
             let target = try #require(match)
-            let point = target.convert(CGPoint(x: target.bounds.midX, y: target.bounds.midY), to: view.layer)
+            let point = CGPoint(x: target.frame.midX, y: target.frame.maxY + target.bounds.height / 2)
             for stage in 0..<4 {
                 if stage == 1 { view.updateStitchTarget(source: a, point: point, now: CACurrentMediaTime() - 1) }
                 if stage == 3 { view.clearStitchTarget() }
@@ -325,7 +338,7 @@ struct ImageStitchTests {
             layer.contents != nil && layer.zPosition < 20 && layer.bounds.width > 1 && layer.position.x > 200
         }
         let target = try #require(match)
-        let point = target.convert(CGPoint(x: target.bounds.midX, y: target.bounds.midY), to: view.layer)
+        let point = CGPoint(x: target.frame.midX, y: target.frame.maxY + target.bounds.height / 2)
         view.updateStitchTarget(source: a, point: point)
         #expect(view.stitchIntent.target == b)
         _ = view.advance(1 / 60)

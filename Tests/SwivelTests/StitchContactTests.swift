@@ -43,30 +43,61 @@ struct StitchContactTests {
         return (view, try #require(photos.first), try #require(photos.last), a, b)
     }
 
-    @Test func nearContactKeepsTwoBodiesAndNeverArmsAnOutsideDrop() throws {
+    @Test func pickingUpOrPassingBesideANeighbourNeverAttracts() throws {
         let (view, a, b, _, _) = try scene()
-        let near = CGPoint(x: b.frame.minX - a.bounds.width / 2 - 15, y: b.frame.midY)
-        view.updateStitchTarget(source: source, point: near)
-        for _ in 0..<80 { _ = view.advance(1 / 120) }
-        #expect(view.stitchIntent.target == nil)
         let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
-        let bodies = try #require(overlay.sublayers)
-        #expect((bodies[0] as? CAShapeLayer)?.path == nil) // side proximity does not join unrelated edges
-        #expect(abs(bodies[1].bounds.width - b.bounds.width) < 0.01)
-        #expect(abs(bodies[2].bounds.width - a.bounds.width) < 0.01)
-        #expect(bodies[3].opacity == 0) // the combined thumbnail is not shown during contact
-        view.commitStitchPreview()
-        #expect(!view.isCommittingStitch)
-
-        let centre = b.convert(CGPoint(x: b.bounds.midX, y: b.bounds.midY), to: view.layer)
-        view.updateStitchTarget(source: source, point: centre, now: CACurrentMediaTime() - 1)
-        _ = view.advance(1 / 60)
+        for point in [CGPoint(x: a.frame.midX + 2, y: a.frame.midY),
+                      CGPoint(x: a.frame.maxX + 4, y: a.frame.midY),
+                      CGPoint(x: b.frame.midX, y: b.frame.midY),
+                      CGPoint(x: b.frame.minX - 4, y: b.frame.maxY + 5)] {
+            view.updateStitchTarget(source: source, point: point)
+            for _ in 0..<100 { _ = view.advance(1 / 120) }
+            #expect(view.stitchIntent.target == nil && overlay.opacity < 0.01)
+            #expect(b.opacity > 0.99)
+            view.commitStitchPreview()
+            #expect(!view.isCommittingStitch)
+        }
+        let edge = CGPoint(x: b.frame.midX, y: b.frame.maxY + a.bounds.height / 2)
+        view.updateStitchTarget(source: source, point: edge, now: CACurrentMediaTime() - 1)
+        for _ in 0..<150 { _ = view.advance(1 / 120) }
+        #expect(view.stitchIntent.target == target)
         #expect(view.stitchHintText == "Release to stitch · Originals kept")
-        view.updateStitchTarget(source: source, point: near)
+        view.updateStitchTarget(source: source, point: CGPoint(x: b.frame.midX, y: b.frame.midY))
         #expect(view.stitchIntent.target == nil)
-        view.updateStitchTarget(source: source, point: centre)
+        view.updateStitchTarget(source: source, point: edge)
         #expect(view.stitchHintText == "Hold briefly to stitch")
         #expect(!view.stitchIntent.ready(at: CACurrentMediaTime()))
+    }
+
+    @Test func contactBuildsGraduallyInsteadOfJumpingIntoPlace() throws {
+        let (view, a, b, _, _) = try scene()
+        let edge = CGPoint(x: b.frame.midX, y: b.frame.maxY + a.bounds.height / 2 + 15)
+        view.updateStitchTarget(source: source, point: edge)
+        let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
+        let top = try #require(overlay.sublayers?[1])
+        for _ in 0..<10 { _ = view.advance(1 / 120) }
+        let early = top.bounds.height
+        for _ in 0..<230 { _ = view.advance(1 / 120) }
+        #expect(top.bounds.height > early + 3)
+        #expect(view.stitchIntent.target == nil) // near preview alone cannot submit
+    }
+
+    @Test func holdingOffCentreNeverAccumulatesSidewaysAttraction() throws {
+        let (view, a, b, _, _) = try scene()
+        let point = CGPoint(x: b.frame.midX + 25, y: b.frame.maxY + a.bounds.height / 2)
+        for _ in 0..<240 {
+            view.updateStitchTarget(source: source, point: point, now: 0)
+            _ = view.advance(1 / 120)
+        }
+        let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
+        let bottom = try #require(overlay.sublayers?[2])
+        let shown = overlay.convert(bottom.frame, to: view.layer)
+        #expect(abs(shown.midX - point.x) <= 8.01)
+        #expect(shown.midX > b.frame.midX + 16) // does not keep walking to the target centre
+        view.updateStitchTarget(source: source, point: CGPoint(x: point.x, y: b.frame.maxY - 1))
+        #expect(view.stitchIntent.target == nil)
+        view.commitStitchPreview()
+        #expect(!view.isCommittingStitch)
     }
 
     @Test func photoPixelsStretchOnlyInTheJoiningBand() throws {
@@ -128,7 +159,7 @@ struct StitchContactTests {
 
     @Test func completedFileHasABoundedHandoffEvenWithoutDisplayFrames() async throws {
         let (view, _, b, _, _) = try scene()
-        let centre = b.convert(CGPoint(x: b.bounds.midX, y: b.bounds.midY), to: view.layer)
+        let centre = CGPoint(x: b.frame.midX, y: b.frame.maxY + b.bounds.height / 2)
         view.updateStitchTarget(source: source, point: centre)
         _ = view.advance(1 / 60)
         view.commitStitchPreview()
@@ -137,7 +168,7 @@ struct StitchContactTests {
         view.finishStitchPreview(output: output)
         view.finishStitchPreview() // the worker's defer must not erase a successful queued result
         #expect(view.isCommittingStitch && handoffs == 0)
-        let deadline = Date().addingTimeInterval(1.2)
+        let deadline = Date().addingTimeInterval(1.8)
         while Date() < deadline && handoffs == 0 { try await Task.sleep(nanoseconds: 20_000_000) }
         #expect(handoffs == 1 && !view.isCommittingStitch)
     }

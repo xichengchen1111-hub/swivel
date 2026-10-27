@@ -940,7 +940,7 @@ final class RopeView: NSView, NSDraggingSource {
     private let stitchBottomPhotoClip = CAShapeLayer()
     private let stitchTopMask = CAShapeLayer()
     private let stitchBottomMask = CAShapeLayer()
-    private var stitchContact = Spring(0, response: 0.3, damping: 0.72)
+    private var stitchContact = Spring(0, response: RopeStitchJelly.contactResponse, damping: RopeStitchJelly.contactDamping)
     private var stitchPointerX = Spring(0, response: 0.1, damping: 1)
     private var stitchPointerY = Spring(0, response: 0.1, damping: 1)
     private var stitchContactActive = false
@@ -2136,21 +2136,21 @@ final class RopeView: NSView, NSDraggingSource {
         func eligible(_ print: Print) -> Bool {
             print.url != source && print.isTouchable && ImageStitch.supports(print.url) && print.photo != nil
         }
-        func near(_ print: Print) -> Bool { eligible(print) && RopeStitchJelly.gap(dragged, print.layer.frame) < RopeStitchJelly.reach }
-        func inside(_ print: Print, engaged: Bool) -> Bool {
-            eligible(print) && RopeStitchIntent.hitArea(in: print.layer.bounds, engaged: engaged).contains(print.layer.convert(point, from: root))
+        func contact(_ print: Print, engaged: Bool) -> CGFloat? {
+            guard eligible(print) else { return nil }
+            return RopeStitchJelly.contact(dragged, below: print.layer.frame, pointer: point, engaged: engaged)
         }
-        let engaged = stitchIntent.target.flatMap(find).flatMap { inside($0, engaged: true) ? $0 : nil }
-        let direct = prints.reversed().first { inside($0, engaged: false) }
-        let retained = stitchVisualTarget.flatMap(find).flatMap { near($0) ? $0 : nil }
-        let target = engaged ?? direct ?? retained ?? prints.filter(near).min { RopeStitchJelly.gap(dragged, $0.layer.frame) < RopeStitchJelly.gap(dragged, $1.layer.frame) }
+        let retained = stitchContactActive && stitchSource == source
+            ? stitchVisualTarget.flatMap(find).flatMap { contact($0, engaged: true) != nil ? $0 : nil } : nil
+        let target = retained ?? prints.filter { contact($0, engaged: false) != nil }.min {
+            abs(dragged.minY - $0.layer.frame.maxY) < abs(dragged.minY - $1.layer.frame.maxY)
+        }
         guard let target, let top = target.photo,
+              let strength = contact(target, engaged: retained != nil),
               bounds.contains(RopeStitchJelly.attached(dragged, below: target.layer.frame, strength: 1, within: bounds))
         else { clearStitchTarget(); return }
         let wasEngaged = stitchIntent.target == target.url
-        let local = target.layer.convert(point, from: root)
-        let commitEligible = RopeStitchIntent.hitArea(in: target.layer.bounds, engaged: wasEngaged).contains(local)
-            || RopeStitchJelly.touchesSeam(dragged, below: target.layer.frame, engaged: wasEngaged)
+        let commitEligible = RopeStitchJelly.touchesSeam(dragged, below: target.layer.frame, engaged: wasEngaged)
         let previousIntent = stitchIntent.target
         stitchIntent.update(commitEligible ? target.url : nil, now: now)
         if commitEligible && previousIntent != target.url {
@@ -2158,7 +2158,7 @@ final class RopeView: NSView, NSDraggingSource {
             setStitchHint("Hold briefly to stitch")
         }
         stitchContactActive = true
-        stitchContact.target = commitEligible ? 1 : max(0, 1 - RopeStitchJelly.gap(dragged, target.layer.frame) / RopeStitchJelly.reach)
+        stitchContact.target = commitEligible ? 1 : strength
         stitchPointerX.target = pointer.x
         stitchPointerY.target = pointer.y
         if stitchVisualTarget != target.url || stitchSource != source || stitchSpring.value < 0.01 {
@@ -2236,7 +2236,7 @@ final class RopeView: NSView, NSDraggingSource {
             stitchCompletedOutput = output
             let presentation = stitchPresentation
             // A lost Space/panel/display link must never leave a completed file waiting on visual frames forever.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { [weak self] in
                 guard let self, self.isCommittingStitch, self.stitchPresentation == presentation,
                       self.stitchCompletedOutput == output else { return }
                 self.handOffStitchedPrint(output)

@@ -3,7 +3,7 @@ import ImageIO
 
 /// A deliberate overlap, rather than passing across a neighbour while dragging out of the rope.
 struct RopeStitchIntent {
-    static let delay: CFTimeInterval = 0.25
+    static let delay: CFTimeInterval = 0.5
     private(set) var target: URL?
     private var since: CFTimeInterval = 0
 
@@ -13,20 +13,18 @@ struct RopeStitchIntent {
         since = now
     }
 
-    static func hitArea(in bounds: CGRect, engaged: Bool) -> CGRect {
-        let inset: CGFloat = engaged ? 0.03 : 0.12
-        return bounds.insetBy(dx: bounds.width * inset, dy: bounds.height * inset)
-    }
-
     func ready(at now: CFTimeInterval) -> Bool { target != nil && now - since >= Self.delay }
 }
 
 /// Geometry for two independently moving photo bodies and their soft connecting neck.
 /// This never touches exported pixels.
 enum RopeStitchJelly {
-    static let response: CGFloat = 0.38
-    static let damping: CGFloat = 0.72
-    static let reach: CGFloat = 30
+    static let response: CGFloat = 0.58
+    static let damping: CGFloat = 0.84
+    static let reach: CGFloat = 20
+    static let contactResponse: CGFloat = 0.7
+    static let contactDamping: CGFloat = 0.85
+    static let horizontalPull: CGFloat = 8
 
     static func gap(_ a: CGRect, _ b: CGRect) -> CGFloat {
         hypot(max(0, max(a.minX - b.maxX, b.minX - a.maxX)),
@@ -43,7 +41,8 @@ enum RopeStitchJelly {
     /// target selection and cancellation continue to use the real pointer, never this attracted frame.
     static func attached(_ dragged: CGRect, below top: CGRect, strength: CGFloat, within area: CGRect? = nil) -> CGRect {
         let t = min(max(strength, 0), 1)
-        var joined = CGRect(x: top.midX - dragged.width / 2, y: top.maxY,
+        let shift = min(max(top.midX - dragged.midX, -horizontalPull), horizontalPull)
+        var joined = CGRect(x: dragged.minX + shift, y: top.maxY,
                             width: dragged.width, height: dragged.height)
         if let area { joined.origin.x = min(max(joined.minX, area.minX), area.maxX - joined.width) }
         var result = mix(dragged, joined, t * t * (3 - 2 * t))
@@ -57,9 +56,22 @@ enum RopeStitchJelly {
     static func touchesSeam(_ dragged: CGRect, below top: CGRect, engaged: Bool) -> Bool {
         let overlap = max(0, min(dragged.maxX, top.maxX) - max(dragged.minX, top.minX))
         let distance = dragged.minY - top.maxY
-        return overlap >= min(dragged.width, top.width) * 0.6
-            && distance >= -min(dragged.height, top.height) * 0.25
-            && distance <= (engaged ? 12 : 6)
+        return overlap >= min(dragged.width, top.width) * 0.65
+            && distance >= (engaged ? -8 : -4)
+            && distance <= (engaged ? 8 : 4)
+    }
+
+    /// Merely picking up a card, passing its neighbour or covering it never starts attraction.
+    /// The actual cursor must be below the target AND the dragged top edge must be near its bottom.
+    static func contact(_ dragged: CGRect, below top: CGRect, pointer: CGPoint, engaged: Bool) -> CGFloat? {
+        let inset = top.width * (engaged ? 0.06 : 0.12)
+        let overlap = min(dragged.maxX, top.maxX) - max(dragged.minX, top.minX)
+        let distance = dragged.minY - top.maxY
+        guard pointer.y >= top.maxY + 2,
+              pointer.x >= top.minX + inset, pointer.x <= top.maxX - inset,
+              overlap >= min(dragged.width, top.width) * 0.65,
+              distance >= (engaged ? -8 : -4), distance <= reach + (engaged ? 4 : 0) else { return nil }
+        return 0.35 + 0.65 * min(max(1 - max(0, distance) / reach, 0), 1)
     }
 
     /// Both surfaces use the same displacement. They first meet at the centre and the
