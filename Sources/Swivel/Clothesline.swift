@@ -932,6 +932,8 @@ final class RopeView: NSView, NSDraggingSource {
     private let stitchTopPhoto = CALayer()
     private let stitchBottomPhoto = CALayer()
     private let stitchMerged = CALayer()
+    private let stitchTopMask = CAShapeLayer()
+    private let stitchBottomMask = CAShapeLayer()
     private var stitchContact = Spring(0, response: 0.3, damping: 0.72)
     private var stitchPointerX = Spring(0, response: 0.1, damping: 1)
     private var stitchPointerY = Spring(0, response: 0.1, damping: 1)
@@ -1026,6 +1028,8 @@ final class RopeView: NSView, NSDraggingSource {
             body.addSublayer(photo)
             stitchLayer.addSublayer(body)
         }
+        stitchTop.mask = stitchTopMask
+        stitchBottom.mask = stitchBottomMask
         stitchMerged.contentsScale = 2
         stitchMerged.opacity = 0
         stitchLayer.addSublayer(stitchMerged)
@@ -1576,32 +1580,38 @@ final class RopeView: NSView, NSDraggingSource {
                 y: 0, width: stitchOriginalSize.width, height: stitchOriginalSize.height)
             let second = isCommittingStitch ? stitchHeldBottom : CGRect(x: stitchPointerX.value - origin.x - stitchSourceSize.width / 2,
                 y: stitchPointerY.value - origin.y - stitchSourceSize.height / 2, width: stitchSourceSize.width, height: stitchSourceSize.height)
+            let proximity = min(max(stitchContact.value, 0), 1)
+            let available = CGRect(x: -origin.x, y: -origin.y, width: bounds.width, height: bounds.height)
+            let attached = RopeStitchJelly.attached(second, below: first, strength: reduced ? 1 : proximity, within: available)
             let top = RopeStitchJelly.mix(first, finalTop, merge)
-            let bottom = RopeStitchJelly.mix(second, finalBottom, merge)
+            let bottom = RopeStitchJelly.mix(isCommittingStitch ? second : attached, finalBottom, merge)
             stitchDisplayedTop = top
             stitchDisplayedBottom = bottom
-            let proximity = reduced ? 0 : min(max(stitchContact.value, 0), 1)
-            let radius = reduced ? 3 : (3 + min(top.height, bottom.height) * 0.45 * proximity * (1 - merge))
+            // The bodies stay rectangular. Bend only their facing edges, with no whole-photo squash.
+            let radius = 3 + 7 * proximity * (1 - merge)
             let joined = reduced ? merge : min(max((merge - 0.72) / 0.28, 0), 1)
-            for (body, photo, frame) in [(stitchTop, stitchTopPhoto, top), (stitchBottom, stitchBottomPhoto, bottom)] {
+            let shadow = CGMutablePath()
+            for (body, photo, mask, frame, upper) in [(stitchTop, stitchTopPhoto, stitchTopMask, top, true),
+                                                       (stitchBottom, stitchBottomPhoto, stitchBottomMask, bottom, false)] {
                 body.transform = CATransform3DIdentity
                 body.frame = frame
-                body.cornerRadius = min(radius, min(frame.width, frame.height) / 2)
+                body.cornerRadius = 0
                 body.opacity = Float(1 - joined)
-                photo.frame = body.bounds.insetBy(dx: 3 * (1 - merge), dy: 3 * (1 - merge))
-                photo.cornerRadius = max(0, body.cornerRadius - 3)
+                mask.frame = body.bounds
+                mask.path = RopeStitchJelly.bodyPath(in: body.bounds, seamAtBottom: upper, radius: radius)
+                let padding = 3 * (1 - merge)
+                let seamPadding = padding * (1 - proximity)
+                photo.frame = CGRect(x: padding, y: upper ? padding : seamPadding,
+                                     width: max(0, frame.width - 2 * padding),
+                                     height: max(0, frame.height - padding - seamPadding))
+                photo.cornerRadius = 0 // the shared edge mask clips the image locally as well
+                shadow.addPath(RopeStitchJelly.bodyPath(in: frame, seamAtBottom: upper, radius: radius))
             }
-            let pulse: CGFloat = reduced ? 0 : sin(.pi * stitchContact.value) * (1 - merge)
-            stitchTop.transform = CATransform3DMakeScale(1 + 0.055 * pulse, 1 - 0.04 * pulse, 1)
-            stitchBottom.transform = CATransform3DMakeScale(1 - 0.04 * pulse, 1 + 0.055 * pulse, 1)
-            let bridge = reduced ? nil : RopeStitchJelly.bridge(top, bottom, strength: proximity)
+            let bridge = RopeStitchJelly.bridge(top, bottom, strength: proximity * (1 - merge))
             stitchBridge.path = bridge
             stitchBridge.opacity = Float(1 - joined)
             stitchMerged.frame = CGRect(origin: .zero, size: stitchSize)
             stitchMerged.opacity = Float(joined)
-            let shadow = CGMutablePath()
-            shadow.addRoundedRect(in: top, cornerWidth: radius, cornerHeight: radius)
-            shadow.addRoundedRect(in: bottom, cornerWidth: radius, cornerHeight: radius)
             if let bridge { shadow.addPath(bridge) }
             stitchLayer.shadowPath = shadow
             stitchHint.position = CGPoint(x: x, y: origin.y + max(top.maxY, bottom.maxY) + 18)
@@ -2100,10 +2110,13 @@ final class RopeView: NSView, NSDraggingSource {
         let direct = prints.reversed().first { inside($0, engaged: false) }
         let retained = stitchVisualTarget.flatMap(find).flatMap { near($0) ? $0 : nil }
         let target = engaged ?? direct ?? retained ?? prints.filter(near).min { RopeStitchJelly.gap(dragged, $0.layer.frame) < RopeStitchJelly.gap(dragged, $1.layer.frame) }
-        guard let target, let top = target.photo else { clearStitchTarget(); return }
+        guard let target, let top = target.photo,
+              bounds.contains(RopeStitchJelly.attached(dragged, below: target.layer.frame, strength: 1, within: bounds))
+        else { clearStitchTarget(); return }
         let wasEngaged = stitchIntent.target == target.url
         let local = target.layer.convert(point, from: root)
         let commitEligible = RopeStitchIntent.hitArea(in: target.layer.bounds, engaged: wasEngaged).contains(local)
+            || RopeStitchJelly.touchesSeam(dragged, below: target.layer.frame, engaged: wasEngaged)
         let previousIntent = stitchIntent.target
         stitchIntent.update(commitEligible ? target.url : nil, now: now)
         if commitEligible && previousIntent != target.url {
@@ -2111,7 +2124,7 @@ final class RopeView: NSView, NSDraggingSource {
             setStitchHint("Hold briefly to stitch")
         }
         stitchContactActive = true
-        stitchContact.target = max(0, 1 - RopeStitchJelly.gap(dragged, target.layer.frame) / RopeStitchJelly.reach)
+        stitchContact.target = commitEligible ? 1 : max(0, 1 - RopeStitchJelly.gap(dragged, target.layer.frame) / RopeStitchJelly.reach)
         stitchPointerX.target = pointer.x
         stitchPointerY.target = pointer.y
         if stitchVisualTarget != target.url || stitchSource != source || stitchSpring.value < 0.01 {

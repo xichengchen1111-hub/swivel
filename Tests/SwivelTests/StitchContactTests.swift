@@ -51,7 +51,7 @@ struct StitchContactTests {
         #expect(view.stitchIntent.target == nil)
         let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
         let bodies = try #require(overlay.sublayers)
-        #expect((bodies[0] as? CAShapeLayer)?.path != nil)
+        #expect((bodies[0] as? CAShapeLayer)?.path == nil) // side proximity does not join unrelated edges
         #expect(abs(bodies[1].bounds.width - b.bounds.width) < 0.01)
         #expect(abs(bodies[2].bounds.width - a.bounds.width) < 0.01)
         #expect(bodies[3].opacity == 0) // the combined thumbnail is not shown during contact
@@ -67,6 +67,42 @@ struct StitchContactTests {
         view.updateStitchTarget(source: source, point: centre)
         #expect(view.stitchHintText == "Hold briefly to stitch")
         #expect(!view.stitchIntent.ready(at: CACurrentMediaTime()))
+    }
+
+    @Test func heldEdgeIsAlreadyOneContourAndReleaseDoesNotRejoin() throws {
+        for reduced in [false, true] {
+            let (view, a, b, _, _) = try scene()
+            view.reducedMotionOverride = reduced
+            let edge = CGPoint(x: b.frame.midX, y: b.frame.maxY + a.bounds.height / 2)
+            view.updateStitchTarget(source: source, point: edge, now: CACurrentMediaTime() - 1)
+            for _ in 0..<180 { _ = view.advance(1 / 120) }
+            #expect(view.stitchIntent.target == target && !view.isCommittingStitch)
+            #expect(view.stitchHintText == "Release to stitch · Originals kept")
+            let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
+            let bodies = try #require(overlay.sublayers)
+            let top = bodies[1].frame, bottom = bodies[2].frame
+            #expect(abs(top.maxY - bottom.minY) < 0.01)
+            #expect(abs(top.midX - bottom.midX) < 0.01)
+            #expect(top.size == b.bounds.size && bottom.size == a.bounds.size)
+            #expect(CATransform3DIsIdentity(bodies[1].transform) && CATransform3DIsIdentity(bodies[2].transform))
+            #expect((bodies[0] as? CAShapeLayer)?.path != nil)
+            // A held seam is only a preview. Pulling away cancels without submitting work.
+            view.updateStitchTarget(source: source, point: CGPoint(x: -100, y: 300))
+            view.commitStitchPreview()
+            #expect(!view.isCommittingStitch && view.stitchIntent.target == nil)
+            // Release starts from the exact attached geometry; it never flashes back to separate bodies.
+            view.updateStitchTarget(source: source, point: edge, now: CACurrentMediaTime() - 1)
+            for _ in 0..<180 { _ = view.advance(1 / 120) }
+            let beforeTop = bodies[1].frame, beforeBottom = bodies[2].frame
+            view.commitStitchPreview()
+            _ = view.advance(0)
+            if !reduced {
+                #expect(bodies[1].frame == beforeTop && bodies[2].frame == beforeBottom)
+                #expect(bodies[3].opacity == 0)
+            }
+            #expect(view.isCommittingStitch)
+            view.clearStitchTarget(force: true)
+        }
     }
 
     @Test func completedFileHasABoundedHandoffEvenWithoutDisplayFrames() async throws {
@@ -117,25 +153,25 @@ struct StitchContactTests {
         for below in [false, true] {
             let (view, a, b, first, second) = try scene()
             let url = folder.appendingPathComponent(below ? "contact-below.gif" : "contact-side.gif")
-            let gif = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, 145, nil))
+            let gif = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, 200, nil))
             CGImageDestinationSetProperties(gif, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]] as CFDictionary)
             let from = below ? CGPoint(x: b.frame.midX, y: b.frame.maxY + a.bounds.height / 2 + 24)
                 : CGPoint(x: a.frame.midX, y: a.frame.midY)
-            let to = b.convert(CGPoint(x: b.bounds.width * 0.62, y: b.bounds.height * 0.64), to: view.layer)
+            let to = CGPoint(x: b.frame.midX, y: b.frame.maxY + a.bounds.height / 2)
             let merged = try ImageStitch.render(top: second, bottom: first)
             if !below {
                 _ = try Images.save(first, as: folder.appendingPathComponent("fixture-a.png"), type: .png, quality: 1)
                 _ = try Images.save(second, as: folder.appendingPathComponent("fixture-b.png"), type: .png, quality: 1)
             }
             view.onStitchHandoff = { [weak view] in view?.setItems([output]) }
-            for frame in 0..<145 {
-                if frame >= 10 && frame < 56 {
+            for frame in 0..<200 {
+                if frame >= 10 && frame < 112 {
                     let t = min(CGFloat(frame - 10) / 36, 1)
                     let eased = t * t * (3 - 2 * t)
                     view.updateStitchTarget(source: source, point: CGPoint(x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased), now: 0)
                 }
-                if frame == 56 { view.commitStitchPreview() }
-                if frame == 57 {
+                if frame == 112 { view.commitStitchPreview() }
+                if frame == 113 {
                     view.markNew(output, arrival: .inPlace, thumbnail: merged)
                     view.finishStitchPreview(output: output)
                 }
@@ -147,7 +183,7 @@ struct StitchContactTests {
                 view.layer?.render(in: ctx)
                 let image = try #require(ctx.makeImage())
                 CGImageDestinationAddImage(gif, image, [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFDelayTime: 0.02]] as CFDictionary)
-                if [18, 36, 60, 76, 120].contains(frame) {
+                if [18, 36, 60, 100, 112, 130, 160].contains(frame) {
                     _ = try Images.save(image, as: folder.appendingPathComponent("\(below ? "below" : "side")-\(frame).png"), type: .png, quality: 1)
                 }
             }

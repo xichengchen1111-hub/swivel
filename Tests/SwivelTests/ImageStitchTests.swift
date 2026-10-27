@@ -38,26 +38,35 @@ struct ImageStitchTests {
         #expect(!RopeStitchIntent.hitArea(in: bounds, engaged: true).contains(CGPoint(x: -1, y: 50)))
     }
 
-    @Test func jellyFillsItsWaistAndSettlesWithOneSmallRebound() {
-        let first = CGRect(x: 0, y: 0, width: 100, height: 120)
-        let second = CGRect(x: 120, y: 10, width: 100, height: 120)
-        #expect(RopeStitchJelly.gap(first, second) == 20)
-        let bridge = RopeStitchJelly.bridge(first, second, strength: 0.6)
-        #expect(bridge?.contains(CGPoint(x: 110, y: 65)) == true)
-        #expect(RopeStitchJelly.bridge(first, second, strength: 0) == nil)
-        #expect(RopeStitchJelly.bridge(first, first, strength: 1) == nil)
-        #expect(RopeStitchJelly.mix(first, second, 0) == first)
-        #expect(RopeStitchJelly.mix(first, second, 1) == second)
+    @Test func onlyTheJoiningEdgesBendAndHeldContactAlreadyAttaches() {
+        let top = CGRect(x: 0, y: 0, width: 180, height: 120)
+        let dragged = CGRect(x: 8, y: 140, width: 180, height: 120)
+        #expect(RopeStitchJelly.gap(top, dragged) == 20)
+        let attached = RopeStitchJelly.attached(dragged, below: top, strength: 1)
+        #expect(attached.minY == top.maxY && attached.midX == top.midX)
+        #expect(attached.size == dragged.size) // contact changes neither image's size/aspect
+        let canvas = CGRect(x: 0, y: 0, width: 650, height: 380)
+        let narrow = CGRect(x: 590, y: 30, width: 20, height: 122)
+        let wide = CGRect(x: 460, y: 158, width: 178, height: 122)
+        let edgeJoin = RopeStitchJelly.attached(wide, below: narrow, strength: 1, within: canvas)
+        #expect(canvas.contains(edgeJoin) && edgeJoin.minY == narrow.maxY)
+        #expect(edgeJoin.size == wide.size)
+        let bridge = RopeStitchJelly.bridge(top, attached, strength: 1)
+        #expect(bridge?.contains(CGPoint(x: 90, y: 120)) == true)
+        #expect(bridge?.contains(CGPoint(x: 1, y: 120)) == false) // shallow inward arc at seam
+        #expect(bridge!.boundingBoxOfPath.height <= 20)
+        #expect(RopeStitchJelly.bridge(top, attached, strength: 0) == nil)
+        let body = RopeStitchJelly.bodyPath(in: top, seamAtBottom: true, radius: 10)
+        #expect(body.contains(CGPoint(x: 2, y: 2))) // far corners stay almost square
+        #expect(!body.contains(CGPoint(x: 1, y: 119))) // only the seam corners bend
+        #expect(body.contains(CGPoint(x: 1, y: 60)))
+        #expect(RopeStitchJelly.touchesSeam(attached, below: top, engaged: false))
+        #expect(!RopeStitchJelly.touchesSeam(dragged, below: top, engaged: false))
+        #expect(!RopeStitchJelly.touchesSeam(attached.offsetBy(dx: 100, dy: 0), below: top, engaged: true))
         var spring = Spring(0, response: RopeStitchJelly.response, damping: RopeStitchJelly.damping)
         spring.target = 1
         var peak: CGFloat = 0
-        for _ in 0..<240 {
-            spring.step(1 / 240)
-            peak = max(peak, spring.value)
-            let pulse = sin(.pi * spring.value)
-            #expect(1 + 0.1 * pulse >= 0.98 && 1 + 0.1 * pulse <= 1.101)
-            #expect(1 - 0.06 * pulse >= 0.939 && 1 - 0.06 * pulse <= 1.02)
-        }
+        for _ in 0..<240 { spring.step(1 / 240); peak = max(peak, spring.value) }
         #expect(peak > 1 && peak < 1.06)
         #expect(abs(spring.value - 1) < 0.001)
         #expect(RopeStitchJelly.damping >= 0.6)
@@ -68,7 +77,7 @@ struct ImageStitchTests {
         let output = URL(fileURLWithPath: "/tmp/feel-stitched.png")
         let thumb = try image(100, 60, CGColor(gray: 0.5, alpha: 1))
         for reduced in [false, true] {
-            let view = RopeView(frame: CGRect(x: 0, y: 0, width: 1000, height: 230))
+            let view = RopeView(frame: CGRect(x: 0, y: 0, width: 1000, height: RopePanel.stitchHeight))
             view.reducedMotionOverride = reduced
             for url in [a, b] { view.markNew(url, arrival: .inPlace, thumbnail: thumb) }
             view.setItems([a, b])
@@ -133,7 +142,7 @@ struct ImageStitchTests {
     @Test @MainActor func aFailedOrDisabledCommitRestoresBothOriginalPrints() throws {
         let a = URL(fileURLWithPath: "/tmp/recover-a.png"), b = URL(fileURLWithPath: "/tmp/recover-b.png")
         let thumb = try image(100, 60, CGColor(gray: 0.5, alpha: 1))
-        let view = RopeView(frame: CGRect(x: 0, y: 0, width: 1000, height: 230))
+        let view = RopeView(frame: CGRect(x: 0, y: 0, width: 1000, height: RopePanel.stitchHeight))
         view.reducedMotionOverride = true
         for url in [a, b] { view.markNew(url, arrival: .inPlace, thumbnail: thumb) }
         view.setItems([a, b]); view.drop(fromHidden: true)
@@ -239,7 +248,7 @@ struct ImageStitchTests {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let a = URL(fileURLWithPath: "/tmp/stitch-a.png"), b = URL(fileURLWithPath: "/tmp/stitch-b.png")
         for reduced in [false, true] {
-            let view = RopeView(frame: CGRect(x: 0, y: 0, width: 650, height: 220))
+            let view = RopeView(frame: CGRect(x: 0, y: 0, width: 650, height: RopePanel.stitchHeight))
             view.reducedMotionOverride = reduced
             view.markNew(a, arrival: .inPlace, thumbnail: try image(200, 120, NSColor.systemBlue.cgColor))
             view.markNew(b, arrival: .inPlace, thumbnail: try image(200, 120, NSColor.systemOrange.cgColor))
@@ -255,13 +264,13 @@ struct ImageStitchTests {
                 if stage == 3 { view.clearStitchTarget() }
                 let frames = stage == 1 ? 8 : 100
                 for _ in 0..<frames { _ = view.advance(1 / 120) }
-                let ctx = try #require(CGContext(data: nil, width: 1300, height: 440, bitsPerComponent: 8, bytesPerRow: 0,
+                let ctx = try #require(CGContext(data: nil, width: Int(view.bounds.width * 2), height: Int(view.bounds.height * 2), bitsPerComponent: 8, bytesPerRow: 0,
                                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
                 ctx.scaleBy(x: 2, y: 2)
                 ctx.setFillColor(NSColor(white: 0.22, alpha: 1).cgColor)
                 ctx.fill(view.bounds)
-                ctx.translateBy(x: 0, y: 220)
+                ctx.translateBy(x: 0, y: view.bounds.height)
                 ctx.scaleBy(x: 1, y: -1)
                 view.layer?.render(in: ctx)
                 let result = try #require(ctx.makeImage())
@@ -273,7 +282,7 @@ struct ImageStitchTests {
     @Test @MainActor func overlapPreviewCancelsOnExitRemovalAndLift() throws {
         let a = URL(fileURLWithPath: "/tmp/stitch-a.png"), b = URL(fileURLWithPath: "/tmp/stitch-b.png")
         let thumb = try image(100, 60, CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
-        let view = RopeView(frame: CGRect(x: 0, y: 0, width: 1000, height: 230))
+        let view = RopeView(frame: CGRect(x: 0, y: 0, width: 1000, height: RopePanel.stitchHeight))
         view.reducedMotionOverride = true
         view.markNew(a, arrival: .inPlace, thumbnail: thumb)
         view.markNew(b, arrival: .inPlace, thumbnail: thumb)

@@ -39,32 +39,68 @@ enum RopeStitchJelly {
                       width: a.width + (b.width - a.width) * t, height: a.height + (b.height - a.height) * t)
     }
 
-    static func bridge(_ a: CGRect, _ b: CGRect, strength: CGFloat) -> CGPath? {
-        let distance = hypot(b.midX - a.midX, b.midY - a.midY)
-        let amount = min(max(strength, 0), 1)
-        guard distance > 1, amount > 0, a.width > 0, a.height > 0, b.width > 0, b.height > 0 else { return nil }
-        let ux = (b.midX - a.midX) / distance, uy = (b.midY - a.midY) / distance
-        let nx = -uy, ny = ux
-        func edge(_ r: CGRect) -> CGFloat {
-            min(r.width / (2 * max(abs(ux), 0.0001)), r.height / (2 * max(abs(uy), 0.0001)))
-        }
-        let small = min(min(a.width, a.height), min(b.width, b.height))
-        let first = CGPoint(x: a.midX + ux * max(0, edge(a) - small * 0.2), y: a.midY + uy * max(0, edge(a) - small * 0.2))
-        let second = CGPoint(x: b.midX - ux * max(0, edge(b) - small * 0.2), y: b.midY - uy * max(0, edge(b) - small * 0.2))
-        let mid = CGPoint(x: (first.x + second.x) / 2, y: (first.y + second.y) / 2)
-        let width = small * (0.18 + 0.12 * amount)
-        let neck = small * 0.2 * amount
-        let length = hypot(second.x - first.x, second.y - first.y) * 0.24
-        func point(_ c: CGPoint, side: CGFloat, along: CGFloat = 0) -> CGPoint {
-            CGPoint(x: c.x + nx * side + ux * along, y: c.y + ny * side + uy * along)
-        }
+    /// The resting preview is already attached while the button is held. Only the source moves;
+    /// target selection and cancellation continue to use the real pointer, never this attracted frame.
+    static func attached(_ dragged: CGRect, below top: CGRect, strength: CGFloat, within area: CGRect? = nil) -> CGRect {
+        let t = min(max(strength, 0), 1)
+        var joined = CGRect(x: top.midX - dragged.width / 2, y: top.maxY,
+                            width: dragged.width, height: dragged.height)
+        if let area { joined.origin.x = min(max(joined.minX, area.minX), area.maxX - joined.width) }
+        return mix(dragged, joined, t * t * (3 - 2 * t))
+    }
+
+    /// A deliberate bottom-edge contact can be held and released without covering the target's centre.
+    static func touchesSeam(_ dragged: CGRect, below top: CGRect, engaged: Bool) -> Bool {
+        let overlap = max(0, min(dragged.maxX, top.maxX) - max(dragged.minX, top.minX))
+        let distance = dragged.minY - top.maxY
+        return overlap >= min(dragged.width, top.width) * 0.6
+            && distance >= -min(dragged.height, top.height) * 0.25
+            && distance <= (engaged ? 12 : 6)
+    }
+
+    /// Ordinary corners remain small. Only the two corners on the joining edge bend into the seam.
+    static func bodyPath(in r: CGRect, seamAtBottom: Bool, radius: CGFloat) -> CGPath {
+        let small = min(3, min(r.width, r.height) / 2)
+        let seam = min(max(small, radius), min(r.width, r.height) / 4)
+        let upper = seamAtBottom ? small : seam, lower = seamAtBottom ? seam : small
         let p = CGMutablePath()
-        p.move(to: point(first, side: width))
-        p.addCurve(to: point(mid, side: neck), control1: point(first, side: width, along: length), control2: point(mid, side: neck, along: -length))
-        p.addCurve(to: point(second, side: width), control1: point(mid, side: neck, along: length), control2: point(second, side: width, along: -length))
-        p.addLine(to: point(second, side: -width))
-        p.addCurve(to: point(mid, side: -neck), control1: point(second, side: -width, along: -length), control2: point(mid, side: -neck, along: length))
-        p.addCurve(to: point(first, side: -width), control1: point(mid, side: -neck, along: -length), control2: point(first, side: -width, along: length))
+        p.move(to: CGPoint(x: r.minX + upper, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX - upper, y: r.minY))
+        p.addQuadCurve(to: CGPoint(x: r.maxX, y: r.minY + upper), control: CGPoint(x: r.maxX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - lower))
+        p.addQuadCurve(to: CGPoint(x: r.maxX - lower, y: r.maxY), control: CGPoint(x: r.maxX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX + lower, y: r.maxY))
+        p.addQuadCurve(to: CGPoint(x: r.minX, y: r.maxY - lower), control: CGPoint(x: r.minX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.minY + upper))
+        p.addQuadCurve(to: CGPoint(x: r.minX + upper, y: r.minY), control: CGPoint(x: r.minX, y: r.minY))
+        p.closeSubpath()
+        return p
+    }
+
+    /// A broad, shallow concave arc along the joining edges, rather than a neck between round blobs.
+    static func bridge(_ top: CGRect, _ bottom: CGRect, strength: CGFloat) -> CGPath? {
+        let amount = min(max(strength, 0), 1)
+        let overlap = min(top.maxX, bottom.maxX) - max(top.minX, bottom.minX)
+        let gap = bottom.minY - top.maxY
+        guard amount > 0, overlap > 12, gap >= -1, gap < reach,
+              min(top.width, top.height, bottom.width, bottom.height) > 0 else { return nil }
+        let bend = min(10, min(top.height, bottom.height) * 0.08) * amount
+        let waist = min(5, overlap * 0.035) * amount
+        let upper = top.maxY - bend, lower = bottom.minY + bend
+        let middle = (top.maxY + bottom.minY) / 2
+        let left = (top.minX + bottom.minX) / 2 + waist
+        let right = (top.maxX + bottom.maxX) / 2 - waist
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: top.minX, y: upper))
+        p.addCurve(to: CGPoint(x: left, y: middle),
+                   control1: CGPoint(x: top.minX, y: middle), control2: CGPoint(x: left, y: upper))
+        p.addCurve(to: CGPoint(x: bottom.minX, y: lower),
+                   control1: CGPoint(x: left, y: lower), control2: CGPoint(x: bottom.minX, y: middle))
+        p.addLine(to: CGPoint(x: bottom.maxX, y: lower))
+        p.addCurve(to: CGPoint(x: right, y: middle),
+                   control1: CGPoint(x: bottom.maxX, y: middle), control2: CGPoint(x: right, y: lower))
+        p.addCurve(to: CGPoint(x: top.maxX, y: upper),
+                   control1: CGPoint(x: right, y: upper), control2: CGPoint(x: top.maxX, y: middle))
         p.closeSubpath()
         return p
     }
