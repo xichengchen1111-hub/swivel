@@ -13,7 +13,7 @@ namespace Swivel.Windows;
 
 internal static class CommonSimilarityNotices
 {
-    internal const string Scope = "Select one to six Windows-reported common folders for one similarity comparison across them. Nothing is selected initially. Reviewing locations does not read child files; the next confirmation lists every selected path before reading contents. Existing local path, system, link and cloud protections remain in force. No files are opened in another app, changed, deleted or sent to an assistant.";
+    internal const string Scope = "Select one to six Windows-reported common folders for one similarity comparison across them. Nothing is selected initially. Reviewing locations does not read child files; the next confirmation lists every selected path before reading contents. Existing local path, system, link and cloud protections remain in force. The comparison itself opens no file in another app, changes or deletes nothing, and sends nothing to an assistant.";
     internal const string Metadata = "All selected folders share 20,000 metadata entries and about 30 soft seconds, up to four levels below each root. Remaining entry and time shares are divided among remaining distinct paths; unused shares pass to later roots. Earlier partial roots are not rescanned. A scan that fails without a count consumes its reserved share. Partial, failed, repeated and unattempted roots remain visible. Blocked system or codec calls may return later; cancellation waits for cleanup.";
     internal const string TextLimits = "All selected folders share one text-content budget: 200 file attempts, 1 MiB per file, 16 MiB of requested reads, 20,000 lines per file and 200,000 retained per-file distinct lines in total. Shared lines count again in each file. Reading, decoding and comparisons share about 60 soft seconds. These limits are not multiplied by the number of folders.";
     internal const string ImageLimits = "All selected folders share one image-content budget: 200 file attempts, 16 MiB per file and 128 MiB of requested reads. Reading, decoding and comparisons share about 60 soft seconds. Decoded images are limited to 16 megapixels and 16,384 pixels per side. These limits are not multiplied by the number of folders.";
@@ -86,6 +86,8 @@ internal sealed class CommonSimilarityDialog : Window
     private readonly List<IssueRow> issues = new();
     private readonly PairRow[] matches;
     private readonly ListView pairs = NativeList(300);
+    private readonly SimilarPairCleanup cleanup;
+    internal int Moved => cleanup.Moved; // also those Windows removed outright
     internal string CurrentReport => Report(null);
     internal string SelectedReport => Report(pairs.SelectedItem as PairRow);
     internal CommonSimilarityDialog(App app, CommonSimilarityResult result)
@@ -107,11 +109,13 @@ internal sealed class CommonSimilarityDialog : Window
             Visit(scan.Root, "");
         }
         foreach (var issue in result.Text?.Issues ?? result.Images!.Issues) issues.Add(new(FullPath(issue.RelativePath), app.L(issue.Reason)));
-        matches = result.Text is { } text ? text.Pairs.Select(p => new PairRow(FullPath(p.First), FullPath(p.Second), p.Percent, p.CommonLines, p.UnionLines, null)).ToArray()
-            : result.Images!.Pairs.Select(p => new PairRow(FullPath(p.First), FullPath(p.Second), p.Percent, null, null, p.DifferentBits)).ToArray();
+        matches = result.Text is { } text ? text.Pairs.Select(p => new PairRow(p.First, p.Second, FullPath(p.First), FullPath(p.Second), p.Percent, p.CommonLines, p.UnionLines, null)).ToArray()
+            : result.Images!.Pairs.Select(p => new PairRow(p.First, p.Second, FullPath(p.First), FullPath(p.Second), p.Percent, null, null, p.DifferentBits)).ToArray();
         var rootPanel = new DockPanel { Margin = new Thickness(20) }; var footer = new WrapPanel(); DockPanel.SetDock(footer, Dock.Bottom); rootPanel.Children.Add(footer);
         footer.Children.Add(UI.Button(app.L("Copy Report"), () => app.Try(() => Clipboard.SetText(CurrentReport))));
         var copy = UI.Button(app.L("Copy Selected Pair"), () => { if (pairs.SelectedItem is PairRow) app.Try(() => Clipboard.SetText(SelectedReport)); }); copy.IsEnabled = false; footer.Children.Add(copy);
+        cleanup = new SimilarPairCleanup(app, this, Absolute, FullPath, result.Text?.Stamps ?? result.Images!.Stamps, pairs, () => pairs.SelectedItem is PairRow row ? (row.FirstKey, row.SecondKey) : null);
+        footer.Children.Add(cleanup.Move); footer.Children.Add(cleanup.Undo);
         var close = UI.Button(app.L("Close"), () => DialogResult = false); close.IsCancel = true; footer.Children.Add(close);
         var tabs = new TabControl(); rootPanel.Children.Add(tabs); Content = rootPanel;
         var rootBody = new StackPanel { Margin = new Thickness(12) };
@@ -125,7 +129,10 @@ internal sealed class CommonSimilarityDialog : Window
         pairs.View = Columns(("Similarity", "Percent", 105), ("First File", "First", 365), ("Second File", "Second", 365)); pairs.ItemsSource = matches;
         string matchTitle = result.Kind == CommonSimilarityKind.Text ? "Matching Text Pairs" : "Matching Image Pairs"; AutomationProperties.SetName(pairs, app.L(matchTitle)); matchBody.Children.Add(pairs);
         var detail = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, MinHeight = 80, MaxHeight = 190, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }; AutomationProperties.SetName(detail, app.L("Selected Pair Details")); matchBody.Children.Add(detail);
-        pairs.SelectionChanged += (_, _) => { copy.IsEnabled = pairs.SelectedItem is PairRow; detail.Text = pairs.SelectedItem is PairRow row ? PairText(row) : ""; }; matchBody.Children.Add(UI.Text(app.L(CommonSimilarityNotices.Privacy), 12)); AddTab(tabs, matchTitle, matchBody);
+        void ShowSelected() { copy.IsEnabled = pairs.SelectedItem is PairRow; detail.Text = pairs.SelectedItem is PairRow row ? PairText(row) : ""; }
+        pairs.SelectionChanged += (_, _) => ShowSelected(); cleanup.Changed += ShowSelected; matchBody.Children.Add(UI.Text(app.L(CommonSimilarityNotices.Privacy), 12));
+        matchBody.Children.Add(UI.Text(app.L(SimilarPairCleanup.Notice), 12)); matchBody.Children.Add(UI.Text(app.L("The kept file can be in another selected folder or on another drive, including a removable one; check where it is before moving."), 12));
+        matchBody.Children.Add(cleanup.Files); matchBody.Children.Add(cleanup.Status); AddTab(tabs, matchTitle, matchBody);
         var skipped = new StackPanel { Margin = new Thickness(12) }; skipped.Children.Add(UI.Text(Summary(), 14)); skipped.Children.Add(UI.Text(Status(), 12));
         foreach (string note in CommonSimilarityNotices.Notes(result.Kind)) skipped.Children.Add(UI.Text(app.L(note), 12));
         skipped.Children.Add(UI.Text(string.Format(app.L("Recorded skipped items: {0}"), issues.Count), 14)); if (issues.Count == 0) skipped.Children.Add(UI.Text(app.L("No recorded skipped items.")));
@@ -153,23 +160,27 @@ internal sealed class CommonSimilarityDialog : Window
         if (root.Scan is { } scan) { text.AppendLine(string.Format(app.L("Logical bytes: {0:N0} · counted files: {1} · skipped items/subtrees: {2}"), scan.Root.Bytes, scan.Root.Files, scan.Root.Skipped)); text.AppendLine(app.L("Metadata Entries") + ": " + scan.Entries.ToString(CultureInfo.CurrentCulture)); if (scan.EntryLimit) text.AppendLine(app.L("Entry limit reached")); if (scan.TimeLimit) text.AppendLine(app.L("Folder scan time limit reached")); }
         text.Append(app.L("Result Recorded")).Append(": ").Append(root.Recorded.ToString("g", CultureInfo.CurrentCulture)); return text.ToString();
     }
+    // The real path, unescaped: the reported root as read plus the file's relative path.
+    private string Absolute(string key) { if (!result.Sources.TryGetValue(key, out var source)) throw new UserError("Unavailable or unsupported"); return System.IO.Path.Combine(roots[source.Kind].Choice.Path!, source.RelativePath); }
     private string FullPath(string key) { if (!result.Sources.TryGetValue(key, out var source)) throw new UserError("Unavailable or unsupported"); return DisplayPath(source.Kind, source.RelativePath); }
     private string DisplayPath(CommonFolderKind kind, string relative)
     {
         var choice = roots[kind].Choice; string path = choice.Path ?? choice.ReportedPath; // a refused location is still shown as reported
         return relative.Length == 0 ? CacheLocations.VisiblePath(path) : CacheLocations.VisiblePath(path.TrimEnd('\\')) + "\\" + string.Join("\\", relative.Split('\\').Select(CacheLocations.VisiblePath));
     }
-    private string PairText(PairRow row) => (row.Bits is int bits ? string.Format(app.L("Grid comparison agreement: {0}% · different bits: {1} of 64"), row.Score, bits) : string.Format(app.L("Similarity: {0}% · shared distinct lines: {1} · union: {2}"), row.Score, row.Common, row.Union)) + Environment.NewLine + row.First + Environment.NewLine + row.Second;
+    private string PairText(PairRow row) => (row.Bits is int bits ? string.Format(app.L("Grid comparison agreement: {0}% · different bits: {1} of 64"), row.Score, bits) : string.Format(app.L("Similarity: {0}% · shared distinct lines: {1} · union: {2}"), row.Score, row.Common, row.Union)) + Environment.NewLine + cleanup.Line(row.FirstKey) + Environment.NewLine + cleanup.Line(row.SecondKey);
     private string Report(PairRow? selected)
     {
         var text = new StringBuilder(); void Add(string line) { if (line.Length > CopyLimit - Environment.NewLine.Length - text.Length) throw new UserError(CommonSimilarityNotices.CopyLimit); text.AppendLine(line); }
         Add(app.L("Windows Doctor") + " · " + Title); Add(Summary()); Add(Status()); foreach (string note in CommonSimilarityNotices.Notes(result.Kind)) Add(app.L(note)); foreach (var root in result.Roots) { Add(""); Add(RootDetail(root)); }
-        if (selected is not null) Add(PairText(selected)); else { if (matches.Length == 0) Add(app.L("No similar pairs in the comparisons completed. Skipped or unexamined files may still be similar.")); foreach (var pair in matches) Add(PairText(pair)); Add(app.L("Skipped Items")); if (issues.Count == 0) Add(app.L("No recorded skipped items.")); foreach (var issue in issues) Add(issue.Path + " · " + issue.Reason); } return text.ToString();
+        if (selected is not null) Add(PairText(selected)); else { if (matches.Length == 0) Add(app.L("No similar pairs in the comparisons completed. Skipped or unexamined files may still be similar.")); foreach (var pair in matches) Add(PairText(pair)); Add(app.L("Skipped Items")); if (issues.Count == 0) Add(app.L("No recorded skipped items.")); foreach (var issue in issues) Add(issue.Path + " · " + issue.Reason);
+            var moved = new StringBuilder(); cleanup.AppendReport(moved, matches.SelectMany(pair => new[] { pair.FirstKey, pair.SecondKey }));
+            foreach (string line in moved.ToString().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)) Add(line); } return text.ToString();
     }
     private void AddTab(TabControl tabs, string title, StackPanel body) => tabs.Items.Add(new TabItem { Header = app.L(title), Content = UI.Scroll(body), Padding = new Thickness(12, 7, 12, 7) });
     private GridView Columns(params (string Title, string Property, double Width)[] columns) { var view = new GridView(); foreach (var c in columns) view.Columns.Add(new GridViewColumn { Header = app.L(c.Title), DisplayMemberBinding = new Binding(c.Property), Width = c.Width }); return view; }
     private static ListView NativeList(double height) { var list = new ListView { Height = height, SelectionMode = SelectionMode.Single }; VirtualizingPanel.SetIsVirtualizing(list, true); VirtualizingPanel.SetVirtualizationMode(list, VirtualizationMode.Recycling); ScrollViewer.SetCanContentScroll(list, true); return list; }
     private sealed record RootRow(CommonSimilarityDialog Owner, CommonDuplicateRootResult Result) { public string Name => Owner.app.L(CommonFolders.Name(Result.Choice.Kind)); public string Status => Owner.RootStatus(Result); public string Entries => Result.Scan?.Entries.ToString(CultureInfo.CurrentCulture) ?? "—"; }
-    private sealed record PairRow(string First, string Second, decimal Score, int? Common, int? Union, int? Bits) { public string Percent => Score.ToString("0.##", CultureInfo.CurrentCulture) + "%"; }
+    private sealed record PairRow(string FirstKey, string SecondKey, string First, string Second, decimal Score, int? Common, int? Union, int? Bits) { public string Percent => Score.ToString("0.##", CultureInfo.CurrentCulture) + "%"; }
     private sealed record IssueRow(string Path, string Reason);
 }

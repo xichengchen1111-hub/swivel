@@ -1047,6 +1047,10 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.98 常用目录跨根相似配对清理（F04 部分→已实现限定范围）
+
+批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。`SimilarPairCleanup` 新增按键构造（`absolute` 给文件 API 真实路径、`display` 给显示与复制的转义路径）；原单文件夹构造改为调用它，报告与状态中的文件名改为完整路径（此前为相对路径）。`CommonSimilarityDialog` 以 `result.Sources` 的不透明键配对，真实路径为所读根 `Choice.Path` 加未转义相对路径；戳记来自同一键的 `Stamps`；被拒的根不会产生键。重叠根同一文件只保留首个键（其余为硬链接问题项）。限制同 0.97，另：保留者可能位于可移动盘。
+
 ## 0.97 相似配对中移走一个文件（F04 部分）
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。`TextSimilarityResult`／`PhotoSimilarityResult` 新增 init 属性 `Stamps`（相对路径→比较时 `DuplicateStamp`：FILE_ID_INFO 卷+128 位 ID、长度、最后写入 FILETIME），只含成功比较的文件。新 `NativeFiles.RecycleSimilar(file, compared, keep, keptCompared, owner)`：保留者 `GENERIC_READ` + 仅 `FILE_SHARE_READ` 打开且戳记一致，被移文件戳记一致、单链接，再走通用 `Recycle`。新 `SimilarPairCleanup` 供两个窗口共用：所选配对的两文件列表、`RecycleBinSession<Side>`（Side 只按相对路径判等，保留移动时的伙伴）；已作为保留者的文件在窗口内不能经其他配对移走（独立审查 P2，已修复复核）。Mac 的相似文件同样从不预选、需保留另一成员。限制：不重读内容，修改时间被改回原值的改动无法发现；被移文件移动期间未锁；撤销只覆盖最近一批；常用目录跨根相似配对仍只读。

@@ -49,7 +49,9 @@ internal static class CommonSimilarityNativeChecks
                     string pairName=app.L(kind==CommonSimilarityKind.Text?"Matching Text Pairs":"Matching Image Pairs");var pairList=Children(dialog).OfType<ListView>().Single(l=>AutomationProperties.GetName(l)==pairName);var copy=Children(dialog).OfType<Button>().Single(b=>Equals(b.Content,app.L("Copy Selected Pair")));
                     check(!copy.IsEnabled&&Children(dialog).OfType<ListView>().All(l=>VirtualizingPanel.GetIsVirtualizing(l)&&VirtualizingPanel.GetVirtualizationMode(l)==VirtualizationMode.Recycling),"Native lists virtualized and pair copy is explicit");pairList.SelectedIndex=0;
                     string suffix=kind==CommonSimilarityKind.Text?"same.txt":"same.png";check(copy.IsEnabled&&dialog.SelectedReport.Contains(Path.Combine(left,suffix))&&dialog.SelectedReport.Contains(Path.Combine(right,suffix))&&dialog.SelectedReport.Contains(app.L(CommonSimilarityNotices.Roots)),"Selected pair report resolves full original paths and retains all root limits");
-                    pairList.SelectedIndex=-1;check(!copy.IsEnabled,"Cleared native selection disables stale copy");dialog.Close();consent.Close();chooser.Close();
+                    var move=Children(dialog).OfType<Button>().Single(b=>Equals(b.Content,app.L("Move Selected to Recycle Bin…")));var files=Children(dialog).OfType<ListView>().Single(l=>AutomationProperties.GetName(l)==app.L("Files in Selected Pair"));
+                    check(!move.IsEnabled&&files.Items.Count==2,"Cross-root pair lists both files; nothing moves until one is chosen");files.SelectedIndex=0;check(move.IsEnabled,"Choosing one file of a cross-root pair enables the move");
+                    pairList.SelectedIndex=-1;check(!copy.IsEnabled&&!move.IsEnabled,"Cleared native selection disables stale copy and move");dialog.Close();consent.Close();chooser.Close();
                 }
             }
             using(var locked=File.Open(Path.Combine(right,"same.txt"),FileMode.Open,FileAccess.ReadWrite,FileShare.None))
@@ -67,6 +69,18 @@ internal static class CommonSimilarityNativeChecks
         finally{app.Prefs.SetLanguage(oldLanguage);}
         check(before.All(p=>File.ReadAllBytes(p.Key).SequenceEqual(p.Value))&&!Directory.GetFiles(folder,".swivel-*.tmp",SearchOption.AllDirectories).Any(),"Common similarity preserves all original bytes and creates no output files");
         Directory.Move(folder,folder+" released");check(Directory.Exists(folder+" released"),"All native roots and ancestors are released before completion");
+
+        // Moving one file of a cross-root similar pair to the Recycle Bin, keeping the other.
+        string movedLeft=Path.Combine(folder+" released","left"),movedRight=Path.Combine(folder+" released","right");
+        var cross=CommonSimilarityReader.Read(CommonSimilarityKind.Text,new[]{CommonFolderChoice.FromReported(CommonFolderKind.Desktop,movedLeft),CommonFolderChoice.FromReported(CommonFolderKind.Downloads,movedRight)},default);
+        var crossPair=cross.Text!.Pairs.Single();var crossStamps=cross.Text.Stamps;
+        string Real(string key){var source=cross.Sources[key];return Path.Combine(source.Kind==CommonFolderKind.Desktop?movedLeft:movedRight,source.RelativePath);}
+        string first=Real(crossPair.First),second=Real(crossPair.Second);
+        check(crossStamps.ContainsKey(crossPair.First)&&crossStamps.ContainsKey(crossPair.Second)&&first!=second,"Cross-root comparison records a scan stamp for each opaque file key");
+        if(!RecycleBin.Available(second)){Console.WriteLine("SKIP: no Recycle Bin on the test drive.");return;}
+        string stored=NativeFiles.RecycleSimilar(second,crossStamps[crossPair.Second],first,crossStamps[crossPair.First]);
+        check(!File.Exists(second)&&File.ReadAllText(first)==privateText&&stored.Contains("$Recycle.Bin",StringComparison.OrdinalIgnoreCase),"Cross-root cleanup moves one file of the pair and keeps the other in another root: "+stored);
+        NativeFiles.RestoreRecycled(second,stored,false);check(File.ReadAllText(second)==privateText,"Undo restores the cross-root file");
     }
     private static IEnumerable<DependencyObject> Children(DependencyObject root)
     {yield return root;foreach(var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())foreach(var item in Children(child))yield return item;}

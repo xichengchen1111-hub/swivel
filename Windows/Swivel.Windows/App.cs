@@ -409,8 +409,8 @@ public sealed partial class App : Application
                 if(!ShowOperationDialog(new CommonSimilarityConfirmation(this,selected,kind),owner,token))return;
                 token.ThrowIfCancellationRequested();report(L("Comparing selected common folders…"));
                 var similar=await AwaitDoctorReadAsync(OnSta(()=>CommonSimilarityReader.Read(kind,selected,token)),token);
-                token.ThrowIfCancellationRequested();ShowOperationDialog(new CommonSimilarityDialog(this,similar),owner,token);
-                report(token.IsCancellationRequested?L("Cancelled."):L("Common-folder comparison closed. No files were changed."));return;
+                token.ThrowIfCancellationRequested();var similarDialog=new CommonSimilarityDialog(this,similar);ShowOperationDialog(similarDialog,owner,token);
+                report(similarDialog.Moved>0?string.Format(L("Similar-file comparison finished. Files moved to the Recycle Bin or removed: {0}"),similarDialog.Moved):token.IsCancellationRequested?L("Cancelled."):L("Common-folder comparison closed. No files were changed."));return;
             }
             if(action.Id=="doctor.commonduplicates")
             {

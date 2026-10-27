@@ -8499,10 +8499,10 @@
     "選擇 Windows 回報的一至六個常用資料夾，在它們之間進行一次精確內容比較。初始不選取任何目錄，檢閱位置不讀取子檔案。下一步確認會先列出所有所選路徑，再開始讀取內容。仍執行既有本機路徑及系統、連結、雲端預留位置保護。比較本身不刪除或開啟檔案，不變更權限，不上傳給助理。",
     "Windows が報告した 1～6 のフォルダーを選び、その間で内容を厳密に比較します。初期選択はなく、場所の確認だけでは子ファイルを読みません。次の確認画面ですべての選択パスを示してから内容を読みます。従来のローカルパス、システム項目、リンク、クラウドの保護を維持します。比較そのものでは削除、ファイルの起動、権限変更、アシスタントへの送信は行いません。"
   ],
-  "Select one to six Windows-reported common folders for one similarity comparison across them. Nothing is selected initially. Reviewing locations does not read child files; the next confirmation lists every selected path before reading contents. Existing local path, system, link and cloud protections remain in force. No files are opened in another app, changed, deleted or sent to an assistant.": [
-    "选择 Windows 报告的 1 至 6 个常用文件夹，在这些位置之间进行一次相似比较。初始不选择任何位置。查看位置不会读取子文件；下一步会列出全部已选路径，确认后才读取内容。现有本地路径、系统项目、链接和云文件保护仍然适用。不在其他应用中打开、修改、删除文件，也不发送给助手。",
-    "選擇 Windows 回報的 1 至 6 個常用資料夾，在這些位置之間進行一次相似比較。初始不選擇任何位置。查看位置不會讀取子檔案；下一步會列出全部已選路徑，確認後才讀取內容。現有本機路徑、系統項目、連結和雲端檔案保護仍然適用。不在其他應用程式中開啟、修改、刪除檔案，也不傳送給助理。",
-    "Windows が報告した共通フォルダーを 1～6 個選び、選択した場所の間で 1 回の類似比較を行います。最初は何も選択されません。場所の確認では子ファイルを読みません。次の確認画面にすべての選択パスを表示してから内容を読みます。ローカルパス、システム項目、リンク、クラウドの既存の保護は維持されます。別のアプリでの表示、変更、削除、アシスタントへの送信は行いません。"
+  "Select one to six Windows-reported common folders for one similarity comparison across them. Nothing is selected initially. Reviewing locations does not read child files; the next confirmation lists every selected path before reading contents. Existing local path, system, link and cloud protections remain in force. The comparison itself opens no file in another app, changes or deletes nothing, and sends nothing to an assistant.": [
+    "选择 Windows 报告的 1 至 6 个常用文件夹，在这些位置之间进行一次相似比较。初始不选择任何位置。查看位置不会读取子文件；下一步会列出全部已选路径，确认后才读取内容。现有本地路径、系统项目、链接和云文件保护仍然适用。比较本身不在其他应用中打开、修改、删除文件，也不发送给助手。",
+    "選擇 Windows 回報的 1 至 6 個常用資料夾，在這些位置之間進行一次相似比較。初始不選擇任何位置。查看位置不會讀取子檔案；下一步會列出全部已選路徑，確認後才讀取內容。現有本機路徑、系統項目、連結和雲端檔案保護仍然適用。比較本身不在其他應用程式中開啟、修改、刪除檔案，也不傳送給助理。",
+    "Windows が報告した共通フォルダーを 1～6 個選び、選択した場所の間で 1 回の類似比較を行います。最初は何も選択されません。場所の確認では子ファイルを読みません。次の確認画面にすべての選択パスを表示してから内容を読みます。ローカルパス、システム項目、リンク、クラウドの既存の保護は維持されます。比較そのものでは別のアプリでの表示、変更、削除、アシスタントへの送信は行いません。"
   ],
   "Select pages across the files below. Exports go beside the first input. Completed separate outputs are kept if a later page fails or is cancelled. Physical PDF page dimensions are retained; PNG uses the selected pixel edge.": [
     "可跨下列文件选页，导出到首个输入旁。若后续页面失败或取消，已完成的独立输出会保留。PDF 保留物理页面尺寸，PNG 使用所选像素长边。",
@@ -12883,5 +12883,10 @@
     "已为本窗口中移走的文件保留",
     "已為本視窗中移走的檔案保留",
     "このウィンドウで移動したファイルのために残しています"
+  ],
+  "The kept file can be in another selected folder or on another drive, including a removable one; check where it is before moving.": [
+    "保留的文件可能在另一个所选文件夹或另一个磁盘上，包括可移动磁盘；移动前请确认它的位置。",
+    "保留的檔案可能在另一個所選資料夾或另一個磁碟上，包括卸除式磁碟；移動前請確認它的位置。",
+    "残すファイルは、選択した別のフォルダーや、リムーバブルを含む別のドライブにある場合があります。移動する前に場所を確認してください。"
   ]
 }
