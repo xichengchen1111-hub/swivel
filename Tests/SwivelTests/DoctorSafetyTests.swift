@@ -639,57 +639,46 @@ extension DoctorSafetyTests {
                                            DoctorQuitTarget(pid: getpid(), bundleID: "com.example.other", launched: nil)])
             #expect(outcome.asked.isEmpty && outcome.skipped.count == 2)
             let rows = DoctorApps.rows([DoctorApps.Usage(app: .init(pid: 42, bundleID: "com.example.big", name: "Big\u{202E}App",
-                                                                     bundlePath: "/Applications/Big.app", launched: nil), bytes: 3_000_000_000)])
-            #expect(rows.count == 2 && rows[1].quit?.pid == 42 && rows[1].level == 1 && rows[1].severity == .review)
+                                                                     bundlePath: "/Applications/Big.app", launched: nil),
+                                                       bytes: Int64(Double(ProcessInfo.processInfo.physicalMemory) * 0.45))])
+            #expect(rows.count == 2 && rows[1].quit?.pid == 42 && rows[1].level == 1 && rows[1].severity == .problem)
             #expect(rows[1].title.contains("\\u{202E}"))
             #expect(DoctorApps.usage([]).isEmpty)
         }
 
-        @Test @MainActor func lastUseIsNotedOnlyWhileDoctorIsOnAndAppsAreSortedEitherWay() throws {
-            // In memory: a UserDefaults suite would leave a settings file behind.
-            final class Store: DoctorActivityStore {
-                var values: [String: Any] = [:]
-                func object(forKey key: String) -> Any? { values[key] }
-                func set(_ value: Any?, forKey key: String) { values[key] = value }
-                func removeObject(forKey key: String) { values[key] = nil }
-            }
-            let defaults = Store()
-            let now = Date(timeIntervalSince1970: 2_000_000_000)
-            let day: TimeInterval = 24 * 3600
-            // Nothing noted while Mac Doctor is off; turning it off forgets what was noted.
-            let activity = DoctorAppActivity(defaults: defaults)
-            activity.activated("com.example.a", at: now.addingTimeInterval(-40 * day), enabled: false)
-            #expect(defaults.object(forKey: DoctorAppActivity.usedKey) == nil)
-            activity.activated("com.example.a", at: now.addingTimeInterval(-40 * day), enabled: true)
-            activity.activated("com.example.b", at: now.addingTimeInterval(-10 * day), enabled: true)
-            // a left the front when b came: used until then.
-            let a = activity.lastUse(bundleID: "com.example.a", launched: nil, now: now)
-            #expect(a.exact && a.date == now.addingTimeInterval(-10 * day) && !a.front)
-            #expect(activity.lastUse(bundleID: "com.example.b", launched: nil, now: now).front)
-            // Never seen: counts from when noting began, or from its launch if later.
-            let c = activity.lastUse(bundleID: "com.example.c", launched: nil, now: now)
-            #expect(!c.exact && c.date == now.addingTimeInterval(-40 * day) && c.idle(now: now, after: 30 * day))
-            let relaunched = activity.lastUse(bundleID: "com.example.a", launched: now.addingTimeInterval(-day), now: now)
-            #expect(!relaunched.exact && relaunched.date == now.addingTimeInterval(-day) && !relaunched.idle(now: now, after: 7 * day))
-            activity.activated("com.example.a", at: now, enabled: false)
-            #expect(defaults.object(forKey: DoctorAppActivity.usedKey) == nil && defaults.object(forKey: DoctorAppActivity.sinceKey) == nil)
-            // Nothing noted yet: nothing is idle.
-            #expect(!DoctorAppActivity.lastUse(seen: nil, since: nil, launched: nil, front: false, now: now).idle(now: now, after: day))
+        @Test func appsAreMeasuredLiveAndSortedEitherWayWithPlainImpactLevels() {
+            let physical = Double(ProcessInfo.processInfo.physicalMemory)
+            // A fifth of the memory or half a core is a lot; twice that is very high.
+            #expect(DoctorApps.impact(bytes: Int64(physical * 0.1), cpu: 10, physical: physical).severity == .info)
+            #expect(DoctorApps.impact(bytes: Int64(physical * 0.25), cpu: nil, physical: physical) == (.review, true, false))
+            #expect(DoctorApps.impact(bytes: 0, cpu: 60, physical: physical) == (.review, false, true))
+            #expect(DoctorApps.impact(bytes: Int64(physical * 0.45), cpu: 0, physical: physical).severity == .problem)
+            #expect(DoctorApps.impact(bytes: 0, cpu: 120, physical: physical).severity == .problem)
 
-            func usage(_ pid: pid_t, _ bytes: Int64, _ daysAgo: Double) -> DoctorApps.Usage {
+            func usage(_ pid: pid_t, _ bytes: Int64, _ cpu: Double?) -> DoctorApps.Usage {
                 DoctorApps.Usage(app: .init(pid: pid, bundleID: "com.example.\(pid)", name: "App \(pid)", bundlePath: "/Applications/\(pid).app",
-                                            launched: nil), bytes: bytes,
-                                 lastUse: .init(date: now.addingTimeInterval(-daysAgo * day), exact: true, front: false))
+                                            launched: nil), bytes: bytes, cpu: cpu)
             }
-            let rows = DoctorApps.rows([usage(1, 3_000_000_000, 0.5), usage(2, 200_000_000, 60), usage(3, 900_000_000, 9)], now: now)
-            let byUse = DoctorApps.sorted(rows, by: .lastUsed).compactMap(\.quit?.pid)
-            let byMemory = DoctorApps.sorted(rows, by: .memory).compactMap(\.quit?.pid)
-            #expect(byUse == [2, 3, 1] && byMemory == [1, 3, 2])
+            let rows = DoctorApps.rows([usage(1, 3_000_000_000, 2), usage(2, 200_000_000, 80), usage(3, 900_000_000, nil)])
+            #expect(DoctorApps.sorted(rows, by: .cpu).compactMap(\.quit?.pid) == [2, 1, 3])
+            #expect(DoctorApps.sorted(rows, by: .memory).compactMap(\.quit?.pid) == [1, 3, 2])
             #expect(DoctorApps.sorted(rows, by: .memory).first?.id == "apps")
-            #expect(rows.first { $0.quit?.pid == 2 }?.value.contains("·") == true)
-            #expect(DoctorAppActivity.idleChoices.contains(DoctorAppActivity.idleAfter))
-        }
+            // Processor shows once it is measured; the first reading has memory only.
+            #expect(rows.first { $0.quit?.pid == 2 }?.value.contains("80") == true)
+            #expect(rows.first { $0.quit?.pid == 3 }?.value.contains("·") == false)
+            #expect(rows.first { $0.quit?.pid == 2 }?.severity == .review)
 
+            // Two readings of this process: processor use is measured against the first.
+            let me = [DoctorApps.App(pid: getpid(), bundleID: "com.example.me", name: "Me", bundlePath: "/nonexistent.app", launched: nil)]
+            let first = DoctorApps.usage(me, previous: nil)
+            #expect(first.usage.allSatisfy { $0.cpu == nil })
+            var spin = 0.0
+            for i in 0..<2_000_000 { spin += Double(i).squareRoot() }
+            #expect(spin > 0)
+            let second = DoctorApps.usage(me, previous: first.sample)
+            #expect(second.usage.first.map { ($0.cpu ?? -1) >= 0 } ?? true)
+            #expect(second.sample.at >= first.sample.at)
+        }
         @Test func cleanUpFindsLeftoversOfRemovedAppsAndSelectsOnlyWhatIsSafe() throws {
             // Identifiers only: never Apple's, app groups, plain words or two-part names.
             #expect(DoctorSweep.identifier("com.example.gone.plist") == "com.example.gone")
@@ -786,10 +775,12 @@ extension DoctorSafetyTests {
             let combined = DoctorSweep.combine(own: nil, caches: caches, background: nil, installers: installers,
                                                duplicates: duplicates, projects: nil, pending: ["Apps"])
             let ids = combined.rows.map(\.id)
-            #expect(ids == ["cleanup.caches", "cache.a", "cleanup.installers", "file.0", "cleanup.duplicates", "dup.0.1", "sim.0.1"])
-            #expect(combined.rows.first { $0.id == "dup.0.1" }?.severity == .info)
-            #expect(combined.rows.first { $0.id == "sim.0.1" }?.severity == .review)
-            #expect(combined.notes.first?.contains("Apps") == true)
+            #expect(ids == ["cleanup.caches", "cache.a", "cleanup.installers", "file.0", "cleanup.duplicates", "dup.0.1", "sim.0.1",
+                            "cleanup.pending.0"])
+            // Only what is safe by nature is ticked for the user; personal files are listed.
+            #expect(combined.rows.first { $0.id == "cache.a" }?.severity == .info)
+            for id in ["file.0", "dup.0.1", "sim.0.1"] { #expect(combined.rows.first { $0.id == id }?.severity == .review) }
+            #expect(combined.rows.last?.title == "Apps")
             let empty = DoctorSweep.combine(own: nil, caches: nil, background: nil, installers: nil, duplicates: nil, projects: nil, pending: [])
             #expect(empty.rows.isEmpty && !empty.headline.isEmpty)
         }
