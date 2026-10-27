@@ -2,9 +2,11 @@
 
 A native, local file toolkit for macOS. Drag any file, tap a key, and drop it on the wheel that appears under your cursor.
 
-> **[⬇ Download Swivel for Mac · 下载 Mac 版](https://github.com/xichengchen1111-hub/swivel-mac/releases/latest/download/Swivel-mac.zip)** — macOS 15+, Apple silicon. Releases and the public source: [swivel-mac](https://github.com/xichengchen1111-hub/swivel-mac).
+> **[⬇ Download Swivel for Mac · 下载 Mac 版](https://github.com/xichengchen1111-hub/swivel-mac/releases/latest/download/Swivel-mac.zip)** — macOS 15+, Apple silicon. Installers and release notes: [swivel-mac](https://github.com/xichengchen1111-hub/swivel-mac). Source, Issues and PRs are maintained in [swivel](https://github.com/xichengchen1111-hub/swivel).
 
-**Windows 0.81 preview:** the separate native .NET 10 / WPF implementation is in [`Windows/`](Windows/README.md). Current progress: 22 features implemented within stated limits, 23 partial, 5 pending, and 2 platform differences; 28 ordinary features still need work. See the [remaining work and priorities](Windows/PROGRESS.md), [compatibility report](reports/Windows与macOS兼容调研.md), and [validation record](Windows/TESTING.md). Windows x64/ARM64 portable packages were cross-built; real Windows/native/GUI acceptance is still pending. Mac source, build and installation remain separate.
+**Current macOS release: 1.14.4 (45).**
+
+**Windows preview:** development and its validation records are maintained separately on the [Windows branch](https://github.com/xichengchen1111-hub/swivel/tree/codex/windows-preview-081/Windows). This macOS release does not publish a Windows installer.
 
 | Key while dragging | Wheel |
 | --- | --- |
