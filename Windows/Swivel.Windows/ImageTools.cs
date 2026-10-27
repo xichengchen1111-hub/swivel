@@ -247,6 +247,28 @@ public static class ImageTools
         return NativeFiles.WriteBeside(document.Input, Path.GetFileNameWithoutExtension(path) + suffix, extension, encoder.Save, cancellation);
     }
 
+    /// An agent's byte ceiling: JPEG on white at the highest quality that fits, with a shorter long
+    /// edge only when even the lowest quality is too big (JpegBudget.Fit). Written beside the original.
+    public static string CompressTo(string path, long maxBytes, FileStamp expected, CancellationToken cancellation)
+    {
+        using var document = Open(path, cancellation);
+        if (!document.Input.Stamp.SameObjectAndContent(expected)) throw new McpToolError(VideoCompress.Changed);
+        var clean = CopyPixels(OnWhite(document.Bitmap), cancellation);
+        BitmapSource frame = clean; var size = (clean.PixelWidth, clean.PixelHeight);
+        var fit = JpegBudget.Fit(maxBytes, clean.PixelWidth, clean.PixelHeight, (width, height, quality) =>
+        {
+            // Scaled once per size, then encoded at each quality tried.
+            if (size != (width, height))
+            {
+                frame = CopyPixels(new TransformedBitmap(clean, new ScaleTransform((double)width / clean.PixelWidth, (double)height / clean.PixelHeight)), cancellation);
+                size = (width, height);
+            }
+            var jpeg = new JpegBitmapEncoder { QualityLevel = quality }; jpeg.Frames.Add(BitmapFrame.Create(frame));
+            using var memory = new MemoryStream(); jpeg.Save(memory); return memory.ToArray();
+        }, cancellation);
+        return NativeFiles.WriteBeside(document.Input, Path.GetFileNameWithoutExtension(path) + " compressed", "jpg", stream => stream.Write(fit.Data), cancellation);
+    }
+
     public static PixelImage ReadPixels(BitmapSource source, int previewEdge, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();

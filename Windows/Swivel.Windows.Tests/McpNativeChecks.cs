@@ -248,6 +248,59 @@ internal static class McpNativeChecks
             var noFolder = Call("undo", new JsonObject { ["dry_run"] = true })["structuredContent"]!;
             check((int?)orphan["completed"] == 1 && ((string)noFolder["results"]![0]!["result"]!).StartsWith("its old folder is unavailable") && File.Exists(Path.Combine(dest, "e.txt")),
                 "Native MCP undo of a move says when the old folder is gone: " + noFolder.ToJsonString());
+
+            // plan_compress on real files: a half-transparent photo kept whole on white, black and
+            // white noise that must shrink, an unreachable target, and two generated videos.
+            string squeeze = Path.Combine(root, "squeeze"); Directory.CreateDirectory(squeeze);
+            string tinted = Path.Combine(squeeze, "tinted.png"), noise = Path.Combine(squeeze, "noise.png");
+            File.Copy(photo, tinted);
+            var dots = new byte[1600 * 1200 * 4]; var dice = new Random(7);
+            for (int i = 0; i < dots.Length; i += 4) { byte level = dice.Next(2) == 0 ? (byte)0 : (byte)255; dots[i] = dots[i + 1] = dots[i + 2] = level; dots[i + 3] = 255; }
+            using (var file = File.Create(noise)) { var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(1600, 1200, 96, 96, PixelFormats.Bgra32, null, dots, 1600 * 4))); encoder.Save(file); }
+            BitmapSource Jpeg(string path) { using var stream = File.OpenRead(path); var decoder = new JpegBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad); return decoder.Frames[0]; }
+            var squeezePlan = Call("plan_compress", new JsonObject { ["paths"] = new JsonArray(tinted, noise), ["target_bytes"] = 100_000 })["structuredContent"]!;
+            var squeezed = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)squeezePlan["plan_id"] })["structuredContent"]!;
+            string tintedOut = Path.Combine(squeeze, "tinted compressed.jpg"), noiseOut = Path.Combine(squeeze, "noise compressed.jpg");
+            var tintedJpeg = new FormatConvertedBitmap(Jpeg(tintedOut), PixelFormats.Bgra32, null, 0); var tintedPixels = new byte[4 * 3 * 4]; tintedJpeg.CopyPixels(tintedPixels, 16, 0);
+            var noiseJpeg = Jpeg(noiseOut);
+            Console.WriteLine($"MCP compress: noise 1600×1200 → {noiseJpeg.PixelWidth}×{noiseJpeg.PixelHeight}, {new FileInfo(noiseOut).Length} bytes");
+            check((int?)squeezed["completed"] == 2 && tintedJpeg.PixelWidth == 4 && tintedJpeg.PixelHeight == 3 && tintedPixels[0] is >= 207 and <= 217 && new FileInfo(tintedOut).Length <= 100_000,
+                "Native MCP plan_compress keeps a small image whole, half-transparent areas on white: " + squeezed.ToJsonString() + " " + tintedPixels[0]);
+            check(new FileInfo(noiseOut).Length <= 100_000 && noiseJpeg.PixelWidth < 1600 && noiseJpeg.PixelWidth >= 320 && Math.Abs(noiseJpeg.PixelWidth * 3 - noiseJpeg.PixelHeight * 4) <= 4,
+                "Native MCP plan_compress shrinks an image that can't fit at its size, keeping its shape");
+            int squeezeFiles = Directory.GetFiles(squeeze).Length;
+            var hopeless = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)Call("plan_compress", new JsonObject { ["paths"] = new JsonArray(noise), ["target_bytes"] = 1000 })["structuredContent"]!["plan_id"] });
+            check(hopeless["isError"]!.GetValue<bool>() && ((string)hopeless["structuredContent"]!["error"]!).Contains("can't be reached") && Directory.GetFiles(squeeze).Length == squeezeFiles,
+                "Native MCP plan_compress refuses an unreachable target and saves nothing: " + hopeless["structuredContent"]!.ToJsonString());
+
+            string quietClip = Path.Combine(squeeze, "quiet.mp4"), toneClip = Path.Combine(squeeze, "tone.mp4"), tone = Path.Combine(squeeze, "tone.wav");
+            using (var wav = new BinaryWriter(File.Create(tone)))
+            {
+                const int rate = 44100, count = rate * 6;
+                wav.Write("RIFF"u8); wav.Write(36 + count * 2); wav.Write("WAVEfmt "u8); wav.Write(16); wav.Write((short)1); wav.Write((short)1); wav.Write(rate); wav.Write(rate * 2); wav.Write((short)2); wav.Write((short)16);
+                wav.Write("data"u8); wav.Write(count * 2);
+                for (int i = 0; i < count; i++) wav.Write((short)(Math.Sin(2 * Math.PI * 440 * i / rate) * 8000));
+            }
+            SubtitleBurnNativeChecks.MakeVideo(quietClip, 6, null); SubtitleBurnNativeChecks.MakeVideo(toneClip, 6, tone);
+            check(((JsonArray)Call("inspect_files", new JsonObject { ["paths"] = new JsonArray(quietClip) })["structuredContent"]!["files"]![0]!["tools"]!).Any(t => (string?)t == "plan_compress"), "Native MCP inspect_files offers plan_compress for a video");
+            // The smallest target follows the length Windows reports (about 122,518 bytes for 6 s).
+            long smallest = VideoBudget.MinimumBytes(VideoCompress.ProbeAsync(quietClip, default).GetAwaiter().GetResult());
+            var small = Call("plan_compress", new JsonObject { ["paths"] = new JsonArray(quietClip), ["target_bytes"] = 1000 });
+            check(small["isError"]!.GetValue<bool>() && ((string)small["structuredContent"]!["error"]!).Contains("needs at least " + smallest.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " bytes") && smallest is > 120_000 and < 125_000,
+                "Native MCP plan_compress names the smallest target for a video's length: " + small["structuredContent"]!.ToJsonString());
+            var clipPlan = Call("plan_compress", new JsonObject { ["paths"] = new JsonArray(quietClip, toneClip), ["target_bytes"] = 300_000 })["structuredContent"]!;
+            var clock = Stopwatch.StartNew();
+            var clips = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)clipPlan["plan_id"] })["structuredContent"]!;
+            string quietOut = Path.Combine(squeeze, "quiet compressed.mp4"), toneOut = Path.Combine(squeeze, "tone compressed.mp4");
+            Console.WriteLine($"MCP compress: two 6 s 640×360 videos in {clock.ElapsedMilliseconds} ms; {new FileInfo(quietClip).Length} → {(File.Exists(quietOut) ? new FileInfo(quietOut).Length : -1)} and {new FileInfo(toneClip).Length} → {(File.Exists(toneOut) ? new FileInfo(toneOut).Length : -1)} bytes");
+            check((int?)clips["completed"] == 2 && new FileInfo(quietOut).Length <= 300_000 && new FileInfo(toneOut).Length <= 300_000, "Native MCP plan_compress makes each video at most the target: " + clipPlan.ToJsonString() + " " + clips.ToJsonString());
+            var quietProbe = VideoCompress.ProbeAsync(quietOut, default).GetAwaiter().GetResult();
+            var toneProbe = VideoCompress.ProbeAsync(toneOut, default).GetAwaiter().GetResult();
+            check(quietProbe is { Width: 640, Height: 360, HasSound: false } && Math.Abs(quietProbe.Seconds - 6) < 0.3 && toneProbe is { HasSound: true } && Math.Abs(toneProbe.Seconds - 6) < 0.3,
+                "Native MCP compressed videos keep their size, length and sound: " + quietProbe + " " + toneProbe);
+            GC.Collect(); GC.WaitForPendingFinalizers(); // the probes' WinRT objects may hold the files until collected
+            var clipsBack = Call("undo", new JsonObject())["structuredContent"]!;
+            check(clipsBack["complete"]!.GetValue<bool>() && !File.Exists(quietOut) && !File.Exists(toneOut) && File.Exists(quietClip) && File.Exists(toneClip), "Native MCP undo of plan_compress recycles the videos, originals kept: " + clipsBack.ToJsonString());
         }
         finally
         {

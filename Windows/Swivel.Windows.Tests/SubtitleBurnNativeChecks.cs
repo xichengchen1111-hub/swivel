@@ -70,7 +70,7 @@ internal static class SubtitleBurnNativeChecks
     }
 
     // A dark blue video of the given length, with an optional sound track.
-    private static void MakeVideo(string path, int seconds, string? sound)
+    internal static void MakeVideo(string path, int seconds, string? sound)
     {
         var composition = new MediaComposition();
         composition.Clips.Add(MediaClip.CreateFromColor(global::Windows.UI.Color.FromArgb(255, 20, 30, 90), TimeSpan.FromSeconds(seconds)));

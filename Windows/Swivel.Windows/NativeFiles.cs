@@ -25,6 +25,8 @@ public static partial class NativeFiles
         public FileStream Stream { get; }
         public string Path { get; }
         internal Input(string path, DirectoryLease parent, FileStream stream) { Path = path; Parent = parent; Stream = stream; }
+        /// The held file's identity, size and times; the handle denies writers, so it stays true.
+        public FileStamp Stamp => ReadStamp(Stream.SafeFileHandle);
         public void Dispose() { Stream.Dispose(); Parent.Dispose(); }
     }
 

@@ -27,6 +27,13 @@ public interface IMcpHost
     /// Text recognized in an image with an installed Windows OCR language: one of TextLanguages,
     /// or the user's profile languages when null.
     string RecognizeText(string path, string? language, CancellationToken token);
+    /// Size, length, sound and bit rate of a video Swivel can compress; a UserError when Windows
+    /// can't open it or it is stored turned.
+    VideoProbe ProbeVideo(string path, CancellationToken token);
+    /// Compresses one image (to JPEG) or video (to H.264/AAC MP4) into a new file beside it of at
+    /// most maxBytes, and returns that file; a UserError, and no file, when it can't get there.
+    /// Refused when the file, once held, no longer matches its planned stamp.
+    string Compress(string path, long maxBytes, FileStamp expected, CancellationToken token);
     /// The body text of a document DocumentText reads (plain text, DOCX, ODT, RTF, static HTML).
     string ReadDocumentText(string path, CancellationToken token);
     /// Whether a file, folder or link has this name; only "not found" counts as free.
@@ -93,6 +100,9 @@ public sealed class McpSession
         // Run on this PC with the pinned U²-Net model; the result is a PNG either way.
         new("image.removebg", "Remove Background", " cutout"), new("image.blurbg", "Blur Background", " blurred"),
     };
+    /// plan_compress's work, logged like an action; not offered through plan_action.
+    private static readonly McpAction Compression = new("compress", "Compress to a size", " compressed");
+    public const long MinTarget = 1_000, MaxTarget = 1_000_000_000_000;
 
     private readonly IMcpHost host;
     private readonly string version;
@@ -100,7 +110,7 @@ public sealed class McpSession
 
     /// An action plan has Action; a rename plan has Renames and a move plan Moves (one pair per
     /// input, in order).
-    private sealed record Plan(string Id, McpAction? Action, IReadOnlyList<RenamePair>? Renames, IReadOnlyList<(string Path, FileStamp Stamp)> Inputs, DateTime Expires, IReadOnlyList<RenamePair>? Moves = null, MoveIdentity? Folder = null);
+    private sealed record Plan(string Id, McpAction? Action, IReadOnlyList<RenamePair>? Renames, IReadOnlyList<(string Path, FileStamp Stamp)> Inputs, DateTime Expires, IReadOnlyList<RenamePair>? Moves = null, MoveIdentity? Folder = null, long? Target = null);
 
     public McpSession(IMcpHost host, string version) { this.host = host; this.version = version; }
 
@@ -148,7 +158,7 @@ public sealed class McpSession
             ["protocolVersion"] = Versions.Contains(requested) ? requested : Versions[0],
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false } },
             ["serverInfo"] = new JsonObject { ["name"] = "swivel-windows", ["title"] = "Swivel (Windows preview)", ["version"] = version },
-            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action, plan_rename or plan_move, then apply_plan with the returned plan_id; outputs are new files beside the originals, renames stay in each file's folder, moves stay on one drive and keep names, and nothing is overwritten. undo moves the files an apply created to the Recycle Bin, or renames or moves files back, if they are unchanged.",
+            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action, plan_compress, plan_rename or plan_move, then apply_plan with the returned plan_id; outputs (including compressed copies) are new files beside the originals, renames stay in each file's folder, moves stay on one drive and keep names, and nothing is overwritten. undo moves the files an apply created to the Recycle Bin, or renames or moves files back, if they are unchanged.",
         };
     }
 
@@ -171,6 +181,13 @@ public sealed class McpSession
                 new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
             Tool("plan_action", "Plan action", "Prepares one action for 1–100 files without writing anything. Returns a plan_id that apply_plan uses within one hour, once.",
                 new JsonObject { ["action"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(Actions.Select(a => (JsonNode)a.Id).ToArray()) }, ["paths"] = Paths() }, new[] { "action", "paths" }, true, false),
+            Tool("plan_compress", "Plan compressing to a size", "Plans compressing 1–100 images or videos so each new file is at most target_bytes (e.g. 500000 for under 500 KB). Images (PNG, JPEG, BMP, TIFF, static GIF; up to 16 megapixels and 16384 pixels per side) become JPEG without their metadata, transparent areas on white: quality is lowered only as far as needed, and if even the lowest quality is too big the long edge shrinks in 15% steps down to 320 pixels. Videos (MP4, MOV, M4V, WMV, up to 2 hours) become H.264/AAC MP4 at a bit rate worked out from their length, never above the original's, at most 1920 pixels on the long edge and smaller at low rates; videos stored turned (as phones often record) are refused, and encoding can take minutes. Originals are kept; new files go beside them. Nothing changes until apply_plan.",
+                new JsonObject
+                {
+                    ["paths"] = Paths(),
+                    ["target_bytes"] = new JsonObject { ["type"] = "integer", ["minimum"] = MinTarget, ["maximum"] = MaxTarget, ["description"] = "Largest size each new file may have, in bytes" },
+                    ["format"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("same", "jpg"), ["description"] = "Optional. Images always become JPEG and videos MP4 here: jpg, or same when every file is already a JPEG image or an MP4 video." },
+                }, new[] { "paths", "target_bytes" }, true, false),
             Tool("plan_rename", "Plan renaming files", "Plans renaming 1–100 files where they are: replace the whole name (base_name), find/replace_with (case-sensitive), add prefix or suffix (before the extension), and optionally number them (-001, -002… in the order of paths; start and digits need number: true). Extensions are kept; each text is at most 120 characters, and added text can't contain \\, / or invisible, blank-looking or text-direction characters. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Only files on NTFS that are not read-only or hard-linked can be renamed. Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
                 new JsonObject
                 {
@@ -184,7 +201,7 @@ public sealed class McpSession
                 }, new[] { "paths" }, true, false),
             Tool("plan_move", "Plan moving files", "Plans moving 1–100 files into an existing folder on the same NTFS drive, keeping their names. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Files already in that folder, names already taken there (nothing is overwritten or renumbered), two files with one name, and files on another drive, read-only or hard-linked are reported on their rows; folders are not moved. Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
                 new JsonObject { ["paths"] = Paths(), ["destination"] = new JsonObject { ["type"] = "string", ["description"] = "Absolute path of an existing local folder" } }, new[] { "paths", "destination" }, true, false),
-            Tool("apply_plan", "Apply plan", "Runs a plan from plan_action, plan_rename or plan_move. Refused if any input changed since planning. Creates new files beside the originals, renames files within their folders, or moves files into the planned folder; never overwrites. Logged for undo.",
+            Tool("apply_plan", "Apply plan", "Runs a plan from plan_action, plan_compress, plan_rename or plan_move. Refused if any input changed since planning. Creates new files beside the originals, renames files within their folders, or moves files into the planned folder; never overwrites. Logged for undo.",
                 new JsonObject { ["plan_id"] = new JsonObject { ["type"] = "string" } }, new[] { "plan_id" }, false, false),
             Tool("undo", "Undo", "Moves the files created by one logged apply to the Recycle Bin, only if each is unchanged; for a rename, renames all its files back together, only if none changed and every old name is free; for a move, moves each unchanged file back to its old folder if its old name is free, leaving the others where they are. Without entry_id it takes the newest apply that is not fully undone; to reach an older one, pass its entry_id from history. dry_run reports without changing anything.",
                 new JsonObject { ["entry_id"] = new JsonObject { ["type"] = "string" }, ["dry_run"] = new JsonObject { ["type"] = "boolean" } }, Array.Empty<string>(), false, true),
@@ -200,7 +217,7 @@ public sealed class McpSession
         if (parameters["arguments"] is not null and not JsonObject) throw new McpInvalidParams("Tool arguments must be an object.");
         Func<JsonObject, CancellationToken, JsonObject> tool = name switch
         {
-            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction, "plan_rename" => PlanRename, "plan_move" => PlanMove,
+            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction, "plan_compress" => PlanCompress, "plan_rename" => PlanRename, "plan_move" => PlanMove,
             "apply_plan" => ApplyPlan, "undo" => Undo, "history" => History,
             _ => throw new McpInvalidParams("Unknown tool: " + name),
         };
@@ -254,7 +271,8 @@ public sealed class McpSession
                 {
                     ["path"] = path, ["ok"] = true, ["size"] = stamp.Size,
                     ["actions"] = new JsonArray((Catalog.IsImage(path) ? Actions.Select(a => (JsonNode)a.Id) : Enumerable.Empty<JsonNode>()).ToArray()),
-                    ["tools"] = new JsonArray((Catalog.IsImage(path) ? ((ocr ??= host.TextLanguages.Count > 0) ? new[] { "extract_text", "read_codes" } : new[] { "read_codes" }) : IsDocument(path) ? new[] { "extract_text" } : Array.Empty<string>()).Append("plan_rename").Append("plan_move").Select(t => (JsonNode)t).ToArray()),
+                    ["tools"] = new JsonArray((Catalog.IsImage(path) ? ((ocr ??= host.TextLanguages.Count > 0) ? new[] { "extract_text", "read_codes" } : new[] { "read_codes" }) : IsDocument(path) ? new[] { "extract_text" } : Array.Empty<string>())
+                        .Concat(Catalog.IsImage(path) || VideoBudget.IsVideo(path) ? new[] { "plan_compress" } : Array.Empty<string>()).Append("plan_rename").Append("plan_move").Select(t => (JsonNode)t).ToArray()),
                 });
             }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { files.Add(new JsonObject { ["path"] = path, ["ok"] = false, ["error"] = error.Message }); }
@@ -353,12 +371,60 @@ public sealed class McpSession
         };
     }
 
-    private Plan Store(McpAction? action, IReadOnlyList<RenamePair>? renames, IReadOnlyList<(string, FileStamp)> inputs, IReadOnlyList<RenamePair>? moves = null, MoveIdentity? folder = null)
+    private JsonObject PlanCompress(JsonObject arguments, CancellationToken token)
+    {
+        foreach (var (key, _) in arguments)
+            if (key is not ("paths" or "target_bytes" or "format")) throw new McpToolError("Unknown argument " + key + ". plan_compress takes paths, target_bytes and format.");
+        var paths = PathsArgument(arguments);
+        if (arguments["target_bytes"] is not JsonValue t || t.GetValueKind() != JsonValueKind.Number || !t.TryGetValue(out double bytes) || bytes != Math.Floor(bytes) || bytes < MinTarget || bytes > MaxTarget)
+            throw new McpToolError("target_bytes must be a whole number of bytes from 1,000 to 1,000,000,000,000.");
+        long target = (long)bytes;
+        string? format = null;
+        if (arguments["format"] is not null)
+        {
+            format = arguments["format"] is JsonValue f && f.GetValueKind() == JsonValueKind.String ? ((string)f!).ToLowerInvariant() : "";
+            if (format == "jpeg") format = "jpg";
+            if (format is "heic" or "png") throw new McpToolError("Swivel for Windows compresses images to a size only as JPEG. Leave format out, or use jpg.");
+            if (format is not ("same" or "jpg")) throw new McpToolError("format must be same or jpg.");
+        }
+        var inputs = new List<(string, FileStamp)>(); var rows = new JsonArray();
+        foreach (string path in paths)
+        {
+            token.ThrowIfCancellationRequested();
+            bool image = Catalog.IsImage(path);
+            if (!image && !VideoBudget.IsVideo(path)) throw new McpToolError(path + ": plan_compress takes PNG, JPEG, BMP, TIFF or GIF images and MP4, MOV, M4V or WMV videos.");
+            if (format == "same" && System.IO.Path.GetExtension(path).ToLowerInvariant() is not (".jpg" or ".jpeg" or ".mp4"))
+                throw new McpToolError(path + ": format same keeps only JPEG images and MP4 videos in their format; Swivel for Windows compresses other images to JPEG and other videos to MP4. Leave format out.");
+            var row = new JsonObject { ["path"] = path, ["kind"] = image ? "image" : "video" };
+            try
+            {
+                var stamp = host.Inspect(path);
+                inputs.Add((path, stamp));
+                if (!image)
+                {
+                    var first = VideoBudget.Plan(target, host.ProbeVideo(path, token));
+                    row["width"] = first.Width; row["height"] = first.Height; row["video_bitrate"] = first.VideoBitrate; row["audio_bitrate"] = first.AudioBitrate;
+                }
+                if (stamp.Size <= (ulong)target) row["note"] = "Already " + stamp.Size.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " bytes, under the target; it is still re-encoded.";
+            }
+            catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }
+            row["output"] = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path) ?? "", System.IO.Path.GetFileNameWithoutExtension(path) + Compression.Suffix + (image ? ".jpg" : ".mp4")) + " (or the next free numbered name)";
+            rows.Add(row);
+        }
+        var plan = Store(Compression, null, inputs, target: target);
+        return new JsonObject
+        {
+            ["plan_id"] = plan.Id, ["action"] = Compression.Id, ["expires"] = plan.Expires.ToString("O"), ["target_bytes"] = target, ["inputs"] = rows,
+            ["note"] = "Compression lowers quality and may lower dimensions; images become JPEG without their metadata, videos H.264/AAC MP4. Originals are kept unchanged.",
+        };
+    }
+
+    private Plan Store(McpAction? action, IReadOnlyList<RenamePair>? renames, IReadOnlyList<(string, FileStamp)> inputs, IReadOnlyList<RenamePair>? moves = null, MoveIdentity? folder = null, long? target = null)
     {
         DateTime now = host.UtcNow;
         foreach (var stale in plans.Values.Where(p => p.Expires <= now).ToArray()) plans.Remove(stale.Id);
         if (plans.Count >= MaxPlans) throw new McpToolError("Too many unused plans. Apply or let some expire first.");
-        var plan = new Plan(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(), action, renames, inputs, now + PlanLifetime, moves, folder);
+        var plan = new Plan(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(), action, renames, inputs, now + PlanLifetime, moves, folder, target);
         plans[plan.Id] = plan;
         return plan;
     }
@@ -560,12 +626,12 @@ public sealed class McpSession
             ["action"] = action.Id, ["outputs"] = outputs,
         };
         string? failure = null;
-        foreach (var (path, _) in plan.Inputs)
+        foreach (var (path, planned) in plan.Inputs)
         {
             if (token.IsCancellationRequested) { failure = "Cancelled."; break; }
             try
             {
-                string output = host.Run(action.Id, path, token);
+                string output = plan.Target is long target ? host.Compress(path, target, planned, token) : host.Run(action.Id, path, token);
                 var stamp = host.Stamp(output) ?? throw new McpToolError("The new file disappeared.");
                 outputs.Add(StampNode(output, stamp));
             }

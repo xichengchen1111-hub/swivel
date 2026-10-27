@@ -98,6 +98,26 @@ public sealed class McpHost : IMcpHost
         return Task.Run(() => document.RecognizeAsync(language, token), token).GetAwaiter().GetResult();
     }
 
+    // Windows' media editing API awaits on the thread pool, as OCR does. Its file and clip
+    // objects can keep the video open until they are collected, which would stop the user
+    // renaming or moving it, so they are collected before returning.
+    public VideoProbe ProbeVideo(string path, CancellationToken token)
+    {
+        try { return Task.Run(() => VideoCompress.ProbeAsync(path, token), token).GetAwaiter().GetResult(); }
+        finally { Release(); }
+    }
+
+    // Images on this STA thread, like the image actions; videos on the thread pool.
+    public string Compress(string path, long maxBytes, FileStamp expected, CancellationToken token)
+    {
+        if (Catalog.IsImage(path)) return ImageTools.CompressTo(path, maxBytes, expected, token);
+        if (!VideoBudget.IsVideo(path)) throw new McpToolError("Only images and videos can be compressed to a size.");
+        try { return Task.Run(() => VideoCompress.CompressAsync(path, maxBytes, expected, token), token).GetAwaiter().GetResult(); }
+        finally { Release(); }
+    }
+
+    private static void Release() { GC.Collect(); GC.WaitForPendingFinalizers(); }
+
     public string ReadDocumentText(string path, CancellationToken token)
     {
         using var document = DocumentTextFile.Open(path, token);

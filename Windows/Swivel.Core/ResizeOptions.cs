@@ -43,4 +43,36 @@ public static class JpegBudget
         }
         return best;
     }
+
+    /// For an agent's byte ceiling: the same quality search, and when even quality 1 is too big,
+    /// long edges 15% smaller each time down to 320 pixels (or the original, if smaller).
+    public static (byte[] Data, int Quality, int Width, int Height) Fit(long bytes, int width, int height, Func<int, int, int, byte[]> encode, System.Threading.CancellationToken token)
+    {
+        if (bytes < 1) throw new McpToolError("Choose a target size of at least 1 byte.");
+        ImageRules.Validate(width, height);
+        int original = Math.Max(width, height), floor = Math.Min(320, original), edge = original;
+        long smallest = long.MaxValue;
+        while (true)
+        {
+            // Scaled here: ImageRules.Fit takes long edges only up to 8192, and images may have 16384.
+            double scale = (double)edge / original;
+            var (w, h) = edge == original ? (width, height) : (Math.Max(1, (int)Math.Round(width * scale)), Math.Max(1, (int)Math.Round(height * scale)));
+            byte[] Run(int quality) { token.ThrowIfCancellationRequested(); var data = encode(w, h, quality); token.ThrowIfCancellationRequested(); return data; }
+            var best = Run(1); smallest = Math.Min(smallest, best.LongLength);
+            if (best.LongLength <= bytes)
+            {
+                var full = Run(100); if (full.LongLength <= bytes) return (full, 100, w, h);
+                int low = 1, high = 100;
+                while (high - low > 1)
+                {
+                    int quality = (low + high) / 2; var candidate = Run(quality);
+                    if (candidate.LongLength <= bytes) { low = quality; best = candidate; } else high = quality;
+                }
+                return (best, low, w, h);
+            }
+            if (edge == floor) break;
+            edge = Math.Max(floor, (int)(edge * 0.85));
+        }
+        throw new McpToolError("The target size can't be reached: the smallest JPEG Swivel could make is " + smallest.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " bytes.");
+    }
 }

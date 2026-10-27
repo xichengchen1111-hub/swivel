@@ -35,6 +35,19 @@ internal static class McpChecks
             while (Files.ContainsKey(output)) output = output.Replace(" converted", " converted 2");
             Add(output); return output;
         }
+        public readonly Dictionary<string, VideoProbe> Videos = new(StringComparer.OrdinalIgnoreCase);
+        public readonly List<(string Path, long Bytes)> Compressed = new();
+        public VideoProbe ProbeVideo(string path, CancellationToken token) => Videos.TryGetValue(path, out var video) ? video : throw new UserError("Windows could not open this video.");
+        public string Compress(string path, long maxBytes, FileStamp expected, CancellationToken token)
+        {
+            if (path == FailOn) throw Throw ?? new UserError("The target size can't be reached.");
+            DuringRun?.Invoke();
+            if (!Files[path].SameObjectAndContent(expected)) throw new UserError("The file changed since planning. No file was made for it; plan again.");
+            Compressed.Add((path, maxBytes));
+            string output = System.IO.Path.ChangeExtension(path, null) + " compressed." + (VideoBudget.IsVideo(path) ? "mp4" : "jpg");
+            for (int n = 2; Files.ContainsKey(output); n++) output = System.IO.Path.ChangeExtension(path, null) + " compressed " + n + "." + (VideoBudget.IsVideo(path) ? "mp4" : "jpg");
+            Files[output] = new FileStamp(1, next++, (ulong)Math.Min(maxBytes, 5000), 1000, 2000); return output;
+        }
         public readonly Dictionary<string, string> Texts = new(StringComparer.OrdinalIgnoreCase);
         public readonly List<(string Path, string? Language)> Recognized = new();
         public readonly List<string> Documents = new();
@@ -161,9 +174,9 @@ internal static class McpChecks
         check((int)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/list\"}")["error"]!["code"]! == -32601, "MCP unknown method");
         check((int)Rpc(session, new string(' ', McpSession.MaxLineChars + 1))["error"]!["code"]! == -32600, "MCP oversized message refused");
         var tools = ((JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!).Select(t => (string)t!["name"]!).ToArray();
-        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "plan_rename", "plan_move", "apply_plan", "undo", "history" }), "MCP tool list");
+        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "plan_compress", "plan_rename", "plan_move", "apply_plan", "undo", "history" }), "MCP tool list");
         var listed = (JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!;
-        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes" or "plan_rename" or "plan_move").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
+        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes" or "plan_compress" or "plan_rename" or "plan_move").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
             "MCP extract_text, read_codes and the plan tools are marked read-only");
         check((int)Call(session, "format_disk", new JsonObject())["error"]!["code"]! == -32602, "MCP unknown tool is an invalid-params error");
 
@@ -176,11 +189,11 @@ internal static class McpChecks
         host.Add(photo); host.Add(doc);
         var inspected = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\missing.png") }))["files"]!;
         check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Count == McpSession.Actions.Count && ((JsonArray)inspected[1]!["actions"]!).Count == 0 && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path");
-        check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes", "plan_rename", "plan_move" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }),
+        check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes", "plan_compress", "plan_rename", "plan_move" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }),
             "MCP inspect_files names the read-only tools for images and documents");
         host.OcrLanguages = new(); host.LanguageReads = 0;
         var noOcr = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\Users\me\b.png") }))["files"]!;
-        check(((JsonArray)noOcr[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "read_codes", "plan_rename", "plan_move" }) && ((JsonArray)noOcr[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }) && host.LanguageReads == 1,
+        check(((JsonArray)noOcr[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "read_codes", "plan_compress", "plan_rename", "plan_move" }) && ((JsonArray)noOcr[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }) && host.LanguageReads == 1,
             "MCP inspect_files offers extract_text for images only where Windows OCR can run, asking once");
         host.OcrLanguages = new() { "en-US", "zh-Hans-CN" };
 
@@ -729,6 +742,81 @@ internal static class McpChecks
             check(IsError(Call(moving, "history", new JsonObject())) && IsError(Call(moving, "undo", new JsonObject())) && mover.History == tampered, "MCP a damaged move log is refused and kept");
         }
         mover.History = goodMoves;
+
+        // plan_compress: images become JPEG, videos MP4, each under the target; logged and undone like an action.
+        var shrinker = new FakeHost(); var shrinking = new McpSession(shrinker, "0.108.0");
+        string pic = @"C:\c\pic.png", jpeg = @"C:\c\shot.jpg", clip = @"C:\c\clip.mov", quiet = @"C:\c\quiet.mp4", text = @"C:\c\read me.txt";
+        foreach (string f in new[] { pic, jpeg, clip, quiet, text }) shrinker.Add(f);
+        shrinker.Videos[clip] = new VideoProbe(3840, 2160, 60, true, 20_000_000);
+        shrinker.Videos[quiet] = new VideoProbe(1280, 720, 10, false, 0);
+        shrinker.Files[clip] = shrinker.Files[clip] with { Size = 50_000_000 };
+        JsonObject Compress(JsonObject arguments) => Call(shrinking, "plan_compress", arguments);
+        var squeezed = Body(Compress(new JsonObject { ["paths"] = Paths(pic, jpeg, clip, quiet), ["target_bytes"] = 2_000_000 }));
+        var rows = (JsonArray)squeezed["inputs"]!;
+        check((string?)squeezed["action"] == "compress" && (long)squeezed["target_bytes"]! == 2_000_000 && rows.Count == 4
+            && (string?)rows[0]!["kind"] == "image" && ((string)rows[0]!["output"]!).StartsWith(@"C:\c\pic compressed.jpg", StringComparison.Ordinal)
+            && (string?)rows[2]!["kind"] == "video" && ((string)rows[2]!["output"]!).StartsWith(@"C:\c\clip compressed.mp4", StringComparison.Ordinal)
+            && (int)rows[2]!["audio_bitrate"]! == 96_000 && (int)rows[2]!["width"]! == 640 && (int)rows[2]!["height"]! == 360
+            && (int)rows[3]!["audio_bitrate"]! == 0 && (int)rows[3]!["width"]! == 1280 && rows[0]!["note"] is JsonValue && rows[2]!["note"] is null
+            && shrinker.Compressed.Count == 0 && shrinker.Files.Count == 5, "MCP plan_compress plans images and videos and writes nothing: " + squeezed.ToJsonString());
+        var shrunk = Body(Call(shrinking, "apply_plan", new JsonObject { ["plan_id"] = (string)squeezed["plan_id"]! }));
+        check((int)shrunk["completed"]! == 4 && (string?)shrunk["action"] == "compress" && (string?)shrunk["outputs"]![0] == @"C:\c\pic compressed.jpg" && (string?)shrunk["outputs"]![3] == @"C:\c\quiet compressed.mp4"
+            && shrinker.Compressed.All(c => c.Bytes == 2_000_000) && shrinker.Compressed.Count == 4, "MCP apply of plan_compress makes each new file with the target");
+        var squeezeLog = (JsonObject)((JsonArray)JsonNode.Parse(shrinker.History!)!["entries"]!)[0]!;
+        check((string?)squeezeLog["action"] == "compress" && ((JsonArray)squeezeLog["outputs"]!).Count == 4 && squeezeLog["renames"] is null && squeezeLog["moves"] is null, "MCP plan_compress is logged as created files");
+        var again = Body(Call(shrinking, "apply_plan", new JsonObject { ["plan_id"] = (string)Body(Compress(new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 1000, ["format"] = "JPG" }))["plan_id"]! }));
+        check((string?)again["outputs"]![0] == @"C:\c\pic compressed 2.jpg", "MCP plan_compress never replaces an earlier compressed copy");
+        check(Body(Call(shrinking, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !shrinker.Files.ContainsKey(@"C:\c\pic compressed 2.jpg") && shrinker.Files.ContainsKey(@"C:\c\pic compressed.jpg"), "MCP undo of plan_compress recycles its newest copy");
+        var dryShrink = Body(Call(shrinking, "undo", new JsonObject { ["dry_run"] = true }));
+        check(((JsonArray)dryShrink["results"]!).Count == 4 && dryShrink["results"]!.AsArray().All(r => (string?)r!["result"] == "would move to the Recycle Bin"), "MCP undo dry run of plan_compress lists every copy");
+        check(Body(Call(shrinking, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && shrinker.Recycled.Count == 5 && shrinker.Files.Count == 5, "MCP undo of plan_compress recycles all copies, originals kept");
+
+        foreach (var (arguments, expected, label) in new (JsonObject, string, string)[]
+        {
+            (new JsonObject { ["paths"] = Paths(pic) }, "target_bytes must be", "missing target"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 999 }, "target_bytes must be", "target below 1,000"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 1_000_000_000_001 }, "target_bytes must be", "target above 1 TB"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000.5 }, "target_bytes must be", "fractional target"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = "5000" }, "target_bytes must be", "target as text"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000, ["quality"] = 50 }, "Unknown argument quality", "unknown argument"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000, ["format"] = "heic" }, "only as JPEG", "HEIC format"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000, ["format"] = "png" }, "only as JPEG", "PNG format"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000, ["format"] = "webp" }, "format must be same or jpg", "unknown format"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000, ["format"] = 3 }, "format must be same or jpg", "format as a number"),
+            (new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000, ["format"] = "same" }, "format same keeps only JPEG images and MP4 videos", "same for a PNG"),
+            (new JsonObject { ["paths"] = Paths(jpeg, clip), ["target_bytes"] = 5_000_000, ["format"] = "same" }, "format same keeps only JPEG images and MP4 videos", "same for a MOV"),
+            (new JsonObject { ["paths"] = Paths(text), ["target_bytes"] = 5000 }, "plan_compress takes", "a text file"),
+            (new JsonObject { ["paths"] = Paths(@"C:\c\gone.jpg"), ["target_bytes"] = 5000 }, @"C:\c\gone.jpg: ", "a missing file"),
+            (new JsonObject { ["paths"] = Paths(@"C:\c\odd.mp4"), ["target_bytes"] = 5_000_000 }, "odd.mp4: ", "a video Windows can't open"),
+            (new JsonObject { ["paths"] = Paths(clip), ["target_bytes"] = 1_000_000 }, "needs at least 1,946,202 bytes", "a target too small for the video's length"),
+        })
+        {
+            if (label == "a video Windows can't open") shrinker.Add(@"C:\c\odd.mp4");
+            var refusal = Compress(arguments);
+            check(IsError(refusal) && ((string)Body(refusal)["error"]!).Contains(expected, StringComparison.Ordinal), "MCP plan_compress refuses " + label + ": " + Body(refusal).ToJsonString());
+        }
+        check(!IsError(Compress(new JsonObject { ["paths"] = Paths(jpeg, quiet), ["target_bytes"] = 201_465, ["format"] = "same" })) && !IsError(Compress(new JsonObject { ["paths"] = Paths(clip), ["target_bytes"] = 1_946_202, ["format"] = "jpeg" })),
+            "MCP plan_compress accepts format same for JPEG images and MP4 videos, jpeg for jpg, and the smallest target it named");
+        check(shrinker.Compressed.Count == 5, "MCP refused compress plans run nothing");
+
+        var changing = Body(Compress(new JsonObject { ["paths"] = Paths(jpeg), ["target_bytes"] = 5000 }));
+        shrinker.Files[jpeg] = shrinker.Files[jpeg] with { Size = 11 };
+        check(IsError(Call(shrinking, "apply_plan", new JsonObject { ["plan_id"] = (string)changing["plan_id"]! })) && shrinker.Compressed.Count == 5, "MCP plan_compress refused when an input changed, nothing written");
+        var racing = Body(Compress(new JsonObject { ["paths"] = Paths(pic, jpeg), ["target_bytes"] = 5000 }));
+        bool edited = false;
+        shrinker.DuringRun = () => { if (!edited) { edited = true; shrinker.Files[jpeg] = shrinker.Files[jpeg] with { Size = 12 }; } };
+        var raced = Call(shrinking, "apply_plan", new JsonObject { ["plan_id"] = (string)racing["plan_id"]! });
+        shrinker.DuringRun = null;
+        check(IsError(raced) && (int)Body(raced)["completed"]! == 1 && ((string)Body(raced)["error"]!).StartsWith(jpeg + ": The file changed since planning", StringComparison.Ordinal), "MCP plan_compress rechecks each file when it is held, so one edited during an earlier file's work is refused: " + Body(raced).ToJsonString());
+        shrinker.FailOn = clip;
+        var halfway = Call(shrinking, "apply_plan", new JsonObject { ["plan_id"] = (string)Body(Compress(new JsonObject { ["paths"] = Paths(pic, clip, quiet), ["target_bytes"] = 5_000_000 }))["plan_id"]! });
+        check(IsError(halfway) && (int)Body(halfway)["completed"]! == 1 && ((string)Body(halfway)["error"]!).StartsWith(clip + ": The target size", StringComparison.Ordinal) && Body(halfway)["entry_id"] is JsonValue
+            && !shrinker.Compressed.Any(c => c.Path == quiet && c.Bytes == 5_000_000), "MCP a compress that fails partway keeps and logs what was made, stops there: " + Body(halfway).ToJsonString());
+        shrinker.FailOn = null;
+        var offPlan = Body(Compress(new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000 }));
+        shrinker.Enabled = false;
+        check(IsError(Compress(new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000 })) && IsError(Call(shrinking, "apply_plan", new JsonObject { ["plan_id"] = (string)offPlan["plan_id"]! })), "MCP plan_compress and its apply refused while Agent Tools is off");
+        shrinker.Enabled = true;
 
         // Plans are bounded.
         string any = @"C:\h\0.png";
