@@ -143,6 +143,7 @@ static partial class Strings
     static partial (string English, string[] Translations)[] FileTools { get; }
     static partial (string English, string[] Translations)[] Qr { get; }
     static partial (string English, string[] Translations)[] Apps { get; }
+    static partial (string English, string[] Translations)[] Search { get; }
 
     static Dictionary<string, string[]>? table;
 
@@ -151,7 +152,7 @@ static partial class Strings
     /// Every row from every module, for the strings check in the tests.
     public static IEnumerable<(string English, string[] Translations)> AllRows =>
         Mac.Concat(Windows).Concat(Converters).Concat(Documents).Concat(Wheel).Concat(Editors).Concat(Settings).Concat(Tools).Concat(Clothesline)
-            .Concat(FileTools).Concat(Qr).Concat(Apps);
+            .Concat(FileTools).Concat(Qr).Concat(Apps).Concat(Search);
 
     static Dictionary<string, string[]> Build()
     {

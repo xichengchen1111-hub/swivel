@@ -210,6 +210,10 @@ final class QuickActionsPane: Pane {
     private let shortcuts = NSPopUpButton(frame: .zero, pullsDown: false)
     private let availability = ToolUI.note("")
     private var open: NSButton!
+    private let fileSearch = NSButton(checkboxWithTitle: L("Search files too, in plain words"), target: nil, action: nil)
+    private let modelStatus = ToolUI.note("")
+    private let meaning = NSButton(checkboxWithTitle: L("Also find files by what they are about"), target: nil, action: nil)
+    private let meaningStatus = ToolUI.note("")
     private let provider = NSPopUpButton(frame: .zero, pullsDown: false)
     private let address = NSTextField()
     private let model = NSTextField()
@@ -218,7 +222,7 @@ final class QuickActionsPane: Pane {
     private let testStatus = ToolUI.note("")
     private var testButton: NSButton!
     private var removeButton: NSButton!
-    init() { super.init(size: NSSize(width: 760, height: 720)) }
+    init() { super.init(size: NSSize(width: 760, height: 930)) }
     required init?(coder: NSCoder) { fatalError() }
     override func build() {
         stack.addArrangedSubview(label("A shortcut to everything", size: 17, weight: .semibold))
@@ -231,6 +235,17 @@ final class QuickActionsPane: Pane {
         open = ToolUI.button("Show Quick Actions", target: self, action: #selector(showPanel))
         stack.addArrangedSubview(open)
         stack.addArrangedSubview(label("If another app uses the same shortcut, choose a different one. You can always reopen Swivel from Finder or Spotlight to reach Settings.", size: 12, secondary: true))
+
+        fileSearch.target = self; fileSearch.action = #selector(fileSearchChanged)
+        stack.addArrangedSubview(fileSearch)
+        stack.addArrangedSubview(label("Type what you remember, such as “the PDF about the quote from last week” or “上周的截图”. Swivel reads the type, time, folder and size, and looks the words up in Spotlight's index on this Mac. Return opens a file, ⌘ Return shows it in Finder, and rows can be dragged out. Nothing is sent anywhere.", size: 12, secondary: true))
+        modelStatus.preferredMaxLayoutWidth = 650
+        stack.addArrangedSubview(modelStatus)
+        meaning.target = self; meaning.action = #selector(meaningChanged)
+        stack.addArrangedSubview(meaning)
+        stack.addArrangedSubview(label("Swivel reads the first pages of your documents on this Mac and keeps a small index of what each one is about (numbers, not the text), so “the paper about collecting requirements with agents” finds it even when those words aren't in it. The first time, macOS may ask to let Swivel read your Desktop, Documents or Downloads folder. Nothing is sent anywhere.", size: 12, secondary: true))
+        meaningStatus.preferredMaxLayoutWidth = 650
+        stack.addArrangedSubview(meaningStatus)
 
         let separator = NSBox(); separator.boxType = .separator
         stack.addArrangedSubview(separator)
@@ -259,12 +274,21 @@ final class QuickActionsPane: Pane {
         NotificationCenter.default.addObserver(forName: QuickActions.shortcutChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+        NotificationCenter.default.addObserver(forName: SemanticIndex.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.meaningStatus.stringValue = SemanticIndex.status }
+        }
     }
     override func refresh() {
         shortcuts.selectItem(at: QuickShortcut.allCases.firstIndex(of: Prefs.quickShortcut) ?? 0)
         open?.isEnabled = Feature.quickActions.isOn
         availability.stringValue = !Feature.quickActions.isOn ? L("Turn this feature on above to get started.") : QuickActions.shared.shortcutAvailable ? L("Shortcut is ready") : L("This shortcut is unavailable. Choose another shortcut or open the panel below.")
         availability.textColor = QuickActions.shared.shortcutAvailable ? .secondaryLabelColor : .systemOrange
+        fileSearch.state = Prefs.fileSearch ? .on : .off
+        fileSearch.isEnabled = Feature.quickActions.isOn
+        modelStatus.stringValue = FileSearch.modelStatus.title
+        meaning.state = Prefs.semanticSearch && SemanticIndex.available ? .on : .off
+        meaning.isEnabled = Feature.quickActions.isOn && Prefs.fileSearch && SemanticIndex.available
+        meaningStatus.stringValue = SemanticIndex.status
         let settings = Prefs.assistant
         provider.selectItem(at: Assistant.Provider.allCases.firstIndex(of: settings.provider) ?? 0)
         // Don't overwrite what the user is typing.
@@ -278,6 +302,12 @@ final class QuickActionsPane: Pane {
         testButton?.isEnabled = Assistant.isConfigured
     }
     @objc private func shortcutChanged() { Prefs.quickShortcut = QuickShortcut.allCases[shortcuts.indexOfSelectedItem] }
+    @objc private func fileSearchChanged() { Prefs.fileSearch = fileSearch.state == .on }
+    @objc private func meaningChanged() {
+        Prefs.semanticSearch = meaning.state == .on
+        // Off forgets what was read; on starts reading straight away.
+        if Prefs.semanticSearch { SemanticIndex.refreshSoon(force: true) } else { SemanticIndex.clear() }
+    }
     @objc private func showPanel() { QuickActions.shared.show() }
     @objc private func providerChanged() {
         let chosen = Assistant.Provider.allCases[provider.indexOfSelectedItem]

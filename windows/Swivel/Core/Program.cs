@@ -82,6 +82,44 @@ static partial class Program
                     return 0;
                 });
 
+            // `Swivel --find <request>` prints how Quick Actions reads a file search request, its Windows Search query and
+            // the ranked files (`*` = matched every word). Read-only.
+            case "--find" when args.Length >= 2:
+                return app.RunThenExit(async () =>
+                {
+                    var request = string.Join(" ", args.Skip(1));
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
+                    var plan = FileSearch.Parse(request);
+                    Console.WriteLine("rules: " + plan.Summary);
+                    Console.WriteLine("meaning of: " + (plan.Topic.Length > 0 ? plan.Topic : "-"));
+                    Console.WriteLine("query: " + (FileSearch.QueryString(plan) ?? "-"));
+                    var hits = await FileSearch.Search(plan);
+                    foreach (var hit in hits)
+                        Console.WriteLine($"{(hit.Strict ? "*" : " ")} {(hit.Meaning > 0 ? hit.Meaning.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) : "    ")} {hit.Path} · {FileSearch.Describe(hit, plan)}");
+                    Console.WriteLine($"{hits.Count} files, {clock.Elapsed.TotalSeconds:0.00} s{(FileSearch.IndexReachable ? "" : " (Windows Search is off)")}");
+                    return 0;
+                });
+
+            // `Swivel --index` reads every document into the semantic index (as Quick Actions does in the background),
+            // printing progress; `--index <request>` then lists the closest files with their similarity.
+            case "--index":
+                return app.RunThenExit(async () =>
+                {
+                    if (!SemanticIndex.ModelInstalled) { Console.WriteLine("FAIL model files missing in " + SemanticIndex.ModelFolder); return 2; }
+                    var clock = System.Diagnostics.Stopwatch.StartNew();
+                    SemanticIndex.Changed += () => Console.WriteLine($"{clock.Elapsed.TotalSeconds:0.0} s: {SemanticIndex.Progress}");
+                    await SemanticIndex.RefreshNow();
+                    Console.WriteLine($"{SemanticIndex.Progress?.Ready ?? 0} files, {clock.Elapsed.TotalSeconds:0.0} s");
+                    if (args.Length >= 2)
+                    {
+                        clock.Restart();
+                        var closest = SemanticIndex.Closest(string.Join(" ", args.Skip(1)), _ => true, 15);
+                        foreach (var (entry, similarity) in closest) Console.WriteLine($"{similarity:0.000} {entry.Path}");
+                        Console.WriteLine($"{clock.ElapsedMilliseconds} ms");
+                    }
+                    return 0;
+                });
+
             // `Swivel --run <convert|tools|actions|apps|codes> <item title> <file>...` runs one menu item headlessly (for testing).
             case "--run" when args.Length >= 4:
                 return app.RunThenExit(() => RunItem(args));
@@ -154,7 +192,22 @@ static partial class Program
                     else AppWindow.Shared.Show(AppTab.TextCapture);
                     break;
                 case "shelf": Shelf.Shared.Add(files); break;
-                case "quick": QuickActions.Shared.Show(files); break;
+                case "quick":
+                    QuickActions.Shared.Show(files);
+                    if (Environment.GetEnvironmentVariable("SWIVEL_QUICK_QUERY") is { Length: > 0 } query) QuickActions.Shared.Type(query);
+                    // Draws the panel into a PNG and prints its rows once the search has settled, then quits.
+                    if (Environment.GetEnvironmentVariable("SWIVEL_QUICK_SNAPSHOT") is { Length: > 0 } snapshot)
+                    {
+                        var later = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
+                        later.Tick += (_, _) =>
+                        {
+                            later.Stop();
+                            QuickActions.Shared.Snapshot(System.IO.Path.GetFullPath(snapshot));
+                            app.Shutdown();
+                        };
+                        later.Start();
+                    }
+                    break;
                 case "presets": AppWindow.Shared.Show(AppTab.ImagePresets); break;
                 case "feel": AppWindow.Shared.Show(AppTab.Feel); break;
                 case "clothesline": AppWindow.Shared.Show(AppTab.Clothesline); break;

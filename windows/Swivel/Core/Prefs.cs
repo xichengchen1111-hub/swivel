@@ -311,6 +311,20 @@ static class Prefs
         set => Set("quickActions.shortcut", value.Id());
     }
 
+    /// Quick Actions also looks the typed text up in the Windows Search index and lists matching files below the actions.
+    public static bool FileSearch
+    {
+        get => Bool("quickActions.fileSearch", true);
+        set => Set("quickActions.fileSearch", value);
+    }
+
+    /// File search also finds files by what they are about (a local index of the documents' meaning, SemanticIndex).
+    public static bool SemanticSearch
+    {
+        get => Bool("quickActions.semanticSearch", true);
+        set => Set("quickActions.semanticSearch", value);
+    }
+
     /// Windows has no public trackpad haptics API; kept so the settings file matches the Mac app's keys.
     public static bool Haptics
     {

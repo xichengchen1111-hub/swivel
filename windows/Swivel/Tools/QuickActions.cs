@@ -6,8 +6,10 @@ using System.Windows.Media;
 
 namespace Swivel;
 
-/// One row of the Quick Actions panel. `Id` is stable ("tools.Crop", "settings"), titles are translated.
-sealed record QuickCommand(string Id, string Title, string Detail, string Glyph, Func<Task<ActionResult?>> Run);
+/// One row of the Quick Actions panel. `Id` is stable ("tools.Crop", "settings"), titles are translated. `File`: a
+/// file the Windows Search index found; the row shows its icon, Enter opens it, Ctrl+Enter shows it in File Explorer,
+/// and it drags out.
+sealed record QuickCommand(string Id, string Title, string Detail, string Glyph, Func<Task<ActionResult?>> Run, string? File = null);
 
 /// Find an action from the keyboard (QuickActions.swift): a global shortcut opens a search panel listing the enabled
 /// tools; Return runs the chosen one on the files chosen in (or dropped on) the panel.
@@ -48,6 +50,14 @@ sealed class QuickActions
     /// The run whose busy toast ("Title…") is up, so only that run takes it down.
     int? busyToastRun;
     Point? lastMouse;
+    /// Files the index found for the text in the field, listed after the matching actions.
+    (string Query, FileSearch.Plan Plan, List<FileSearch.Hit> Hits)? found;
+    CancellationTokenSource? finding;
+    int findRun;
+    /// When the file rows last changed: an Enter typed in the same instant was meant for the row that was there.
+    DateTime foundAt = DateTime.MinValue;
+    /// Where a press on a file row started, for dragging it out.
+    (Point Start, int Row)? press;
 
     public bool IsVisible => window?.IsVisible == true;
 
@@ -81,7 +91,17 @@ sealed class QuickActions
         generation++;
         confirming = false;
         if (files != null) chosenFiles = [.. files];
+        StopFinding();
+        found = null;
         search.Text = "";
+        placeholder.Text = Prefs.FileSearch ? L("Search actions and files…") : L("Search actions…");
+        ToolUI.AutomationName(search, placeholder.Text);
+        if (Prefs.FileSearch)
+        {
+            FileSearch.Prewarm();
+            SemanticIndex.Prewarm();
+            SemanticIndex.RefreshSoon();
+        }
         Rebuild();
         if (!window.IsVisible)
         {
@@ -99,9 +119,42 @@ sealed class QuickActions
         UpdateRowEmphasis();
     }
 
+    /// For previews and screenshots (`SWIVEL_QUICK_QUERY` with `--tool quick`): fills the field as if it were typed.
+    public void Type(string text)
+    {
+        if (window?.IsVisible != true) return;
+        search.Text = text;
+        search.CaretIndex = text.Length;
+    }
+
+    /// Draws the panel into a PNG and prints its rows (`SWIVEL_QUICK_SNAPSHOT`), without capturing the screen.
+    public void Snapshot(string path)
+    {
+        if (window is not { IsVisible: true } || window.Content is not FrameworkElement root) return;
+        double scale = VisualTreeHelper.GetDpi(root).DpiScaleX;
+        var size = new Size(root.ActualWidth, root.ActualHeight);
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            // The Fluent backdrop isn't part of the visual tree, so lay the theme's background under the content.
+            var background = Application.Current?.TryFindResource("ApplicationBackgroundBrush") as Brush ?? Brushes.White;
+            context.DrawRectangle(background, null, new Rect(size));
+            context.DrawRectangle(new VisualBrush(root), null, new Rect(size));
+        }
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
+            (int)Math.Ceiling(size.Width * scale), (int)Math.Ceiling(size.Height * scale), 96 * scale, 96 * scale, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
+        using (var stream = File.Create(path)) encoder.Save(stream);
+        foreach (var command in commands) Console.WriteLine($"{(command.File == null ? "action" : "file  ")} {command.Title} · {command.Detail}");
+        Console.WriteLine("hint: " + hint.Text);
+    }
+
     /// Closes at once: exits are faster than entrances.
     public void Hide()
     {
+        StopFinding();
         generation++;
         confirming = false;
         if (window is { IsVisible: true }) window.Dismiss();
@@ -193,7 +246,9 @@ sealed class QuickActions
         search.TextChanged += (_, _) =>
         {
             placeholder.Visibility = search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-            if (!confirming) Filter();
+            if (confirming) return;
+            Filter();
+            FindFiles();
         };
         search.PreviewKeyDown += SearchKey;
 
@@ -218,11 +273,21 @@ sealed class QuickActions
             if (lastMouse == position) return;
             lastMouse = position;
             if (confirming) return;
+            if (press is { } p && e.LeftButton == MouseButtonState.Pressed &&
+                (Math.Abs(position.X - p.Start.X) >= SystemParameters.MinimumHorizontalDragDistance ||
+                 Math.Abs(position.Y - p.Start.Y) >= SystemParameters.MinimumVerticalDragDistance))
+            {
+                press = null;
+                DragOut(p.Row);
+                return;
+            }
             if (RowIndex(e.OriginalSource) is int row && row != selected) Select(row, scrollIntoView: false);
         };
+        list.PreviewMouseLeftButtonUp += (_, _) => press = null;
         list.PreviewMouseLeftButtonDown += (_, e) =>
         {
             if (RowIndex(e.OriginalSource) is not int row || confirming) return;
+            press = row < commands.Count && commands[row].File != null ? (e.GetPosition(list), row) : null;
             Select(row, scrollIntoView: false);
             // Only a double-click on a row runs it; one on the empty space below the rows does nothing.
             if (e.ClickCount == 2) RunSelected();
@@ -388,9 +453,13 @@ sealed class QuickActions
     string FilesDescription => chosenFiles.Count == 0 ? L("Choose files or drop them here")
         : chosenFiles.Count == 1 ? System.IO.Path.GetFileName(chosenFiles[0]) : L("%d files", chosenFiles.Count);
 
-    void Filter()
+    void Filter(string? keepID = null)
     {
+        var query = search.Text.Trim();
         commands = Matching(allCommands, search.Text);
+        // The previous text's files stay while the new text is looked up, so the list doesn't flash empty.
+        var files = Prefs.FileSearch && found is { } f && (f.Query == query || (finding != null && query.Length > 0)) ? found : null;
+        if (files is { } shown) commands.AddRange(shown.Hits.Select(hit => FileCommand(hit, shown.Plan)));
         list.Children.Clear();
         rows.Clear();
         foreach (var command in commands)
@@ -400,9 +469,73 @@ sealed class QuickActions
             list.Children.Add(row);
         }
         selected = -1;
-        if (commands.Count > 0) Select(0, scrollIntoView: true);
+        if (commands.Count > 0)
+        {
+            int keep = keepID == null ? -1 : commands.FindIndex(c => c.Id == keepID);
+            Select(Math.Max(0, keep), scrollIntoView: keep <= 0);
+        }
         runButton.IsEnabled = commands.Count > 0;
-        hint.Text = commands.Count == 0 ? L("No matching actions. Try another search.") : L("↑ ↓ to select · Return to run · Esc to close");
+        bool searchingFiles = finding != null && Prefs.FileSearch && query.Length >= 2;
+        hint.Text = commands.Count == 0
+            ? (searchingFiles ? L("Searching files…") : Prefs.FileSearch ? L("No matching actions or files. Try other words.") : L("No matching actions. Try another search."))
+            : files is { Hits.Count: > 0 } withFiles
+                ? L("Files: %@ · Ctrl+Enter shows in File Explorer", withFiles.Plan.Summary) + (searchingFiles ? " · " + L("Still searching…") : "")
+                : searchingFiles ? L("Searching files…") : L("↑ ↓ to select · Return to run · Esc to close");
+    }
+
+    /// A row for a file the index found. The file is checked again when it runs: it may have moved since.
+    public static QuickCommand FileCommand(FileSearch.Hit hit, FileSearch.Plan? plan = null) =>
+        new("file:" + hit.Path, hit.Name, FileSearch.Describe(hit, plan), "", () =>
+        {
+            if (!System.IO.File.Exists(hit.Path) && !System.IO.Directory.Exists(hit.Path)) throw new Info(L("This file has moved or been deleted."));
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(hit.Path) { UseShellExecute = true });
+            return Task.FromResult<ActionResult?>(null);
+        }, hit.Path);
+
+    string? SelectedID => selected >= 0 && selected < commands.Count ? commands[selected].Id : null;
+
+    void StopFinding()
+    {
+        finding?.Cancel();
+        finding = null;
+    }
+
+    /// Looks the text up in the Windows Search index once typing pauses. The answer replaces the file rows only while
+    /// the same text is still in the field, and keeps the selected row where it was.
+    async void FindFiles()
+    {
+        StopFinding();
+        var query = search.Text.Trim();
+        if (!Prefs.FileSearch || query.Length < 2)
+        {
+            if (found != null) { found = null; foundAt = DateTime.UtcNow; Filter(SelectedID); }
+            return;
+        }
+        var cancel = new CancellationTokenSource();
+        finding = cancel;
+        int ticket = ++findRun;
+        Filter(SelectedID);
+        try
+        {
+            await Task.Delay(180, cancel.Token);
+            var plan = FileSearch.Parse(query);
+            List<FileSearch.Hit> hits = plan.IsEmpty ? [] : await FileSearch.Search(plan, cancel: cancel.Token);
+            if (cancel.IsCancellationRequested || ticket != findRun || confirming || search.Text.Trim() != query) return;
+            finding = null;
+            bool changed = found is not { } old || !old.Hits.SequenceEqual(hits);
+            found = (query, plan, hits);
+            if (changed) foundAt = DateTime.UtcNow;
+            Filter(SelectedID);
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    /// Drags a file row out (to File Explorer, a chat or a mail), as the Shelf does: Copy or Link, never Move.
+    void DragOut(int row)
+    {
+        if (row >= commands.Count || commands[row].File is not { } file || !(System.IO.File.Exists(file) || System.IO.Directory.Exists(file))) return;
+        try { DragDrop.DoDragDrop(list, new DataObject(DataFormats.FileDrop, new[] { file }), DragDropEffects.Copy | DragDropEffects.Link); }
+        catch (System.Runtime.InteropServices.COMException) { }
     }
 
     void Select(int row, bool scrollIntoView)
@@ -435,7 +568,7 @@ sealed class QuickActions
                 break;
             case Key.Return:
                 e.Handled = true;
-                RunSelected();
+                RunSelected(reveal: Keyboard.Modifiers.HasFlag(ModifierKeys.Control));
                 break;
             case Key.Escape:
                 e.Handled = true;
@@ -461,7 +594,9 @@ sealed class QuickActions
         }
     }
 
-    void RunSelected()
+    void RunSelected() => RunSelected(reveal: false);
+
+    void RunSelected(bool reveal)
     {
         if (!Feature.QuickActions.IsOn() || confirming) return;
         if (selected < 0 || selected >= commands.Count)
@@ -471,6 +606,17 @@ sealed class QuickActions
         }
         int row = selected;
         var command = commands[row];
+        if (command.File is { } file)
+        {
+            // A row that just appeared, or one left from the previous text while the new one is looked up.
+            if ((DateTime.UtcNow - foundAt).TotalSeconds < 0.3) return;
+            if (found?.Query != search.Text.Trim()) { ToolUI.Refuse(search); return; }
+            Confirm(row);
+            if (!reveal) Perform(command);
+            else if (System.IO.File.Exists(file) || System.IO.Directory.Exists(file)) FileActions.Reveal([file]);
+            else Toast.Shared.Show(L("This file has moved or been deleted."), "info");
+            return;
+        }
         // Re-resolve against enabled features, so a stale panel cannot run a disabled action.
         if (!MakeCommands(chosenFiles).Any(c => c.Id == command.Id))
         {
@@ -613,8 +759,12 @@ sealed class QuickRow : Border
         labels.Children.Add(title);
         labels.Children.Add(detail);
         var dock = new DockPanel();
-        DockPanel.SetDock(glyph, Dock.Left);
-        dock.Children.Add(glyph);
+        // A found file shows its own shell icon in place of the glyph.
+        FrameworkElement leading = command.File is { } file && ToolUI.FileIcon(file, 32) is { } icon
+            ? new System.Windows.Controls.Image { Source = icon, Width = 24, Height = 24, Margin = new Thickness(2, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center }
+            : glyph;
+        DockPanel.SetDock(leading, Dock.Left);
+        dock.Children.Add(leading);
         dock.Children.Add(labels);
         Child = dock;
         ToolUI.AutomationName(this, $"{command.Title}, {command.Detail}");

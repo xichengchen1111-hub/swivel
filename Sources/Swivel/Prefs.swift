@@ -210,6 +210,18 @@ enum Prefs {
         set { defaults.set(newValue.rawValue, forKey: "quickActions.shortcut"); post() }
     }
 
+    /// Quick Actions also looks the typed text up in Spotlight and lists matching files below the actions.
+    static var fileSearch: Bool {
+        get { defaults.object(forKey: "quickActions.fileSearch") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "quickActions.fileSearch"); post() }
+    }
+
+    /// File search also finds files by what they are about (a local index of the documents' meaning, SemanticIndex).
+    static var semanticSearch: Bool {
+        get { defaults.object(forKey: "quickActions.semanticSearch") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "quickActions.semanticSearch"); post() }
+    }
+
     /// App Actions. Applications stay in "appTargets.v1" in the shape 1.6 reads (an older build that met a web page's
     /// delivery there failed on the whole list, fell back to the starters and saved those over it); web pages and the
     /// combined order have keys of their own, which older builds don't know about and leave alone.

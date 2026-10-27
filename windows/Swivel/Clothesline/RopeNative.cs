@@ -146,12 +146,21 @@ static partial class RopeNative
 
     static readonly Guid ScreenshotsFolderId = new("b7bede81-df94-4682-a7d8-57a52620b86f");
 
+    static readonly Guid DownloadsFolderId = new("374de290-123f-4565-9164-39c4925e467b");
+
     /// The user's Screenshots folder (where Win + Print Screen and the Snipping Tool save), or Pictures\Screenshots.
-    public static string ScreenshotsFolder()
+    public static string ScreenshotsFolder() =>
+        KnownFolder(ScreenshotsFolderId) ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Screenshots");
+
+    /// The user's Downloads folder (it can be moved, so not always UserProfile\Downloads). Used by file search.
+    public static string DownloadsFolder() =>
+        KnownFolder(DownloadsFolderId) ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+
+    static string? KnownFolder(Guid id)
     {
         try
         {
-            if (SHGetKnownFolderPath(ScreenshotsFolderId, 0, IntPtr.Zero, out var p) == 0 && p != IntPtr.Zero)
+            if (SHGetKnownFolderPath(id, 0, IntPtr.Zero, out var p) == 0 && p != IntPtr.Zero)
             {
                 try
                 {
@@ -162,7 +171,7 @@ static partial class RopeNative
             }
         }
         catch (Exception) { }
-        return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "Screenshots");
+        return null;
     }
 
     // MARK: Drag images (the shell's drag-image helper, so the print itself follows the pointer)

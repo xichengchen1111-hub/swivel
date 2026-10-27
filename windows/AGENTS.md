@@ -24,7 +24,12 @@ Several agents may build at once: always pass your own `--artifacts-path` (a fol
 
 Command-line test modes (same as the Mac app): `--run <convert|tools|actions|apps|codes> "<item>" <file>…`,
 `--edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>…`, `--recognize <image>`,
-`--tool <text|shelf|quick|presets|feel|clothesline|style|colors|rename|pdf|qr|library|apps|launcher> [file]…`, `--demo`, `--frames`, `--feedback <check|play>`. `SWIVEL_SETTINGS=<file>`
+`--tool <text|shelf|quick|presets|feel|clothesline|style|colors|rename|pdf|qr|library|apps|launcher> [file]…`, `--demo`, `--frames`, `--feedback <check|play>`,
+`--find "<request>"` (prints how Quick Actions' file search reads the request, the Windows Search SQL and the ranked
+files; `*` = matched every word, the number is the meaning similarity; read-only), `--index ["<request>"]` (updates the
+semantic index, ~1 minute for 2,500 documents, then lists the closest files). With `--tool quick`,
+`SWIVEL_QUICK_QUERY` types into the panel and `SWIVEL_QUICK_SNAPSHOT=<png>` draws it after 4 s, prints its rows and
+quits. `SWIVEL_SETTINGS=<file>`
 points the app at a separate settings file; `SWIVEL_TAB=<0-15>` opens a settings page; `SWIVEL_QR_LIBRARY_DIR=<dir>` isolates the QR library. Do not start the app without
 arguments while testing: that starts the tray icon, the drag watcher and global hotkeys on the owner's desktop.
 
@@ -43,6 +48,8 @@ arguments while testing: that starts the tray icon, the drag watcher and global 
 | Editors | `Editors/` |
 | Settings window (PowerToys-style sidebar) | `Settings/` |
 | Shelf, Quick Actions, Text Capture, Image Presets, shared tool UI | `Tools/` |
+| Quick Actions' plain-language file search (rules → Windows Search SystemIndex over ADO, ranking, WeChat/QQ/DingTalk folder aliases) | `Tools/FileSearch.cs` (`ConceptGroups` is the same table as the Mac's `conceptGroups`: change both; `SecretForms` match names and folders only), strings in `Core/Strings.Search.cs`. Meaning is compared on `Plan.Topic` only: time, sender, place and type are filters, never part of the vector. Times are read from their parts in `Tools/FileSearchTime.cs` (direction + amount + unit + ending, calendar units and parts, days, weekdays, dates, seasons, “since”), never from a list of whole phrases: add a part, not a phrase, and a case to `TimesAreReadFromTheirPartsHoweverTheyAreSaid` |
+| Finding documents by meaning (multilingual-e5-small in Windows' own `Windows.AI.MachineLearning`, C# SentencePiece tokenizer, index of name + folder + AutoSummary vectors in `%LOCALAPPDATA%\Swivel\SemanticIndex`) | `Tools/SemanticIndex.cs`; model in `ThirdParty/MultilingualE5` (not in git: `fetch.ps1`, pinned SHA-256; `build.ps1` runs it) |
 | Clothesline | `Clothesline/` |
 | Batch Rename, PDF Pages (1.4) | `FileTools/` |
 | QR & Barcodes: reader/encoder, scan window, QR Library and its 3D scenes (1.4) | `Qr/` |
@@ -54,6 +61,9 @@ arguments while testing: that starts the tray icon, the drag watcher and global 
 - **No third-party dependencies in the app.** Use .NET, WPF, the WinRT APIs above, Win32 (P/Invoke with
   `LibraryImport`) and tools that ship with Windows (`%SystemRoot%\System32\tar.exe`). WinForms is referenced only
   for `NotifyIcon` and silent printing. The test project uses Microsoft's MSTest.
+  One owner-approved exception (2026-10-27): the multilingual-e5-small ONNX model (MIT) in `ThirdParty/MultilingualE5`
+  for semantic file search only — data, no code, run by Windows' built-in ONNX runtime, hash-checked before loading,
+  never downloaded at run time. Its tokenizer and vectors are checked against the reference (`SemanticIndexTests`).
 - **Code-only WPF**: no `.xaml` files (they slow parallel builds and the port reads closer to the AppKit code).
 - **Outputs go next to the original file.** Never create a new folder for results (multi-page outputs are
   `name 1.png`, `name 2.png`…). Never overwrite: use `Paths.Output` / `Paths.Unique`. Write to a temp file in the

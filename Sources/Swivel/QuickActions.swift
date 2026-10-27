@@ -21,6 +21,8 @@ struct QuickCommand {
     let detail: String
     let symbol: String
     let run: () async throws -> ActionResult?
+    /// A file Spotlight found: the row shows its icon, Return opens it, ⌘Return shows it in Finder, and it drags out.
+    var file: URL? = nil
 }
 
 @MainActor
@@ -57,6 +59,12 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
     /// Numbers each question; an answer to an older, cancelled one changes nothing.
     private var askRun = 0
     static let askID = "assistant.ask"
+    /// Files Spotlight found for the text in the field, listed after the matching actions.
+    private var found: (query: String, plan: FileSearch.Plan, hits: [FileSearch.Hit])?
+    private var finding: Task<Void, Never>?
+    private var findRun = 0
+    /// When the file rows last changed: a Return typed in the same instant was meant for the row that was there.
+    private var foundAt = Date.distantPast
 
     func syncSettings() {
         if !Feature.quickActions.isOn {
@@ -83,6 +91,14 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         confirming = false
         if let files { chosenFiles = files }
         search.stringValue = ""
+        finding?.cancel(); finding = nil; found = nil
+        let placeholder = Prefs.fileSearch ? L("Search actions and files…") : L("Search actions…")
+        search.placeholderString = placeholder
+        search.setAccessibilityLabel(placeholder)
+        if Prefs.fileSearch {
+            FileSearch.prewarm()
+            SemanticIndex.refreshSoon()
+        }
         rebuild()
         if !window.isVisible {
             place(window)
@@ -101,9 +117,27 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         updateRowEmphasis()
     }
 
+    /// For previews and screenshots (`SWIVEL_QUICK_QUERY` with `--tool quick`): fills the field as if it were typed.
+    func type(_ text: String) {
+        guard window?.isVisible == true else { return }
+        search.stringValue = text
+        filter()
+        findFiles()
+    }
+
+    func snapshot(to url: URL) {
+        guard let view = window?.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try? bitmap.representation(using: .png, properties: [:])?.write(to: url)
+        for command in commands { print(command.file == nil ? "action" : "file  ", command.title, "·", command.detail) }
+        print("hint:", hint.stringValue)
+        fflush(stdout)
+    }
+
     /// Closes at once: exits are faster than entrances.
     func hide() {
         asking?.cancel(); asking = nil
+        finding?.cancel(); finding = nil
         generation += 1
         confirming = false
         if let window, window.isVisible {
@@ -164,6 +198,7 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         table.headerView = nil; table.style = .inset; table.rowHeight = 48
         table.dataSource = self; table.delegate = self
         table.target = self; table.doubleAction = #selector(doubleClicked)
+        table.setDraggingSourceOperationMask(.copy, forLocal: false)
         // Moving the pointer over a row selects it, as in Spotlight; Return then runs what's under the pointer.
         table.onHover = { [weak self] row in
             guard let self, !confirming, row != table.selectedRow else { return }
@@ -281,9 +316,12 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
     private var filesDescription: String {
         chosenFiles.isEmpty ? L("Choose files or drop them here") : chosenFiles.count == 1 ? chosenFiles[0].lastPathComponent : L("%d files", chosenFiles.count)
     }
-    private func filter() {
+    private func filter(keeping keptID: String? = nil) {
         let query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         commands = Self.matching(allCommands, query: query)
+        // The previous text's files stay while the new text is looked up, so the list doesn't flash empty.
+        let files = !Prefs.fileSearch ? nil : found.flatMap { $0.query == query || (finding != nil && !query.isEmpty) ? $0 : nil }
+        if let files { commands += files.hits.map { Self.fileCommand($0, plan: files.plan) } }
         if !query.isEmpty, Assistant.isReady {
             if let suggestion, suggestion.query == query, suggestion.files == chosenFiles,
                let picked = allCommands.first(where: { $0.id == suggestion.id }) {
@@ -299,11 +337,70 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
             }
         }
         table.reloadData()
-        if !commands.isEmpty { table.selectRowIndexes([0], byExtendingSelection: false) }
+        if !commands.isEmpty {
+            let row = keptID.flatMap { id in commands.firstIndex { $0.id == id } } ?? 0
+            table.selectRowIndexes([row], byExtendingSelection: false)
+        }
         runButton?.isEnabled = !commands.isEmpty && asking == nil
+        let searchingFiles = finding != nil && Prefs.fileSearch && query.count >= 2
         hint.stringValue = asking != nil ? L("Asking the assistant…")
-            : commands.isEmpty ? L("No matching actions. Try another search.") : L("↑ ↓ to select · Return to run · Esc to close")
+            : commands.isEmpty ? (searchingFiles ? L("Searching files…") : Prefs.fileSearch ? L("No matching actions or files. Try other words.") : L("No matching actions. Try another search."))
+            : files.map { !$0.hits.isEmpty } == true ? L("Files: %@ · ⌘ Return shows in Finder", files!.plan.summary) + (searchingFiles ? " · " + L("Still searching…") : "")
+            : searchingFiles ? L("Searching files…") : L("↑ ↓ to select · Return to run · Esc to close")
     }
+
+    /// A row for a file Spotlight found. The file is checked again when it runs: it may have moved since.
+    static func fileCommand(_ hit: FileSearch.Hit, plan: FileSearch.Plan? = nil) -> QuickCommand {
+        QuickCommand(id: "file:" + hit.url.path, title: hit.name, detail: FileSearch.describe(hit, plan: plan), symbol: "doc", run: {
+            guard FileManager.default.fileExists(atPath: hit.url.path) else { throw Info(L("This file has moved or been deleted.")) }
+            NSWorkspace.shared.open(hit.url)
+            return nil
+        }, file: hit.url)
+    }
+
+    /// Looks the text up in Spotlight once typing pauses: first as the built-in rules read it, then, with Apple
+    /// Intelligence on, again with the on-device model's words. Each answer replaces the file rows only while the
+    /// same text is still in the field, and keeps the selected row where it was.
+    private func findFiles() {
+        finding?.cancel(); finding = nil
+        let query = search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Prefs.fileSearch, query.count >= 2 else {
+            if found != nil { found = nil; foundAt = Date(); filter(keeping: selectedID) }
+            return
+        }
+        findRun += 1
+        let ticket = findRun
+        finding = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            let plan = FileSearch.parse(query)
+            let hits = plan.isEmpty ? [] : await FileSearch.search(plan)
+            guard !Task.isCancelled else { return }
+            let refining = !plan.isEmpty && FileSearch.modelReady
+            self?.showFiles(query, plan, hits, ticket: ticket, done: !refining)
+            guard refining else { return }
+            let refined = await FileSearch.refine(plan, request: query)
+            guard !Task.isCancelled else { return }
+            guard refined != plan else { self?.showFiles(query, plan, hits, ticket: ticket, done: true); return }
+            let better = await FileSearch.search(refined)
+            guard !Task.isCancelled else { return }
+            // The model's words found nothing where the rules' did: keep what was there.
+            if better.isEmpty, !hits.isEmpty { self?.showFiles(query, plan, hits, ticket: ticket, done: true) }
+            else { self?.showFiles(query, refined, better, ticket: ticket, done: true) }
+        }
+        filter(keeping: selectedID)
+    }
+
+    private func showFiles(_ query: String, _ plan: FileSearch.Plan, _ hits: [FileSearch.Hit], ticket: Int, done: Bool) {
+        guard ticket == findRun, !confirming, search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
+        if done { finding = nil }
+        let changed = found?.hits != hits
+        found = (query, plan, hits)
+        if changed { foundAt = Date() }
+        filter(keeping: selectedID)
+    }
+
+    private var selectedID: String? { commands.indices.contains(table.selectedRow) ? commands[table.selectedRow].id : nil }
 
     /// What the assistant may choose from. Saved QR codes are left out: they are named after the images they came
     /// from, and file names stay on this Mac.
@@ -353,7 +450,8 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
     @objc private func clearFiles() { chosenFiles = []; rebuild() }
     /// Only a double-click on a row runs it; one on the empty space below the rows does nothing.
     @objc private func doubleClicked() { if table.clickedRow >= 0 { runSelected() } }
-    @objc private func runSelected() {
+    @objc private func runSelected() { runSelection(reveal: false) }
+    private func runSelection(reveal: Bool) {
         guard Feature.quickActions.isOn, !confirming else { return }
         guard commands.indices.contains(table.selectedRow) else {
             ToolUI.refuse(search)
@@ -366,6 +464,21 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         if row == 0, command.symbol == "sparkles", Date().timeIntervalSince(suggestedAt) < 0.4 { return }
         if command.id == Self.askID {
             ask(search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines))
+            return
+        }
+        if let file = command.file {
+            // A row that just appeared, or one left from the previous text while the new one is looked up.
+            if Date().timeIntervalSince(foundAt) < 0.3 { return }
+            guard found?.query == search.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) else { ToolUI.refuse(search); return }
+            confirm(row)
+            if reveal {
+                guard FileManager.default.fileExists(atPath: file.path) else {
+                    Toast.shared.show(L("This file has moved or been deleted."), symbol: "info.circle.fill"); return
+                }
+                NSWorkspace.shared.activateFileViewerSelecting([file])
+            } else {
+                perform(command)
+            }
             return
         }
         // Re-resolve against enabled features, so a stale panel cannot run a disabled action.
@@ -472,6 +585,10 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
         // A new request replaces the question still on its way.
         asking?.cancel(); asking = nil
         filter()
+        findFiles()
+    }
+    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
+        commands.indices.contains(row) ? commands[row].file as NSURL? : nil
     }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.moveDown(_:)) || commandSelector == #selector(NSResponder.moveUp(_:)) {
@@ -481,7 +598,11 @@ final class QuickActions: NSObject, NSWindowDelegate, NSSearchFieldDelegate, NST
             table.selectRowIndexes([row], byExtendingSelection: false); table.scrollRowToVisible(row)
             return true
         }
-        if commandSelector == #selector(NSResponder.insertNewline(_:)) { runSelected(); return true }
+        // ⌘Return arrives as insertNewline or, when nothing else binds it, as noop.
+        let commandReturn = NSApp.currentEvent.map { $0.type == .keyDown && $0.keyCode == 36 && $0.modifierFlags.contains(.command) } ?? false
+        if commandSelector == #selector(NSResponder.insertNewline(_:)) || (commandReturn && commandSelector == Selector(("noop:"))) {
+            runSelection(reveal: commandReturn); return true
+        }
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) { hide(); return true }
         return false
     }
@@ -572,7 +693,8 @@ private final class QuickCell: NSTableCellView {
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(_ command: QuickCommand) {
-        symbol.image = NSImage(systemSymbolName: command.symbol, accessibilityDescription: nil)
+        symbol.image = command.file.map { NSWorkspace.shared.icon(forFile: $0.path) }
+            ?? NSImage(systemSymbolName: command.symbol, accessibilityDescription: nil)
         title.stringValue = command.title
         detail.stringValue = command.detail
     }

@@ -53,6 +53,10 @@ static class AppHost
         QuickActions.Shared.SyncSettings();
         ShortcutWheel.Shared.Sync();
         Clothesline.Shared.Start();
+        // Keeps the meaning index of documents current, a minute after start so launch stays quick (SemanticIndex.cs).
+        var index = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        index.Tick += (_, _) => { index.Interval = TimeSpan.FromMinutes(30); SemanticIndex.RefreshSoon(); };
+        index.Start();
         if (Environment.GetEnvironmentVariable("SWIVEL_SHOW_ROPE") != null) // for testing
             Delay(500, Clothesline.Shared.Toggle);
         Prefs.Changed += () => Application.Current.Dispatcher.BeginInvoke(() =>

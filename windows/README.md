@@ -35,6 +35,7 @@ Windows equivalents:
 | Screenshot takeover | Watches your Screenshots folder (Print Screen, Win + Print Screen, Snipping Tool with auto-save); nothing in Windows settings is changed |
 | Quick Look | A small Preview window (press and hold a print, or Space on the Shelf) |
 | Quick Actions ⌃⇧Space / ⌃⌥K / ⌘⇧P | **Ctrl + Shift + Space** / Ctrl + Alt + K / Ctrl + Shift + P |
+| Quick Actions file search (Spotlight, ⌘Return shows in Finder) | Windows Search index on this PC (`System.Kind`, dates, size, word-prefix `CONTAINS`); **Ctrl + Enter** shows in File Explorer. "微信 / WeChat", "QQ", "钉钉" also match those apps' download folders, and their cache files are left out. Abstract requests (“找工作相关的东西”, “上周领导发的工作内容”) are widened by the same concept table as the Mac, and documents are also found by meaning with a small local model (multilingual-e5-small, MIT) over the text Windows Search already extracted; files aren't opened and nothing leaves the PC |
 | AirDrop | Share (Nearby Sharing, Mail, Phone Link…) |
 | Vision OCR / face detection | Windows.Media.Ocr / Windows.Media.FaceAnalysis (on-device) |
 | Force Touch haptics | Not available on Windows (no public API); sounds are kept |

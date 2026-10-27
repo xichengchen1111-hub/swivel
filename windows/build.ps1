@@ -9,6 +9,9 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
+# The semantic file search model is not in git; fetch it (pinned, hash-checked) the first time.
+& (Join-Path $PSScriptRoot 'ThirdParty\MultilingualE5\fetch.ps1')
+
 $out = Join-Path $PSScriptRoot 'build\Swivel'
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 

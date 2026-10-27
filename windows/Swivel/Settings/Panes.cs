@@ -801,6 +801,10 @@ sealed class QuickActionsPane : Pane
     readonly TextBlock availability = Ui.Text("", 13, tone: Tone.Secondary);
     readonly TextBlock availabilityIcon = Ui.Glyph("", 14, Tone.Secondary);
     readonly Button open;
+    readonly ToggleSwitch fileSearch = new();
+    readonly TextBlock indexNote = Ui.Text("", 12, tone: Tone.Secondary);
+    readonly ToggleSwitch semantic = new();
+    readonly TextBlock semanticNote = Ui.Text("", 12, tone: Tone.Secondary);
     bool refreshing;
 
     public QuickActionsPane()
@@ -821,6 +825,32 @@ sealed class QuickActionsPane : Pane
         open = Ui.Button(L("Show Quick Actions"), () => QuickActions.Shared.Show(), accent: true);
         Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { open } }, 16);
         Add(Ui.Text(L("If another app uses the same shortcut, choose a different one. You can always reopen Swivel from the Start menu or the notification area to reach Settings."), 12, tone: Tone.Secondary), 16);
+
+        // File search (FileSearch.cs).
+        fileSearch.Toggled += on =>
+        {
+            if (!refreshing) Prefs.FileSearch = on;
+        };
+        AutomationProperties.SetName(fileSearch, L("Search files too, in plain words"));
+        Add(new SettingsCard("", L("Search files too, in plain words"),
+            L("Type what you remember, such as “the PDF about the quote from last week” or “上周的截图”. Swivel reads the type, time, folder and size, and looks the words up in the Windows Search index on this PC. Enter opens a file, Ctrl+Enter shows it in File Explorer, and rows can be dragged out. Nothing is sent anywhere."),
+            fileSearch) { Margin = new Thickness(0, 24, 0, 0) });
+        Add(indexNote, 10);
+        // Finding files by meaning (SemanticIndex.cs).
+        semantic.Toggled += on =>
+        {
+            if (refreshing) return;
+            Prefs.SemanticSearch = on;
+            if (on) SemanticIndex.RefreshSoon(force: true); else SemanticIndex.Clear();
+        };
+        AutomationProperties.SetName(semantic, L("Also find files by what they are about"));
+        Add(new SettingsCard("", L("Also find files by what they are about"),
+            L("Abstract requests such as “the work my manager sent last week” or “操作系统复习资料” find documents even when those words aren't in them, across Chinese and English. Swivel turns the text Windows Search already read from your documents into numbers with a small model on this PC (multilingual-e5-small, MIT) and keeps only those numbers, the paths and dates. Files aren't opened and nothing is sent anywhere."),
+            semantic) { Margin = new Thickness(0, 12, 0, 0) });
+        Add(semanticNote, 10);
+        void indexed() => Dispatcher.BeginInvoke(Refresh);
+        Loaded += (_, _) => { SemanticIndex.Changed -= indexed; SemanticIndex.Changed += indexed; };
+        Unloaded += (_, _) => SemanticIndex.Changed -= indexed;
         // The hotkey registers after Prefs change (AppHost syncs it); its result arrives through ShortcutChanged.
         void registered() => Dispatcher.BeginInvoke(Refresh);
         Loaded += (_, _) =>
@@ -840,9 +870,22 @@ sealed class QuickActionsPane : Pane
     {
         refreshing = true;
         shortcuts.SelectedIndex = Array.IndexOf(QuickShortcuts.All, Prefs.QuickShortcut);
+        fileSearch.IsChecked = Prefs.FileSearch;
+        semantic.IsChecked = Prefs.SemanticSearch;
         refreshing = false;
         bool on = Feature.QuickActions.IsOn();
         open.IsEnabled = on;
+        fileSearch.IsEnabled = on;
+        semantic.IsEnabled = on && Prefs.FileSearch && SemanticIndex.ModelInstalled;
+        semanticNote.Text = !SemanticIndex.ModelInstalled ? L("The model isn't part of this copy of Swivel, so files are found by their words only.")
+            : !Prefs.SemanticSearch || !Prefs.FileSearch ? ""
+            : SemanticIndex.Progress is { Left: > 0 } progress ? L("Reading documents… %d ready, %d to go", progress.Ready, progress.Left)
+            : SemanticIndex.Progress is { } done ? L("%d documents ready", done.Ready)
+            : L("Documents are read the next time Quick Actions opens.");
+        indexNote.Text = FileSearch.IndexReachable
+            ? L("Files come from the Windows Search index. To include more folders, add them under Settings › Privacy & security › Searching Windows.")
+            : L("Windows Search is off on this PC, so no files can be found. Turn on the Windows Search service to use this.");
+        Ui.SetTone(indexNote, FileSearch.IndexReachable ? Tone.Secondary : Tone.Caution);
         if (!on)
         {
             availability.Text = L("Turn this feature on above to get started.");

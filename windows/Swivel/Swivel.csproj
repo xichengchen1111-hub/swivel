@@ -30,4 +30,13 @@
     <InternalsVisibleTo Include="Swivel.Tests" />
   </ItemGroup>
 
+  <!-- Quick Actions' semantic file search (ThirdParty/MultilingualE5, fetched by its fetch.ps1; skipped when absent). -->
+  <ItemGroup>
+    <None Include="..\ThirdParty\MultilingualE5\model_quantized.onnx" Condition="Exists('..\ThirdParty\MultilingualE5\model_quantized.onnx')"
+          Link="Models\MultilingualE5\model_quantized.onnx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\ThirdParty\MultilingualE5\tokenizer.json" Condition="Exists('..\ThirdParty\MultilingualE5\tokenizer.json')"
+          Link="Models\MultilingualE5\tokenizer.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\ThirdParty\MultilingualE5\LICENSE" Link="Models\MultilingualE5\LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

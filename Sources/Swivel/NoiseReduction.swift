@@ -40,7 +40,10 @@ enum NoiseReduction {
             throw ToolError(L("Couldn't encode audio."))
         }
         defer { vDSP_destroy_fftsetup(setup) }
-        let window = (0..<size).map { Float(sqrt(0.5 - 0.5 * cos(2 * .pi * (Double($0) + 0.5) / Double(size)))) }
+        let window = (0..<size).map { index -> Float in
+            let phase = 2 * Double.pi * (Double(index) + 0.5) / Double(size)
+            return Float(sqrt(0.5 - 0.5 * cos(phase)))
+        }
         let quietSize = Int(buffer.frameCapacity)
         var quiet = 0, leastEnergy = Double.infinity, cursor = 0
         var quietEnergy = [Double](repeating: 0, count: channels)

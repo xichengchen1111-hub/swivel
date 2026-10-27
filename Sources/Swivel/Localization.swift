@@ -44,7 +44,7 @@ enum Language: String, CaseIterable {
 
 /// Translates an English UI string. Unknown strings (and English) come back unchanged.
 func L(_ english: String) -> String {
-    guard let column = Language.resolved.column, let row = Strings.table[english] ?? Strings.doctor[english] else { return english }
+    guard let column = Language.resolved.column, let row = Strings.table[english] ?? Strings.doctor[english] ?? Strings.search[english] else { return english }
     return row[column]
 }
 

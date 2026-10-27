@@ -42,7 +42,13 @@ MainActor.assumeIsolated {
             if args.count >= 4 { TextCaptureWindow.present(URL(fileURLWithPath: args[3])) }
             else { AppWindow.shared.show(.textCapture) }
         case "shelf": Shelf.shared.add(args.dropFirst(3).map { URL(fileURLWithPath: $0) })
-        case "quick": QuickActions.shared.show(files: args.dropFirst(3).map { URL(fileURLWithPath: $0) })
+        case "quick":
+            QuickActions.shared.show(files: args.dropFirst(3).map { URL(fileURLWithPath: $0) })
+            if let text = ProcessInfo.processInfo.environment["SWIVEL_QUICK_QUERY"] { QuickActions.shared.type(text) }
+            // Draws the panel into a PNG and prints its rows once the search has settled (no Screen Recording needed).
+            if let path = ProcessInfo.processInfo.environment["SWIVEL_QUICK_SNAPSHOT"] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { QuickActions.shared.snapshot(to: URL(fileURLWithPath: path)) }
+            }
         case "presets": AppWindow.shared.show(.imagePresets)
         case "feel": AppWindow.shared.show(.feel)
         case "clothesline": AppWindow.shared.show(.clothesline)
@@ -109,6 +115,75 @@ MainActor.assumeIsolated {
         Task { @MainActor in
             do { print(try await TextRecognition.recognize(URL(fileURLWithPath: args[2]))); exit(0) }
             catch { print("FAIL \(error.localizedDescription)"); exit(2) }
+        }
+        app.setActivationPolicy(.prohibited)
+        app.run()
+    }
+
+    // `Swivel --find <request>` prints how Quick Actions reads a file search request, its Spotlight query and the
+    // ranked files. Read-only: it only queries Spotlight's index.
+    if args.count >= 3, args[1] == "--find" {
+        // A plain function: the same loop inside the async closure below aborted release builds in the task
+        // allocator (“freed pointer was not the last allocation”, Swift 6.3).
+        func show(_ hits: [FileSearch.Hit], plan: FileSearch.Plan, started: Date) {
+            for hit in hits {
+                let meaning = hit.meaning > 0 ? String(format: " · ≈%.2f", hit.meaning) : ""
+                print(hit.strict ? "*" : " ", hit.url.path, "·", FileSearch.describe(hit, plan: plan) + meaning)
+            }
+            print(hits.count, "files,", String(format: "%.2f s", Date().timeIntervalSince(started)))
+        }
+        Task { @MainActor in
+            let request = args[2...].joined(separator: " ")
+            let started = Date()
+            var plan = FileSearch.parse(request)
+            print("rules:", plan.summary)
+            print("topic:", plan.topic.isEmpty ? "-" : plan.topic)
+            print("query:", FileSearch.queryString(plan) ?? "-")
+            if FileSearch.modelReady {
+                FileSearch.prewarm()
+                plan = await FileSearch.refine(plan, request: request)
+                print("model:", plan.understood ? plan.summary : "(no change)", String(format: "%.2f s", Date().timeIntervalSince(started)))
+            } else {
+                print("model:", FileSearch.modelStatus)
+            }
+            let hits = await FileSearch.search(plan)
+            show(hits, plan: plan, started: started)
+            exit(0)
+        }
+        app.setActivationPolicy(.prohibited)
+        app.run()
+    }
+
+    // `Swivel --index` reads every document into the semantic index (as Quick Actions does in the background),
+    // printing progress; `--index <request>` then lists the closest files with their similarity. Reads documents
+    // only; `SWIVEL_SEMANTIC_INDEX_DIR` keeps a development build's index apart from the real one.
+    if args.count >= 2, args[1] == "--index" {
+        Task { @MainActor in
+            guard SemanticIndex.available else { print("FAIL no built-in English and Chinese word embeddings"); exit(2) }
+            let started = Date()
+            let observer = NotificationCenter.default.addObserver(forName: SemanticIndex.changed, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated {
+                    if let progress = SemanticIndex.progress {
+                        print(String(format: "%.1f s: %d ready, %d left", Date().timeIntervalSince(started), progress.ready, progress.left))
+                    }
+                }
+            }
+            await SemanticIndex.refreshNow()
+            NotificationCenter.default.removeObserver(observer)
+            print(SemanticIndex.progress?.ready ?? 0, "files,", String(format: "%.1f s", Date().timeIntervalSince(started)), "·", SemanticIndex.indexFile.path)
+            if args.count >= 3 {
+                let plan = FileSearch.parse(args[2...].joined(separator: " "))
+                print("topic:", plan.topic)
+                let clock = Date()
+                // `SWIVEL_INDEX_UNDER=<folder>` lists only the files below it.
+                let under = ProcessInfo.processInfo.environment["SWIVEL_INDEX_UNDER"].map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+                let closest = await Task.detached {
+                    SemanticIndex.closest(topic: plan.topic, terms: plan.terms.map(\.forms), limit: 15) { under.map($0.path.hasPrefix) ?? true }
+                }.value
+                for (entry, similarity) in closest { print(String(format: "%.3f", similarity), entry.path) }
+                print(String(format: "%.0f ms", Date().timeIntervalSince(clock) * 1000))
+            }
+            exit(0)
         }
         app.setActivationPolicy(.prohibited)
         app.run()

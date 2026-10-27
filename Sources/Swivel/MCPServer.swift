@@ -291,7 +291,7 @@ enum MCPStdio {
         for number in [SIGTERM, SIGINT, SIGHUP] {
             signal(number, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
-            source.setEventHandler { MainActor.assumeIsolated { stop(0) } }
+            source.setEventHandler { MainActor.assumeIsolated { () -> Void in stop(0) } }
             source.resume()
             signalSources.append(source)
         }
