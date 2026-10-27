@@ -1,11 +1,19 @@
 name: Windows preview checks
+# Runs once per pull-request update (not again for the same push) and skips
+# documentation-only changes. Test packages are built and uploaded only when
+# asked for: Actions → Windows preview checks → Run workflow → "package".
 on:
   workflow_dispatch:
+    inputs:
+      package:
+        description: 'Build and upload the test packages (ZIP and MSIX)'
+        type: boolean
+        default: true
   pull_request:
-    paths: ['Windows/**', '.github/workflows/windows.yml']
-  push:
-    branches: ['codex/windows-preview-081']
-    paths: ['Windows/**', '.github/workflows/windows.yml']
+    paths: ['Windows/**', '!Windows/**/*.md', '.github/workflows/windows.yml']
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -23,9 +31,11 @@ jobs:
         shell: pwsh
         run: ./Windows/build.ps1 -Runtime win-x64
       - name: Cross-publish ARM64 (not runtime-tested here)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package }}
         shell: pwsh
         run: ./Windows/build.ps1 -Runtime win-arm64 -SkipTests
       - name: Pack MSIX (x64 and ARM64)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package }}
         shell: pwsh
         run: |
           ./Windows/Packaging/build-msix.ps1 -Runtime win-x64
@@ -33,13 +43,16 @@ jobs:
       # Self-signed test certificate for friends' sideload testing only. The private key
       # lives only in repository secrets; without them the packages stay unsigned.
       - name: Sign MSIX with the test certificate
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package }}
         shell: pwsh
         env:
           PFX_BASE64: ${{ secrets.SWIVEL_TEST_CERT_PFX_BASE64 }}
           PFX_PASSWORD: ${{ secrets.SWIVEL_TEST_CERT_PASSWORD }}
         run: ./Windows/Packaging/sign-msix.ps1
       - uses: actions/upload-artifact@v7
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.package }}
         with:
+          retention-days: 3
           name: Swivel-Windows-preview
           path: |
             build/windows/*.zip
