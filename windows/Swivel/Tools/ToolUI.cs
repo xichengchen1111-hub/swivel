@@ -182,6 +182,20 @@ static class ToolUI
         return chosen ? [.. dialog.FileNames] : [];
     }
 
+    /// An Open dialog limited to PDF files (with an "All files" fallback); empty when cancelled.
+    public static List<string> ChoosePdfs(bool multiple, Window? owner = null)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Multiselect = multiple,
+            Filter = L("PDF") + "|*.pdf|" + L("All files") + "|*.*",
+            CheckFileExists = true,
+            Title = L("Choose Files…"),
+        };
+        bool chosen = owner is { IsVisible: true } ? dialog.ShowDialog(owner) == true : dialog.ShowDialog() == true;
+        return chosen ? [.. dialog.FileNames] : [];
+    }
+
     /// A folder picker; empty when cancelled.
     public static List<string> ChooseFolders(bool multiple, Window? owner = null)
     {

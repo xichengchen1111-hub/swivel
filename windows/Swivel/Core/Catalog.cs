@@ -113,9 +113,32 @@ static class FileKinds
 /// Decides which menu items a drag gets, per file kind and key.
 static class Catalog
 {
+    static IReadOnlyList<SavedQrCode>? codeCache;
+    static bool watchingCodes;
+
+    /// Saved QR codes for the Codes menu, reloaded when the library changes.
+    public static IReadOnlyList<SavedQrCode> SavedCodes()
+    {
+        if (!watchingCodes)
+        {
+            watchingCodes = true;
+            QrLibraryStore.Changed += () => codeCache = null;
+        }
+        if (codeCache is null)
+        {
+            try { codeCache = new QrLibraryStore().Load(); }
+            catch (Exception) { codeCache = []; }
+        }
+        return codeCache;
+    }
+
     public static string DisplayTitle(string id)
     {
+        if (id == "Arrange PDF Pages") return L("PDF Pages");
+        if (id == "Read QR Codes") return L("Scan QR");
         if (id == "Float") return L("Add to Shelf");
+        if (id.StartsWith("qr.") && SavedCodes().FirstOrDefault(c => "qr." + c.Id == id) is { } code) return code.Name;
+        if (id.StartsWith("app.") && AppTargets.All.FirstOrDefault(t => t.ActionId == id) is { } target) return target.Name;
         if (id.StartsWith("preset.") && Prefs.ImagePresets.FirstOrDefault(p => p.ActionId == id) is { } preset)
             return preset.DisplayName;
         return L(id);
@@ -123,7 +146,8 @@ static class Catalog
 
     public static List<WheelItem> StandaloneItems(IReadOnlyList<string> paths, WheelMode mode) =>
         DefaultItems(paths, mode)
-            .Where(i => i.Title is "Extract Text" or "Float" or "Hang" || i.Title.StartsWith("preset."))
+            .Where(i => i.Title is "Extract Text" or "Float" or "Hang" or "Batch Rename" or "Arrange PDF Pages" or "Read QR Codes" or "QR Library"
+                        || i.Title.StartsWith("preset.") || i.Title.StartsWith("app.") || i.Title.StartsWith("qr."))
             .ToList();
 
     /// The menu for a drag, in the user's order with hidden items removed.
@@ -133,6 +157,15 @@ static class Catalog
     /// Everything a menu can offer for a kind of file, used by the Customize settings.
     public static List<string> AllItems(WheelMode mode, FileKind kind)
     {
+        if (mode == WheelMode.Apps)
+        {
+            if (!Feature.AppRouting.IsOn()) return [];
+            // Customize represents a whole category, not just its sample .jpg/.docx file.
+            return AppTargets.All
+                .Where(t => t.Enabled && (t.Extensions.Count == 0 || t.Extensions.Any(ext => FileKinds.Of([@"Z:\nonexistent\file." + ext]) == kind)))
+                .Select(t => t.ActionId)
+                .ToList();
+        }
         var samples = kind.SampleFiles();
         var multi = DefaultItems(samples, mode).Select(i => i.Title).ToList();
         var single = DefaultItems(samples.Take(1).ToList(), mode).Select(i => i.Title);
@@ -141,6 +174,42 @@ static class Catalog
 
     public static List<WheelItem> DefaultItems(IReadOnlyList<string> paths, WheelMode mode)
     {
+        // The Apps and Codes menus also serve the keyboard tool wheel, which has no files.
+        if (mode == WheelMode.Codes)
+        {
+            if (!Feature.QrCodes.IsOn()) return [];
+            List<WheelItem> codes =
+            [
+                new("QR Library", _ =>
+                {
+                    if (!Feature.QrCodes.IsOn()) throw new ToolError(L("This feature is turned off."));
+                    QrLibraryWindow.Show();
+                    return Task.FromResult(new ActionResult(""));
+                }),
+            ];
+            codes.AddRange(SavedCodes().Select(entry => new WheelItem("qr." + entry.Id, _ =>
+            {
+                if (!Feature.QrCodes.IsOn()) throw new ToolError(L("This feature is turned off."));
+                if (!new QrLibraryStore().Load().Any(c => c.Id == entry.Id))
+                    throw new ToolError(L("This saved code was removed. Open the QR Library to refresh."));
+                QrLibraryWindow.Show(entry.Id);
+                return Task.FromResult(new ActionResult(""));
+            })));
+            return codes;
+        }
+        if (mode == WheelMode.Apps)
+        {
+            if (!Feature.AppRouting.IsOn()) return [];
+            return AppTargets.All
+                .Where(t => t.Enabled && (paths.Count == 0 || t.Accepts(paths)))
+                .Select(target => new WheelItem(target.ActionId, async files =>
+                {
+                    var selected = files.Count == 0 ? ToolUI.ChooseFiles(imagesOnly: false, multiple: true) : files;
+                    if (selected.Count == 0) throw new Cancelled();
+                    return await FileAppRouting.Run(target, selected);
+                }))
+                .ToList();
+        }
         if (paths.Count == 0) return [];
         var kind = FileKinds.Of(paths);
         var sourceExt = paths.Select(FileKinds.Ext).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -148,9 +217,21 @@ static class Catalog
 
         switch (mode)
         {
+            case WheelMode.Apps or WheelMode.Codes:
+                return []; // Handled above.
+
             case WheelMode.Actions:
             {
                 var list = Actions(multi);
+                if (Feature.BatchRename.IsOn())
+                {
+                    list.Add(new WheelItem("Batch Rename", files =>
+                    {
+                        if (!Feature.BatchRename.IsOn()) throw new ToolError(L("This feature is turned off."));
+                        BatchRenameWindow.Present(files);
+                        return Task.FromResult(new ActionResult(""));
+                    }));
+                }
                 if (kind == FileKind.Image && Feature.Clothesline.IsOn())
                 {
                     list.Insert(1, new WheelItem("Hang", files =>
@@ -213,6 +294,15 @@ static class Catalog
                             .. Images.ToolItems.Select(o => Each(o.Title, paths, o.Run)),
                             new WheelItem("Make PDF", async files => Saved(await Images.MakePdf(files))),
                         ];
+                        if (Feature.QrCodes.IsOn())
+                        {
+                            list.Insert(0, new WheelItem("Read QR Codes", files =>
+                            {
+                                if (!Feature.QrCodes.IsOn()) throw new ToolError(L("This feature is turned off."));
+                                QrCodesWindow.Present(files);
+                                return Task.FromResult(new ActionResult(""));
+                            }));
+                        }
                         if (Feature.TextCapture.IsOn() && !multi)
                         {
                             list.Insert(0, new WheelItem("Extract Text", files =>
@@ -257,6 +347,15 @@ static class Catalog
                             Each("Crop", paths, p => new CropEditor(p).PresentAsync()),
                             .. Pdfs.ToolItems.Select(o => Each(o.Title, paths, o.Run)),
                         ];
+                        if (Feature.PdfPages.IsOn())
+                        {
+                            list.Insert(0, new WheelItem("Arrange PDF Pages", files =>
+                            {
+                                if (!Feature.PdfPages.IsOn()) throw new ToolError(L("This feature is turned off."));
+                                PdfPagesWindow.Present(files);
+                                return Task.FromResult(new ActionResult(""));
+                            }));
+                        }
                         if (multi) list.Insert(0, new WheelItem("Merge", async files => Saved([await Pdfs.Merge(files)])));
                         return list;
                     }

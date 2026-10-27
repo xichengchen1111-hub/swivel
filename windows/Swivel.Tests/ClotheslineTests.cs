@@ -465,6 +465,25 @@ public sealed class ClotheslineTests
     }
 
     [TestMethod]
+    public void DraggingACardOntoTheRopeLetsTheNextCardShow()
+    {
+        // Regression: a card dragged up and hung left `Dragging` set, so every later screenshot's card waited
+        // for that finished drag and never appeared.
+        var timer = new CardTimer();
+        timer.Present(0);
+        timer.BeginDrag();
+        Assert.IsTrue(timer.Dragging);
+        timer.Taken();
+        Assert.IsFalse(timer.Dragging);
+        Assert.IsFalse(timer.Interacting);
+        Assert.IsFalse(timer.Showing);
+        Assert.IsFalse(timer.Due(100), "a card that was taken is never put away again");
+        // The next screenshot's card shows and waits as usual.
+        timer.Present(200);
+        Assert.IsTrue(timer.Due(202.5));
+    }
+
+    [TestMethod]
     public void TopEdgeRevealsOnceAndRearmsAfterLeaving()
     {
         var edge = new TopEdgeTrigger();

@@ -76,7 +76,7 @@ sealed class DragTapDetector
     {
         if (pressed == 0) return null;
         foreach (var mode in WheelModes.All)
-            if ((pressed & KeyBit(mode)) != 0) return mode;
+            if (mode.IsAvailable() && (pressed & KeyBit(mode)) != 0) return mode;
         return null;
     }
 }

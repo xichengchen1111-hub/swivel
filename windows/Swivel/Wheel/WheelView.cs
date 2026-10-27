@@ -1,4 +1,7 @@
 using System.Windows;
+using System.Windows.Automation.Peers;
+using System.Windows.Automation.Provider;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
@@ -52,6 +55,28 @@ sealed class WheelView : FrameworkElement
     public Action<WheelItem, IReadOnlyList<string>>? Dropped { get; set; }
     public Action? OnDragEndedWithoutDrop { get; set; }
     public string Subtitle { get; set; } = "";
+
+    /// The keyboard tool wheel (1.4): items are clicked, or chosen with the arrow keys and Enter, instead of dropped on.
+    public Action<WheelItem>? Clicked { get; set; }
+    /// Esc, or a click on the hub or outside the items, in a clickable menu.
+    public Action? Cancelled { get; set; }
+    /// Space in a clickable menu.
+    public Action? NextPage { get; set; }
+
+    bool clickable;
+    /// Opened from the keyboard rather than during a drag: it takes clicks and keys, and its hints say so.
+    public bool IsClickable
+    {
+        get => clickable;
+        set
+        {
+            if (clickable == value) return;
+            clickable = value;
+            Focusable = value;
+            Invalidate();
+            RefreshAutomation();
+        }
+    }
 
     MenuStyle style = MenuStyle.Wheel;
     public MenuStyle MenuStyle
@@ -224,6 +249,7 @@ sealed class WheelView : FrameworkElement
         if (!turning) visited = false;
         CancelArmed = false;
         hubPress.Snap(0);
+        RefreshAutomation();
         if (turning)
         {
             if (!Motion.Reduced)
@@ -860,6 +886,88 @@ sealed class WheelView : FrameworkElement
         return true;
     }
 
+    // MARK: Clicks and keys (the keyboard tool wheel)
+
+    /// A click at `wpfPoint` (WPF view coordinates): presses the item under it, or cancels on the hub or a gap. The
+    /// press starts on mouse-down; the item runs on the next dispatcher turn.
+    public bool Click(Point wpfPoint)
+    {
+        if (!clickable || pressed != null) return false;
+        openPoint = null; // a deliberate click counts even if the pointer hasn't moved since the menu opened
+        Track(wpfPoint);
+        if (hovered is { } index && index >= 0 && index < items.Count)
+        {
+            Choose(index);
+            return true;
+        }
+        Cancelled?.Invoke();
+        return false;
+    }
+
+    /// Esc closes, Space turns the page, the arrow keys step through the items (left/up backwards) and Enter runs the
+    /// highlighted one. Returns true for a key the menu used.
+    public bool HandleKey(Key key)
+    {
+        if (!clickable) return false;
+        if (pressed != null) return true;
+        switch (key)
+        {
+            case Key.Escape:
+                Cancelled?.Invoke();
+                return true;
+            case Key.Space:
+                NextPage?.Invoke();
+                return true;
+            case Key.Left or Key.Up or Key.Right or Key.Down:
+                if (items.Count == 0) return true;
+                bool backwards = key is Key.Left or Key.Up;
+                int from = hovered ?? (backwards ? 0 : -1);
+                openPoint = null;
+                Hovered = (from + (backwards ? -1 : 1) + items.Count) % items.Count;
+                CancelArmed = false;
+                return true;
+            case Key.Enter:
+                if (hovered is { } index && index >= 0 && index < items.Count) Choose(index);
+                return true;
+        }
+        return false;
+    }
+
+    /// UI Automation's Invoke on an item: the same as clicking it.
+    internal void Invoke(int index)
+    {
+        if (clickable && pressed == null && index >= 0 && index < items.Count) Choose(index);
+    }
+
+    /// Presses the item in with its sound, then runs it.
+    void Choose(int index)
+    {
+        var item = items[index];
+        BeginConfirm(index);
+        Feedback.Press();
+        Dispatcher.BeginInvoke(() => Clicked?.Invoke(item));
+    }
+
+    /// The item's outline on screen (physical pixels), for UI Automation.
+    internal Rect ItemScreenRect(int index)
+    {
+        var slots = Slots(settled: true);
+        if (index < 0 || index >= slots.Count || PresentationSource.FromVisual(this) == null) return Rect.Empty;
+        var b = slots[index].Path.Bounds;
+        var wpf = new Rect(b.X, viewSize.Height - b.Y - b.Height, b.Width, b.Height);
+        try { return new Rect(PointToScreen(wpf.TopLeft), PointToScreen(wpf.BottomRight)); }
+        catch (InvalidOperationException) { return Rect.Empty; }
+    }
+
+    void RefreshAutomation()
+    {
+        if (UIElementAutomationPeer.FromElement(this) is not { } peer) return;
+        peer.ResetChildrenCache();
+        peer.InvalidatePeer();
+    }
+
+    protected override AutomationPeer OnCreateAutomationPeer() => new WheelViewPeer(this);
+
     // MARK: Drawing
 
     bool IsDark => DarkOverride ?? Native.DarkMode;
@@ -989,7 +1097,8 @@ sealed class WheelView : FrameworkElement
         }
 
         DrawHeadline(new Point(c.X, c.Y + 7), hubRadius * 1.7);
-        DrawText(cancelArmed ? L("release to cancel") : hovered == null ? Subtitle : L("drop to apply"),
+        DrawText(clickable ? (hovered == null ? L("Esc to close") : L("Click or Enter"))
+            : cancelArmed ? L("release to cancel") : hovered == null ? Subtitle : L("drop to apply"),
             new Point(c.X, c.Y - 8), FontWeights.Medium, 8.5, Ink.WithAlpha(0.6), hubRadius * 1.6);
         DrawPageDots(new Point(c.X, c.Y - 26), hintBelow: true);
         painter.Restore();
@@ -1021,13 +1130,15 @@ sealed class WheelView : FrameworkElement
     {
         var rect = new Rect(0, viewSize.Height - HeaderHeight, viewSize.Width, HeaderHeight);
         var title = Headline(hovered);
-        var detail = cancelArmed ? L("release to cancel") : hovered == null ? Subtitle : L("drop to apply");
+        var detail = clickable ? (hovered == null ? L("Esc to close") : L("Click or Enter"))
+            : cancelArmed ? L("release to cancel") : hovered == null ? Subtitle : L("drop to apply");
         FontWeight bold = Fw(FontWeights.Bold), regular = Fw(FontWeights.Normal), semibold = Fw(Semibold);
         double titleSize = Fs(13), detailSize = Fs(11), hintSize = Fs(9);
         // Sized for the widest title this page can show, so hovering never slides the header sideways.
         double shownTitle = painter.Width(title, Look.UI, bold, titleSize);
         double titleWidth = Math.Max(shownTitle, headerTitles.Select(t => painter.Width(t, Look.UI, bold, titleSize)).DefaultIfEmpty(0).Max());
-        double detailWidth = Math.Min(new[] { Subtitle, L("drop to apply"), L("release to cancel") }
+        var details = clickable ? new[] { L("Esc to close"), L("Click or Enter") } : new[] { Subtitle, L("drop to apply"), L("release to cancel") };
+        double detailWidth = Math.Min(details
             .Max(t => painter.Width(t, Look.UI, regular, detailSize)), 150);
         // Windows key names are words ("Shift next"), not symbols, so the dots' room follows the hint's width.
         // In a narrow menu the hint shortens to the key's name, so the detail text keeps its room.
@@ -1036,7 +1147,7 @@ sealed class WheelView : FrameworkElement
         double dotsWidth = pageCount > 1 ? (pageCount - 1) * 7 + 4 + 10 + hintWidth + 8 : 0;
         if (pageCount > 1 && titleWidth + Math.Min(detailWidth, 80) + dotsWidth + 34 > viewSize.Width - 8)
         {
-            headerHint = mode.KeySymbol();
+            headerHint = PageKey;
             hintWidth = Math.Min(painter.Width(headerHint, Look.UI, semibold, hintSize), 64);
             dotsWidth = (pageCount - 1) * 7 + 4 + 10 + hintWidth + 8;
         }
@@ -1068,7 +1179,9 @@ sealed class WheelView : FrameworkElement
         painter.Restore();
     }
 
-    string PageHint => L("%@ next", mode.KeySymbol());
+    /// The key that turns the page: the menu's drag key, or Space in a clickable menu.
+    string PageKey => clickable ? L("Space") : mode.KeySymbol();
+    string PageHint => L("%@ next", PageKey);
 
     double DotSize(int p) => p == page && !Motion.Reduced ? 4 * (1 + 0.5 * (1 - Math.Clamp(reveal.Value, 0, 1))) : 4;
 
@@ -1303,4 +1416,62 @@ sealed class WheelView : FrameworkElement
         var dc = glow ? painter.Glow(labelGlow) : painter.Plain;
         painter.Text(dc, text, at, Look.UI, Fw(weight), Fs(size), color, maxWidth, minSize: MinText);
     }
+}
+
+/// UI Automation for the menu: in a clickable menu (the keyboard tool wheel) every item is a button that can be
+/// invoked, followed by Cancel and, with several pages, Next Page (the Mac's WheelAccessibilityButton). A drag menu
+/// keeps the default peer: it is a drop target, not something to click.
+sealed class WheelViewPeer(WheelView view) : FrameworkElementAutomationPeer(view)
+{
+    protected override AutomationControlType GetAutomationControlTypeCore() =>
+        view.IsClickable ? AutomationControlType.Menu : AutomationControlType.Custom;
+
+    protected override string GetClassNameCore() => "SwivelMenu";
+
+    protected override string GetNameCore() => "Swivel";
+
+    protected override List<AutomationPeer>? GetChildrenCore()
+    {
+        if (!view.IsClickable) return base.GetChildrenCore();
+        var children = new List<AutomationPeer>();
+        for (int i = 0; i < view.Items.Count; i++)
+        {
+            int index = i;
+            children.Add(new WheelButtonPeer(view.Items[i].DisplayTitle, () => view.ItemScreenRect(index), () => view.Invoke(index)));
+        }
+        children.Add(new WheelButtonPeer(L("Cancel"), null, () => view.Cancelled?.Invoke()));
+        if (view.PageCount > 1) children.Add(new WheelButtonPeer(L("Next Page"), null, () => view.NextPage?.Invoke()));
+        return children;
+    }
+}
+
+/// One invokable button of a clickable menu. Cancel and Next Page have no outline of their own (Esc and Space).
+sealed class WheelButtonPeer(string name, Func<Rect>? bounds, Action press) : AutomationPeer, IInvokeProvider
+{
+    public void Invoke() => press();
+    public override object? GetPattern(PatternInterface pattern) => pattern == PatternInterface.Invoke ? this : null;
+    protected override string GetAcceleratorKeyCore() => "";
+    protected override string GetAccessKeyCore() => "";
+    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+    protected override string GetAutomationIdCore() => "";
+    protected override Rect GetBoundingRectangleCore() => bounds?.Invoke() ?? Rect.Empty;
+    protected override List<AutomationPeer>? GetChildrenCore() => null;
+    protected override string GetClassNameCore() => "SwivelMenuItem";
+    protected override Point GetClickablePointCore() =>
+        bounds?.Invoke() is { IsEmpty: false } r ? new Point(r.X + r.Width / 2, r.Y + r.Height / 2) : new Point(double.NaN, double.NaN);
+    protected override string GetHelpTextCore() => "";
+    protected override string GetItemStatusCore() => "";
+    protected override string GetItemTypeCore() => "";
+    protected override AutomationPeer? GetLabeledByCore() => null;
+    protected override string GetNameCore() => name;
+    protected override AutomationOrientation GetOrientationCore() => AutomationOrientation.None;
+    protected override bool HasKeyboardFocusCore() => false;
+    protected override bool IsContentElementCore() => true;
+    protected override bool IsControlElementCore() => true;
+    protected override bool IsEnabledCore() => true;
+    protected override bool IsKeyboardFocusableCore() => false;
+    protected override bool IsOffscreenCore() => bounds != null && bounds().IsEmpty;
+    protected override bool IsPasswordCore() => false;
+    protected override bool IsRequiredForFormCore() => false;
+    protected override void SetFocusCore() { }
 }

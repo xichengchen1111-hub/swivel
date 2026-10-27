@@ -1,7 +1,7 @@
 # Swivel for Windows — notes for coding agents
 
-`windows/` is the Windows port of Swivel: the same six tools as the macOS app (Wheel, Clothesline, Text Capture,
-File Shelf, Image Presets, Quick Actions), rewritten in C# / WPF for Windows 10 (2004+) and 11. The macOS sources in
+`windows/` is the Windows port of Swivel: the same ten tools as the macOS app (Wheel, Clothesline, Text Capture,
+File Shelf, Image Presets, Quick Actions, Batch Rename, PDF Pages, QR & Barcodes, App Actions), rewritten in C# / WPF for Windows 10 (2004+) and 11. The macOS sources in
 `../Sources/Swivel` are the specification: keep the behaviour, wording, numbers (spring responses, delays, sizes) and
 file-naming rules the same unless Windows makes that impossible, and say so in a comment where it differs.
 
@@ -22,10 +22,10 @@ Several agents may build at once: always pass your own `--artifacts-path` (a fol
 `dotnet build windows/Swivel/Swivel.csproj --artifacts-path <scratch>/art` and
 `dotnet test windows/Swivel.Tests --artifacts-path <scratch>/art --filter ClassName~Images`.
 
-Command-line test modes (same as the Mac app): `--run <convert|tools|actions> "<item>" <file>…`,
+Command-line test modes (same as the Mac app): `--run <convert|tools|actions|apps|codes> "<item>" <file>…`,
 `--edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>…`, `--recognize <image>`,
-`--tool <text|shelf|quick|presets|feel|clothesline|style|colors> [file]…`, `--demo`, `--frames`, `--feedback <check|play>`. `SWIVEL_SETTINGS=<file>`
-points the app at a separate settings file; `SWIVEL_TAB=<0-11>` opens a settings page. Do not start the app without
+`--tool <text|shelf|quick|presets|feel|clothesline|style|colors|rename|pdf|qr|library|apps|launcher> [file]…`, `--demo`, `--frames`, `--feedback <check|play>`. `SWIVEL_SETTINGS=<file>`
+points the app at a separate settings file; `SWIVEL_TAB=<0-15>` opens a settings page; `SWIVEL_QR_LIBRARY_DIR=<dir>` isolates the QR library. Do not start the app without
 arguments while testing: that starts the tray icon, the drag watcher and global hotkeys on the owner's desktop.
 
 ## Code map (`windows/Swivel`)
@@ -44,6 +44,9 @@ arguments while testing: that starts the tray icon, the drag watcher and global 
 | Settings window (PowerToys-style sidebar) | `Settings/` |
 | Shelf, Quick Actions, Text Capture, Image Presets, shared tool UI | `Tools/` |
 | Clothesline | `Clothesline/` |
+| Batch Rename, PDF Pages (1.4) | `FileTools/` |
+| QR & Barcodes: reader/encoder, scan window, QR Library and its 3D scenes (1.4) | `Qr/` |
+| App Actions and the keyboard tool wheel (1.4) | `Apps/` |
 | Tests | `../Swivel.Tests/` |
 
 ## Rules of the house

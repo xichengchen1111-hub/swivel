@@ -39,6 +39,16 @@ static partial class Strings
             ["搜索已开启的工具，选择文件后按回车。也可以直接从文件资源管理器拖入文件。", "搜尋已開啟的工具，選擇檔案後按 Enter。也可以直接從檔案總管拖入檔案。", "有効なツールを検索し、ファイルを選んで Enter。エクスプローラーからのドロップも受け付けます。"]),
         ("If another app uses the same shortcut, choose a different one. You can always reopen Swivel from the Start menu or the notification area to reach Settings.",
             ["如果与其他应用的快捷键冲突，请换一个。始终可以从开始菜单或通知区域重新打开 Swivel 进入设置。", "如果與其他應用程式的快速鍵衝突，請換一個。隨時可從開始功能表或通知區域重新開啟 Swivel 進入設定。", "他のアプリと重なる場合は別のキーを選んでください。スタート メニューや通知領域から Swivel を開き直せば設定に戻れます。"]),
+        // The keyboard tool wheel (1.4): Ctrl + Alt instead of Control + Option, Enter instead of Return.
+        ("Hold Ctrl and Alt with the selected key to open the wheel. Space alone only changes pages in an open wheel.",
+            ["同时按住 Ctrl、Alt 和所选按键打开轮盘。单独按空格只用于已打开轮盘的翻页。", "同時按住 Ctrl、Alt 與選定按鍵開啟輪盤。單獨按空白鍵只用於已開啟輪盤的翻頁。",
+             "Ctrl と Alt を押しながら選択したキーで開きます。Space 単独では開いているホイールのページを切り替えます。"]),
+        ("Click an action, or use arrow keys and Enter. Space changes pages; Esc closes. Only enabled tools appear.",
+            ["点击动作，或用方向键和回车选择。空格翻页，Esc 关闭，仅显示已启用的工具。", "點選動作，或以方向鍵與 Enter 選取。空格換頁，Esc 關閉，僅顯示已啟用工具。",
+             "クリックまたは矢印と Enter で選択します。Space でページ切替、Esc で閉じます。有効なツールのみ表示します。"]),
+        ("Another app is using this shortcut. Choose a different one, or use Show Tool Wheel below.",
+            ["其他应用正在使用这个快捷键。请换一个，或使用下方的“显示工具轮盘”。", "其他 App 正在使用這個快速鍵。請換一個，或使用下方的「顯示工具輪盤」。",
+             "このショートカットは別のアプリが使用しています。別のキーを選ぶか、下の「ツールホイールを表示」を使ってください。"]),
         // Feel & Text (1.3.3): the Mac's "Sound & touch" without haptics, and the notes that name macOS.
         ("Sound", ["声音", "聲音", "サウンド"]),
         ("Animation effects in Windows always take priority. Try the menu above, or click the sample to replay.",

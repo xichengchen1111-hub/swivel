@@ -236,6 +236,147 @@ public sealed class SettingsTests
         finally { window.Close(); }
     }
 
+    sealed class TestHotKey(bool registered) : IHotKeyRegistration
+    {
+        public bool IsRegistered => registered;
+        public void Dispose() { }
+    }
+
+    [STATestMethod]
+    public void ShortcutsListTheNewMenusWhileTheirToolsAreOn()
+    {
+        var window = Open(AppTab.Shortcuts);
+        try
+        {
+            var pane = (ShortcutsPane)Current<WheelPage>(window).Section(0);
+            Assert.AreEqual(Visibility.Collapsed, pane.Row(WheelMode.Apps).Visibility);
+            Assert.AreEqual(Visibility.Collapsed, pane.Row(WheelMode.Codes).Visibility);
+            Assert.HasCount(5, pane.Picker(WheelMode.Apps).Items);
+            Prefs.SetFeatureEnabled(Feature.AppRouting, true);
+            Pump(0.2);
+            Assert.AreEqual(Visibility.Visible, pane.Row(WheelMode.Apps).Visibility);
+            Assert.AreEqual(Array.IndexOf(TriggerKeys.All, TriggerKey.Space), pane.Picker(WheelMode.Apps).SelectedIndex);
+            // Taking Space for Convert swaps: App Actions gets Shift.
+            pane.Picker(WheelMode.Convert).SelectedIndex = Array.IndexOf(TriggerKeys.All, TriggerKey.Space);
+            Assert.AreEqual(TriggerKey.Shift, Prefs.Key(WheelMode.Apps));
+            Prefs.SetFeatureEnabled(Feature.QrCodes, true);
+            Pump(0.2);
+            Assert.AreEqual(Visibility.Visible, pane.Row(WheelMode.Codes).Visibility);
+            Assert.AreEqual(Array.IndexOf(TriggerKeys.All, TriggerKey.Tab), pane.Picker(WheelMode.Codes).SelectedIndex);
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void ToolWheelShortcutSaysReadyOrConflictNeverBoth()
+    {
+        var window = Open(AppTab.Shortcuts);
+        try
+        {
+            var pane = (ShortcutsPane)Current<WheelPage>(window).Section(0);
+            bool succeeds = false;
+            var launcher = new ShortcutWheel((_, _, _) => new TestHotKey(succeeds));
+            pane.Launcher = launcher;
+            pane.Refresh();
+            Assert.AreEqual("Tool wheel shortcut is off", pane.LauncherStatus.Text);
+            Assert.IsFalse(pane.LauncherKey.IsEnabled);
+            Assert.IsFalse(pane.ShowLauncher.IsEnabled);
+            Assert.HasCount(3, pane.LauncherKey.Items);
+            Assert.AreEqual("Ctrl + Alt + J", pane.LauncherKey.SelectedItem as string);
+
+            pane.LauncherSwitch.Flip();
+            Assert.IsTrue(Prefs.ShortcutWheelEnabled);
+            launcher.Sync();
+            pane.Refresh();
+            Assert.AreEqual("Another app is using this shortcut. Choose a different one, or use Show Tool Wheel below.", pane.LauncherStatus.Text);
+            Assert.IsTrue(pane.ShowLauncher.IsEnabled, "the wheel can still be opened from here");
+            Prefs.SetFeatureEnabled(Feature.AppRouting, true);
+            Pump(0.3);
+            RenderPage(window, "shortcuts-tool-wheel-conflict");
+
+            succeeds = true;
+            pane.LauncherKey.SelectedIndex = Array.IndexOf(WheelShortcuts.All, WheelShortcut.W);
+            Assert.AreEqual(WheelShortcut.W, Prefs.WheelShortcut);
+            pane.Refresh();
+            Assert.AreEqual("", pane.LauncherStatus.Text, "not tried yet: neither ready nor a conflict");
+            launcher.Sync();
+            pane.Refresh();
+            Assert.AreEqual("Shortcut is ready", pane.LauncherStatus.Text);
+
+            Prefs.IsEnabled = false;
+            launcher.Sync();
+            Pump(0.2);
+            pane.Refresh();
+            Assert.AreEqual("Turn this feature on above to get started.", pane.LauncherStatus.Text);
+            Assert.IsFalse(pane.ShowLauncher.IsEnabled);
+        }
+        finally
+        {
+            Prefs.IsEnabled = true;
+            window.Close();
+        }
+    }
+
+    [STATestMethod]
+    public void CustomizeOffersAppAndLibraryButtonsOnTheirMenus()
+    {
+        Prefs.SetFeatureEnabled(Feature.AppRouting, true);
+        var window = Open(AppTab.Customize);
+        try
+        {
+            var pane = (CustomizePane)Current<WheelPage>(window).Section(2);
+            Assert.HasCount(5, pane.ModePicker.Items);
+            Assert.AreEqual(Visibility.Collapsed, pane.AddAppButton.Visibility);
+            Assert.AreEqual(Visibility.Collapsed, pane.LibraryButton.Visibility);
+            pane.ModePicker.SelectedIndex = Array.IndexOf(WheelModes.All, WheelMode.Apps);
+            Pump(0.1);
+            Assert.AreEqual(WheelMode.Apps, pane.Mode);
+            Assert.AreEqual(Visibility.Visible, pane.AddAppButton.Visibility);
+            Assert.AreEqual(Visibility.Visible, pane.ManageAppsButton.Visibility);
+            Assert.IsTrue(pane.AddAppButton.IsEnabled);
+            CollectionAssert.AreEqual(new[] { "app.codex", "app.claude-code" }, pane.Rows.Select(r => r.Title).ToArray());
+            Pump(0.5);
+            RenderPage(window, "customize-apps");
+            // (Manage Applications opens App Actions in the shared settings window, which tests don't open.)
+
+            pane.ModePicker.SelectedIndex = Array.IndexOf(WheelModes.All, WheelMode.Codes);
+            Pump(0.1);
+            Assert.AreEqual(Visibility.Collapsed, pane.AddAppButton.Visibility);
+            Assert.AreEqual(Visibility.Visible, pane.LibraryButton.Visibility);
+            Assert.IsFalse(pane.LibraryButton.IsEnabled, "QR & Barcodes is off");
+            Assert.IsFalse(pane.KindPicker.IsEnabled, "one library for every file type");
+        }
+        finally { window.Close(); }
+    }
+
+    [STATestMethod]
+    public void AppActionsPageTogglesEditsAndRemovesRules()
+    {
+        Prefs.SetFeatureEnabled(Feature.AppRouting, true);
+        var window = Open(AppTab.AppRouting);
+        try
+        {
+            var pane = (AppRoutingPane)Current<FeaturePage>(window).Content;
+            CollectionAssert.AreEqual(new[] { "codex", "claude-code" }, pane.Targets.Select(t => t.Id).ToArray());
+            Assert.HasCount(2, pane.Table.Items);
+            Assert.IsTrue(pane.EditButton.IsEnabled);
+            pane.SetEnabled("codex", false);
+            Assert.IsFalse(AppTargets.All[0].Enabled);
+            pane.Saved(new FileAppTarget { Id = "n", Name = "Notepad", AppPath = @"C:\Windows\notepad.exe", Extensions = ["txt"] });
+            Pump(0.1);
+            Assert.HasCount(3, pane.Table.Items);
+            Assert.AreEqual("n", (pane.Table.SelectedItem as ListBoxItem)?.Tag);
+            window.ThemeMode = ThemeMode.Light;
+            Pump(0.3);
+            RenderPage(window, "app-actions-light");
+            pane.RemoveTarget();
+            Pump(0.1);
+            CollectionAssert.AreEqual(new[] { "codex", "claude-code" }, AppTargets.All.Select(t => t.Id).ToArray());
+            Assert.HasCount(2, pane.Table.Items);
+        }
+        finally { window.Close(); }
+    }
+
     // MARK: Style
 
     [STATestMethod]

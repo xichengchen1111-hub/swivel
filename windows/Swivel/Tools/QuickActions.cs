@@ -312,8 +312,21 @@ sealed class QuickActions
                 Clothesline.Shared.Reveal();
                 return Task.FromResult<ActionResult?>(null);
             }));
+        if (Feature.QrCodes.IsOn())
+            list.Add(new("qrLibrary", L("QR Library"), L("Saved codes and trees"), Feature.QrCodes.Glyph(), () =>
+            {
+                QrLibraryWindow.Show();
+                return Task.FromResult<ActionResult?>(null);
+            }));
         if (files.Count == 0)
         {
+            foreach (var feature in new[] { Feature.BatchRename, Feature.PdfPages, Feature.QrCodes })
+                if (feature.IsOn())
+                    list.Add(new($"choose.{feature.Id()}", feature.Title(), L("Choose Files…"), feature.Glyph(), () =>
+                    {
+                        FileTools.ChooseAndOpen(feature);
+                        return Task.FromResult<ActionResult?>(null);
+                    }));
             if (Feature.TextCapture.IsOn())
                 list.Add(new("chooseOCR", L("Extract Text"), L("Choose an image…"), Feature.TextCapture.Glyph(), () =>
                 {

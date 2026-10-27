@@ -66,42 +66,116 @@ sealed class WheelPage : StackPanel
 
 // MARK: - Shortcuts
 
-/// Which key opens each menu. Windows has Shift, Ctrl and Alt (the Windows key opens Start, and there is no fn key
-/// that survives a drag). Picking a key another menu uses swaps the two (Prefs.SetKey).
+/// Which key opens each menu, and the keyboard tool wheel. Windows has Shift, Ctrl and Alt, plus Space and Tab for the
+/// 1.4 menus (the Windows key opens Start, and there is no fn key that survives a drag). Picking a key another menu
+/// uses swaps the two (Prefs.SetKey). The App Actions and QR Library rows show only while their tools are on.
 sealed class ShortcutsPane : Pane
 {
+    static readonly (WheelMode Mode, string Title)[] Menus =
+        [(WheelMode.Convert, "Convert formats"), (WheelMode.Tools, "File tools"), (WheelMode.Actions, "File actions"), (WheelMode.Apps, "App Actions"), (WheelMode.Codes, "QR Library")];
+
     readonly Dictionary<WheelMode, ComboBox> pickers = [];
+    readonly Dictionary<WheelMode, SettingsCard> rows = [];
+    readonly ToggleSwitch launcherSwitch = new();
+    readonly ComboBox launcherKey = new() { MinWidth = 180 };
+    readonly TextBlock launcherStatus = Ui.Text("", 13, tone: Tone.Secondary);
+    readonly TextBlock launcherIcon = Ui.Glyph("\uE946", 14, Tone.Secondary);
+    readonly Button showLauncher;
     bool refreshing;
 
     public ShortcutsPane()
     {
         Add(Ui.Text(L("Choose which key opens each menu. Start dragging first, then tap the key."), tone: Tone.Secondary), 4);
         var group = new CardGroup { Margin = new Thickness(0, 16, 0, 0) };
-        foreach (var (mode, title) in new[] { (WheelMode.Convert, "Convert formats"), (WheelMode.Tools, "File tools"), (WheelMode.Actions, "File actions") })
+        foreach (var (mode, title) in Menus)
         {
             var picker = new ComboBox { MinWidth = 140 };
             foreach (var key in TriggerKeys.All) picker.Items.Add(key.Title());
+            AutomationProperties.SetName(picker, L(title));
             picker.SelectionChanged += (_, _) =>
             {
                 if (refreshing || picker.SelectedIndex < 0) return;
                 Prefs.SetKey(TriggerKeys.All[picker.SelectedIndex], mode);
             };
             pickers[mode] = picker;
-            group.Add(new SettingsCard(mode.Glyph(), L(title), null, picker));
+            var card = new SettingsCard(mode.Glyph(), L(title), null, picker);
+            rows[mode] = card;
+            group.Add(card);
         }
         Add(group);
         Add(Ui.Text(L("Picking a key that another menu uses swaps the two."), 12, tone: Tone.Secondary), 10);
         Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { Ui.Button(L("Restore Defaults"), Prefs.ResetKeys) } }, 14);
+
+        // The keyboard tool wheel (1.4).
+        launcherSwitch.Toggled += on =>
+        {
+            if (!refreshing) Prefs.ShortcutWheelEnabled = on;
+        };
+        AutomationProperties.SetName(launcherSwitch, L("Open a tool wheel without dragging"));
+        foreach (var shortcut in WheelShortcuts.All) launcherKey.Items.Add(shortcut.Title());
+        AutomationProperties.SetName(launcherKey, L("Tool wheel shortcut"));
+        launcherKey.SelectionChanged += (_, _) =>
+        {
+            if (refreshing || launcherKey.SelectedIndex < 0) return;
+            Prefs.WheelShortcut = WheelShortcuts.All[launcherKey.SelectedIndex];
+        };
+        Add(new CardGroup(
+            new SettingsCard(WheelMode.Tools.Glyph(), L("Open a tool wheel without dragging"), L("Hold Ctrl and Alt with the selected key to open the wheel. Space alone only changes pages in an open wheel."), launcherSwitch),
+            new SettingsCard("\uE765", L("Tool wheel shortcut"), null, launcherKey)) { Margin = new Thickness(0, 28, 0, 0) });
+        launcherIcon.Margin = new Thickness(2, 0, 8, 0);
+        launcherIcon.VerticalAlignment = VerticalAlignment.Top;
+        Add(new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0), Children = { launcherIcon, launcherStatus } });
+        showLauncher = Ui.Button(L("Show Tool Wheel"), () => ShortcutWheel.Shared.Show());
+        Add(new StackPanel { Orientation = Orientation.Horizontal, Children = { showLauncher } }, 12);
+        Add(Ui.Text(L("Click an action, or use arrow keys and Enter. Space changes pages; Esc closes. Only enabled tools appear."), 12, tone: Tone.Secondary), 10);
+
+        // The shortcut registers after Prefs change (the app syncs it); its result arrives through Changed.
+        void registered() => Dispatcher.BeginInvoke(Refresh);
+        Loaded += (_, _) =>
+        {
+            ShortcutWheel.Shared.Changed -= registered;
+            ShortcutWheel.Shared.Changed += registered;
+        };
+        Unloaded += (_, _) => ShortcutWheel.Shared.Changed -= registered;
         Refresh();
     }
 
     internal ComboBox Picker(WheelMode mode) => pickers[mode];
+    internal SettingsCard Row(WheelMode mode) => rows[mode];
+    internal ToggleSwitch LauncherSwitch => launcherSwitch;
+    internal ComboBox LauncherKey => launcherKey;
+    internal TextBlock LauncherStatus => launcherStatus;
+    internal Button ShowLauncher => showLauncher;
+
+    /// The tool wheel the status describes (the shared one; tests use their own).
+    internal ShortcutWheel Launcher { get; set; } = ShortcutWheel.Shared;
 
     public override void Refresh()
     {
         refreshing = true;
-        foreach (var (mode, picker) in pickers) picker.SelectedIndex = Array.IndexOf(TriggerKeys.All, Prefs.Key(mode));
+        foreach (var (mode, picker) in pickers)
+        {
+            picker.SelectedIndex = Array.IndexOf(TriggerKeys.All, Prefs.Key(mode));
+            rows[mode].Visibility = mode.IsAvailable() ? Visibility.Visible : Visibility.Collapsed;
+        }
+        bool enabled = Prefs.ShortcutWheelEnabled;
+        launcherSwitch.SetQuietly(enabled);
+        launcherKey.SelectedIndex = Array.IndexOf(WheelShortcuts.All, Prefs.WheelShortcut);
+        launcherKey.IsEnabled = enabled;
+        showLauncher.IsEnabled = Feature.Wheel.IsOn() && enabled;
         refreshing = false;
+        var (text, glyph, tone, iconTone) =
+            !enabled ? (L("Tool wheel shortcut is off"), "\uE946", Tone.Secondary, Tone.Secondary)
+            : !Feature.Wheel.IsOn() ? (L("Turn this feature on above to get started."), "\uE946", Tone.Secondary, Tone.Secondary)
+            // Synced right after this change; until then the shortcut tried last (if any) tells.
+            : Launcher.RegisteredShortcut == Prefs.WheelShortcut && !Launcher.Available
+                ? (L("Another app is using this shortcut. Choose a different one, or use Show Tool Wheel below."), "\uE7BA", Tone.Caution, Tone.Caution)
+            : Launcher.RegisteredShortcut == Prefs.WheelShortcut ? (L("Shortcut is ready"), "\uE73E", Tone.Secondary, Tone.Success)
+            : ("", "", Tone.Secondary, Tone.Secondary);
+        launcherStatus.Text = text;
+        launcherIcon.Text = glyph;
+        Ui.SetTone(launcherStatus, tone);
+        Ui.SetTone(launcherIcon, iconTone);
     }
 }
 
@@ -452,6 +526,7 @@ sealed class CustomizePane : Pane
 
     readonly ComboBox modePicker = new() { MinWidth = 150 };
     readonly ComboBox kindPicker = new() { MinWidth = 160 };
+    readonly Button addAppButton, manageAppsButton, libraryButton;
     readonly ArrangeList list = new();
     readonly PreviewFrame preview = new() { Width = 420, Height = 380 };
     List<(string Title, bool Shown)> rows = [];
@@ -461,7 +536,7 @@ sealed class CustomizePane : Pane
     public CustomizePane()
     {
         Add(Ui.Text(L("Pick which options each menu shows and in what order. Untick to hide, drag to reorder."), tone: Tone.Secondary), 4);
-        foreach (var title in new[] { "Convert formats", "File tools", "File actions" }) modePicker.Items.Add(L(title));
+        foreach (var title in new[] { "Convert formats", "File tools", "File actions", "App Actions", "QR Library" }) modePicker.Items.Add(L(title));
         foreach (var kind in Kinds)
         {
             var item = new StackPanel { Orientation = Orientation.Horizontal };
@@ -487,6 +562,12 @@ sealed class CustomizePane : Pane
         reset.Margin = new Thickness(0, 0, 0, 8);
         pickers.Children.Add(reset);
         Add(pickers);
+        addAppButton = Ui.Button(L("Add Application…"), AddApplication);
+        manageAppsButton = Ui.Button(L("Manage Applications…"), () => AppWindow.Shared.Show(AppTab.AppRouting));
+        libraryButton = Ui.Button(L("Open QR Library…"), () => QrLibraryWindow.Show());
+        manageAppsButton.Margin = new Thickness(8, 0, 0, 8);
+        addAppButton.Margin = libraryButton.Margin = new Thickness(0, 0, 0, 8);
+        Add(new WrapPanel { Children = { addAppButton, manageAppsButton, libraryButton } });
 
         list.Toggled += (index, shown) =>
         {
@@ -543,6 +624,21 @@ sealed class CustomizePane : Pane
     }
 
     internal WheelMode Mode => WheelModes.All[Math.Max(modePicker.SelectedIndex, 0)];
+    internal Button AddAppButton => addAppButton;
+    internal Button ManageAppsButton => manageAppsButton;
+    internal Button LibraryButton => libraryButton;
+    /// Where Add Application saves (tests replace it; the form itself is tested on its own).
+    internal Action<FileAppTarget> AppSaved { get; set; } = AppTargets.Save;
+
+    void AddApplication()
+    {
+        if (!Feature.AppRouting.IsOn()) return;
+        AppTargetForm.Present(this, null, value =>
+        {
+            AppSaved(value);
+            Load(crossfade: true);
+        });
+    }
     internal FileKind Kind => Kinds[Math.Max(kindPicker.SelectedIndex, 0)];
     internal ComboBox ModePicker => modePicker;
     internal ComboBox KindPicker => kindPicker;
@@ -554,6 +650,12 @@ sealed class CustomizePane : Pane
 
     void Load(bool crossfade)
     {
+        // App Actions can add and manage apps here; the QR Library has one list for every file type.
+        addAppButton.Visibility = manageAppsButton.Visibility = Mode == WheelMode.Apps ? Visibility.Visible : Visibility.Collapsed;
+        addAppButton.IsEnabled = Feature.AppRouting.IsOn();
+        libraryButton.Visibility = Mode == WheelMode.Codes ? Visibility.Visible : Visibility.Collapsed;
+        libraryButton.IsEnabled = Feature.QrCodes.IsOn();
+        kindPicker.IsEnabled = Mode != WheelMode.Codes;
         var all = Catalog.AllItems(Mode, Kind);
         var hidden = Prefs.Hidden(Mode, Kind);
         var order = Prefs.Order(Mode, Kind);

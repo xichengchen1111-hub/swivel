@@ -3,18 +3,21 @@ using System.Text.Json.Nodes;
 
 namespace Swivel;
 
-/// A modifier key that can open a menu while dragging. (Windows has no Command or fn key that survives a drag:
-/// the Windows key opens Start, so the three menus use Shift, Ctrl and Alt.)
-enum TriggerKey { Shift, Control, Alt }
+/// A key that can open a menu while dragging. (Windows has no Command or fn key that survives a drag and the Windows
+/// key opens Start, so the menus use Shift, Ctrl and Alt, plus Space and Tab for the two 1.4 menus: during a drag
+/// Windows ignores both, so tapping them never changes what the drop does.)
+enum TriggerKey { Shift, Control, Alt, Space, Tab }
 
 static class TriggerKeys
 {
-    public static readonly TriggerKey[] All = [TriggerKey.Shift, TriggerKey.Control, TriggerKey.Alt];
+    public static readonly TriggerKey[] All = [TriggerKey.Shift, TriggerKey.Control, TriggerKey.Alt, TriggerKey.Space, TriggerKey.Tab];
 
     public static string Id(this TriggerKey key) => key switch
     {
         TriggerKey.Shift => "shift",
         TriggerKey.Control => "control",
+        TriggerKey.Space => "space",
+        TriggerKey.Tab => "tab",
         _ => "alt",
     };
 
@@ -25,6 +28,8 @@ static class TriggerKeys
     {
         TriggerKey.Shift => L("Shift"),
         TriggerKey.Control => L("Ctrl"),
+        TriggerKey.Space => L("Space"),
+        TriggerKey.Tab => L("Tab"),
         _ => L("Alt"),
     };
 
@@ -32,15 +37,47 @@ static class TriggerKeys
     {
         TriggerKey.Shift => L("⇧ Shift"),
         TriggerKey.Control => L("Ctrl"),
+        TriggerKey.Space => L("␣ Space"),
+        TriggerKey.Tab => L("⇥ Tab"),
         _ => L("Alt"),
     };
 
-    /// The Win32 virtual-key code (VK_SHIFT, VK_CONTROL, VK_MENU).
+    /// The Win32 virtual-key code (VK_SHIFT, VK_CONTROL, VK_MENU, VK_SPACE, VK_TAB).
     public static int VirtualKey(this TriggerKey key) => key switch
     {
         TriggerKey.Shift => 0x10,
         TriggerKey.Control => 0x11,
+        TriggerKey.Space => 0x20,
+        TriggerKey.Tab => 0x09,
         _ => 0x12,
+    };
+}
+
+/// The keyboard shortcut for the clickable tool wheel: Ctrl + Alt + J by default, like the Mac's ⌃⌥J.
+enum WheelShortcut { J, Space, W }
+
+static class WheelShortcuts
+{
+    public static readonly WheelShortcut[] All = [WheelShortcut.J, WheelShortcut.Space, WheelShortcut.W];
+
+    /// The stored value, matching the Mac ("j", "space", "w").
+    public static string Id(this WheelShortcut shortcut) => shortcut.ToString().ToLowerInvariant();
+
+    public static WheelShortcut? FromId(string? id) => All.Cast<WheelShortcut?>().FirstOrDefault(s => s!.Value.Id() == id);
+
+    public static string Title(this WheelShortcut shortcut) => shortcut switch
+    {
+        WheelShortcut.Space => "Ctrl + Alt + Space",
+        WheelShortcut.W => "Ctrl + Alt + W",
+        _ => "Ctrl + Alt + J",
+    };
+
+    /// The Win32 virtual-key code used with MOD_CONTROL | MOD_ALT.
+    public static int VirtualKey(this WheelShortcut shortcut) => shortcut switch
+    {
+        WheelShortcut.Space => 0x20,
+        WheelShortcut.W => 0x57,
+        _ => 0x4A,
     };
 }
 
@@ -327,18 +364,55 @@ static class Prefs
     {
         WheelMode.Convert => TriggerKey.Shift,
         WheelMode.Tools => TriggerKey.Control,
+        WheelMode.Apps => TriggerKey.Space,
+        WheelMode.Codes => TriggerKey.Tab,
         _ => TriggerKey.Alt,
     };
 
-    public static TriggerKey Key(WheelMode mode) => TriggerKeys.FromId(Get<string>($"key.{mode.Id()}")) ?? DefaultKey(mode);
+    /// Explicit saved assignments win first (so choices made before 1.4 survive); the remaining menus get their
+    /// default key, or the first free one if it is taken. Every menu always has a different key.
+    public static TriggerKey Key(WheelMode mode)
+    {
+        var chosen = new Dictionary<WheelMode, TriggerKey>();
+        var used = new HashSet<TriggerKey>();
+        foreach (var candidate in WheelModes.All)
+            if (TriggerKeys.FromId(Get<string>($"key.{candidate.Id()}")) is { } key && used.Add(key)) chosen[candidate] = key;
+        foreach (var candidate in WheelModes.All)
+        {
+            if (chosen.ContainsKey(candidate)) continue;
+            var preferred = DefaultKey(candidate);
+            var value = used.Contains(preferred) ? TriggerKeys.All.First(k => !used.Contains(k)) : preferred;
+            chosen[candidate] = value;
+            used.Add(value);
+        }
+        return chosen[mode];
+    }
+
+    /// The clickable tool wheel opened from the keyboard (1.4; off by default).
+    public static bool ShortcutWheelEnabled
+    {
+        get => Bool("wheel.shortcutEnabled", false);
+        set => Set("wheel.shortcutEnabled", value);
+    }
+
+    public static WheelShortcut WheelShortcut
+    {
+        get => WheelShortcuts.FromId(Get<string>("wheel.shortcut")) ?? WheelShortcut.J;
+        set => Set("wheel.shortcut", value.Id());
+    }
 
     /// Assigns a key; if another menu already used it, that menu takes this one's old key.
     public static void SetKey(TriggerKey key, WheelMode mode)
     {
-        var old = Key(mode);
+        // Pin every menu's current key first, so resolving the swap can't shuffle the others.
+        var current = WheelModes.All.ToDictionary(m => m, Key);
+        var old = current[mode];
         foreach (var other in WheelModes.All)
-            if (other != mode && Key(other) == key) Set($"key.{other.Id()}", old.Id(), notify: false);
-        Set($"key.{mode.Id()}", key.Id());
+        {
+            var value = other == mode ? key : current[other] == key ? old : current[other];
+            Set($"key.{other.Id()}", value.Id(), notify: false);
+        }
+        Changed?.Invoke();
     }
 
     public static void ResetKeys()

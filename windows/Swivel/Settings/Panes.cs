@@ -49,6 +49,8 @@ sealed class OverviewPage : StackPanel
                      (Feature.Wheel, SettingsView.Page.Wheel), (Feature.Clothesline, SettingsView.Page.Clothesline),
                      (Feature.TextCapture, SettingsView.Page.TextCapture), (Feature.Shelf, SettingsView.Page.Shelf),
                      (Feature.ImagePresets, SettingsView.Page.ImagePresets), (Feature.QuickActions, SettingsView.Page.QuickActions),
+                     (Feature.BatchRename, SettingsView.Page.BatchRename), (Feature.PdfPages, SettingsView.Page.PdfPages),
+                     (Feature.QrCodes, SettingsView.Page.QrCodes), (Feature.AppRouting, SettingsView.Page.AppRouting),
                  })
         {
             var card = new FeatureHeader(feature, compact: true, open: () => open(page));

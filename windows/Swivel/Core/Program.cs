@@ -82,7 +82,7 @@ static partial class Program
                     return 0;
                 });
 
-            // `Swivel --run <convert|tools|actions> <item title> <file>...` runs one menu item headlessly (for testing).
+            // `Swivel --run <convert|tools|actions|apps|codes> <item title> <file>...` runs one menu item headlessly (for testing).
             case "--run" when args.Length >= 4:
                 return app.RunThenExit(() => RunItem(args));
 
@@ -117,7 +117,7 @@ static partial class Program
             case "--rope-frames" when args.Length == 2:
                 return app.RunThenExit(() => Task.FromResult(ClotheslineFrames.Render(args[1])));
 
-            // `Swivel --demo <convert|tools|actions> <file> [script] [style]` shows a menu at the pointer without a drag.
+            // `Swivel --demo <convert|tools|actions|apps|codes> <file> [script] [style]` shows a menu at the pointer without a drag.
             case "--demo" when args.Length >= 3:
                 return app.RunThenExit(() => WheelDemo.Run(args.Skip(1).ToArray()));
         }
@@ -129,7 +129,10 @@ static partial class Program
     {
         if (Environment.GetEnvironmentVariable("SWIVEL_SETTINGS") is not { Length: > 0 })
             Prefs.FilePath = System.IO.Path.Combine(Prefs.AppFolder, "settings.preview.json");
-        foreach (var feature in new[] { Feature.TextCapture, Feature.Shelf, Feature.ImagePresets, Feature.QuickActions })
+        if (Environment.GetEnvironmentVariable("SWIVEL_QR_LIBRARY_DIR") is { Length: > 0 } library)
+            QrLibraryStore.PreviewDirectory = System.IO.Path.GetFullPath(library);
+        foreach (var feature in new[] { Feature.TextCapture, Feature.Shelf, Feature.ImagePresets, Feature.QuickActions,
+                                        Feature.BatchRename, Feature.PdfPages, Feature.QrCodes, Feature.AppRouting })
             Prefs.SetFeatureEnabled(feature, true);
         if (Environment.GetEnvironmentVariable("SWIVEL_PREVIEW_APPEARANCE") is { } appearance)
             app.ThemeMode = appearance == "light" ? ThemeMode.Light : ThemeMode.Dark;
@@ -137,7 +140,12 @@ static partial class Program
         app.Startup += (_, _) =>
         {
             QuickActions.Shared.SyncSettings();
-            Prefs.Changed += () => app.Dispatcher.BeginInvoke(QuickActions.Shared.SyncSettings);
+            ShortcutWheel.Shared.Sync();
+            Prefs.Changed += () => app.Dispatcher.BeginInvoke(() =>
+            {
+                QuickActions.Shared.SyncSettings();
+                ShortcutWheel.Shared.Sync();
+            });
             var files = args.Skip(2).Select(System.IO.Path.GetFullPath).ToList();
             switch (args[1])
             {
@@ -152,6 +160,36 @@ static partial class Program
                 case "clothesline": AppWindow.Shared.Show(AppTab.Clothesline); break;
                 case "style": AppWindow.Shared.Show(AppTab.Style); break;
                 case "colors": AppWindow.Shared.Show(AppTab.Colors); break;
+                case "rename":
+                    if (files.Count > 0) BatchRenameWindow.Present(files);
+                    else AppWindow.Shared.Show(AppTab.BatchRename);
+                    break;
+                case "pdf":
+                    if (files.Count > 0) PdfPagesWindow.Present(files);
+                    else AppWindow.Shared.Show(AppTab.PdfPages);
+                    break;
+                case "qr":
+                    if (files.Count > 0) QrCodesWindow.Present(files);
+                    else AppWindow.Shared.Show(AppTab.QrCodes);
+                    break;
+                case "apps": AppWindow.Shared.Show(AppTab.AppRouting); break;
+                case "library": QrLibraryWindow.Show(); break;
+                case "launcher":
+                    Prefs.ShortcutWheelEnabled = true;
+                    Prefs.IsEnabled = true;
+                    ShortcutWheel.Shared.Sync();
+                    ShortcutWheel.Shared.Show();
+                    // The wheel window hides rather than closes, so quit once it and anything it opened are gone.
+                    app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                    var watch = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                    watch.Tick += (_, _) =>
+                    {
+                        if (ShortcutWheel.Shared.Wheel.IsVisible || app.Windows.OfType<Window>().Any(w => w.IsVisible)) return;
+                        watch.Stop();
+                        app.Shutdown();
+                    };
+                    watch.Start();
+                    break;
                 default: AppWindow.Shared.Show(); break;
             }
         };

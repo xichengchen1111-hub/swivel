@@ -8,7 +8,7 @@ using System.Windows.Threading;
 namespace Swivel;
 
 /// Pages of the settings window. The numbers match the Mac app's SWIVEL_TAB values.
-enum AppTab { General = 0, Shortcuts = 1, Style = 2, Customize = 3, Clothesline = 4, Overview = 5, TextCapture = 6, Shelf = 7, ImagePresets = 8, QuickActions = 9, Feel = 10, Colors = 11 }
+enum AppTab { General = 0, Shortcuts = 1, Style = 2, Customize = 3, Clothesline = 4, Overview = 5, TextCapture = 6, Shelf = 7, ImagePresets = 8, QuickActions = 9, Feel = 10, Colors = 11, BatchRename = 12, PdfPages = 13, QrCodes = 14, AppRouting = 15 }
 
 /// The app's main window, laid out like PowerToys Settings: features in a sidebar, each with its own switch and
 /// settings (AppWindow.swift / BundleWindow.swift). While it is open Swivel shows on the taskbar.
@@ -180,7 +180,7 @@ sealed class SettingsWindow : Window
 /// Sidebar of pages on the left (Overview, each feature, General), the selected page on the right (BundleSplit).
 sealed class SettingsView : Grid
 {
-    internal enum Page { Overview, Wheel, Clothesline, TextCapture, Shelf, ImagePresets, QuickActions, General, Feel }
+    internal enum Page { Overview, Wheel, Clothesline, TextCapture, Shelf, ImagePresets, QuickActions, BatchRename, PdfPages, QrCodes, AppRouting, General, Feel }
 
     readonly SettingsWindow? owner;
     readonly Sidebar sidebar;
@@ -217,6 +217,10 @@ sealed class SettingsView : Grid
         Page.Shelf => Feature.Shelf.Title(),
         Page.ImagePresets => Feature.ImagePresets.Title(),
         Page.QuickActions => Feature.QuickActions.Title(),
+        Page.BatchRename => Feature.BatchRename.Title(),
+        Page.PdfPages => Feature.PdfPages.Title(),
+        Page.QrCodes => Feature.QrCodes.Title(),
+        Page.AppRouting => Feature.AppRouting.Title(),
         Page.Feel => L("Feel & Text"),
         _ => L("General"),
     };
@@ -230,6 +234,10 @@ sealed class SettingsView : Grid
         Page.Shelf => Feature.Shelf.Glyph(),
         Page.ImagePresets => Feature.ImagePresets.Glyph(),
         Page.QuickActions => Feature.QuickActions.Glyph(),
+        Page.BatchRename => Feature.BatchRename.Glyph(),
+        Page.PdfPages => Feature.PdfPages.Glyph(),
+        Page.QrCodes => Feature.QrCodes.Glyph(),
+        Page.AppRouting => Feature.AppRouting.Glyph(),
         Page.Feel => "", // Personalize (the Mac's slider.horizontal.3 is Image Presets' glyph here)
         _ => "", // Settings
     };
@@ -242,6 +250,10 @@ sealed class SettingsView : Grid
         Page.Shelf => Swivel.Feature.Shelf,
         Page.ImagePresets => Swivel.Feature.ImagePresets,
         Page.QuickActions => Swivel.Feature.QuickActions,
+        Page.BatchRename => Swivel.Feature.BatchRename,
+        Page.PdfPages => Swivel.Feature.PdfPages,
+        Page.QrCodes => Swivel.Feature.QrCodes,
+        Page.AppRouting => Swivel.Feature.AppRouting,
         _ => null,
     };
 
@@ -257,6 +269,10 @@ sealed class SettingsView : Grid
             case AppTab.ImagePresets: ShowPage(Page.ImagePresets); break;
             case AppTab.QuickActions: ShowPage(Page.QuickActions); break;
             case AppTab.Feel: ShowPage(Page.Feel); break;
+            case AppTab.BatchRename: ShowPage(Page.BatchRename); break;
+            case AppTab.PdfPages: ShowPage(Page.PdfPages); break;
+            case AppTab.QrCodes: ShowPage(Page.QrCodes); break;
+            case AppTab.AppRouting: ShowPage(Page.AppRouting); break;
             default:
                 ShowPage(Page.Wheel);
                 ((WheelPage)pages[Page.Wheel]).Select(tab);
@@ -277,6 +293,10 @@ sealed class SettingsView : Grid
             Page.Shelf => new FeaturePage(Swivel.Feature.Shelf, new ShelfPane()),
             Page.ImagePresets => new FeaturePage(Swivel.Feature.ImagePresets, new ImagePresetsPane()),
             Page.QuickActions => new FeaturePage(Swivel.Feature.QuickActions, new QuickActionsPane()),
+            Page.BatchRename => new FeaturePage(Swivel.Feature.BatchRename, new BatchRenamePane()),
+            Page.PdfPages => new FeaturePage(Swivel.Feature.PdfPages, new PdfPagesPane()),
+            Page.QrCodes => new FeaturePage(Swivel.Feature.QrCodes, new QrCodesPane()),
+            Page.AppRouting => new FeaturePage(Swivel.Feature.AppRouting, new AppRoutingPane()),
             Page.Feel => new FeelPage(),
             _ => new GeneralPage(),
         };

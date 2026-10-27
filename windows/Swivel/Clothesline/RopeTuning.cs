@@ -220,6 +220,15 @@ sealed class CardTimer
         Deadline = null;
     }
 
+    /// A drag took the card away (hung on the rope, or moved into a folder): the drag is over and so is the card.
+    /// Without clearing `Dragging`, every later card would wait for a drag that already ended.
+    public void Taken()
+    {
+        Dragging = false;
+        Interacting = false;
+        Dismissed();
+    }
+
     public void Pause() => Deadline = null;
 
     public void Resume(double now) => Schedule(now, ResumeSeconds);

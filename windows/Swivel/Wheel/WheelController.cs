@@ -27,6 +27,9 @@ sealed class WheelController
     public WheelController()
     {
         panel.View.Dropped = Perform;
+        panel.View.Clicked = item => Perform(item, []);
+        panel.View.Cancelled = () => Close(WheelWindow.Dismissal.Cancel);
+        panel.View.NextPage = DemoNextPage;
         panel.View.OnDragEndedWithoutDrop = () =>
         {
             if (panel.IsShown && !panel.IsClosing && panel.View.Pressed == null) Close(WheelWindow.Dismissal.Cancel);
@@ -50,10 +53,33 @@ sealed class WheelController
     internal IReadOnlyList<List<WheelItem>> Pages => pages;
     internal int CurrentPage => page;
 
+    /// The menu is up (and not on its way out).
+    public bool IsVisible => panel.IsShown && !panel.IsClosing;
+
+    /// The keyboard tool wheel: the same templates and feedback at the pointer, with click, arrow keys and Enter
+    /// instead of a drop. Items run without files (file tools ask for them).
+    public void ShowClickable(IReadOnlyList<WheelItem> items, WheelMode mode = WheelMode.Tools)
+    {
+        if (items.Count == 0) return;
+        pendingMode = null;
+        this.mode = mode;
+        page = 0;
+        pages = Paginate(items);
+        panel.View.MenuStyle = StyleOverride ?? Prefs.Style;
+        panel.View.Subtitle = L("Click or use arrows · Enter · Space for next page");
+        panel.View.IsClickable = true;
+        Refresh();
+        panel.ShowClickable(Native.CursorPixels());
+    }
+
+    public void Dismiss() => Close(WheelWindow.Dismissal.Cancel);
+
     /// A trigger key was tapped during a drag. `files` is null for a real drag (the menu learns the dragged files
     /// when the drag enters its window); demos pass them.
     public void KeyTapped(WheelMode newMode, IReadOnlyList<string>? files)
     {
+        // A drag menu is a drop target again, even if the keyboard wheel was open.
+        panel.EndClickable();
         if (newMode == mode && panel.IsShown && !panel.IsClosing)
         {
             if (pages.Count <= 1)
@@ -150,6 +176,12 @@ sealed class WheelController
     public void DemoNextPage()
     {
         if (mode is not { } m || pages.Count <= 1) return;
+        if (panel.Clickable)
+        {
+            page = (page + 1) % pages.Count;
+            Refresh();
+            return;
+        }
         KeyTapped(m, []);
     }
 

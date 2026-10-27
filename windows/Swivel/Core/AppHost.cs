@@ -51,6 +51,7 @@ static class AppHost
         watcher.OnDragEnd = () => wheel.DragEnded();
         watcher.Start();
         QuickActions.Shared.SyncSettings();
+        ShortcutWheel.Shared.Sync();
         Clothesline.Shared.Start();
         if (Environment.GetEnvironmentVariable("SWIVEL_SHOW_ROPE") != null) // for testing
             Delay(500, Clothesline.Shared.Toggle);
@@ -58,6 +59,7 @@ static class AppHost
         {
             RebuildMenu();
             QuickActions.Shared.SyncSettings();
+            ShortcutWheel.Shared.Sync();
         });
 
         // Opened by hand: show the window. Started at login: stay in the tray.
@@ -68,7 +70,7 @@ static class AppHost
         }
         else
         {
-            // SWIVEL_TAB=<0-11> opens a specific page (for testing).
+            // SWIVEL_TAB=<0-15> opens a specific page (for testing).
             AppTab? tab = int.TryParse(Environment.GetEnvironmentVariable("SWIVEL_TAB"), out var n) && Enum.IsDefined(typeof(AppTab), n)
                 ? (AppTab)n : null;
             AppWindow.Shared.Show(tab);
@@ -125,7 +127,7 @@ static class AppHost
         bool anyOn = Features.All.Any(f => f.IsOn());
         watcher.IsEnabled = wheelOn;
 
-        var keys = string.Join(" · ", WheelModes.All.Select(m => $"{Prefs.Key(m).Symbol()} {m.Title()}"));
+        var keys = string.Join(" · ", WheelModes.All.Where(m => m.IsAvailable()).Select(m => $"{Prefs.Key(m).Symbol()} {m.Title()}"));
         var tip = new List<string>();
         if (wheelOn) tip.Add(L("Wheel: drag a file, then tap %@", keys));
         if (ropeOn) tip.Add(L("Clothesline: move to the top edge, or press Ctrl + Alt + T"));
@@ -156,8 +158,10 @@ static class AppHost
         {
             menu.Items.Add(new Forms.ToolStripSeparator());
             menu.Items.Add(new Forms.ToolStripMenuItem(L("Wheel — drag a file, keep holding, then tap a key:")) { Enabled = false });
-            foreach (var (mode, title) in new[] { (WheelMode.Convert, "Convert formats"), (WheelMode.Tools, "File tools"), (WheelMode.Actions, "File actions") })
+            foreach (var (mode, title) in new[] { (WheelMode.Convert, "Convert formats"), (WheelMode.Tools, "File tools"), (WheelMode.Actions, "File actions"),
+                                                  (WheelMode.Apps, "App Actions"), (WheelMode.Codes, "QR Library") })
             {
+                if (!mode.IsAvailable()) continue;
                 var item = new Forms.ToolStripMenuItem($"{Prefs.Key(mode).Title()} — {L(title)}");
                 foreach (var line in Guide(mode)) item.DropDownItems.Add(new Forms.ToolStripMenuItem(line) { Enabled = true });
                 item.DropDownItems.Add(new Forms.ToolStripSeparator());
@@ -175,6 +179,16 @@ static class AppHost
             });
         if (Feature.ImagePresets.IsOn()) Add(menu, L("Image Presets…"), () => AppWindow.Shared.Show(AppTab.ImagePresets));
         if (Feature.QuickActions.IsOn()) Add(menu, L("Show Quick Actions"), () => QuickActions.Shared.Show());
+        if (Feature.BatchRename.IsOn()) Add(menu, L("Batch Rename…"), () => FileTools.ChooseAndOpen(Feature.BatchRename));
+        if (Feature.PdfPages.IsOn()) Add(menu, L("PDF Pages…"), () => FileTools.ChooseAndOpen(Feature.PdfPages));
+        if (Feature.QrCodes.IsOn())
+        {
+            Add(menu, L("Read QR Codes…"), () => FileTools.ChooseAndOpen(Feature.QrCodes));
+            Add(menu, L("QR Library…"), () => QrLibraryWindow.Show());
+        }
+        if (wheelOn && Prefs.ShortcutWheelEnabled)
+            Add(menu, L("Show Tool Wheel"), () => ShortcutWheel.Shared.Show()).ShortcutKeyDisplayString = Prefs.WheelShortcut.Title();
+        if (Feature.AppRouting.IsOn()) Add(menu, L("App Actions…"), () => AppWindow.Shared.Show(AppTab.AppRouting));
 
         if (ropeOn)
         {
@@ -213,14 +227,14 @@ static class AppHost
     /// One row per file kind listing exactly what that key's menu offers, in the user's order.
     static IEnumerable<string> Guide(WheelMode mode)
     {
-        FileKind[] kinds = mode == WheelMode.Actions
+        FileKind[] kinds = mode is WheelMode.Actions or WheelMode.Codes
             ? [FileKind.Other]
             : [FileKind.Image, FileKind.Video, FileKind.Audio, FileKind.Pdf, FileKind.Document, FileKind.Archive, FileKind.Other];
         foreach (var kind in kinds)
         {
             var titles = Catalog.Items(kind.SampleFiles(), mode).Select(i => i.DisplayTitle).ToList();
             if (titles.Count == 0) continue;
-            var label = mode == WheelMode.Actions ? L("Any file or folder") : kind.Title();
+            var label = mode is WheelMode.Actions or WheelMode.Codes ? L("Any file or folder") : kind.Title();
             yield return $"{label}:  {string.Join(" · ", titles)}";
         }
     }

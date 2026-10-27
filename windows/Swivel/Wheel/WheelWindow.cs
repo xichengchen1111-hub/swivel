@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -72,6 +73,20 @@ sealed partial class WheelWindow : Window
         Content = root;
 
         driver.OnFrame = Advance;
+        // The keyboard tool wheel: the pointer and keys drive the menu directly (a drag menu gets them from the drag).
+        root.MouseMove += (_, e) => { if (Clickable) TrackPointer(e.GetPosition(View)); };
+        root.MouseLeave += (_, _) => { if (Clickable && !IsClosing) View.PointerLeft(); };
+        root.MouseLeftButtonDown += (_, e) => ClickAt(e);
+        root.MouseRightButtonDown += (_, e) => ClickAt(e);
+        PreviewKeyDown += (_, e) =>
+        {
+            if (Clickable && IsShown && !IsClosing && View.HandleKey(e.Key == Key.System ? e.SystemKey : e.Key)) e.Handled = true;
+        };
+        // Clicking into another app closes it, as a click outside the Mac's panel does.
+        Deactivated += (_, _) =>
+        {
+            if (Clickable && IsShown && !IsClosing) View.Cancelled?.Invoke();
+        };
         DragEnter += OnDragEnter;
         DragOver += OnDragOver;
         DragLeave += OnDragLeave;
@@ -81,6 +96,65 @@ sealed partial class WheelWindow : Window
     }
 
     public enum Dismissal { Cancel, Confirm }
+
+    // MARK: Clickable (the keyboard tool wheel)
+
+    /// Opened from the keyboard: the window takes activation, clicks and keys. A drag menu never activates (it would
+    /// take the foreground from the app the drag started in).
+    public bool Clickable { get; private set; }
+    ActivationReturn handBack;
+
+    void SetActivatable(bool activatable)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return;
+        var style = Native.GetWindowLongW(hwnd, Native.GWL_EXSTYLE);
+        var updated = activatable ? style & ~Native.WS_EX_NOACTIVATE : style | Native.WS_EX_NOACTIVATE;
+        if (updated != style) Native.SetWindowLongW(hwnd, Native.GWL_EXSTYLE, updated);
+    }
+
+    /// Back to a drop target that never activates (before a drag menu opens).
+    public void EndClickable()
+    {
+        if (!Clickable) return;
+        Clickable = false;
+        View.IsClickable = false;
+        SetActivatable(false);
+    }
+
+    /// Opens the menu at the pointer and gives it the keyboard. Activation goes back to the app that had it when the
+    /// menu is cancelled.
+    public void ShowClickable(Native.POINT point)
+    {
+        new WindowInteropHelper(this).EnsureHandle();
+        if (!Clickable) handBack.Remember(ToolNative.GetForegroundWindow());
+        Clickable = true;
+        View.IsClickable = true;
+        SetActivatable(true);
+        ShowMenu(point);
+        if (ToolPanel.OffscreenForTests) return;
+        Activate();
+        ToolNative.SetForegroundWindow(new WindowInteropHelper(this).Handle);
+        View.Focus();
+        Keyboard.Focus(View);
+    }
+
+    void TrackPointer(Point p)
+    {
+        if (!IsShown || IsClosing) return;
+        if (p.X >= 0 && p.Y >= 0 && p.X < View.ViewSize.Width && p.Y < View.ViewSize.Height) View.Track(p);
+        else View.PointerLeft();
+    }
+
+    void ClickAt(MouseButtonEventArgs e)
+    {
+        if (!Clickable || !IsShown || IsClosing) return;
+        e.Handled = true;
+        var p = e.GetPosition(View);
+        // Outside the menu (its clear margin) is outside: close, as a click elsewhere does.
+        if (p.X >= 0 && p.Y >= 0 && p.X < View.ViewSize.Width && p.Y < View.ViewSize.Height) View.Click(p);
+        else View.Cancelled?.Invoke();
+    }
 
     // MARK: Placement
 
@@ -258,6 +332,13 @@ sealed partial class WheelWindow : Window
         if (IsProbing && !IsShown) { HideNow(); return; }
         if (!IsShown || IsClosing) return;
         IsClosing = true;
+        if (Clickable && how == Dismissal.Cancel)
+        {
+            // Esc or a click outside: the app that was in front gets the keyboard back at once.
+            bool active = ToolNative.GetForegroundWindow() == new WindowInteropHelper(this).Handle;
+            var previous = handBack.Take(swivelIsActive: active);
+            if (previous != IntPtr.Zero) ToolNative.SetForegroundWindow(previous);
+        }
         // A closing menu no longer catches the drag.
         Native.SetClickThrough(this, true);
         int token = Generation;
@@ -294,6 +375,7 @@ sealed partial class WheelWindow : Window
         driver.Stop();
         Hide();
         Native.SetClickThrough(this, false);
+        EndClickable();
         alpha.Snap(0);
         scale.Snap(1);
         ApplyChrome();

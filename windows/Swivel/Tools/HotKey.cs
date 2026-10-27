@@ -9,7 +9,7 @@ namespace Swivel;
 ///
 /// Create it on a thread with a running dispatcher (the UI thread); WM_HOTKEY arrives through that thread's
 /// message loop and `action` runs there.
-sealed partial class HotKey : IDisposable
+sealed partial class HotKey : IHotKeyRegistration
 {
     public const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_SHIFT = 0x4, MOD_WIN = 0x8, MOD_NOREPEAT = 0x4000;
     const int WM_HOTKEY = 0x0312;

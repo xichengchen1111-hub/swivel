@@ -64,8 +64,9 @@ sealed class IncomingCard
 
     public void Present(string path)
     {
-        // A newer screenshot never pulls the file out from under a drag; it waits until the drag ends.
-        if (timer.Dragging)
+        // A newer screenshot never pulls the file out from under a drag; it waits until the drag ends. (Only a card
+        // that is still here can be dragging.)
+        if (timer.Dragging && Path != null)
         {
             if (next is { } waiting && !Same(waiting, path)) Release(waiting);
             next = path;
@@ -272,7 +273,7 @@ sealed class IncomingCard
                 // Hung on the rope, moved or copied into a folder, or thrown away: the card's job is done.
                 if (intoFolder && File.Exists(path)) Clothesline.Shared.CopiedAway(path);
                 Path = null;
-                timer.Dismissed();
+                timer.Taken();
                 OrderOut();
                 View.SetDimmed(false, animated: false);
             }
@@ -730,6 +731,43 @@ sealed class IncomingView : FrameworkElement
             singleClick = timer;
             timer.Start();
         }
+    }
+
+    /// Whether a screenshot is waiting (the card's button is only there while one is).
+    internal bool HasScreenshot => card?.Path != null;
+
+    /// Screen readers and UI Automation see a "Hang Screenshot" button that hangs the screenshot when invoked
+    /// (the Mac 1.4.2 accessibility press).
+    internal void InvokeHang()
+    {
+        if (!HasScreenshot) return;
+        singleClick?.Stop();
+        singleClick = null;
+        card?.HangNow();
+    }
+
+    protected override System.Windows.Automation.Peers.AutomationPeer OnCreateAutomationPeer() => new IncomingViewPeer(this);
+}
+
+sealed class IncomingViewPeer(IncomingView owner) : System.Windows.Automation.Peers.FrameworkElementAutomationPeer(owner),
+    System.Windows.Automation.Provider.IInvokeProvider
+{
+    protected override System.Windows.Automation.Peers.AutomationControlType GetAutomationControlTypeCore() =>
+        System.Windows.Automation.Peers.AutomationControlType.Button;
+    protected override string GetClassNameCore() => nameof(IncomingView);
+    protected override string GetNameCore() => L("Hang Screenshot");
+    protected override string GetHelpTextCore() => L("Click to hang this screenshot on the clothesline.");
+    protected override bool IsControlElementCore() => owner.HasScreenshot;
+    protected override bool IsContentElementCore() => owner.HasScreenshot;
+    protected override bool IsEnabledCore() => owner.HasScreenshot;
+
+    public override object? GetPattern(System.Windows.Automation.Peers.PatternInterface patternInterface) =>
+        patternInterface == System.Windows.Automation.Peers.PatternInterface.Invoke ? this : base.GetPattern(patternInterface);
+
+    public void Invoke()
+    {
+        if (!IsEnabled()) throw new System.Windows.Automation.ElementNotEnabledException();
+        owner.InvokeHang();
     }
 }
 
