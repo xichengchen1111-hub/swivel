@@ -119,7 +119,7 @@ final class MCPTools {
                     let size = try await track.load(.naturalSize).applying(try await track.load(.preferredTransform))
                     info["width"] = Int(abs(size.width)); info["height"] = Int(abs(size.height))
                 }
-            case .archive, .folder, .other:
+            case .archive, .folder, .other, .subtitle, .data, .model3D, .font:
                 break
             }
         } catch {
@@ -729,6 +729,7 @@ enum MCPCatalog {
         switch (mode, kind) {
         case (.convert, .image):
             if title == "PDF" { return firstPDF }
+            if let icon = Images.iconFormats.first(where: { $0.name == title }) { return each("", icon.ext) }
             return Images.outputFormats.first { $0.name == title }.map { .imagePages(ext: $0.ext) }
         case (.tools, .image):
             switch title {
@@ -766,7 +767,16 @@ enum MCPCatalog {
             return Docs.formats.first { $0.name == title }.map { each("", $0.ext) }
         case (.convert, .archive):
             return title == "Extract" ? .extracted : nil
-        case (_, .archive), (_, .folder), (_, .other):
+        case (.convert, .subtitle):
+            return SubtitleFormats.formats.first { $0.name == title }.map { each("", $0.ext) }
+        case (.convert, .data):
+            return DataFormats.formats.first { $0.name == title }.map { each("", $0.ext) }
+        case (.convert, .model3D):
+            return Models3D.formats.first { $0.name == title }.map { each($0.ext == "png" ? " preview" : "", $0.ext) }
+        case (.convert, .font):
+            if title == FontFormats.desktop.name { return .each(suffix: "", ext: FontFormats.desktopExtension) }
+            return [FontFormats.woff, FontFormats.woff2].first { $0.name == title }.map { each("", $0.ext) }
+        case (_, .archive), (_, .folder), (_, .other), (_, .subtitle), (_, .data), (_, .model3D), (_, .font):
             return title == "ZIP" ? archive("zip") : title == "TAR.GZ" ? archive("tar.gz") : nil
         default:
             return nil
