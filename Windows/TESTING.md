@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.99 — Old temporary files to the Recycle Bin (F06 part, 2026-10-27)
+
+- Core 4,519,805 on Mac (new `TempCleanupChecks`: creation/write/change parsing, Touched/Newest propagation, 7-day plan incl. copied-today file and undated descendant); native compiled 0 warnings/errors (not run here).
+- New native `TempCleanupNativeChecks`: backdates all four times with SetFileInformationByHandle; lists only the old file and old folder (not a new file, a folder with a fresh file inside, or a file copied in with an old modified date); refuses a changed size or modified time and a folder with something written inside; window lists old items unselected with Move disabled until selection; real move of a file and a folder to the Recycle Bin and Undo.
+- Independent review: P2 fixed and rechecked — copies/extractions keep an old last write (now creation and change time count too); a folder Windows removed only partly was reported as left alone (now re-measured and reported as partly removed). P3 fixed: undated descendants block listing, wording about permanent deletion and in-use items, controls disabled while busy, restored items leave the list, error mapping in the partial check. Open for Windows confirmation: whether NTFS parent directory entries ever lag the file's own times (would refuse, never over-move).
+
 ## Windows0.98 — Cross-root similar pairs to the Recycle Bin (F04 now limited-implemented, 2026-10-27)
 
 - Core 4,519,767 on Mac; native compiled 0 warnings/errors (not run here).

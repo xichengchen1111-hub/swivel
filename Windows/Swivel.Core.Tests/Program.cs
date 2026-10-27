@@ -107,6 +107,7 @@ DoctorNetworkChecks.Run(Check);
 FolderSizeChecks.Run(Check, Reject);
 DuplicateFileChecks.Run(Check, Reject);
 TextSimilarityChecks.Run(Check, Reject);
+TempCleanupChecks.Run(Check, Reject);
 PhotoSimilarityChecks.Run(Check, Reject);
 ProjectFolderChecks.Run(Check, Reject);
 LargeFileChecks.Run(Check, Reject);

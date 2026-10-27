@@ -9,7 +9,10 @@ using System.Threading;
 
 namespace Swivel.Core;
 
-public sealed record FolderEntry(string Name, bool Directory, long Bytes, uint Attributes);
+/// Raw FILETIMEs from the directory record (0 when not known): LastWrite, and Touched, the
+/// latest of creation, last write and change time. Copies and extractions keep an old last
+/// write, but get a new creation and change time.
+public sealed record FolderEntry(string Name, bool Directory, long Bytes, uint Attributes, long LastWrite = 0, long Touched = 0);
 public interface IFolderMetadata : IDisposable
 {
     string Name { get; }
@@ -26,6 +29,12 @@ public sealed class FolderSizeNode(string name, bool directory)
     public bool Incomplete { get; internal set; }
     public bool Aggregate { get; internal set; }
     public string? Issue { get; internal set; }
+    /// Raw FILETIMEs from the directory records: the item's own last write and Touched (latest of
+    /// creation, last write and change), and the latest Touched of the item and everything
+    /// counted below it. 0 when not known; Newest is -1 when anything counted below is undated.
+    public long LastWrite { get; internal set; }
+    public long Touched { get; internal set; }
+    public long Newest { get; internal set; }
     public IReadOnlyList<FolderSizeNode> Children { get; internal set; } = Array.Empty<FolderSizeNode>();
 }
 public sealed record FolderScanResult(FolderSizeNode Root, int Entries, bool EntryLimit, bool TimeLimit);
@@ -60,18 +69,21 @@ public static class FolderSizes
                     if (Stop()) { node.Incomplete = true; break; }
                     if (entries == limits.MaxEntries) { entryLimit = node.Incomplete = true; break; }
                     entries++;
-                    void Skip(string issue) => children.Add(new(entry.Name, entry.Directory) { Skipped = 1, Incomplete = true, Issue = issue });
+                    void Skip(string issue) => children.Add(new(entry.Name, entry.Directory) { Skipped = 1, Incomplete = true, Issue = issue, LastWrite = entry.LastWrite, Touched = entry.Touched, Newest = entry.Touched });
                     try
                     {
                         WindowsPathPolicy.ValidateName(entry.Name);
                         if ((entry.Attributes & SkippedAttributes) != 0 || entry.Bytes < 0 || entry.Directory != ((entry.Attributes & 0x10) != 0))
                         { Skip("System, link, cloud or invalid item"); continue; }
-                        if (!entry.Directory) children.Add(new(entry.Name, false) { Bytes = entry.Bytes, Files = 1 });
+                        if (!entry.Directory) children.Add(new(entry.Name, false) { Bytes = entry.Bytes, Files = 1, LastWrite = entry.LastWrite, Touched = entry.Touched, Newest = entry.Touched });
                         else if (depth >= limits.MaxDepth) { Skip("Depth limit"); }
                         else
                         {
                             using var child = directory.OpenChild(entry.Name);
-                            children.Add(Visit(child, depth + 1));
+                            var visited = Visit(child, depth + 1);
+                            visited.LastWrite = entry.LastWrite; visited.Touched = entry.Touched;
+                            visited.Newest = visited.Newest < 0 || entry.Touched <= 0 ? -1 : Math.Max(visited.Newest, entry.Touched);
+                            children.Add(visited);
                         }
                     }
                     catch (Exception ex) when (Expected(ex)) { Skip("Unavailable or unsupported"); }
@@ -82,6 +94,7 @@ public static class FolderSizes
             token.ThrowIfCancellationRequested();
             node.Children = children.AsReadOnly(); node.Bytes = children.Sum(x => x.Bytes); node.Files = children.Sum(x => x.Files);
             node.Skipped += children.Sum(x => x.Skipped); node.Incomplete |= children.Any(x => x.Incomplete);
+            node.Newest = children.Count == 0 ? 0 : children.Any(x => x.Newest <= 0) ? -1 : children.Max(x => x.Newest);
             return node;
         }
         var result = Visit(root, 0); token.ThrowIfCancellationRequested();
@@ -121,7 +134,9 @@ public static class FolderDirectoryBuffer
             catch (DecoderFallbackException ex) { throw new InvalidDataException("Invalid directory name encoding.", ex); }
             uint attributes = BinaryPrimitives.ReadUInt32LittleEndian(item[56..]);
             long bytes = BinaryPrimitives.ReadInt64LittleEndian(item[40..]);
-            entries.Add(new(name, (attributes & 0x10) != 0, bytes, attributes));
+            long creation = BinaryPrimitives.ReadInt64LittleEndian(item[8..]), lastWrite = BinaryPrimitives.ReadInt64LittleEndian(item[24..]), change = BinaryPrimitives.ReadInt64LittleEndian(item[32..]);
+            long touched = creation <= 0 || lastWrite <= 0 || change <= 0 ? 0 : Math.Max(creation, Math.Max(lastWrite, change));
+            entries.Add(new(name, (attributes & 0x10) != 0, bytes, attributes, lastWrite, touched));
             if (next == 0) return entries;
             at += (int)next;
         }

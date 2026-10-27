@@ -5549,10 +5549,10 @@
     "單一點陣 PDF",
     "1つの画像化 PDF"
   ],
-  "One confirmed Windows-reported temporary or legacy WinINET location only; environment and policy can redirect it. This is not a complete Windows or modern-browser cache inventory, or proof that every item is cache. Files can still be in use or contain work in progress; nothing is classified as safe to delete or reclaimable. Copy Current View explicitly includes the displayed names and path. No cleanup, deletion, permission change or assistant upload is performed.": [
-    "这里只测量一个已确认的、由 Windows 报告的临时或旧版 WinINET 位置；环境与策略可能重定向该位置。这不是完整 Windows 或现代浏览器缓存清单，也不证明所有项目都是缓存。文件可能仍在使用或包含未完成的工作；不会判定可安全删除或可释放空间。明确点击“复制当前视图”会包含显示的名称和路径。不执行清理、删除、权限更改或助手上传。",
-    "這裡只測量一個已確認的、由 Windows 回報的暫存或舊版 WinINET 位置；環境與原則可能重新導向該位置。這不是完整 Windows 或現代瀏覽器快取清單，也不證明所有項目都是快取。檔案可能仍在使用或包含未完成的工作；不會判定可安全刪除或可釋放空間。明確點選「複製目前檢視」會包含顯示的名稱和路徑。不執行清理、刪除、權限變更或助理上傳。",
-    "確認した Windows 報告の一時フォルダーまたは従来の WinINET の場所だけを計測しています。環境やポリシーで場所が変わる場合があります。Windows や現代のブラウザーのキャッシュ全体ではなく、すべての項目がキャッシュとの証明でもありません。使用中や作業途中のファイルが含まれる可能性があり、安全な削除や解放容量は判定しません。「現在の表示をコピー」は表示された名前とパスを明示的に含めます。削除・権限変更・アシスタントへの送信はしません。"
+  "One confirmed Windows-reported temporary or legacy WinINET location only; environment and policy can redirect it. This is not a complete Windows or modern-browser cache inventory, or proof that every item is cache. Files can still be in use or contain work in progress; nothing is classified as safe to delete or reclaimable. Copy Current View explicitly includes the displayed names and path. The map itself performs no cleanup, deletion, permission change or assistant upload.": [
+    "这里只测量一个已确认的、由 Windows 报告的临时或旧版 WinINET 位置；环境与策略可能重定向该位置。这不是完整 Windows 或现代浏览器缓存清单，也不证明所有项目都是缓存。文件可能仍在使用或包含未完成的工作；不会判定可安全删除或可释放空间。明确点击“复制当前视图”会包含显示的名称和路径。空间图本身不执行清理、删除、权限更改或助手上传。",
+    "這裡只測量一個已確認的、由 Windows 回報的暫存或舊版 WinINET 位置；環境與原則可能重新導向該位置。這不是完整 Windows 或現代瀏覽器快取清單，也不證明所有項目都是快取。檔案可能仍在使用或包含未完成的工作；不會判定可安全刪除或可釋放空間。明確點選「複製目前檢視」會包含顯示的名稱和路徑。空間圖本身不執行清理、刪除、權限變更或助理上傳。",
+    "確認した Windows 報告の一時フォルダーまたは従来の WinINET の場所だけを計測しています。環境やポリシーで場所が変わる場合があります。Windows や現代のブラウザーのキャッシュ全体ではなく、すべての項目がキャッシュとの証明でもありません。使用中や作業途中のファイルが含まれる可能性があり、安全な削除や解放容量は判定しません。「現在の表示をコピー」は表示された名前とパスを明示的に含めます。マップ自体は整理、削除、権限変更、アシスタントへの送信を行いません。"
   ],
   "One explicit read-only Windows power-capability sample: reported S1-S5, S0 low power idle, hibernation-file type and selected power-button, lid, hybrid-sleep and wake-alarm flags. A nonzero capability flag is reported as supported or present; all original byte values remain visible. Failed reads are unavailable, not unsupported.": [
     "明确触发的一次只读 Windows 电源能力快照：报告的 S1–S5、S0 低功耗空闲、休眠文件类型，以及电源/睡眠按钮、盖子、混合睡眠和唤醒闹钟标志。非零标志显示为报告支持或存在，并保留全部原始字节值。读取失败表示不可用，不表示不支持。",
@@ -9164,10 +9164,10 @@
     "目標大小（KB）",
     "目標サイズ（KB）"
   ],
-  "Temporary and cache locations can contain work in progress or files an app still needs. This tool does not classify files as safe to delete, identify unused items or estimate reclaimable space. It only measures one confirmed location with the existing bounded read-only size map; file and folder names become visible. No cleanup, deletion, permission change, automatic assistant upload or undo operation is provided.": [
-    "临时与缓存位置可能包含未完成的工作，或应用仍需使用的文件。本工具不判断哪些文件可安全删除，不识别未使用项目，也不估算可释放空间。只对一个明确确认的位置复用现有有界只读空间图；文件和文件夹名称会显示。不提供清理、删除、权限更改、自动助手上传或撤销操作。",
-    "暫存與快取位置可能包含未完成的工作，或應用程式仍需使用的檔案。本工具不判斷哪些檔案可安全刪除，不識別未使用項目，也不估算可釋放空間。只對一個明確確認的位置重用既有有界唯讀空間圖；檔案和資料夾名稱會顯示。不提供清理、刪除、權限變更、自動助理上傳或復原操作。",
-    "一時・キャッシュの場所には作業途中のデータや、アプリがまだ必要とするファイルが含まれる場合があります。安全に削除できるファイル、未使用の項目、解放できる容量は判定しません。確認された 1 つの場所を従来の上限付き読み取り専用マップで計測し、ファイルとフォルダーの名前を表示します。削除・権限変更・アシスタントへの自動送信・元に戻す操作はありません。"
+  "Temporary and cache locations can contain work in progress or files an app still needs. This tool does not classify files as safe to delete, identify unused items or estimate reclaimable space. It only measures one confirmed location with the existing bounded read-only size map; file and folder names become visible. For the temporary folder, a review window then lists only items unchanged for 7 days, which you can move to the Recycle Bin after checking them; nothing is selected for you. The legacy WinINET location is only measured. Swivel itself never deletes permanently (Windows asks first when an item is too large for the Recycle Bin), changes no permission and sends nothing to an assistant automatically.": [
+    "临时与缓存位置可能包含未完成的工作，或应用仍需使用的文件。本工具不判断哪些文件可安全删除，不识别未使用项目，也不估算可释放空间。只对一个明确确认的位置复用现有有界只读空间图；文件和文件夹名称会显示。对临时文件夹，随后会出现审阅窗口，只列出 7 天内未改动的项目，你检查后可将其移到回收站；不会替你预先选择。旧版 WinINET 位置只测量。Swivel 本身不会永久删除（项目太大放不进回收站时，Windows 会先询问），不更改权限，也不自动发送给助手。",
+    "暫存與快取位置可能包含未完成的工作，或應用程式仍需使用的檔案。本工具不判斷哪些檔案可安全刪除，不識別未使用項目，也不估算可釋放空間。只對一個明確確認的位置重用既有有界唯讀空間圖；檔案和資料夾名稱會顯示。對暫存資料夾，隨後會出現檢閱視窗，只列出 7 天內未變動的項目，你檢查後可將其移到資源回收筒；不會替你預先選取。舊版 WinINET 位置只測量。Swivel 本身不會永久刪除（項目太大放不進資源回收筒時，Windows 會先詢問），不變更權限，也不自動傳送給助理。",
+    "一時・キャッシュの場所には作業途中のデータや、アプリがまだ必要とするファイルが含まれる場合があります。安全に削除できるファイル、未使用の項目、解放できる容量は判定しません。確認された 1 つの場所を従来の上限付き読み取り専用マップで計測し、ファイルとフォルダーの名前を表示します。一時フォルダーでは、続いて 7 日間変更されていない項目だけを一覧する確認画面が開き、確認したうえでごみ箱へ移動できます。あらかじめ選択はしません。従来の WinINET の場所は計測のみです。Swivel 自体は完全に削除しません（ごみ箱に入らない大きさの場合は Windows が確認します）。権限の変更やアシスタントへの自動送信も行いません。"
   ],
   "Temporary file references with multi-selection and copy drag. Folders and cloud placeholders are not supported yet.": [
     "临时文件引用，支持多选和拖出复制；暂不支持文件夹及云占位文件。",
@@ -12888,5 +12888,70 @@
     "保留的文件可能在另一个所选文件夹或另一个磁盘上，包括可移动磁盘；移动前请确认它的位置。",
     "保留的檔案可能在另一個所選資料夾或另一個磁碟上，包括卸除式磁碟；移動前請確認它的位置。",
     "残すファイルは、選択した別のフォルダーや、リムーバブルを含む別のドライブにある場合があります。移動する前に場所を確認してください。"
+  ],
+  "Old Temporary Files": [
+    "旧临时文件",
+    "舊暫存檔案",
+    "古い一時ファイル"
+  ],
+  "No items in this folder were left unchanged for 7 days.": [
+    "此文件夹中没有 7 天内未改动的项目。",
+    "此資料夾中沒有 7 天內未變動的項目。",
+    "このフォルダーには 7 日間変更されていない項目はありません。"
+  ],
+  "Move 1 temporary item to the Recycle Bin?": [
+    "将 1 个临时项目移到回收站？",
+    "將 1 個暫存項目移到資源回收筒？",
+    "一時項目 1 個をごみ箱へ移動しますか？"
+  ],
+  "Move {0} temporary items to the Recycle Bin?": [
+    "将 {0} 个临时项目移到回收站？",
+    "將 {0} 個暫存項目移到資源回收筒？",
+    "一時項目 {0} 個をごみ箱へ移動しますか？"
+  ],
+  "An app may still need an old temporary file. Items that changed or are in use may be left in place, and a program still running from an old file can be affected.": [
+    "应用可能仍需要旧的临时文件。已改动或正在使用的项目可能留在原处，仍在用旧文件运行的程序也可能受影响。",
+    "應用程式可能仍需要舊的暫存檔案。已變動或正在使用的項目可能留在原處，仍在用舊檔案執行的程式也可能受影響。",
+    "アプリが古い一時ファイルをまだ必要とする場合があります。変更された項目や使用中の項目はそのまま残る場合があり、古いファイルから実行中のプログラムが影響を受けることもあります。"
+  ],
+  "Select All Listed": [
+    "全选列出的项目",
+    "全選列出的項目",
+    "一覧の項目をすべて選択"
+  ],
+  "Show Size Map…": [
+    "显示空间图…",
+    "顯示空間圖…",
+    "サイズマップを表示…"
+  ],
+  "Last Changed": [
+    "最后改动",
+    "最後變動",
+    "最終変更"
+  ],
+  "Unchanged for 7 days: {0} items · {1:N0} bytes · changed recently: {2} · not listed (skipped, partial or undated): {3}": [
+    "7 天未改动：{0} 项 · {1:N0} 字节 · 最近改动：{2} · 未列出（跳过、不完整或无日期）：{3}",
+    "7 天未變動：{0} 項 · {1:N0} 位元組 · 最近變動：{2} · 未列出（略過、不完整或無日期）：{3}",
+    "7 日間変更なし: {0} 項目 · {1:N0} バイト · 最近変更: {2} · 一覧外（スキップ、不完全、日付不明）: {3}"
+  ],
+  "It changed since it was listed, or something inside it changed in the last 7 days or could not be measured, so it was left alone.": [
+    "它在列出后已改动，或其中有内容在 7 天内改动或无法测量，因此未移动。",
+    "它在列出後已變動，或其中有內容在 7 天內變動或無法測量，因此未移動。",
+    "一覧に載せた後に変更されたか、中の何かが 7 日以内に変更された、または計測できなかったため、そのままにしました。"
+  ],
+  "Temporary-folder review finished. Items moved to the Recycle Bin or removed: {0}": [
+    "临时文件夹审阅已完成。已移到回收站或已移除的项目：{0}",
+    "暫存資料夾檢閱已完成。已移到資源回收筒或已移除的項目：{0}",
+    "一時フォルダーの確認が終わりました。ごみ箱に移動または削除された項目: {0}"
+  ],
+  "Windows moved or removed only part of it; the rest is still in place. Check the Recycle Bin.": [
+    "Windows 只移走或删除了其中一部分，其余仍在原处。请检查回收站。",
+    "Windows 只移走或刪除了其中一部分，其餘仍在原處。請檢查資源回收筒。",
+    "Windows が移動または削除したのは一部だけで、残りは元の場所にあります。ごみ箱を確認してください。"
+  ],
+  "Only direct items of the configured temporary folder are listed, and only when the item and everything measured inside it were created, written and changed more than 7 days ago (a file copied or unpacked here recently counts as recent, even with an old modified date). Skipped, partial or undated items, and anything changed recently, are not listed. Nothing is selected for you. An app may still need an old file, so review the list first. Before each move the item is checked again: a file must have the same size and modified time and no other hard link; a folder must have the same modified time and be measured again completely with nothing inside changed in the last 7 days. Items in use may be left in place. If Windows removes only part of a folder (for example after asking to delete it permanently while a file inside is in use), the result says so; check the Recycle Bin. Only fixed drives with a Recycle Bin are used; if an item is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move restores the last moved items while this window is open, unless something now exists at their place; restored items count as recently changed and leave the list. Afterwards, restore them from the Recycle Bin.": [
+    "只列出所配置临时文件夹中的直接项目，且该项目及其中测量到的所有内容的创建、写入和改动时间都在 7 天以前（最近复制或解压到这里的文件即使修改日期较旧，也算最近）。跳过的、不完整的、没有日期的项目以及最近改动过的都不会列出。不会替你预先选择。应用可能仍需要旧文件，请先检查列表。每次移动前会再次检查：文件的大小和修改时间必须不变且没有其他硬链接；文件夹的修改时间必须不变，并重新完整测量，其中 7 天内没有任何改动。正在使用的项目可能留在原处。如果 Windows 只移走或删除了文件夹的一部分（例如询问是否永久删除而其中有文件正在使用），结果会说明；请检查回收站。只使用有回收站的固定磁盘；项目太大放不进回收站时，Windows 会先询问是否永久删除。窗口打开期间，“撤销移动”可放回最近移走的项目，除非原位置已有别的东西；还原的项目算作最近改动，会从列表中移除。之后请从回收站还原。",
+    "只列出所設定暫存資料夾中的直接項目，且該項目及其中測量到的所有內容的建立、寫入和變動時間都在 7 天以前（最近複製或解壓縮到這裡的檔案即使修改日期較舊，也算最近）。略過的、不完整的、沒有日期的項目以及最近變動過的都不會列出。不會替你預先選取。應用程式可能仍需要舊檔案，請先檢查清單。每次移動前會再次檢查：檔案的大小和修改時間必須不變且沒有其他硬式連結；資料夾的修改時間必須不變，並重新完整測量，其中 7 天內沒有任何變動。正在使用的項目可能留在原處。如果 Windows 只移走或刪除了資料夾的一部分（例如詢問是否永久刪除而其中有檔案正在使用），結果會說明；請檢查資源回收筒。只使用有資源回收筒的固定磁碟；項目太大放不進資源回收筒時，Windows 會先詢問是否永久刪除。視窗開啟期間，「復原移動」可放回最近移走的項目，除非原位置已有其他項目；還原的項目算作最近變動，會從清單中移除。之後請從資源回收筒還原。",
+    "設定された一時フォルダーの直下の項目のうち、その項目と中で計測したすべての内容の作成・書き込み・変更が 7 日より前のものだけを一覧します（最近ここへコピーや展開されたファイルは、更新日が古くても最近とみなします）。スキップ・不完全・日付不明の項目や最近変更されたものは一覧しません。あらかじめ選択はしません。アプリが古いファイルをまだ必要とする場合があるので、先に一覧を確認してください。移動の前に毎回もう一度確認します。ファイルはサイズと更新日時が同じでほかのハードリンクがないこと、フォルダーは更新日時が同じで、もう一度完全に計測して中に 7 日以内の変更がないことが必要です。使用中の項目はそのまま残る場合があります。Windows がフォルダーの一部だけを移動または削除した場合（たとえば完全に削除するか確認され、中のファイルが使用中だったとき）は結果に表示しますので、ごみ箱を確認してください。ごみ箱のある固定ドライブだけを使います。ごみ箱に入らない大きさの場合、Windows が完全に削除するか確認します。このウィンドウを開いている間は「移動を取り消す」で最後に移動した項目を戻せます（元の場所に別の項目がない場合）。戻した項目は最近変更されたものとして一覧から外れます。その後はごみ箱から復元してください。"
   ]
 }

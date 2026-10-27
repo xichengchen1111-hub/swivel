@@ -1047,6 +1047,10 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.99 旧临时文件移入回收站（F06 部分）
+
+批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。`FolderDirectoryBuffer.Parse` 读取 FILE_FULL_DIR_INFO 的创建(8)／写入(24)／改动(32)时间：`FolderEntry.LastWrite`、`Touched`（三者最大，任一未知为 0）；`FolderSizeNode` 增 `LastWrite`、`Touched`、`Newest`（其下任一无日期则 -1）。新 `TempCleanup.Plan`：根的直接子项无问题、完整、`Touched` 与 `Newest` 都早于 7 天才列出。新 `NativeFiles.RecycleTempItem`：持有句柄的 LastWrite 与列出时一致、FILE_BASIC_INFO 的 Touched 仍早于截止；文件再核对长度与单链接；文件夹用 `FolderSizes.Scan` 重新完整测量（句柄在移动前关闭）。通用 `Recycle` 新增可选 `failed` 回调：文件夹移动失败或仍存在时重新测量，与移动前不同则报告“只移走部分”。审查两个 P2（复制/解压文件保留旧修改时间；Windows 部分删除被误报为“未动”）均已修复复核。限制：重新测量到移动之间仍有短暂窗口；只按时间判断，不知道哪个程序还在用；撤销后的项目不再列出；仅临时文件夹，WinINET 只测量；浏览器/应用缓存规则未做。
+
 ## 0.98 常用目录跨根相似配对清理（F04 部分→已实现限定范围）
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。`SimilarPairCleanup` 新增按键构造（`absolute` 给文件 API 真实路径、`display` 给显示与复制的转义路径）；原单文件夹构造改为调用它，报告与状态中的文件名改为完整路径（此前为相对路径）。`CommonSimilarityDialog` 以 `result.Sources` 的不透明键配对，真实路径为所读根 `Choice.Path` 加未转义相对路径；戳记来自同一键的 `Stamps`；被拒的根不会产生键。重叠根同一文件只保留首个键（其余为硬链接问题项）。限制同 0.97，另：保留者可能位于可移动盘。

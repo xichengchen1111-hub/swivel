@@ -481,6 +481,11 @@ public sealed partial class App : Application
                 var preview=new CacheLocationDialog(this,choices);if(!ShowOperationDialog(preview,owner,token))return;
                 token.ThrowIfCancellationRequested();var selected=preview.Selected??throw new UserError("Choose an available cache location first.");
                 report(L("Reading selected cache-location sizes…"));var scan=await AwaitDoctorReadAsync(Task.Run(()=>CacheLocationReader.Scan(selected,token),token),token);token.ThrowIfCancellationRequested();
+                if(selected.Kind==CacheLocationKind.Temporary)
+                {
+                    var temp=new TempCleanupDialog(this,selected.Path!,scan,DateTime.UtcNow);ShowOperationDialog(temp,owner,token);
+                    report(temp.Moved>0?string.Format(L("Temporary-folder review finished. Items moved to the Recycle Bin or removed: {0}"),temp.Moved):token.IsCancellationRequested?L("Cancelled."):L("Cache-location inspection closed. No files were removed."));return;
+                }
                 ShowOperationDialog(new FolderMapDialog(this,selected.Path!,scan,CacheLocations.ResultContext,CacheLocations.Name(selected.Kind)),owner,token);
                 report(token.IsCancellationRequested?L("Cancelled."):L("Cache-location inspection closed. No files were removed."));return;
             }
