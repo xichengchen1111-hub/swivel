@@ -104,6 +104,22 @@ public sealed class McpHost : IMcpHost
         return document.Document.Text;
     }
 
+    public bool NameTaken(string path) => NativeFiles.NameTaken(path);
+    public string StoredName(string path) => NativeFiles.StoredName(path);
+
+    // The same lease the rename takes, so its refusals (file system, read-only, hard links) show at planning.
+    public void CheckRename(string path) { using var lease = NativeFiles.OpenRename(path); }
+
+    // Leases pin each file and its folder from the stamp check through the last rename; while
+    // held, nobody else can rename the file, so its stored name is checked once here.
+    public RenameOutcome Rename(IReadOnlyList<RenamePair> plan, IReadOnlyList<FileStamp> expected, CancellationToken token)
+    {
+        using var session = RenameSession.Open(plan.Select(p => p.Source), token);
+        if (session.Stamps.Where((stamp, i) => !stamp.SameObjectAndContent(expected[i])).Any()) throw new McpToolError("A file changed just now.");
+        if (session.StoredNames.Where((name, i) => name != Path.GetFileName(plan[i].Source)).Any()) throw new McpToolError("A file's name changed just now.");
+        return session.Execute(plan, token);
+    }
+
     public FileStamp? Stamp(string path)
     {
         try { return NativeFiles.InspectStamp(path); }

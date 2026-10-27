@@ -13,4 +13,16 @@ public static partial class NativeFiles
         using var probe = Open(path, ReadAttributes, 7, 3, OpenReparse);
         return ReadStamp(probe);
     }
+
+    /// The file's own name as the file system stores it (its long name, in its exact case),
+    /// read through the same attribute-only handle.
+    public static string StoredName(string path)
+    {
+        WindowsPathPolicy.Validate(path);
+        using var parent = DirectoryLease.Open(System.IO.Path.GetDirectoryName(path)!);
+        using var probe = Open(path, ReadAttributes, 7, 3, OpenReparse);
+        Check(probe, false);
+        return Leaf(FinalPath(probe));
+    }
+    private static string Leaf(string path) => path[(path.LastIndexOf('\\') + 1)..];
 }

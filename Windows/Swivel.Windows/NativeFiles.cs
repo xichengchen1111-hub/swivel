@@ -127,6 +127,8 @@ public static partial class NativeFiles
         private readonly DirectoryLease parent;
         public string CurrentPath { get; private set; }
         public FileStamp Stamp { get; }
+        /// The held file's name as stored now (long name, exact case).
+        public string StoredName => Leaf(FinalPath(handle));
         internal RenameLease(string path, DirectoryLease parent, SafeFileHandle handle)
         {
             CurrentPath = path; this.parent = parent; this.handle = handle;
@@ -153,6 +155,15 @@ public static partial class NativeFiles
             if (error != 2) throw new Win32Exception(error); // Missing leaf only; access/errors are not absence.
         }
         public void Dispose() { handle.Dispose(); parent.Dispose(); }
+    }
+    /// Whether anything (a file, folder or link) has this name; only "not found" counts as free.
+    public static bool NameTaken(string path)
+    {
+        WindowsPathPolicy.Validate(path);
+        if (GetAttributes(path) != uint.MaxValue) return true;
+        int error = Marshal.GetLastWin32Error();
+        if (error == 2) return false;
+        throw new Win32Exception(error);
     }
     public static RenameLease OpenRename(string path)
     {

@@ -1047,6 +1047,20 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.106 MCP 批量改名：plan_rename → apply_plan → undo（G02 部分）
+
+批次开始 `git fetch`：origin/main 已从 `4166d5d` 前进到 `38a6fe6`（Mac 1.14.4：拼接、格式、AirDrop、Mac 医生清理；Mac 版 MCP 已有 plan_compress、plan_rename、plan_move），不含 `Windows/` 改动，本分支未合并；0.105 已随另一会话的 `f0817d4` 推到远端。工作区另有其他会话的 Mac 未提交改动，未触碰。
+
+Core `RenameRules.Build` 拆出 `CheckLimits(count)` 与 `Destination(path, index)`，行为不变（批量改名窗口照旧）。`IMcpHost` 新增 `NameTaken(path)`（只有“找不到”算空闲）与 `Rename(plan, expected, token)`。`McpSession`：工具顺序为 list_actions、inspect_files、extract_text、read_codes、plan_action、plan_rename、apply_plan、undo、history；`inspect_files` 每个文件的 `tools` 末尾加 `plan_rename`。`Plan` 记录改为 `Action?`／`Renames?`，计划存取统一由 `Store` 处理（过期清理、64 个上限）。
+
+`plan_rename`：只接受 paths、base_name、find、replace_with、prefix、suffix、number、start、digits，其他参数名整次拒绝（防止 `replace` 之类拼错让 find 变成删除）；文字须为合法 Unicode 字符串，`number` 为布尔，`start` 0–99,999,999、`digits` 1–8 为整数（1.0 也算整数），`start`／`digits` 需 `number: true`；至少给 base_name、find、prefix、suffix 或 number 之一，`CheckLimits` 在检查任何名字前执行。加进名字的四段文字拒绝 `\`、`/` 和 `HiddenCharacter`：控制/格式/行段分隔符、U+0020 以外的空格类、Unicode 默认可忽略的填充符与变体选择符（U+3164、U+115F/1160、U+FFA0、U+034F、U+17B4/17B5、U+180B–180F、U+FE00–FE0F、U+FFF0–FFF8、U+1BCA0–1BCA3、U+1D173–1D17A、U+E0000–E0FFF）和盲文空白 U+2800，报出码位；find 只用来匹配，不检查。逐个 `Inspect` 并读 `IMcpHost.StoredName`（Windows：只读属性句柄 + `GetFinalPathNameByHandle` 的最后一段，即长文件名的实际大小写），与传入路径的最后一段逐字比较，不同就整次拒绝并说出真实名字。逐行问题只查会改名的行：新名为空或从原来不以点开头变成以点开头（扩展名前什么都不剩）；`WindowsPathPolicy` 不接受；`IMcpHost.CheckRename`（Windows：打开再关闭与改名相同的 `NativeFiles.OpenRename` 租约，非 NTFS、只读、硬链接在这里报出）；新名不是任一所选文件当前名字且 `NameTaken`（查不了也算问题）。与另一新名不区分大小写相同则所有行都查。有问题或无任何变化时 `can_apply=false`、不给 plan_id；名字不变的文件不进计划，应用时不租、不核对。
+
+`apply_plan`：先按原有逻辑核对历史可读、每个输入的身份/大小/写入时间，再调用 `host.Rename`。Windows `McpHost.Rename` 用 `RenameSession.Open` 租住每个文件和父文件夹，核对租约时的 `Stamps` 与计划一致、`StoredNames`（租住期间别人改不了名）与每个源路径的最后一段逐字相同，再 `Execute`（预检所有目标空闲，需要时先挪到同目录唯一临时名，失败按相反顺序回滚，从不替换）。宿主抛错=未改任何文件，报 “Nothing was renamed.”；结果中 `Remaining`（不在原名的文件）才记入历史：全部回滚则不记录并报 “Every name was restored”，回滚失败的文件列出现在位置、记入历史、可撤销。历史条目 `{id,time,action:"rename",outputs:[],renames:[{from,path,volume,index,size,write,creation,undone}]}`；`LoadHistory` 校验 renames 的类型、路径、`from` 与印记，并拒绝同时带非空 outputs 或 action 不是 rename 的改名条目（否则撤销永远完不成），损坏时整份拒绝且不覆盖。
+
+`undo`：`Pending` 同时看 outputs 与 renames；改名条目由 `UndoRename` 处理，全部或全不：每个未撤销的文件须仍在、身份内容未变、原名空闲（原名是本条另一文件当前名字或只差大小写时不查）；任何一项不满足则全部不改、逐项说明并加 note；记录的位置已不存在、而原名处正是同一文件（身份与内容相同）时视为“已经回到原名”，标记 undone（`dry_run` 不标）；`dry_run` 只报告。执行时用反向配对调用同一个 `host.Rename`；回到原名的标记 undone，回滚失败而换了位置的更新 `path`，其余保持记录。保存历史失败时返回错误，说明名字已如 results 所示、历史未更新，下次撤销会认出已回到原名的文件。`history` 对改名条目另列 `renames`（from、path、undone）。设置页与功能状态说明改写（四语）。
+
+独立 agent 审查（只读；用替身宿主驱动编好的 Core 做探针，并通读 Windows 宿主代码）：无 P1。已修 P2：新名字和撤销后恢复的名字都由 agent 传入的路径写法算出，大小写不同或给的是 8.3 短名时会把文件改错名（撤销也回不到真名）；现在 plan_rename 用 `StoredName`（最终路径的最后一段）逐字核对，不一致整次拒绝，应用和撤销时在租约下再查一次。已修 P3：加入的文字拒绝 `\`、`/` 和不可见/像空格/改方向的字符；名字不变的文件不检查也不租住；扩展名前为空或只剩空格、未知参数名被拒绝；`start: 1.0` 可用，`start`/`digits` 需 `number`；同时带 outputs 的改名条目使历史不可读，而不是成为永远撤销不完的条目；Swivel 改不了的文件（非 NTFS、只读、硬链接）在对应行报出；撤销后历史存不上会明说，下次撤销认出已回到原名的文件。复查发现这项恢复的新 P2：连锁、互换和只改大小写时，因为先查记录位置再查原名，认不出已回到原名；改为先查原名及其实际写法，并补连锁与只改大小写的回归。最终复查确认已关闭，且这项检查不会在尚未撤销的普通改名、连锁、互换、只改大小写或卡在暂存名的条目上误判；它提出的两个 P3 也已修（原名处是该文件后来加的硬链接时不算“已回到原名”，而算原名被占用；扩展名前为空的提示措辞）。 接受的限制：降级到 0.86–0.105 后给它改名条目的 entry_id，会报完成但没有结果；手动改了大小写后撤销会以“A file's name changed just now”拒绝。
+
 ## 0.105 MCP 只读工具：extract_text、read_codes（G02 部分）
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`；工作区另有其他会话的 Mac 未提交改动，未触碰。

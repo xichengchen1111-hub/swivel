@@ -18,7 +18,15 @@ internal static class McpChecks
         public string? FailOn;
         private ulong next = 100;
         public FileStamp Add(string path) => Files[path] = new FileStamp(1, next++, 10, 1000, 2000);
-        public FileStamp Inspect(string path) => Files.TryGetValue(path, out var s) ? s : throw (path.EndsWith("denied.png") ? new UnauthorizedAccessException("Access is denied.") : new UserError("Choose a local regular file."));
+        public FileStamp Inspect(string path) => Files.TryGetValue(Aliases.GetValueOrDefault(path, path), out var s) ? s : throw (path.EndsWith("denied.png") ? new UnauthorizedAccessException("Access is denied.") : new UserError("Choose a local regular file."));
+        public readonly Dictionary<string, string> Aliases = new(StringComparer.OrdinalIgnoreCase); // 8.3 short path → long path
+        public readonly HashSet<string> Locked = new(StringComparer.OrdinalIgnoreCase); // read-only or hard-linked
+        public string StoredName(string path)
+        {
+            string key = Files.Keys.First(k => string.Equals(k, Aliases.GetValueOrDefault(path, path), StringComparison.OrdinalIgnoreCase));
+            return key[(key.LastIndexOf('\\') + 1)..];
+        }
+        public void CheckRename(string path) { if (Locked.Contains(path)) throw new UserError("Batch Rename does not accept read-only files, hard links or unavailable file identities."); }
         public string Run(string action, string path, CancellationToken token)
         {
             if (path == FailOn) throw Throw ?? new UserError("Could not read the image.");
@@ -41,6 +49,37 @@ internal static class McpChecks
         }
         public string RecognizeText(string path, string? language, CancellationToken token) { Recognized.Add((path, language)); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("No OCR language."); }
         public string ReadDocumentText(string path, CancellationToken token) { Documents.Add(path); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("Not a valid document."); }
+        public readonly HashSet<string> Taken = new(StringComparer.OrdinalIgnoreCase); // folders and other names
+        public int NameChecks;
+        public bool NameTaken(string path) { NameChecks++; return Files.ContainsKey(path) || Taken.Contains(path); }
+        public enum RenameFailure { None, RolledBack, Stuck }
+        public RenameFailure RenameFails;
+        public readonly List<IReadOnlyList<RenamePair>> Renamed = new();
+        public RenameOutcome Rename(IReadOnlyList<RenamePair> plan, IReadOnlyList<FileStamp> expected, CancellationToken token)
+        {
+            RenameRules.Validate(plan);
+            for (int i = 0; i < plan.Count; i++)
+                if (!Files.TryGetValue(plan[i].Source, out var s) || !s.SameObjectAndContent(expected[i])) throw new UserError("A file changed just now.");
+            if (plan.Any(p => StoredName(p.Source) != p.Source[(p.Source.LastIndexOf('\\') + 1)..])) throw new UserError("A file's name changed just now.");
+            if (plan.Any(p => Locked.Contains(p.Source))) throw new UserError("Batch Rename does not accept read-only files, hard links or unavailable file identities.");
+            foreach (var pair in plan)
+                if (pair.Changed && !plan.Any(p => p.Source.Equals(pair.Destination, StringComparison.OrdinalIgnoreCase)) && (Files.ContainsKey(pair.Destination) || Taken.Contains(pair.Destination)))
+                    throw new UserError("A destination name is already occupied. Nothing was overwritten.");
+            Renamed.Add(plan);
+            var stamps = plan.Select(p => Files[p.Source]).ToArray();
+            var error = new System.IO.IOException("The disk is busy.");
+            if (RenameFails == RenameFailure.RolledBack) return new RenameOutcome(plan.Select((p, i) => new RenameLocation(p.Source, p.Source, stamps[i])).ToArray(), error, false);
+            foreach (var pair in plan) Files.Remove(pair.Source);
+            var at = plan.Select(p => p.Destination).ToArray();
+            if (RenameFails == RenameFailure.Stuck)
+            {
+                // The first file's rollback failed at its staging name; the others went back.
+                at = plan.Select(p => p.Source).ToArray();
+                at[0] = plan[0].Source[..(plan[0].Source.LastIndexOf('\\') + 1)] + ".swivel-rename-stuck";
+            }
+            for (int i = 0; i < plan.Count; i++) Files[at[i]] = stamps[i];
+            return new RenameOutcome(plan.Select((p, i) => new RenameLocation(p.Source, at[i], stamps[i])).ToArray(), RenameFails == RenameFailure.Stuck ? error : null, false);
+        }
         public FileStamp? Stamp(string path) => Files.TryGetValue(path, out var s) ? s : null;
         public void Recycle(string path, FileStamp expected)
         {
@@ -78,9 +117,9 @@ internal static class McpChecks
         check((int)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/list\"}")["error"]!["code"]! == -32601, "MCP unknown method");
         check((int)Rpc(session, new string(' ', McpSession.MaxLineChars + 1))["error"]!["code"]! == -32600, "MCP oversized message refused");
         var tools = ((JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!).Select(t => (string)t!["name"]!).ToArray();
-        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "apply_plan", "undo", "history" }), "MCP tool list");
+        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "plan_rename", "apply_plan", "undo", "history" }), "MCP tool list");
         var listed = (JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!;
-        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
+        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes" or "plan_rename").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
             "MCP extract_text and read_codes are marked read-only");
         check((int)Call(session, "format_disk", new JsonObject())["error"]!["code"]! == -32602, "MCP unknown tool is an invalid-params error");
 
@@ -93,11 +132,11 @@ internal static class McpChecks
         host.Add(photo); host.Add(doc);
         var inspected = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\missing.png") }))["files"]!;
         check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Count == McpSession.Actions.Count && ((JsonArray)inspected[1]!["actions"]!).Count == 0 && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path");
-        check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text" }),
+        check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes", "plan_rename" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename" }),
             "MCP inspect_files names the read-only tools for images and documents");
         host.OcrLanguages = new(); host.LanguageReads = 0;
         var noOcr = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\Users\me\b.png") }))["files"]!;
-        check(((JsonArray)noOcr[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "read_codes" }) && ((JsonArray)noOcr[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text" }) && host.LanguageReads == 1,
+        check(((JsonArray)noOcr[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "read_codes", "plan_rename" }) && ((JsonArray)noOcr[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename" }) && host.LanguageReads == 1,
             "MCP inspect_files offers extract_text for images only where Windows OCR can run, asking once");
         host.OcrLanguages = new() { "en-US", "zh-Hans-CN" };
 
@@ -272,6 +311,217 @@ internal static class McpChecks
         reader.Enabled = false;
         check(IsError(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(qr) })) && IsError(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(doc) })), "MCP read tools refuse while Agent Tools is off");
         reader.Enabled = true;
+
+        // plan_rename → apply_plan → undo, on its own host.
+        var namer = new FakeHost(); var naming = new McpSession(namer, "0.106.0");
+        string ra = @"C:\w\a.txt", rb = @"C:\w\b.png", rc = @"C:\w\photo.jpg";
+        namer.Add(ra); namer.Add(rb); namer.Add(rc);
+        JsonObject Rename(JsonObject arguments) => Call(naming, "plan_rename", arguments);
+        foreach (var (badRename, why) in new (JsonObject, string)[]
+        {
+            (new JsonObject { ["paths"] = Paths(ra) }, "no rule"),
+            (new JsonObject { ["paths"] = Paths(ra), ["find"] = "", ["start"] = 5 }, "only start"),
+            (new JsonObject { ["paths"] = Paths(ra), ["base_name"] = 5 }, "a number as text"),
+            (new JsonObject { ["paths"] = Paths(ra), ["number"] = "yes" }, "number as text"),
+            (new JsonObject { ["paths"] = Paths(ra), ["number"] = true, ["start"] = -1 }, "a negative start"),
+            (new JsonObject { ["paths"] = Paths(ra), ["number"] = true, ["start"] = 1.5 }, "a fractional start"),
+            (new JsonObject { ["paths"] = Paths(ra), ["number"] = true, ["digits"] = 9 }, "nine digits"),
+            (new JsonObject { ["paths"] = Paths(ra, rb), ["number"] = true, ["start"] = 99_999_999 }, "numbers past 99999999"),
+            (new JsonObject { ["paths"] = Paths(ra), ["prefix"] = new string('p', 121) }, "text over 120 characters"),
+            (new JsonObject { ["paths"] = Paths(ra, @"C:\w\gone.txt"), ["prefix"] = "x" }, "a missing file"),
+            (new JsonObject { ["paths"] = Paths(ra), ["find"] = "a", ["replace"] = "b" }, "an unknown argument (a misspelt replace_with)"),
+            (new JsonObject { ["paths"] = Paths(ra), ["prefix"] = "x", ["digits"] = 2 }, "digits without number"),
+            (new JsonObject { ["paths"] = Paths(ra), ["prefix"] = @"sub\" }, "a backslash in added text"),
+            (new JsonObject { ["paths"] = Paths(ra), ["base_name"] = "a/b" }, "a slash in added text"),
+            (new JsonObject { ["paths"] = Paths(@"C:\w\A.TXT"), ["prefix"] = "x" }, "a path spelt in another case than the file's name"),
+        })
+            check(IsError(Rename(badRename)) && namer.NameChecks == 0, "MCP plan_rename refuses " + why + " before checking any name");
+        foreach (string hidden in new[] { "\u202E", "\u2028", "\u0085", "\u200B", "\u00A0", "\u3000", "\u3164", "\u2800", "\uFE0F", "\U000E0020" })
+        {
+            var hiddenRefused = Rename(new JsonObject { ["paths"] = Paths(ra), ["prefix"] = "x" + hidden });
+            check(IsError(hiddenRefused) && ((string)Body(hiddenRefused)["error"]!).Contains("U+" + char.ConvertToUtf32(hidden, 0).ToString("X4")) && namer.NameChecks == 0,
+                "MCP plan_rename refuses invisible, blank-looking or text-direction characters in added text: U+" + char.ConvertToUtf32(hidden, 0).ToString("X4"));
+        }
+        check(!IsError(Rename(new JsonObject { ["paths"] = Paths(ra), ["find"] = "\u00A0", ["replace_with"] = "_" })), "MCP plan_rename accepts such characters in find, which only matches");
+        namer.Aliases[@"C:\w\PHOTO~1.JPG"] = rc;
+        var shortName = Rename(new JsonObject { ["paths"] = Paths(@"C:\w\PHOTO~1.JPG"), ["prefix"] = "x" });
+        check(IsError(shortName) && ((string)Body(shortName)["error"]!).Contains("named photo.jpg"), "MCP plan_rename refuses an 8.3 short name, naming the file's own name: " + Body(shortName).ToJsonString());
+        namer.Aliases.Clear(); namer.NameChecks = 0;
+
+        var loneRename = Rpc(naming, "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_rename\",\"arguments\":{\"paths\":[\"C:\\\\w\\\\a.txt\"],\"prefix\":\"x\\ud800\"}}}");
+        check((loneRename["error"] is JsonObject || IsError(loneRename)) && namer.NameChecks == 0, "MCP plan_rename refuses a lone surrogate before checking any name: " + loneRename.ToJsonString());
+        var planned = Body(Rename(new JsonObject { ["paths"] = Paths(ra, rb), ["prefix"] = "2026 ", ["suffix"] = " v", ["number"] = true, ["start"] = 7, ["digits"] = 2 }));
+        var plannedRows = (JsonArray)planned["renames"]!;
+        check(planned["can_apply"]!.GetValue<bool>() && planned["plan_id"] is JsonValue && (string?)planned["action"] == "rename"
+            && (string?)plannedRows[0]!["to"] == @"C:\w\2026 a v-07.txt" && (string?)plannedRows[1]!["to"] == @"C:\w\2026 b v-08.png" && plannedRows.All(r => r!["issue"] is null)
+            && namer.Files.ContainsKey(ra) && !namer.Files.ContainsKey(@"C:\w\2026 a v-07.txt") && namer.NameChecks == 2,
+            "MCP plan_rename lists each new name, keeps extensions, numbers in path order and changes nothing: " + planned.ToJsonString());
+        var renamed = Body(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)planned["plan_id"]! }));
+        check((string?)renamed["action"] == "rename" && renamed["entry_id"] is JsonValue && (int)renamed["completed"]! == 2 && (int)renamed["total"]! == 2
+            && !namer.Files.ContainsKey(ra) && namer.Files.ContainsKey(@"C:\w\2026 a v-07.txt") && namer.Files.ContainsKey(@"C:\w\2026 b v-08.png"),
+            "MCP apply_plan renames the planned files: " + renamed.ToJsonString());
+        check(IsError(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)planned["plan_id"]! })), "MCP a rename plan is single use");
+        var logged = (JsonObject)JsonNode.Parse(namer.History!)!["entries"]![0]!;
+        check(logged["outputs"] is JsonArray { Count: 0 } && ((JsonArray)logged["renames"]!).Count == 2 && (string?)logged["renames"]![0]!["from"] == ra,
+            "MCP a rename is logged with an empty outputs list, so older versions can still read the log");
+        var listedRename = (JsonObject)Body(Call(naming, "history", new JsonObject()))["entries"]![0]!;
+        check((string?)listedRename["action"] == "rename" && (string?)listedRename["renames"]![1]!["path"] == @"C:\w\2026 b v-08.png" && !listedRename["renames"]![1]!["undone"]!.GetValue<bool>(),
+            "MCP history lists the renamed files");
+
+        // Undo puts every file back together, or none.
+        string newA = @"C:\w\2026 a v-07.txt", newB = @"C:\w\2026 b v-08.png";
+        var dryUndo = Body(Call(naming, "undo", new JsonObject { ["dry_run"] = true }));
+        check(((JsonArray)dryUndo["results"]!).All(r => (string?)r!["result"] == "would be renamed back") && namer.Files.ContainsKey(newA) && namer.Renamed.Count == 1, "MCP undo dry_run of a rename changes nothing");
+        var editedB = namer.Files[newB]; namer.Files[newB] = editedB with { Size = 99 };
+        var blockedUndo = Body(Call(naming, "undo", new JsonObject()));
+        check((string?)blockedUndo["results"]![1]!["result"] == "changed since the rename; left alone" && ((string)blockedUndo["results"]![0]!["result"]!).Contains("waiting") && blockedUndo["note"] is JsonValue
+            && !blockedUndo["complete"]!.GetValue<bool>() && namer.Files.ContainsKey(newA) && namer.Renamed.Count == 1, "MCP undo of a rename refuses every file when one changed");
+        namer.Files[newB] = editedB; namer.Taken.Add(ra);
+        var takenUndo = Body(Call(naming, "undo", new JsonObject()));
+        check((string?)takenUndo["results"]![0]!["result"] == "its old name is taken now; left alone" && namer.Files.ContainsKey(newA) && namer.Renamed.Count == 1, "MCP undo of a rename refuses when an old name is taken");
+        namer.Taken.Remove(ra);
+        var undoneRename = Body(Call(naming, "undo", new JsonObject()));
+        check(undoneRename["complete"]!.GetValue<bool>() && ((JsonArray)undoneRename["results"]!).All(r => (string?)r!["result"] == "renamed back") && namer.Files.ContainsKey(ra) && namer.Files.ContainsKey(rb) && !namer.Files.ContainsKey(newA),
+            "MCP undo renames every file back: " + undoneRename.ToJsonString());
+        check(IsError(Call(naming, "undo", new JsonObject())) && (string?)Body(Call(naming, "undo", new JsonObject { ["entry_id"] = (string)renamed["entry_id"]! }))["results"]![0]!["result"] == "already undone",
+            "MCP an undone rename is not undone twice");
+
+        // Problems are reported per row, with no plan.
+        namer.Taken.Add(@"C:\w\x a.txt");
+        var problemRows = (JsonArray)Body(Rename(new JsonObject { ["paths"] = Paths(ra, rb), ["prefix"] = "x " }))["renames"]!;
+        check(((string)problemRows[0]!["issue"]!).Contains("already exists") && problemRows[1]!["issue"] is null, "MCP plan_rename reports a name that is taken");
+        var same = Body(Rename(new JsonObject { ["paths"] = Paths(ra, @"C:\w\b.txt"), ["base_name"] = "same" }));
+        namer.Add(@"C:\w\b.txt");
+        same = Body(Rename(new JsonObject { ["paths"] = Paths(ra, @"C:\w\b.txt"), ["base_name"] = "same" }));
+        check(!same["can_apply"]!.GetValue<bool>() && same["plan_id"] is null && ((JsonArray)same["renames"]!).All(r => ((string)r!["issue"]!).Contains("same name")), "MCP plan_rename reports two files getting one name, ignoring case");
+        check(((JsonArray)Body(Rename(new JsonObject { ["paths"] = Paths(ra), ["suffix"] = "?" }))["renames"]!)[0]!["issue"] is JsonValue, "MCP plan_rename refuses a name Windows cannot use");
+        var nothing = Body(Rename(new JsonObject { ["paths"] = Paths(ra, rb), ["find"] = "zzz", ["replace_with"] = "y" }));
+        check(!nothing["can_apply"]!.GetValue<bool>() && ((JsonArray)nothing["renames"]!).All(r => r!["unchanged"]!.GetValue<bool>()), "MCP plan_rename says when no name changes");
+        var emptied = Body(Rename(new JsonObject { ["paths"] = Paths(ra), ["find"] = "a" }));
+        check(!emptied["can_apply"]!.GetValue<bool>() && ((string)emptied["renames"]![0]!["issue"]!).Contains("before its extension"), "MCP plan_rename refuses a rule that leaves nothing before the extension");
+        check(Body(Rename(new JsonObject { ["paths"] = Paths(ra), ["prefix"] = "x", ["number"] = true, ["start"] = 1.0 }))["can_apply"]!.GetValue<bool>(), "MCP plan_rename takes 1.0 as a whole number");
+        namer.Locked.Add(rb);
+        var lockedRow = Body(Rename(new JsonObject { ["paths"] = Paths(ra, rb), ["prefix"] = "x" }));
+        check(!lockedRow["can_apply"]!.GetValue<bool>() && ((string)lockedRow["renames"]![1]!["issue"]!).Contains("can't rename") && lockedRow["renames"]![0]!["issue"] is null,
+            "MCP plan_rename reports a file Swivel can't rename (read-only, hard link, other file system) on its row");
+        // A file that keeps its name is neither held nor checked, even when it couldn't be renamed.
+        string oddName = "C:\\w\\odd\u2028.txt"; namer.Add(oddName); namer.Locked.Add(oddName);
+        var keeps = Body(Rename(new JsonObject { ["paths"] = Paths(ra, rb, oddName), ["find"] = "a", ["replace_with"] = "z" }));
+        check(keeps["can_apply"]!.GetValue<bool>() && keeps["renames"]![1]!["unchanged"]!.GetValue<bool>() && keeps["renames"]![2]!["unchanged"]!.GetValue<bool>(), "MCP plan_rename ignores files that keep their names: " + keeps.ToJsonString());
+        int renameCalls = namer.Renamed.Count;
+        var kept = Body(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)keeps["plan_id"]! }));
+        check((int)kept["total"]! == 1 && namer.Renamed.Count == renameCalls + 1 && namer.Renamed[^1].Count == 1 && namer.Files.ContainsKey(@"C:\w\z.txt"), "MCP apply_plan renames only the files whose names change");
+        check(Body(Call(naming, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && namer.Files.ContainsKey(ra), "MCP undo of a rename with files that kept their names");
+        namer.Locked.Clear(); namer.Files.Remove(oddName);
+
+        // Chains, case changes, a file changed or a name taken after planning, and failed steps.
+        string f1 = @"C:\w\f-001.txt", f2 = @"C:\w\f-002.txt"; namer.Add(f1); namer.Add(f2);
+        var chain = Body(Rename(new JsonObject { ["paths"] = Paths(f1, f2, rc), ["find"] = "photo", ["replace_with"] = "Photo", ["base_name"] = "f", ["number"] = true, ["start"] = 2 }));
+        check(chain["can_apply"]!.GetValue<bool>(), "MCP plan_rename allows a chain onto a name another selected file gives up: " + chain.ToJsonString());
+        var caseOnly = Body(Rename(new JsonObject { ["paths"] = Paths(rc), ["find"] = "photo", ["replace_with"] = "Photo" }));
+        check(caseOnly["can_apply"]!.GetValue<bool>() && (string?)caseOnly["renames"]![0]!["to"] == @"C:\w\Photo.jpg" && caseOnly["renames"]![0]!["unchanged"] is null, "MCP plan_rename allows a case-only change");
+        var chained = Body(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)chain["plan_id"]! }));
+        check((int)chained["completed"]! == 3 && namer.Files.ContainsKey(@"C:\w\f-003.txt") && namer.Files.ContainsKey(@"C:\w\f-004.jpg") && !namer.Files.ContainsKey(f1), "MCP apply_plan renames a chain");
+        check(IsError(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)caseOnly["plan_id"]! })), "MCP a rename plan whose file was renamed since is refused");
+        check(Body(Call(naming, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && namer.Files.ContainsKey(f1) && namer.Files.ContainsKey(f2) && namer.Files.ContainsKey(rc), "MCP undo renames a chain back");
+
+        var later = Body(Rename(new JsonObject { ["paths"] = Paths(ra), ["prefix"] = "later " }));
+        namer.Files[ra] = namer.Files[ra] with { WriteTime = 5 };
+        int histories = namer.Saves;
+        check(IsError(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)later["plan_id"]! })) && namer.Files.ContainsKey(ra) && namer.Saves == histories, "MCP a rename is refused when its file changed since planning");
+        later = Body(Rename(new JsonObject { ["paths"] = Paths(ra), ["prefix"] = "later " }));
+        namer.Taken.Add(@"C:\w\later a.txt");
+        var occupied = Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)later["plan_id"]! });
+        check(IsError(occupied) && ((string)Body(occupied)["error"]!).Contains("Nothing was renamed") && namer.Files.ContainsKey(ra) && namer.Saves == histories, "MCP a rename is refused when a new name was taken after planning");
+        namer.Taken.Remove(@"C:\w\later a.txt");
+        later = Body(Rename(new JsonObject { ["paths"] = Paths(ra, rb), ["prefix"] = "later " }));
+        namer.RenameFails = FakeHost.RenameFailure.RolledBack;
+        var rolledBack = Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)later["plan_id"]! });
+        check(IsError(rolledBack) && ((string)Body(rolledBack)["error"]!).Contains("Every name was restored") && namer.Files.ContainsKey(ra) && namer.Saves == histories, "MCP a failed rename that rolled back logs nothing");
+        later = Body(Rename(new JsonObject { ["paths"] = Paths(ra, rb), ["prefix"] = "later " }));
+        namer.RenameFails = FakeHost.RenameFailure.Stuck;
+        var stuck = Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)later["plan_id"]! });
+        string stuckAt = @"C:\w\.swivel-rename-stuck";
+        check(IsError(stuck) && Body(stuck)["entry_id"] is JsonValue && (string?)Body(stuck)["renames"]![0]!["to"] == stuckAt && ((JsonArray)Body(stuck)["renames"]!).Count == 1 && (int)Body(stuck)["completed"]! == 0,
+            "MCP a rename whose rollback failed lists and logs where the file is: " + Body(stuck).ToJsonString());
+        namer.RenameFails = FakeHost.RenameFailure.None;
+        check(Body(Call(naming, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && namer.Files.ContainsKey(ra) && !namer.Files.ContainsKey(stuckAt), "MCP undo brings a stuck file back to its name");
+
+        // A swap, and undoing it.
+        FileStamp s1 = namer.Files[f1], s2 = namer.Files[f2];
+        var swap = Body(Rename(new JsonObject { ["paths"] = Paths(f2, f1), ["base_name"] = "f", ["number"] = true }));
+        Body(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)swap["plan_id"]! }));
+        check(namer.Files[f1] == s2 && namer.Files[f2] == s1, "MCP apply_plan swaps two names");
+        check(Body(Call(naming, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && namer.Files[f1] == s1 && namer.Files[f2] == s2, "MCP undo swaps them back");
+
+        // The file's name changed case after planning: the plan was built from the old spelling.
+        later = Body(Rename(new JsonObject { ["paths"] = Paths(ra), ["prefix"] = "late " }));
+        var held = namer.Files[ra]; namer.Files.Remove(ra); namer.Files[@"C:\w\A.txt"] = held; histories = namer.Saves;
+        var respelt = Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)later["plan_id"]! });
+        check(IsError(respelt) && ((string)Body(respelt)["error"]!).Contains("Nothing was renamed") && namer.Files.ContainsKey(@"C:\w\A.txt") && namer.Saves == histories, "MCP a rename is refused when the file's name changed case after planning");
+        namer.Files.Remove(@"C:\w\A.txt"); namer.Files[ra] = held;
+
+        // Undo that fails: refused by the host, stopped half way, or unable to save the log.
+        string ua = @"C:\w\u a.txt", ub = @"C:\w\u b.png";
+        Body(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)Body(Rename(new JsonObject { ["paths"] = Paths(ra, rb), ["prefix"] = "u " }))["plan_id"]! }));
+        namer.Locked.Add(ua); histories = namer.Saves;
+        var hostRefused = Body(Call(naming, "undo", new JsonObject()));
+        check(!hostRefused["complete"]!.GetValue<bool>() && ((JsonArray)hostRefused["results"]!).All(r => ((string)r!["result"]!).StartsWith("not renamed back: ")) && hostRefused["note"] is JsonValue
+            && namer.Files.ContainsKey(ua) && namer.Saves == histories, "MCP undo of a rename that the host refuses changes nothing and stays pending: " + hostRefused.ToJsonString());
+        namer.Locked.Clear(); namer.RenameFails = FakeHost.RenameFailure.Stuck;
+        var halfUndo = Body(Call(naming, "undo", new JsonObject()));
+        check(!halfUndo["complete"]!.GetValue<bool>() && (string?)halfUndo["results"]![0]!["path"] == stuckAt && ((string)halfUndo["note"]!).Contains("stopped") && namer.Files.ContainsKey(stuckAt) && namer.Files.ContainsKey(ub),
+            "MCP an undo that stops half way says where each file is and keeps them logged: " + halfUndo.ToJsonString());
+        namer.RenameFails = FakeHost.RenameFailure.None; namer.SaveFails = true;
+        var unsaved = Call(naming, "undo", new JsonObject());
+        check(IsError(unsaved) && ((string)Body(unsaved)["error"]!).Contains("history could not be updated") && namer.Files.ContainsKey(ra) && namer.Files.ContainsKey(rb),
+            "MCP an undo whose log can't be saved says so, with the files back: " + Body(unsaved).ToJsonString());
+        namer.SaveFails = false;
+        var backAlready = Body(Call(naming, "undo", new JsonObject()));
+        check(backAlready["complete"]!.GetValue<bool>() && ((JsonArray)backAlready["results"]!).All(r => (string?)r!["result"] == "already back at its old name") && namer.Files.ContainsKey(ra),
+            "MCP a later undo marks files already back at their old names as done: " + backAlready.ToJsonString());
+        // The same for a chain (each old name now holds the file that had it) and a case-only change.
+        foreach (var (moved, why) in new (JsonObject, string)[]
+        {
+            (new JsonObject { ["paths"] = Paths(f1, f2), ["base_name"] = "f", ["number"] = true, ["start"] = 2 }, "a chain"),
+            (new JsonObject { ["paths"] = Paths(rc), ["find"] = "photo", ["replace_with"] = "Photo" }, "a case-only change"),
+        })
+        {
+            Body(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)Body(Rename(moved))["plan_id"]! }));
+            namer.SaveFails = true;
+            bool failed = IsError(Call(naming, "undo", new JsonObject()));
+            namer.SaveFails = false;
+            var recovered = Body(Call(naming, "undo", new JsonObject()));
+            check(failed && recovered["complete"]!.GetValue<bool>() && ((JsonArray)recovered["results"]!).All(r => (string?)r!["result"] == "already back at its old name")
+                && namer.Files[f1] == s1 && namer.Files[f2] == s2 && namer.StoredName(rc) == "photo.jpg",
+                "MCP a later undo recognizes " + why + " already back after an unsaved undo: " + recovered.ToJsonString());
+        }
+        // A hard link to the renamed file under its old name is not "back": the old name counts as taken.
+        Body(Call(naming, "apply_plan", new JsonObject { ["plan_id"] = (string)Body(Rename(new JsonObject { ["paths"] = Paths(ra), ["prefix"] = "h " }))["plan_id"]! }));
+        namer.Files[ra] = namer.Files[@"C:\w\h a.txt"];
+        var linked = Body(Call(naming, "undo", new JsonObject()));
+        check(!linked["complete"]!.GetValue<bool>() && (string?)linked["results"]![0]!["result"] == "its old name is taken now; left alone", "MCP undo doesn't take a hard link under the old name for the file being back: " + linked.ToJsonString());
+        namer.Files.Remove(ra);
+        check(Body(Call(naming, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && namer.Files.ContainsKey(ra), "MCP undo renames it back once the link is gone");
+        check(IsError(Call(naming, "undo", new JsonObject())), "MCP nothing is left to undo after that");
+        var blank = Body(Rename(new JsonObject { ["paths"] = Paths(ra), ["base_name"] = "   " }));
+        check(!blank["can_apply"]!.GetValue<bool>() && ((string)blank["renames"]![0]!["issue"]!).Contains("before its extension"), "MCP plan_rename refuses a name of only spaces before the extension");
+
+        string? goodLog = namer.History;
+        foreach (string tampered in new[]
+        {
+            "{\"version\":1,\"entries\":[{\"id\":\"x\",\"action\":\"rename\",\"outputs\":[{\"path\":\"p\",\"volume\":1,\"index\":1,\"size\":1,\"write\":1,\"creation\":1}],\"renames\":[{\"path\":\"q\",\"from\":\"r\",\"volume\":1,\"index\":2,\"size\":1,\"write\":1,\"creation\":1}]}]}",
+            "{\"version\":1,\"entries\":[{\"id\":\"x\",\"action\":\"convert.png\",\"outputs\":[],\"renames\":[{\"path\":\"q\",\"from\":\"r\",\"volume\":1,\"index\":2,\"size\":1,\"write\":1,\"creation\":1}]}]}",
+            "{\"version\":1,\"entries\":[{\"id\":\"x\",\"action\":\"rename\",\"outputs\":[],\"renames\":5}]}",
+            "{\"version\":1,\"entries\":[{\"id\":\"x\",\"action\":\"rename\",\"outputs\":[],\"renames\":[{\"path\":\"p\",\"volume\":1,\"index\":1,\"size\":1,\"write\":1,\"creation\":1}]}]}",
+        })
+        {
+            namer.History = tampered;
+            check(IsError(Call(naming, "history", new JsonObject())) && IsError(Call(naming, "undo", new JsonObject())) && namer.History == tampered, "MCP a damaged rename log is refused and kept");
+        }
+        namer.History = goodLog; namer.Enabled = false;
+        check(IsError(Rename(new JsonObject { ["paths"] = Paths(ra), ["prefix"] = "x" })), "MCP plan_rename refuses while Agent Tools is off");
+        namer.Enabled = true;
 
         // Plans are bounded.
         string any = @"C:\h\0.png";

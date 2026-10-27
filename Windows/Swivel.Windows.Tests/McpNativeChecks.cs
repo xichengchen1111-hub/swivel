@@ -11,6 +11,9 @@ using Swivel.Windows;
 
 internal static class McpNativeChecks
 {
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", EntryPoint = "GetShortPathNameW", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetShortPathName(string longPath, System.Text.StringBuilder shortPath, uint length);
+
     internal static void Run(string directory, Action<bool, string> check, Action<Action, string> reject)
     {
         // Windows-only: real files, the Recycle Bin and a test-only registry value.
@@ -74,6 +77,78 @@ internal static class McpNativeChecks
                 string expected; using (var file = File.OpenRead((string)documents[i]!)) expected = DocumentText.Read(file, formats[i].Item2, default).Text;
                 check(read3[i]!["ok"]!.GetValue<bool>() && (string?)read3[i]!["text"] == expected && expected.Contains("第二行 & <tag>"), "Native MCP extract_text reads " + formats[i].Item2 + " through the document reader: " + read3[i]!.ToJsonString());
             }
+
+            // plan_rename on real files: a chain onto a name another file gives up, a case-only
+            // change, a name taken by a folder; apply, then undo puts every name back.
+            string names = Path.Combine(root, "rename"); Directory.CreateDirectory(names);
+            string r1 = Path.Combine(names, "r-001.txt"), r2 = Path.Combine(names, "r-002.txt"), lower = Path.Combine(names, "case.txt");
+            File.WriteAllText(r1, "first"); File.WriteAllText(r2, "second"); File.WriteAllText(lower, "case");
+            Directory.CreateDirectory(Path.Combine(names, "x r-001.txt"));
+            var taken = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1, r2), ["prefix"] = "x " })["structuredContent"]!;
+            check(!taken["can_apply"]!.GetValue<bool>() && taken["renames"]![0]!["issue"] is JsonValue && taken["renames"]![1]!["issue"] is null, "Native MCP plan_rename reports a name a folder already has: " + taken.ToJsonString());
+            var chain = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1, r2, lower), ["find"] = "case", ["replace_with"] = "Case", ["base_name"] = "r", ["number"] = true, ["start"] = 2 })["structuredContent"]!;
+            var chained = Call("apply_plan", new JsonObject { ["plan_id"] = (string)chain["plan_id"]! })["structuredContent"]!;
+            string Name(string folder, string name) => Directory.GetFiles(folder, name).Select(Path.GetFileName).Single()!;
+            check((int)chained["completed"]! == 3 && File.ReadAllText(Path.Combine(names, "r-002.txt")) == "first" && File.ReadAllText(Path.Combine(names, "r-003.txt")) == "second"
+                && File.ReadAllText(Path.Combine(names, "r-004.txt")) == "case" && !File.Exists(r1) && !File.Exists(lower), "Native MCP apply_plan renames a chain on real files: " + chained.ToJsonString());
+            var caseOnly = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(Path.Combine(names, "r-004.txt")), ["find"] = "r-004", ["replace_with"] = "R-004" })["structuredContent"]!;
+            Call("apply_plan", new JsonObject { ["plan_id"] = (string)caseOnly["plan_id"]! });
+            check(Name(names, "r-004.txt") == "R-004.txt", "Native MCP apply_plan makes a case-only change");
+            var back = Call("undo", new JsonObject())["structuredContent"]!;
+            check(back["complete"]!.GetValue<bool>() && Name(names, "r-004.txt") == "r-004.txt", "Native MCP undo reverts a case-only change: " + back.ToJsonString());
+            back = Call("undo", new JsonObject())["structuredContent"]!;
+            check(back["complete"]!.GetValue<bool>() && File.ReadAllText(r1) == "first" && File.ReadAllText(r2) == "second" && Name(names, "case.txt") == "case.txt" && !File.Exists(Path.Combine(names, "r-003.txt")),
+                "Native MCP undo renames the chain back on real files: " + back.ToJsonString());
+
+            // The path must spell the file's stored name: another case, or an 8.3 short name, is refused.
+            var respelt = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(Path.Combine(names, "R-001.TXT")), ["prefix"] = "x" });
+            check(respelt["isError"]!.GetValue<bool>() && ((string)respelt["structuredContent"]!["error"]!).Contains("named r-001.txt"), "Native MCP plan_rename refuses a path spelt in another case: " + respelt.ToJsonString());
+            string longName = Path.Combine(names, "long name 2026.txt"); File.WriteAllText(longName, "long");
+            var shortBuffer = new System.Text.StringBuilder(1024);
+            string shortName = GetShortPathName(longName, shortBuffer, (uint)shortBuffer.Capacity) > 0 ? shortBuffer.ToString() : longName;
+            if (shortName != longName)
+            {
+                var viaShort = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(shortName), ["prefix"] = "x" });
+                check(viaShort["isError"]!.GetValue<bool>() && ((string)viaShort["structuredContent"]!["error"]!).Contains("named long name 2026.txt"), "Native MCP plan_rename refuses an 8.3 short name: " + viaShort.ToJsonString());
+            }
+            // A read-only file can't be renamed (reported on its row) but doesn't block files around it that keep their names.
+            string locked = Path.Combine(names, "locked.txt"); File.WriteAllText(locked, "locked"); File.SetAttributes(locked, FileAttributes.ReadOnly);
+            var lockedRow = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1, locked), ["prefix"] = "y " })["structuredContent"]!;
+            check(!lockedRow["can_apply"]!.GetValue<bool>() && ((string)lockedRow["renames"]![1]!["issue"]!).Contains("can't rename") && lockedRow["renames"]![0]!["issue"] is null, "Native MCP plan_rename reports a read-only file on its row: " + lockedRow.ToJsonString());
+            var aroundLocked = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1, locked), ["find"] = "001", ["replace_with"] = "009" })["structuredContent"]!;
+            var renamedAround = Call("apply_plan", new JsonObject { ["plan_id"] = (string)aroundLocked["plan_id"]! })["structuredContent"]!;
+            check((int)renamedAround["total"]! == 1 && File.ReadAllText(Path.Combine(names, "r-009.txt")) == "first" && File.Exists(locked), "Native MCP apply_plan renames around a read-only file that keeps its name: " + renamedAround.ToJsonString());
+            check(Call("undo", new JsonObject())["structuredContent"]!["complete"]!.GetValue<bool>() && File.ReadAllText(r1) == "first", "Native MCP undo of that rename");
+            File.SetAttributes(locked, FileAttributes.Normal);
+
+            // A swap on real files, a dry run of its undo, and the undo.
+            var swap = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r2, r1), ["base_name"] = "r", ["number"] = true })["structuredContent"]!;
+            Call("apply_plan", new JsonObject { ["plan_id"] = (string)swap["plan_id"]! });
+            check(File.ReadAllText(r1) == "second" && File.ReadAllText(r2) == "first", "Native MCP apply_plan swaps two names on real files");
+            var dryBack = Call("undo", new JsonObject { ["dry_run"] = true })["structuredContent"]!;
+            check(((JsonArray)dryBack["results"]!).All(r => (string?)r!["result"] == "would be renamed back") && File.ReadAllText(r1) == "second", "Native MCP undo dry run of a swap changes nothing: " + dryBack.ToJsonString());
+            check(Call("undo", new JsonObject())["structuredContent"]!["complete"]!.GetValue<bool>() && File.ReadAllText(r1) == "first" && File.ReadAllText(r2) == "second", "Native MCP undo swaps the names back on real files");
+
+            // After planning: a new name taken, or the file edited, refuses the apply without renaming anything.
+            var late = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1), ["prefix"] = "z " })["structuredContent"]!;
+            File.WriteAllText(Path.Combine(names, "z r-001.txt"), "planted");
+            var occupied = Call("apply_plan", new JsonObject { ["plan_id"] = (string)late["plan_id"]! });
+            check(occupied["isError"]!.GetValue<bool>() && File.ReadAllText(r1) == "first" && File.ReadAllText(Path.Combine(names, "z r-001.txt")) == "planted", "Native MCP apply_plan refuses a new name taken after planning: " + occupied.ToJsonString());
+            File.Delete(Path.Combine(names, "z r-001.txt"));
+            late = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1), ["prefix"] = "z " })["structuredContent"]!;
+            File.AppendAllText(r1, "+");
+            var edited = Call("apply_plan", new JsonObject { ["plan_id"] = (string)late["plan_id"]! });
+            check(edited["isError"]!.GetValue<bool>() && File.Exists(r1) && !File.Exists(Path.Combine(names, "z r-001.txt")), "Native MCP apply_plan refuses a file edited after planning: " + edited.ToJsonString());
+
+            // Undo refuses every file when one was edited, or when an old name is taken.
+            var both = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1, r2), ["prefix"] = "e " })["structuredContent"]!;
+            Call("apply_plan", new JsonObject { ["plan_id"] = (string)both["plan_id"]! });
+            File.WriteAllText(r1, "new file at the old name");
+            var blocked = Call("undo", new JsonObject())["structuredContent"]!;
+            check((string?)blocked["results"]![0]!["result"] == "its old name is taken now; left alone" && File.Exists(Path.Combine(names, "e r-002.txt")), "Native MCP undo refuses when an old name is taken: " + blocked.ToJsonString());
+            File.Delete(r1); File.AppendAllText(Path.Combine(names, "e r-002.txt"), "+");
+            blocked = Call("undo", new JsonObject())["structuredContent"]!;
+            check((string?)blocked["results"]![1]!["result"] == "changed since the rename; left alone" && File.Exists(Path.Combine(names, "e r-001.txt")), "Native MCP undo refuses every file when one was edited: " + blocked.ToJsonString());
         }
         finally
         {

@@ -10,24 +10,33 @@ public sealed record RenameRules(string Base = "", string Find = "", string Repl
 {
     public IReadOnlyList<RenamePair> Build(IReadOnlyList<string> paths)
     {
-        if (paths.Count is < 1 or > 100) throw new UserError("Choose up to 100 files at a time.");
-        if (new[] { Base, Find, Replacement, Prefix, Suffix }.Any(x => x is null || x.Length > 120) || Start is < 0 or > 99999999 || Digits is < 1 or > 8 || (long)Start + paths.Count - 1 > 99999999)
-            throw new UserError("Use text up to 120 characters, a start number from 0 to 99999999 and 1 to 8 digits.");
+        CheckLimits(paths.Count);
         var pairs = paths.Select((path, index) => {
             WindowsPathPolicy.Validate(path);
-            int slash = path.LastIndexOf('\\'); string name = path[(slash + 1)..];
-            int dot = name.LastIndexOf('.');
-            string extension = dot > 0 ? name[dot..] : "", stem = dot > 0 ? name[..dot] : name;
-            if (Base.Length > 0) stem = Base;
-            if (Find.Length > 0) stem = stem.Replace(Find, Replacement, StringComparison.Ordinal);
-            stem = Prefix + stem + Suffix;
-            if (Number) stem += "-" + (Start + index).ToString("D" + Digits, CultureInfo.InvariantCulture);
-            string destination = path[..(slash + 1)] + stem + extension;
+            string destination = Destination(path, index);
             WindowsPathPolicy.Validate(destination);
             return new RenamePair(path, destination);
         }).ToArray();
         Validate(pairs);
         return Array.AsReadOnly(pairs);
+    }
+    public void CheckLimits(int count)
+    {
+        if (count is < 1 or > 100) throw new UserError("Choose up to 100 files at a time.");
+        if (new[] { Base, Find, Replacement, Prefix, Suffix }.Any(x => x is null || x.Length > 120) || Start is < 0 or > 99999999 || Digits is < 1 or > 8 || (long)Start + count - 1 > 99999999)
+            throw new UserError("Use text up to 120 characters, a start number from 0 to 99999999 and 1 to 8 digits.");
+    }
+    /// The new path of the file at this position, unchecked (Build checks it).
+    public string Destination(string path, int index)
+    {
+        int slash = path.LastIndexOf('\\'); string name = path[(slash + 1)..];
+        int dot = name.LastIndexOf('.');
+        string extension = dot > 0 ? name[dot..] : "", stem = dot > 0 ? name[..dot] : name;
+        if (Base.Length > 0) stem = Base;
+        if (Find.Length > 0) stem = stem.Replace(Find, Replacement, StringComparison.Ordinal);
+        stem = Prefix + stem + Suffix;
+        if (Number) stem += "-" + (Start + index).ToString("D" + Digits, CultureInfo.InvariantCulture);
+        return path[..(slash + 1)] + stem + extension;
     }
     public static void Validate(IReadOnlyList<RenamePair> pairs)
     {

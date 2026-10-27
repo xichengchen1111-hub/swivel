@@ -10,6 +10,8 @@ public sealed class RenameSession : IDisposable
 {
     private readonly List<NativeFiles.RenameLease> leases = new();
     public IReadOnlyList<string> Paths => leases.Select(x => x.CurrentPath).ToArray();
+    public IReadOnlyList<FileStamp> Stamps => leases.Select(x => x.Stamp).ToArray();
+    public IReadOnlyList<string> StoredNames => leases.Select(x => x.StoredName).ToArray();
     private RenameSession() { }
     public static RenameSession Open(IEnumerable<string> paths, CancellationToken token)
     {
