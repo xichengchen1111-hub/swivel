@@ -209,8 +209,9 @@ struct FormatKindsTests {
         let watcher = AirDropShelf(folder: dir) { delivered += $0.map(\.lastPathComponent) }
         watcher.start()
         defer { watcher.stop() }
+        let startDeadline = Date().addingTimeInterval(2)
+        while !watcher.isWatching && Date() < startDeadline { try await Task.sleep(for: .milliseconds(10)) }
         #expect(watcher.isWatching)
-        try await Task.sleep(for: .milliseconds(300))
         try quarantined("photo.heic", agent: "sharingd")
         try quarantined("page.pdf", agent: "Safari")
         for _ in 0..<40 where delivered.isEmpty { try await Task.sleep(for: .milliseconds(100)) }

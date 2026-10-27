@@ -13,6 +13,16 @@ final class AirDropShelf {
 
     private let folder: URL
     private let deliver: @MainActor ([URL]) -> Void
+    private let openDirectory: @Sendable (URL) -> Int32
+    private var opening: Task<Void, Never>?
+    private var openingRequest: Startup?
+
+    private final class Startup: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+        func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+        var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    }
     private var source: DispatchSourceFileSystemObject?
     private var observer: NSObjectProtocol?
     private var known: Set<Entry> = []
@@ -24,10 +34,14 @@ final class AirDropShelf {
     private let queue = DispatchQueue(label: "local.swivel.airdrop-shelf")
 
     init(folder: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads"),
+         openDirectory: @escaping @Sendable (URL) -> Int32 = { open($0.path, O_EVTONLY | O_DIRECTORY | O_CLOEXEC) },
          deliver: @escaping @MainActor ([URL]) -> Void = { Shelf.shared.add($0) }) {
         self.folder = folder
         self.deliver = deliver
+        self.openDirectory = openDirectory
     }
+
+    deinit { openingRequest?.cancel() }
 
     var isWatching: Bool { source != nil }
 
@@ -42,28 +56,54 @@ final class AirDropShelf {
     }
 
     func start() {
-        guard source == nil else { return }
-        let fd = open(folder.path, O_EVTONLY | O_DIRECTORY | O_CLOEXEC)
-        guard fd >= 0 else { return }  // No access (yet), or no Downloads folder.
-        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
-        source.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.schedule(after: 0.4) } }
-        source.setCancelHandler { close(fd) }
-        self.source = source
-        started = Date()
+        guard source == nil, opening == nil else { return }
         generation += 1
+        let generation = self.generation, folder = self.folder, queue = self.queue, opener = openDirectory
+        started = Date()
         waiting = [:]
-        // Whatever is already there is not news.
-        let folder = self.folder, generation = self.generation
-        scan = Task { [weak self] in
-            let entries = await Self.list(folder, on: self?.queue ?? .global())
-            guard let self, self.generation == generation else { return }
-            self.known = Set(entries.map(\.entry))
+        let request = Startup()
+        openingRequest = request
+        // Opening Downloads can wait on privacy consent or its file provider. Never hold the UI thread.
+        // Take the baseline before creating a source: stop/deinit can never release a suspended source.
+        opening = Task { [weak self] in
+            let baseline = await Self.openBaseline(folder, on: queue, opener: opener, request: request)
+            guard let self, self.generation == generation else {
+                if baseline.fd >= 0 { close(baseline.fd) }
+                return
+            }
+            self.opening = nil
+            self.openingRequest = nil
+            guard baseline.fd >= 0 else { return }
+            self.known = Set(baseline.entries.map(\.entry))
+            let fd = baseline.fd
+            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: [.write, .rename, .delete], queue: .main)
+            source.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.schedule(after: 0.4) } }
+            source.setCancelHandler { close(fd) }
+            self.source = source
             source.resume()
+            self.schedule(after: 0.4) // cover arrivals between the baseline and installing the event source
+        }
+    }
+
+    private nonisolated static func openBaseline(_ folder: URL, on queue: DispatchQueue,
+                                                 opener: @escaping @Sendable (URL) -> Int32, request: Startup) async -> (fd: Int32, entries: Listing) {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                guard !request.isCancelled else { continuation.resume(returning: (-1, [])); return }
+                let fd = opener(folder)
+                guard !request.isCancelled else {
+                    if fd >= 0 { close(fd) }
+                    continuation.resume(returning: (-1, [])); return
+                }
+                continuation.resume(returning: (fd, fd >= 0 ? entries(folder) : []))
+            }
         }
     }
 
     func stop() {
         generation += 1
+        openingRequest?.cancel(); openingRequest = nil
+        opening?.cancel(); opening = nil
         scan?.cancel(); scan = nil
         source?.cancel(); source = nil
         known = []; waiting = [:]
@@ -105,23 +145,27 @@ final class AirDropShelf {
         }
     }
 
+    private typealias Listing = [(entry: Entry, url: URL, snapshot: Snapshot)]
+
     /// Visible top-level entries with their identity, size and modification date (lstat: links are not followed).
     nonisolated static func list(_ folder: URL, on queue: DispatchQueue) async -> [(entry: Entry, url: URL, snapshot: Snapshot)] {
         await withCheckedContinuation { continuation in
-            queue.async {
-                let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-                var result: [(Entry, URL, Snapshot)] = []
-                for name in names.prefix(50_000) where !name.hasPrefix(".") {
-                    let url = folder.appendingPathComponent(name)
-                    var info = stat()
-                    guard lstat(url.path, &info) == 0 else { continue }
-                    let kind = info.st_mode & S_IFMT
-                    guard kind == S_IFREG || kind == S_IFDIR else { continue }
-                    result.append((Entry(device: info.st_dev, inode: info.st_ino), url, Snapshot(size: info.st_size, modified: info.st_mtimespec)))
-                }
-                continuation.resume(returning: result)
-            }
+            queue.async { continuation.resume(returning: entries(folder)) }
         }
+    }
+
+    private nonisolated static func entries(_ folder: URL) -> Listing {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        var result: Listing = []
+        for name in names.prefix(50_000) where !name.hasPrefix(".") {
+            let url = folder.appendingPathComponent(name)
+            var info = stat()
+            guard lstat(url.path, &info) == 0 else { continue }
+            let kind = info.st_mode & S_IFMT
+            guard kind == S_IFREG || kind == S_IFDIR else { continue }
+            result.append((Entry(device: info.st_dev, inode: info.st_ino), url, Snapshot(size: info.st_size, modified: info.st_mtimespec)))
+        }
+        return result
     }
 
     nonisolated static func isAirDrop(_ url: URL, since: Date) -> Bool {
