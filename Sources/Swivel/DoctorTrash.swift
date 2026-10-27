@@ -73,12 +73,15 @@ enum DoctorTrash {
         case .duplicate, .similar: return DoctorDuplicates.isAllowed(target)
         case .build: return DoctorProjects.isAllowed(target)
         case .leftover: return DoctorUninstall.isAllowedLeftover(target)
+        case .orphan: return DoctorSweep.isAllowedOrphan(target)
+        // Apps are moved by `DoctorUninstall.trashApp`, which checks them itself; never through a plan.
+        case .app: return false
         }
         switch target.mode {
         case .folder:
             return false
         case .contents:
-            return catalogue.contains { $0.path == target.path }
+            return catalogue.contains { $0.path == target.path } || DoctorBrowserCaches.isAllowed(target)
         case .item:
             if DoctorLargeFiles.isAllowed(target) { return true }
             let prefix = "~/Library/LaunchAgents/"
