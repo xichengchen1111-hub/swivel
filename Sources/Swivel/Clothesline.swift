@@ -945,7 +945,8 @@ final class RopeView: NSView, NSDraggingSource {
     private var stitchPointerY = Spring(0, response: 0.1, damping: 1)
     private var stitchContactActive = false
     private var stitchSourceSize = CGSize.zero
-    private var stitchGrabOffset = CGPoint.zero
+    var stitchGrabOffset = CGPoint.zero // internal for grab-position regression fixtures
+    private var stitchDrawsContact = false
     private var stitchDisplayedTop = CGRect.zero
     private var stitchDisplayedBottom = CGRect.zero
     private var stitchPresentation = 0
@@ -1425,6 +1426,7 @@ final class RopeView: NSView, NSDraggingSource {
         if !stitchContactActive, !isCommittingStitch, stitchSpring.isSettled {
             stitchVisualTarget = nil
             stitchSource = nil
+            stitchDrawsContact = false
             if !isDraggingItem { (window as? RopePanel)?.setStitchTracking(false) }
         }
         if reduced {
@@ -1554,7 +1556,7 @@ final class RopeView: NSView, NSDraggingSource {
             let scale = reduced ? 1 : 1 + RopeTuning.hoverScale * p - RopeTuning.pressScale * press + RopeTuning.chargeScale * charge
             print.layer.transform = CATransform3DScale(CATransform3DMakeRotation(print.angle, 0, 0, 1), scale, scale, 1)
             let participating = print.url == stitchSource || print.url == stitchVisualTarget
-            let stitching: CGFloat = participating ? ((stitchContactActive || isCommittingStitch) ? 1 : min(max(stitchSpring.value, 0), 1)) : 0
+            let stitching: CGFloat = participating ? (isCommittingStitch ? 1 : stitchDrawsContact ? (stitchContactActive ? 1 : min(max(stitchSpring.value, 0), 1)) : 0) : 0
             print.layer.opacity = Float(print.awaitingSince == nil ? print.opacity.value * (1 - stitching) : 0)
             // Coming toward you on hover, pressed flat against the rope on mouse-down.
             print.layer.shadowRadius = max(6 + 3 * p - 4 * press, 1.5)
@@ -1576,7 +1578,7 @@ final class RopeView: NSView, NSDraggingSource {
         }
         let join = min(max(stitchSpring.value, 0), 1)
         ropeLayer.zPosition = join > 0.001 ? 20 : 0
-        stitchLayer.opacity = stitchContactActive || isCommittingStitch ? 1 : Float(join)
+        stitchLayer.opacity = isCommittingStitch ? 1 : stitchDrawsContact ? (stitchContactActive ? 1 : Float(join)) : 0
         stitchHint.opacity = stitchIntent.target == nil && !isCommittingStitch ? 0 : Float(join)
         if let target = stitchVisualTarget.flatMap(find) {
             stitchX.target = target.slot.value
@@ -2037,7 +2039,7 @@ final class RopeView: NSView, NSDraggingSource {
     func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
         guard Prefs.clotheslineEnabled, let source = downURL, let window, !isCommittingStitch else { return }
         // Keep tracking when the transparent window is passing a non-contact drag to another app.
-        updateStitchTarget(source: source, point: convert(window.convertPoint(fromScreen: screenPoint), from: nil))
+        updateStitchTarget(source: source, point: convert(window.convertPoint(fromScreen: session.draggingLocation), from: nil))
         updateMouseCatching()
     }
 
@@ -2132,7 +2134,6 @@ final class RopeView: NSView, NSDraggingSource {
         let pointer = CGPoint(x: point.x - stitchGrabOffset.x, y: point.y - stitchGrabOffset.y)
         let dragged = CGRect(x: pointer.x - sourcePrint.size.width / 2, y: pointer.y - sourcePrint.size.height / 2,
                              width: sourcePrint.size.width, height: sourcePrint.size.height)
-        guard bounds.contains(dragged) else { clearStitchTarget(); return } // never hide the native drag image if this panel would clip its replacement
         func eligible(_ print: Print) -> Bool {
             print.url != source && print.isTouchable && ImageStitch.supports(print.url) && print.photo != nil
         }
@@ -2143,22 +2144,22 @@ final class RopeView: NSView, NSDraggingSource {
         let retained = stitchContactActive && stitchSource == source
             ? stitchVisualTarget.flatMap(find).flatMap { contact($0, engaged: true) != nil ? $0 : nil } : nil
         let target = retained ?? prints.filter { contact($0, engaged: false) != nil }.min {
-            abs(dragged.minY - $0.layer.frame.maxY) < abs(dragged.minY - $1.layer.frame.maxY)
+            abs(point.x - $0.layer.frame.midX) < abs(point.x - $1.layer.frame.midX)
         }
         guard let target, let top = target.photo,
-              let strength = contact(target, engaged: retained != nil),
-              bounds.contains(RopeStitchJelly.attached(dragged, below: target.layer.frame, strength: 1, within: bounds))
+              contact(target, engaged: retained != nil) != nil
         else { clearStitchTarget(); return }
-        let wasEngaged = stitchIntent.target == target.url
-        let commitEligible = RopeStitchJelly.touchesSeam(dragged, below: target.layer.frame, engaged: wasEngaged)
         let previousIntent = stitchIntent.target
-        stitchIntent.update(commitEligible ? target.url : nil, now: now)
-        if commitEligible && previousIntent != target.url {
+        stitchIntent.update(target.url, now: now)
+        if previousIntent != target.url {
             stitchReady = false
             setStitchHint("Hold briefly to stitch")
         }
         stitchContactActive = true
-        stitchContact.target = commitEligible ? 1 : strength
+        // Rendering safety controls only replacement of the native drag image, never drop eligibility.
+        stitchDrawsContact = bounds.contains(dragged)
+            && bounds.contains(RopeStitchJelly.attached(dragged, below: target.layer.frame, strength: 1, within: bounds))
+        stitchContact.target = 1
         stitchPointerX.target = pointer.x
         stitchPointerY.target = pointer.y
         if stitchVisualTarget != target.url || stitchSource != source || stitchSpring.value < 0.01 {
@@ -2220,6 +2221,7 @@ final class RopeView: NSView, NSDraggingSource {
         guard stitchIntent.target != nil else { return }
         stitchHeldTop = stitchDisplayedTop
         stitchHeldBottom = stitchDisplayedBottom
+        stitchDrawsContact = true // commit takes over safe geometry and keeps the normal crossfade handoff
         stitchPresentation &+= 1
         isCommittingStitch = true
         stitchSpring.target = 1
@@ -2273,7 +2275,7 @@ final class RopeView: NSView, NSDraggingSource {
         guard let sender, sender.draggingSource as? RopeView === self, let url = downURL, let print = find(url) else { return }
         // The composed preview takes over from the floating print. Destination-only changes are restored by
         // AppKit on exit, so dragging onward into Finder or another app keeps the original file/image.
-        let image = !stitchContactActive && !isCommittingStitch ? print.image.map { NSImage(cgImage: $0, size: print.size) } : nil
+        let image = !(stitchContactActive && stitchDrawsContact) && !isCommittingStitch ? print.image.map { NSImage(cgImage: $0, size: print.size) } : nil
         sender.enumerateDraggingItems(options: [], for: self, classes: [NSURL.self],
                                       searchOptions: [.urlReadingFileURLsOnly: true]) { item, _, _ in
             item.setDraggingFrame(item.draggingFrame, contents: image)

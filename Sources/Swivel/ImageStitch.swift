@@ -22,8 +22,8 @@ enum RopeStitchJelly {
     static let response: CGFloat = 0.58
     static let damping: CGFloat = 0.84
     static let reach: CGFloat = 20
-    static let contactResponse: CGFloat = 0.7
-    static let contactDamping: CGFloat = 0.85
+    static let contactResponse: CGFloat = 0.85
+    static let contactDamping: CGFloat = 0.88
     static let horizontalPull: CGFloat = 8
 
     static func gap(_ a: CGRect, _ b: CGRect) -> CGFloat {
@@ -48,30 +48,29 @@ enum RopeStitchJelly {
         var result = mix(dragged, joined, t * t * (3 - 2 * t))
         // Give the two edges time to stretch into each other before closing their gap.
         let close = min(max((t - 0.55) / 0.45, 0), 1)
-        result.origin.y = dragged.minY + (joined.minY - dragged.minY) * close * close * (3 - 2 * close)
+        let gap = dragged.minY - top.maxY
+        if gap < 0 {
+            // A cursor just below the target can still hold an overlapping image. Gently open
+            // the seam before melting it shut, rather than requiring manual pixel alignment.
+            result.origin.y = top.maxY + gap * pow(1 - t, 3) + 12 * sin(.pi * t)
+        } else {
+            result.origin.y = dragged.minY + (joined.minY - dragged.minY) * close * close * (3 - 2 * close)
+        }
+        if let area {
+            result.origin.x = min(max(result.minX, area.minX), area.maxX - result.width)
+            result.origin.y = min(max(result.minY, area.minY), area.maxY - result.height)
+        }
         return result
     }
 
-    /// A deliberate bottom-edge contact can be held and released without covering the target's centre.
-    static func touchesSeam(_ dragged: CGRect, below top: CGRect, engaged: Bool) -> Bool {
-        let overlap = max(0, min(dragged.maxX, top.maxX) - max(dragged.minX, top.minX))
-        let distance = dragged.minY - top.maxY
-        return overlap >= min(dragged.width, top.width) * 0.65
-            && distance >= (engaged ? -8 : -4)
-            && distance <= (engaged ? 8 : 4)
-    }
-
-    /// Merely picking up a card, passing its neighbour or covering it never starts attraction.
-    /// The actual cursor must be below the target AND the dragged top edge must be near its bottom.
+    /// Intent follows the actual cursor, regardless of where on the source photo it was grabbed.
+    /// No hidden source-edge alignment requirement: below + dwell is sufficient to merge.
     static func contact(_ dragged: CGRect, below top: CGRect, pointer: CGPoint, engaged: Bool) -> CGFloat? {
         let inset = top.width * (engaged ? 0.06 : 0.12)
-        let overlap = min(dragged.maxX, top.maxX) - max(dragged.minX, top.minX)
-        let distance = dragged.minY - top.maxY
-        guard pointer.y >= top.maxY + 2,
-              pointer.x >= top.minX + inset, pointer.x <= top.maxX - inset,
-              overlap >= min(dragged.width, top.width) * 0.65,
-              distance >= (engaged ? -8 : -4), distance <= reach + (engaged ? 4 : 0) else { return nil }
-        return 0.35 + 0.65 * min(max(1 - max(0, distance) / reach, 0), 1)
+        let depth = min(160, max(72, dragged.height + reach))
+        guard pointer.y >= top.maxY + 2, pointer.y <= top.maxY + depth,
+              pointer.x >= top.minX + inset, pointer.x <= top.maxX - inset else { return nil }
+        return 1
     }
 
     /// Both surfaces use the same displacement. They first meet at the centre and the

@@ -75,11 +75,13 @@ struct StitchContactTests {
         view.updateStitchTarget(source: source, point: edge)
         let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
         let top = try #require(overlay.sublayers?[1])
+        let bottom = try #require(overlay.sublayers?[2])
         for _ in 0..<10 { _ = view.advance(1 / 120) }
-        let early = top.bounds.height
+        let earlyGap = bottom.frame.minY - top.frame.maxY
         for _ in 0..<230 { _ = view.advance(1 / 120) }
-        #expect(top.bounds.height > early + 3)
-        #expect(view.stitchIntent.target == nil) // near preview alone cannot submit
+        #expect(earlyGap > 10)
+        #expect(abs(bottom.frame.minY - top.frame.maxY) < 0.1)
+        #expect(view.stitchIntent.target == target && !view.isCommittingStitch)
     }
 
     @Test func holdingOffCentreNeverAccumulatesSidewaysAttraction() throws {
@@ -104,8 +106,8 @@ struct StitchContactTests {
         let (view, a, b, _, _) = try scene()
         let near = CGPoint(x: b.frame.midX, y: b.frame.maxY + a.bounds.height / 2 + 15)
         view.updateStitchTarget(source: source, point: near)
-        for _ in 0..<180 { _ = view.advance(1 / 120) }
-        #expect(view.stitchIntent.target == nil && !view.isCommittingStitch)
+        for _ in 0..<32 { _ = view.advance(1 / 120) }
+        #expect(view.stitchIntent.target == target && !view.isCommittingStitch)
         let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
         let bodies = try #require(overlay.sublayers)
         let top = bodies[1], bottom = bodies[2]
@@ -157,6 +159,50 @@ struct StitchContactTests {
         }
     }
 
+    @Test func aCursorJustBelowThePhotoCanMergeFromEveryGrabPosition() throws {
+        for offset in [CGPoint.zero, CGPoint(x: -65, y: 50), CGPoint(x: 65, y: -50)] {
+            let (view, _, b, _, _) = try scene()
+            view.stitchGrabOffset = offset
+            let cursor = CGPoint(x: b.frame.midX, y: b.frame.maxY + 12)
+            view.updateStitchTarget(source: source, point: cursor, now: CACurrentMediaTime() - 1)
+            for _ in 0..<240 { _ = view.advance(1 / 120) }
+            #expect(view.stitchIntent.target == target && view.stitchIntent.ready(at: CACurrentMediaTime()))
+            #expect(!view.isCommittingStitch)
+            view.commitStitchPreview()
+            #expect(view.isCommittingStitch)
+            view.clearStitchTarget(force: true)
+        }
+    }
+
+    @Test func aClippedNativeDragDoesNotDisableABelowCursorDrop() throws {
+        let (_, _, _, first, _) = try scene()
+        let context = try #require(CGContext(data: nil, width: 1000, height: 20, bitsPerComponent: 8, bytesPerRow: 0,
+                                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(NSColor.systemOrange.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: 1000, height: 20))
+        let wide = try #require(context.makeImage())
+        let view = RopeView(frame: CGRect(x: 0, y: 0, width: 650, height: RopePanel.stitchHeight))
+        view.reducedMotionOverride = true
+        view.markNew(source, arrival: .inPlace, thumbnail: first)
+        view.markNew(target, arrival: .inPlace, thumbnail: wide)
+        view.setItems([source, target]); view.drop(fromHidden: true)
+        for _ in 0..<240 { _ = view.advance(1 / 120) }
+        let photos = (view.layer?.sublayers ?? []).filter { $0.contents != nil }
+        let a = try #require(photos.first), b = try #require(photos.last)
+        view.stitchGrabOffset = CGPoint(x: 0, y: a.bounds.height / 2 - 2)
+        let cursor = CGPoint(x: b.frame.midX, y: b.frame.maxY + 12)
+        view.updateStitchTarget(source: source, point: cursor, now: CACurrentMediaTime() - 1)
+        _ = view.advance(1 / 60)
+        #expect(view.stitchIntent.target == target && view.stitchIntent.ready(at: CACurrentMediaTime()))
+        let overlay = try #require(view.layer?.sublayers?.first?.sublayers?.first)
+        #expect(overlay.opacity == 0 && b.opacity > 0.99) // leave the native image intact while it extends beyond the panel
+        view.commitStitchPreview()
+        _ = view.advance(1 / 60)
+        #expect(view.isCommittingStitch)
+        view.clearStitchTarget(force: true)
+    }
+
     @Test func completedFileHasABoundedHandoffEvenWithoutDisplayFrames() async throws {
         let (view, _, b, _, _) = try scene()
         let centre = CGPoint(x: b.frame.midX, y: b.frame.maxY + b.bounds.height / 2)
@@ -193,7 +239,7 @@ struct StitchContactTests {
         let bodyOnRope = overlay.convert(bottom.frame, to: view.layer)
         #expect(bodyOnRope.maxY > RopePanel.height)
         #expect(bodyOnRope.maxY < view.bounds.height)
-        #expect(bottom.opacity > 0.99 && view.stitchIntent.target == nil)
+        #expect(bottom.opacity > 0.99 && view.stitchIntent.target == target)
         view.lift {}
         #expect(panel.frame.height == RopePanel.height && panel.frame.maxY == top)
     }

@@ -31,7 +31,7 @@ struct ImageStitchTests {
         #expect(!intent.ready(at: 20.1))
     }
 
-    @Test func attractionRequiresTheCursorAndBothSeamsBelowTheTarget() {
+    @Test func attractionFollowsTheCursorBelowTheTargetWithoutAnAlignmentRequirement() {
         let top = CGRect(x: 200, y: 30, width: 180, height: 120)
         let below = CGRect(x: 200, y: 165, width: 180, height: 120)
         #expect(RopeStitchJelly.contact(below, below: top, pointer: CGPoint(x: 290, y: 210), engaged: false) != nil)
@@ -41,10 +41,11 @@ struct ImageStitchTests {
             #expect(RopeStitchJelly.contact(top, below: top, pointer: CGPoint(x: 290, y: 90), engaged: engaged) == nil)
             let side = CGRect(x: 10, y: 30, width: 180, height: 120)
             #expect(RopeStitchJelly.contact(side, below: top, pointer: CGPoint(x: 100, y: 90), engaged: engaged) == nil)
-            #expect(RopeStitchJelly.contact(side, below: top, pointer: CGPoint(x: 290, y: 210), engaged: engaged) == nil)
+            #expect(RopeStitchJelly.contact(side, below: top, pointer: CGPoint(x: 290, y: 210), engaged: engaged) != nil)
         }
         let far = below.offsetBy(dx: 0, dy: 12)
-        #expect(RopeStitchJelly.contact(far, below: top, pointer: CGPoint(x: 290, y: 230), engaged: false) == nil)
+        #expect(RopeStitchJelly.contact(far, below: top, pointer: CGPoint(x: 290, y: 230), engaged: false) != nil)
+        #expect(RopeStitchJelly.contact(far, below: top, pointer: CGPoint(x: 290, y: 320), engaged: false) == nil)
         let offset = below.offsetBy(dx: 25, dy: 0)
         let attracted = RopeStitchJelly.attached(offset, below: top, strength: 1)
         #expect(abs(attracted.midX - offset.midX) <= 8)
@@ -77,9 +78,12 @@ struct ImageStitchTests {
         let joined = RopeStitchJelly.melt(top: top, bottom: attached, strength: 1)
         #expect(joined.extent == 0)
         #expect(joined.path(upper: true).contains(CGPoint(x: 1, y: 119)))
-        #expect(RopeStitchJelly.touchesSeam(attached, below: top, engaged: false))
-        #expect(!RopeStitchJelly.touchesSeam(dragged, below: top, engaged: false))
-        #expect(!RopeStitchJelly.touchesSeam(attached.offsetBy(dx: 100, dy: 0), below: top, engaged: true))
+        #expect(RopeStitchJelly.contact(attached, below: top, pointer: CGPoint(x: 90, y: 132), engaged: false) != nil)
+        #expect(RopeStitchJelly.contact(dragged, below: top, pointer: CGPoint(x: 90, y: 132), engaged: false) != nil)
+        let overlapping = dragged.offsetBy(dx: 0, dy: -80)
+        #expect(RopeStitchJelly.attached(overlapping, below: top, strength: 0) == overlapping)
+        #expect(RopeStitchJelly.attached(overlapping, below: top, strength: 0.6).minY > top.maxY)
+        #expect(RopeStitchJelly.attached(overlapping, below: top, strength: 1).minY == top.maxY)
         var spring = Spring(0, response: RopeStitchJelly.response, damping: RopeStitchJelly.damping)
         spring.target = 1
         var peak: CGFloat = 0
