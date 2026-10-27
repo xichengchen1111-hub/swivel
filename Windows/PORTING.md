@@ -1057,6 +1057,8 @@ Windows `ClaudeExtension`：`Swivel.exe` 旁有 `Swivel.mcpb` 时以 ShellExecut
 
 独立 agent 审查（只读；对照 MCPB 官方 MANIFEST.md 与 schema/替换源码）：无 P1。已修 P2：原先用 AssocQueryString 预先检查 .mcpb 关联，Claude Desktop 若以打包应用或 DelegateExecute 方式登记会被误判为没有（现在直接 ShellExecute，只把 1155 映射为提示）；LOCALAPPDATA 不是本地路径时提示原说“未设置”（已改）。已修 P3：成功状态改为“交给打开 .mcpb 的应用”；选中路径先规范化；build.ps1 清理失败不再掩盖原错误，build.sh 用 trap 清理临时目录；启动脚本测试改为分别数 spawn/require 并拒绝 exec/fork 等。未验证：真实 Claude Desktop 的安装、文件选择、内置 Node 与 .mcpb 关联；从 Node 启动真实命令别名。
 
+核心 4,520,481；推送后 Windows CI 40600961106 在 GitHub 的 Windows 运行器上通过：核心 4,520,482、原生 5,379，含经 Node.js 运行启动脚本、启动真实 Swivel.exe 完成 initialize/tools/list 往返（2.8 秒）及全部拒绝情形。G02 仍为部分实现，固定 52 项仍 27／23／0／2。
+
 ## 0.109 MCP 文档文字转换与逐个文件再核对（G02 部分）
 
 批次开始 `git fetch`：origin/main 仍为 `c053dd0`（Mac 1.14.5），不含 `Windows/` 改动；0.108 已推送，Windows CI 40509653918 通过（核心 4,520,456、原生 5,358）。
