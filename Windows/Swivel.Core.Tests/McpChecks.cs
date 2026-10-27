@@ -27,6 +27,20 @@ internal static class McpChecks
             while (Files.ContainsKey(output)) output = output.Replace(" converted", " converted 2");
             Add(output); return output;
         }
+        public readonly Dictionary<string, string> Texts = new(StringComparer.OrdinalIgnoreCase);
+        public readonly List<(string Path, string? Language)> Recognized = new();
+        public readonly List<string> Documents = new();
+        public readonly List<string> Codes = new();
+        public List<string> OcrLanguages = new() { "en-US", "zh-Hans-CN" };
+        public int LanguageReads;
+        public IReadOnlyList<string> TextLanguages { get { LanguageReads++; return OcrLanguages; } }
+        public QrReadResult ReadCode(string path, CancellationToken token)
+        {
+            Codes.Add(path);
+            return Texts.TryGetValue(path, out var text) ? new QrReadResult(text, 2, QrCorrection.Quartile, 3, 8) : throw new UserError(QrFlatRead.NoCode);
+        }
+        public string RecognizeText(string path, string? language, CancellationToken token) { Recognized.Add((path, language)); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("No OCR language."); }
+        public string ReadDocumentText(string path, CancellationToken token) { Documents.Add(path); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("Not a valid document."); }
         public FileStamp? Stamp(string path) => Files.TryGetValue(path, out var s) ? s : null;
         public void Recycle(string path, FileStamp expected)
         {
@@ -64,7 +78,10 @@ internal static class McpChecks
         check((int)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/list\"}")["error"]!["code"]! == -32601, "MCP unknown method");
         check((int)Rpc(session, new string(' ', McpSession.MaxLineChars + 1))["error"]!["code"]! == -32600, "MCP oversized message refused");
         var tools = ((JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!).Select(t => (string)t!["name"]!).ToArray();
-        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "plan_action", "apply_plan", "undo", "history" }), "MCP tool list");
+        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "apply_plan", "undo", "history" }), "MCP tool list");
+        var listed = (JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!;
+        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
+            "MCP extract_text and read_codes are marked read-only");
         check((int)Call(session, "format_disk", new JsonObject())["error"]!["code"]! == -32602, "MCP unknown tool is an invalid-params error");
 
         host.Enabled = false;
@@ -76,6 +93,14 @@ internal static class McpChecks
         host.Add(photo); host.Add(doc);
         var inspected = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\missing.png") }))["files"]!;
         check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Count == McpSession.Actions.Count && ((JsonArray)inspected[1]!["actions"]!).Count == 0 && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path");
+        check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text" }),
+            "MCP inspect_files names the read-only tools for images and documents");
+        host.OcrLanguages = new(); host.LanguageReads = 0;
+        var noOcr = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\Users\me\b.png") }))["files"]!;
+        check(((JsonArray)noOcr[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "read_codes" }) && ((JsonArray)noOcr[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text" }) && host.LanguageReads == 1,
+            "MCP inspect_files offers extract_text for images only where Windows OCR can run, asking once");
+        host.OcrLanguages = new() { "en-US", "zh-Hans-CN" };
+
         check(IsError(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, photo.ToUpperInvariant()) })), "MCP repeated paths refused");
         check(IsError(Call(session, "inspect_files", new JsonObject { ["paths"] = new JsonArray() })) && IsError(Call(session, "inspect_files", new JsonObject { ["paths"] = new JsonArray(1) })), "MCP empty or non-string paths refused");
         check(IsError(Call(session, "plan_action", new JsonObject { ["action"] = "file.delete", ["paths"] = Paths(photo) })), "MCP unknown action refused");
@@ -185,6 +210,68 @@ internal static class McpChecks
         var unlogged = Call(session, "apply_plan", new JsonObject { ["plan_id"] = (string)planE["plan_id"]! });
         check(IsError(unlogged) && Body(unlogged)["entry_id"] is null && ((JsonArray)Body(unlogged)["outputs"]!).Count == 1 && ((string)Body(unlogged)["error"]!).Contains("could not be logged") && host.History == saved && host.Held == 0, "MCP a failed history save is reported with the kept output");
         host.SaveFails = false;
+
+        var reader = new FakeHost(); var reading = new McpSession(reader, "0.105.0");
+        reader.Add(doc);
+        // extract_text: images through OCR (with the language asked for), documents through the
+        // document reader; per-file failures and text limits are reported, never cut.
+        string scan = @"C:\Users\me\Pictures\scan.png", report = @"C:\Users\me\report.docx", sheet = @"C:\Users\me\sheet.xlsx", noText = @"C:\Users\me\Pictures\blank.png";
+        reader.Add(scan); reader.Add(report); reader.Add(sheet); reader.Add(noText);
+        reader.Texts[scan] = "Hello 你好"; reader.Texts[doc] = "notes"; reader.Texts[report] = "Quarterly report";
+        var extracted = Body(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(scan, doc, report, noText, @"C:\gone.png"), ["language"] = "zh-hans-cn" }));
+        var texts = (JsonArray)extracted["files"]!;
+        check((string?)texts[0]!["text"] == "Hello 你好" && (string?)texts[0]!["kind"] == "image" && (string?)texts[1]!["text"] == "notes" && (string?)texts[2]!["kind"] == "document" && (string?)texts[2]!["text"] == "Quarterly report"
+            && !texts[3]!["ok"]!.GetValue<bool>() && (string?)texts[3]!["error"] == "No OCR language." && !texts[4]!["ok"]!.GetValue<bool>(),
+            "MCP extract_text reads images and documents and reports each failure per file: " + extracted.ToJsonString());
+        check(reader.Recognized.SequenceEqual(new[] { (scan, (string?)"zh-Hans-CN"), (noText, (string?)"zh-Hans-CN") }) && reader.Documents.SequenceEqual(new[] { doc, report }),
+            "MCP extract_text sends images to OCR with the language as Windows spells it and documents to the document reader, after checking each path");
+        check(reader.LanguageReads == 1, "MCP extract_text reads the installed OCR languages once per call");
+        Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(scan) });
+        check(reader.Recognized[^1] == (scan, null), "MCP extract_text without a language uses the user's language settings");
+        check(IsError(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(scan, sheet) })) && reader.Recognized.Count == 3, "MCP extract_text refuses a file that is neither an image nor a supported document before reading anything");
+        foreach (JsonNode language in new JsonNode[] { "", "e", "en US", "en_US", "en-US;rm", new string('a', 65), 5, true })
+        {
+            check(IsError(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(scan), ["language"] = language.DeepClone() })), "MCP extract_text refuses a malformed language: " + language.ToJsonString());
+            check(IsError(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(doc), ["language"] = language })), "MCP extract_text refuses a malformed language with documents only: " + language.ToJsonString());
+        }
+        int recognized = reader.Recognized.Count, documents = reader.Documents.Count;
+        var missing = Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(doc, scan), ["language"] = "fr-FR" });
+        check(IsError(missing) && ((string)Body(missing)["error"]!).Contains("Installed: en-US, zh-Hans-CN") && reader.Recognized.Count == recognized && reader.Documents.Count == documents,
+            "MCP extract_text refuses an OCR language that is not installed, naming the installed ones, before reading anything");
+        var docsOnly = (JsonArray)Body(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(doc), ["language"] = "fr-FR" }))["files"]!;
+        check(docsOnly[0]!["ok"]!.GetValue<bool>() && (string?)docsOnly[0]!["text"] == "notes", "MCP extract_text ignores a well-formed language for documents only");
+        reader.OcrLanguages = new();
+        var withoutOcr = (JsonArray)Body(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(scan, doc), ["language"] = "en-US" }))["files"]!;
+        check((string?)withoutOcr[0]!["error"] == McpSession.NoOcr && withoutOcr[1]!["ok"]!.GetValue<bool>() && reader.Recognized.Count == recognized,
+            "MCP extract_text says Windows OCR is unavailable without decoding the image, and still reads documents");
+        reader.OcrLanguages = new() { "en-US", "zh-Hans-CN" };
+        string big = @"C:\Users\me\big.txt", big2 = @"C:\Users\me\big2.txt"; reader.Add(big); reader.Add(big2);
+        reader.Texts[big] = new string('a', McpSession.MaxFileText + 1);
+        var tooLong = (JsonArray)Body(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(big) }))["files"]!;
+        check(!tooLong[0]!["ok"]!.GetValue<bool>() && tooLong[0]!["text"] is null, "MCP extract_text refuses a file's text over the limit instead of cutting it");
+        int fit = McpSession.MaxReplyText / McpSession.MaxFileText;
+        var budget = Enumerable.Range(0, fit + 1).Select(i => @"C:\Users\me\part" + i + ".txt").ToArray();
+        foreach (string part in budget) { reader.Add(part); reader.Texts[part] = new string('b', McpSession.MaxFileText - 5); } // leaves room for "notes"
+        var parts = (JsonArray)Body(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(budget.Append(doc).ToArray()) }))["files"]!;
+        check(parts.Take(fit).All(f => f!["ok"]!.GetValue<bool>()) && !parts[fit]!["ok"]!.GetValue<bool>() && parts[fit]!["text"] is null && parts[fit + 1]!["ok"]!.GetValue<bool>() && (string?)parts[fit + 1]!["text"] == "notes",
+            "MCP extract_text refuses text past the reply budget file by file, and still returns a smaller file after it");
+        reader.Texts[big2] = "a\ud800b";
+        check(!((JsonArray)Body(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(big2) }))["files"]!)[0]!["ok"]!.GetValue<bool>(), "MCP extract_text refuses text that is not valid Unicode");
+
+        // read_codes: one strict flat QR per image; anything else is reported as not read.
+        string qr = @"C:\Users\me\Pictures\qr.png", odd = @"C:\Users\me\Pictures\odd.png"; reader.Add(qr); reader.Add(odd);
+        reader.Texts.Remove(scan); reader.Texts[qr] = "https://example.com/\u0007"; reader.Texts[odd] = "x\udc00";
+        var read = Body(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(qr, scan, odd, @"C:\gone.png") }));
+        var codes = (JsonArray)read["codes"]!; var unread = (JsonArray)read["not_read"]!;
+        check(codes.Count == 1 && (string?)codes[0]!["path"] == qr && (string?)codes[0]!["value"] == "https://example.com/\u0007" && (string?)codes[0]!["type"] == "QR" && (int)codes[0]!["version"]! == 2 && (string?)codes[0]!["correction"] == "Q",
+            "MCP read_codes returns the code's exact text, version and correction level: " + read.ToJsonString());
+        check(unread.Select(u => (string)u!["path"]!).SequenceEqual(new[] { scan, odd, @"C:\gone.png" }) && (string?)unread[0]!["error"] == QrFlatRead.NoCode && read["note"] is JsonValue,
+            "MCP read_codes lists images without a readable code, invalid text or a bad path, with why");
+        check(reader.Codes.SequenceEqual(new[] { qr, scan, odd }), "MCP read_codes reads each image only after checking its path");
+        check(IsError(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(qr, doc) })) && reader.Codes.Count == 3, "MCP read_codes takes images only, refusing before reading any");
+        reader.Enabled = false;
+        check(IsError(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(qr) })) && IsError(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(doc) })), "MCP read tools refuse while Agent Tools is off");
+        reader.Enabled = true;
 
         // Plans are bounded.
         string any = @"C:\h\0.png";

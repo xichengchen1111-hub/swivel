@@ -1327,6 +1327,22 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.105 — MCP read-only tools extract_text and read_codes (G02 part, 2026-10-27)
+
+- Core 4,520,274 on Mac; native compiled 0 warnings/errors (not run here).
+- `McpChecks` (core, fake host):
+  - tools/list has the eight tools in the Mac order, and extract_text and read_codes are read-only;
+  - inspect_files lists extract_text and read_codes for images and extract_text for documents; with no OCR language it lists only read_codes for images, asking for the languages once;
+  - extract_text sends images to OCR with the tag as Windows spells it (asked in lower case) and documents to the document reader, after checking each path, and reads the installed languages once per call; without a language it passes none;
+  - it refuses the whole call for a file that is neither an image nor a supported document, for a malformed language (with images or documents only), and for a language that is not installed (naming the installed ones), before reading anything; a well-formed language is ignored for documents only;
+  - with no OCR available, images report `NoOcr` without calling OCR and documents are still read;
+  - a file over 200,000 UTF-16 units and text past the 400,000 reply budget are refused rather than cut, and a smaller file after a refusal is still returned; lone surrogates are refused;
+  - read_codes returns the exact text, version and correction level, lists unread images with why, reads each image only after its path check, and refuses non-images before reading any;
+  - both tools refuse while Agent Tools is off.
+- Native (compiled only), `McpNativeChecks`: read_codes reads a generated medium-correction QR PNG and reports a plain photo as not read; extract_text reads a UTF-8 text file, and an image without the MSIX package reports `NoOcr`; the host offers no OCR languages without the package; DOCX, RTF and HTML written by Swivel's writers come back through MCP exactly as `DocumentText.Read` reads them, with a language given.
+- Independent agent review: no P1 or P2. The P3s were fixed: extract_text listed for images without OCR, a misleading message when the profile languages have no OCR, an uninstalled language found only after decoding each image, read_codes wording (90° steps, whole-number scaling), limits now stated in UTF-16 units with a smaller reply budget, "Swivel uses no network" wording, stale README/PROGRESS lines, and the test gaps. A hung OCR call has no timeout (same as existing actions); recorded as a limitation.
+- Not tested: real agent hosts (Claude Code, Claude Desktop, Codex), OCR under a real MSIX package, and the native suite on Windows.
+
 ## Windows0.104 — Uninstall in Settings; leftover folders of removed apps (F08 part, 2026-10-27)
 
 - Core 4,520,239 on Mac; native compiled 0 warnings/errors (not run here).

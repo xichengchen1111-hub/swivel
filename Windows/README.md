@@ -10,6 +10,15 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.105 新增：Agent 工具读码与取文字
+
+Agent 工具（MCP）新增两个只读工具，不写文件，Swivel 不联网：
+
+- **`extract_text`**：图片用 Windows 自带 OCR 识别文字。需要 MSIX 安装包和已安装的识别语言；ZIP 版或没有语言时逐个文件说明原因，不会去解码图片。可传 `language`（如 `zh-Hans-CN`，不区分大小写），必须是已安装的语言，否则整次拒绝并列出已安装的语言；不传则按用户的语言设置。纯文本、DOCX、ODT、RTF、静态 HTML 文档读正文文字，限制与“检查文档文字”相同，`language` 对文档不起作用。每个文件超过 200,000 个 UTF-16 单位、或一次回复累计超过 400,000 时拒绝该文件（后面较小的文件照常返回），绝不截断；agent 主机自己也可能缩短很长的回复，所以每次少传几个文件。
+- **`read_codes`**：每张图读一个清晰的平面二维码（方形、正放或按 90° 旋转、完整四格白边、像素清晰，整数倍放大可以），返回原文、版本和纠错级别；照片、损坏或裁切的码、平滑缩放过的图和条形码读不出，会列出原因。读出的文字不代表来源可信、链接安全。
+
+`inspect_files` 现在同时列出每个文件可用的只读工具（图片只在能运行 OCR 时列出 `extract_text`）。OCR 图片超过系统边长上限时，文字识别窗口也改为单独说明“请先缩小或裁剪”。改名、移动、按目标大小压缩和 MCPB 打包仍待做，G02 仍为部分实现，固定 52 项仍 27／23／0／2。真实 agent 主机、MSIX 下的真实 OCR 未验证；一次卡住的 OCR 调用没有超时，只能结束 agent 主机里的服务器。
+
 ## 0.104 新增：在 Windows 设置中卸载；查找卸载后的残留
 
 Windows Doctor 的 **Desktop Installation Records** 窗口新增两个按钮：
@@ -93,7 +102,7 @@ Windows Doctor 的 **Find Project Build Folders…** 结果窗口现在可以多
 
 ## 0.86 新增：Agent 工具（MCP）
 
-在设置里打开 **Agent Tools (MCP)** 后，Claude Code、Claude Desktop、Codex 等本机 agent 可以通过 `Swivel.exe --mcp` 调用 Swivel（MSIX 安装后用别名 `swivel-preview.exe`）。只走标准输入/输出，不开端口、不联网、不显示窗口。设置页的 **Copy Agent Tools Setup** 复制三种主机的配置。工具：`list_actions`、`inspect_files`（只读）、`plan_action`、`apply_plan`、`undo`、`history`。写入只能先 plan 再 apply：计划一次性、1 小时内有效，输入文件的身份、大小或修改时间变了就拒绝；目前只开放在原图旁新建文件的转换（PNG/JPG/BMP/TIFF/GIF）、旋转、翻转和灰度，绝不覆盖。每次应用都记入历史（当前用户注册表），`undo` 先核对输出没被改动，再把它移到回收站；只在有回收站的本地固定盘上撤销，其他位置一律不动。OCR、读码、目标大小压缩、改名、移动和 MCPB 打包仍待做，G02 由待实现变为部分实现，固定 52 项为 22／26／2／2，普通剩余 28。真实 agent 主机尚未验证。
+在设置里打开 **Agent Tools (MCP)** 后，Claude Code、Claude Desktop、Codex 等本机 agent 可以通过 `Swivel.exe --mcp` 调用 Swivel（MSIX 安装后用别名 `swivel-preview.exe`）。只走标准输入/输出，不开端口、不联网、不显示窗口。设置页的 **Copy Agent Tools Setup** 复制三种主机的配置。工具：`list_actions`、`inspect_files`（只读）、`plan_action`、`apply_plan`、`undo`、`history`。写入只能先 plan 再 apply：计划一次性、1 小时内有效，输入文件的身份、大小或修改时间变了就拒绝；目前只开放在原图旁新建文件的转换（PNG/JPG/BMP/TIFF/GIF）、旋转、翻转和灰度，绝不覆盖。每次应用都记入历史（当前用户注册表），`undo` 先核对输出没被改动，再把它移到回收站；只在有回收站的本地固定盘上撤销，其他位置一律不动。目标大小压缩、改名、移动和 MCPB 打包仍待做（OCR 取文字和读码由 0.105 补上），G02 由待实现变为部分实现，固定 52 项为 22／26／2／2，普通剩余 28。真实 agent 主机尚未验证。
 
 ## 0.85 新增：资源管理器文件夹样式
 

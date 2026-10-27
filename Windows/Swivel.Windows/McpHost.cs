@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32;
 using Swivel.Core;
 
@@ -68,6 +71,37 @@ public sealed class McpHost : IMcpHost
     {
         if (!System.Linq.Enumerable.Any(McpSession.Actions, a => a.Id == action)) throw new McpToolError("Unknown action.");
         return ImageTools.Run(path, action, 0, token);
+    }
+
+    // On this STA thread, like the image actions; OCR itself awaits on the thread pool.
+    public QrReadResult ReadCode(string path, CancellationToken token)
+    {
+        using var document = QrReadDocument.Open(path, token);
+        return document.Result;
+    }
+
+    public IReadOnlyList<string> TextLanguages
+    {
+        get
+        {
+            if (!NativeIdentity.HasPackage) return Array.Empty<string>();
+            try { return TextCaptureDocument.InstalledLanguages(); }
+            catch (Exception error) when (error is COMException or InvalidCastException or TypeInitializationException) { return Array.Empty<string>(); }
+        }
+    }
+
+    public string RecognizeText(string path, string? language, CancellationToken token)
+    {
+        using var document = TextCaptureDocument.Open(path, token);
+        if (language is not null && !document.Languages.Contains(language, StringComparer.OrdinalIgnoreCase))
+            throw new McpToolError("The OCR language " + language + " is not installed in Windows. Installed: " + string.Join(", ", document.Languages) + ".");
+        return Task.Run(() => document.RecognizeAsync(language, token), token).GetAwaiter().GetResult();
+    }
+
+    public string ReadDocumentText(string path, CancellationToken token)
+    {
+        using var document = DocumentTextFile.Open(path, token);
+        return document.Document.Text;
     }
 
     public FileStamp? Stamp(string path)

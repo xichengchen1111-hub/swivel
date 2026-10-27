@@ -1047,6 +1047,20 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.105 MCP 只读工具：extract_text、read_codes（G02 部分）
+
+批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`；工作区另有其他会话的 Mac 未提交改动，未触碰。
+
+`IMcpHost` 新增 `TextLanguages`（已安装的 OCR 语言标签；没有 MSIX 身份或没有语言时为空）、`ReadCode`、`RecognizeText(path, language?)`、`ReadDocumentText`。Core `McpSession`：工具顺序与 Mac 一致（list_actions、inspect_files、extract_text、read_codes、plan_action、apply_plan、undo、history），两个新工具 readOnlyHint=true、destructiveHint=false。
+
+`extract_text`：先整体检查路径（1–100、唯一、合法 Unicode）和 `language` 格式（2–64 个 ASCII 字母数字或连字符，文档也检查格式）；任一既非 `Catalog.IsImage` 也非 `DocumentText.Extensions` 的文件即整体拒绝、不读取。有图片时 `TextLanguages` 每次调用只读一次：指定语言按不区分大小写匹配，换成 Windows 的写法传下去，没有就整次拒绝并列出已安装语言，在解码任何图片之前；列表为空时图片逐个报 `NoOcr`，不调用 OCR，文档照常读。逐文件 `host.Inspect` 后分派，返回 `{path, ok, kind, text}`，失败逐文件报告；文本须为合法 UTF-16，每文件 ≤`MaxFileText`(200,000)、整次回复累计 ≤`MaxReplyText`(400,000) 个 UTF-16 单位，超出的文件报错、不截断，之后放得下的文件仍返回。上限由 1,000,000 降到 400,000：回复里文字既在 text 内容又在 structuredContent，且非 ASCII 字符被转义，中文最坏约每字 13 字节。描述说明主机可能自行缩短长回复。
+
+`read_codes`：只收图片，逐文件 `Inspect` 后 `ReadCode`，返回 `codes`（path、type "QR"、value 原文、version、correction L/M/Q/H）、`not_read`（path、error）和“不代表来源可信”的 note；描述写明按 90° 旋转、整数倍放大可以、平滑缩放不行。`inspect_files` 每项新增 `tools`，图片在 `TextLanguages` 为空时只列 `read_codes`（整次只问一次）。
+
+Windows `McpHost`：`TextLanguages` 先查 `NativeIdentity.HasPackage`，再用 `TextCaptureDocument.InstalledLanguages()`（最多 128 个，超出视为空），COM 异常视为空；`ReadCode` 用 `QrReadDocument.Open`（严格平面读取，不做数据纠错）；`RecognizeText` 用 `TextCaptureDocument.Open`，再次核对语言，识别在线程池 `Task.Run` 上等待；`ReadDocumentText` 用 `DocumentTextFile.Open`。`TextCaptureDocument`：超出 `OcrEngine.MaxImageDimension` 改报新的 `TooLarge`（四语），没有语言仍报 `Unsupported`；`RecognizeAsync` 接受 null（`TryCreateFromUserProfileLanguages`），用户语言设置里没有可用 OCR 时报出已安装语言（仅 agent 路径会传 null），语言比较不区分大小写；文字识别窗口始终传入列表中的原样语言，行为不变。设置页与功能状态说明改写（四语）。
+
+独立代理复查（0.105）：无 P1／P2。P3 已修：无 MSIX 时 inspect_files 仍列 extract_text、用户语言无 OCR 时误导性的提示、错误语言要逐张解码后才发现、读码描述不准确、上限单位与回复体积、"nothing leaves this PC" 措辞、README／PROGRESS 中过期的“OCR/读码待做”、测试缺口（仅文档时的语言、预算后的小文件、读码调用记录、原生 DOCX/RTF/HTML、大小写与未安装语言）。卡住的 OCR 调用没有超时（与现有动作相同，服务器按行顺序处理），记为限制。
+
 ## 0.104 在设置中卸载；卸载后的同名残留文件夹（F08 部分）
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`；其他会话的 Mac Doctor 未提交改动未触碰。`WindowsSettingsPage` 追加 `Apps`→`ms-settings:appsfeatures`（封闭枚举，无参数、无提升）。`InstalledAppsDialog` 页脚新增 **Open Installed Apps in Settings** 与 **Find Leftovers of Apps Removed Since This List Was Read…**；后者只设 `LeftoversRequested` 并以 `DialogResult=true` 关闭，App 的 `doctor.installedapps` 流程在 `ShowDoctorOperationAsync` 返回且未取消时继续：`AwaitDoctorReadAsync(Task.Run(AppLeftoverReader.Read(installed, token)))`，再 `ShowOperationDialog(AppLeftoversDialog)`，沿用原有取消／关闭／退出等待。新 `InstalledApps.Uninstall` 说明文字。

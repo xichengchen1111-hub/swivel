@@ -43,6 +43,37 @@ internal static class McpNativeChecks
             File.AppendAllText(rotated, "x");
             var refused = Call("undo", new JsonObject())["structuredContent"]!;
             check((string?)refused["results"]![0]!["result"] == "changed since apply; left alone" && File.Exists(rotated), "Native MCP undo leaves an edited output alone");
+
+            // Read-only tools on real files: a generated QR PNG, a plain photo, a text document,
+            // and OCR, which needs the MSIX package identity this test process does not have.
+            var code = QrCode.Encode("Swivel MCP 读码", QrCorrection.Medium); int side = (code.Size + 8) * 8;
+            string qr = Path.Combine(root, "code.png");
+            using (var file = File.Create(qr)) { var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(side, side, 96, 96, PixelFormats.Gray8, null, code.Raster(), side))); encoder.Save(file); }
+            var read = Call("read_codes", new JsonObject { ["paths"] = new JsonArray(qr, photo) })["structuredContent"]!;
+            check((string?)read["codes"]![0]!["value"] == "Swivel MCP 读码" && (string?)read["codes"]![0]!["correction"] == "M" && ((JsonArray)read["codes"]!).Count == 1
+                && (string?)read["not_read"]![0]!["path"] == photo, "Native MCP read_codes reads a generated QR PNG and reports a plain image as not read: " + read.ToJsonString());
+            string notes = Path.Combine(root, "notes.txt"); File.WriteAllText(notes, "Line one\r\n第二行", new System.Text.UTF8Encoding(false));
+            var text = (JsonArray)Call("extract_text", new JsonObject { ["paths"] = new JsonArray(notes, qr) })["structuredContent"]!["files"]!;
+            check((string?)text[0]!["text"] == "Line one\r\n第二行" && (NativeIdentity.HasPackage ? text[1]!["ok"] is not null : (string?)text[1]!["error"] == McpSession.NoOcr),
+                "Native MCP extract_text reads a text document, and OCR without the MSIX package explains why: " + text.ToJsonString());
+            var ocrHost = new McpHost(() => true, value);
+            check(NativeIdentity.HasPackage || ocrHost.TextLanguages.Count == 0, "Native MCP offers no OCR languages without the MSIX package");
+            // DOCX, RTF and HTML written by Swivel's own writers come back exactly as the
+            // document reader reads them.
+            var formats = new[] { (TextExport.Docx, "docx"), (TextExport.Rtf, "rtf"), (TextExport.Html, "html") };
+            var documents = new JsonArray();
+            foreach (var (format, extension) in formats)
+            {
+                string document = Path.Combine(root, "notes." + extension);
+                using (var file = File.Create(document)) DocumentText.Write(file, "Line one\n第二行 & <tag>", format, default);
+                documents.Add(document);
+            }
+            var read3 = (JsonArray)Call("extract_text", new JsonObject { ["paths"] = documents, ["language"] = "xx-YY" })["structuredContent"]!["files"]!;
+            for (int i = 0; i < formats.Length; i++)
+            {
+                string expected; using (var file = File.OpenRead((string)documents[i]!)) expected = DocumentText.Read(file, formats[i].Item2, default).Text;
+                check(read3[i]!["ok"]!.GetValue<bool>() && (string?)read3[i]!["text"] == expected && expected.Contains("第二行 & <tag>"), "Native MCP extract_text reads " + formats[i].Item2 + " through the document reader: " + read3[i]!.ToJsonString());
+            }
         }
         finally
         {

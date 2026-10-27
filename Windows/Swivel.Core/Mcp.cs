@@ -19,6 +19,16 @@ public interface IMcpHost
     FileStamp Inspect(string path);
     /// Runs one allowed action on one input and returns the new file it created beside it.
     string Run(string action, string path, CancellationToken token);
+    /// The one clean flat QR code in an image (QrFlatRead's strict rules); a UserError when none.
+    QrReadResult ReadCode(string path, CancellationToken token);
+    /// The installed Windows OCR language tags; empty when OCR cannot run here (no MSIX package
+    /// identity, or no language installed).
+    IReadOnlyList<string> TextLanguages { get; }
+    /// Text recognized in an image with an installed Windows OCR language: one of TextLanguages,
+    /// or the user's profile languages when null.
+    string RecognizeText(string path, string? language, CancellationToken token);
+    /// The body text of a document DocumentText reads (plain text, DOCX, ODT, RTF, static HTML).
+    string ReadDocumentText(string path, CancellationToken token);
     /// The identity of a file Swivel created, or null when it no longer exists.
     FileStamp? Stamp(string path);
     /// Moves a file Swivel created to the Recycle Bin only if it is still exactly that file.
@@ -45,6 +55,10 @@ public sealed record McpAction(string Id, string Title, string Suffix);
 public sealed class McpSession
 {
     public const int MaxLineChars = 16 * 1024 * 1024, MaxPaths = 100, MaxPlans = 64, MaxHistory = 200, MaxHistoryChars = 4 * 1024 * 1024;
+    /// Text returned by extract_text: per file and for the whole reply, in UTF-16 units. Longer
+    /// text is refused, never cut.
+    public const int MaxFileText = 200_000, MaxReplyText = 400_000;
+    public const string NoOcr = "Windows OCR is not available here: reading text in images needs Swivel's MSIX package and an OCR language installed in Windows.";
     public static readonly TimeSpan PlanLifetime = TimeSpan.FromHours(1);
     public static readonly string[] Versions = { "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05" };
 
@@ -111,7 +125,7 @@ public sealed class McpSession
             ["protocolVersion"] = Versions.Contains(requested) ? requested : Versions[0],
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false } },
             ["serverInfo"] = new JsonObject { ["name"] = "swivel-windows", ["title"] = "Swivel (Windows preview)", ["version"] = version },
-            ["instructions"] = "Local Windows file tools. Inspect first. Writes need plan_action, then apply_plan with the returned plan_id; outputs are new files beside the originals and nothing is overwritten. undo moves the files an apply created to the Recycle Bin if they are unchanged.",
+            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action, then apply_plan with the returned plan_id; outputs are new files beside the originals and nothing is overwritten. undo moves the files an apply created to the Recycle Bin if they are unchanged.",
         };
     }
 
@@ -127,7 +141,11 @@ public sealed class McpSession
             };
         return new JsonArray(
             Tool("list_actions", "List actions", "Lists the actions plan_action accepts and what each one writes.", new JsonObject(), Array.Empty<string>(), true, false),
-            Tool("inspect_files", "Inspect files", "Checks that paths are local regular files Swivel can read and lists the actions available for each. Reads metadata only.", new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
+            Tool("inspect_files", "Inspect files", "Checks that paths are local regular files Swivel can read and lists the plan_action actions and read-only tools available for each (extract_text for images only where Windows OCR can run). Reads metadata only.", new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
+            Tool("extract_text", "Extract text", "Returns the text of images (Windows OCR on this PC with an installed language; needs Swivel's MSIX package) and of plain-text, DOCX, ODT, RTF or static HTML documents (body text only). Read-only; Swivel uses no network. A file's text over " + MaxFileText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " UTF-16 units, or text past " + MaxReplyText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " in one reply, is refused rather than cut. Hosts may still shorten long tool replies, so ask for a few files at a time.",
+                new JsonObject { ["paths"] = Paths(), ["language"] = new JsonObject { ["type"] = "string", ["description"] = "Optional OCR language tag such as en-US or zh-Hans-CN, matched to the installed OCR languages ignoring case. Default: the user's Windows language settings. Ignored for documents." } }, new[] { "paths" }, true, false),
+            Tool("read_codes", "Read QR codes", "Reads one clean, flat QR code per image, such as a saved or generated QR image: square, upright or turned in 90° steps, an exact four-module white border and sharp pixels (whole-number scaling is fine). Photos, damaged or cropped codes, smoothly resized images and barcodes are not read. Read-only.",
+                new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
             Tool("plan_action", "Plan action", "Prepares one action for 1–100 files without writing anything. Returns a plan_id that apply_plan uses within one hour, once.",
                 new JsonObject { ["action"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(Actions.Select(a => (JsonNode)a.Id).ToArray()) }, ["paths"] = Paths() }, new[] { "action", "paths" }, true, false),
             Tool("apply_plan", "Apply plan", "Runs a plan from plan_action. Refused if any input changed since planning. Creates new files beside the originals; never overwrites. Logged for undo.",
@@ -146,7 +164,7 @@ public sealed class McpSession
         if (parameters["arguments"] is not null and not JsonObject) throw new McpInvalidParams("Tool arguments must be an object.");
         Func<JsonObject, CancellationToken, JsonObject> tool = name switch
         {
-            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "plan_action" => PlanAction,
+            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction,
             "apply_plan" => ApplyPlan, "undo" => Undo, "history" => History,
             _ => throw new McpInvalidParams("Unknown tool: " + name),
         };
@@ -189,7 +207,7 @@ public sealed class McpSession
 
     private JsonObject InspectFiles(JsonObject arguments, CancellationToken token)
     {
-        var files = new JsonArray();
+        var files = new JsonArray(); bool? ocr = null; // asked once, only when an image is listed
         foreach (string path in PathsArgument(arguments))
         {
             token.ThrowIfCancellationRequested();
@@ -200,11 +218,77 @@ public sealed class McpSession
                 {
                     ["path"] = path, ["ok"] = true, ["size"] = stamp.Size,
                     ["actions"] = new JsonArray((Catalog.IsImage(path) ? Actions.Select(a => (JsonNode)a.Id) : Enumerable.Empty<JsonNode>()).ToArray()),
+                    ["tools"] = new JsonArray((Catalog.IsImage(path) ? ((ocr ??= host.TextLanguages.Count > 0) ? new[] { "extract_text", "read_codes" } : new[] { "read_codes" }) : IsDocument(path) ? new[] { "extract_text" } : Array.Empty<string>()).Select(t => (JsonNode)t).ToArray()),
                 });
             }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { files.Add(new JsonObject { ["path"] = path, ["ok"] = false, ["error"] = error.Message }); }
         }
         return new JsonObject { ["files"] = files };
+    }
+
+    private static bool IsDocument(string path)
+        => DocumentText.Extensions.Contains(System.IO.Path.GetExtension(path).TrimStart('.'), StringComparer.OrdinalIgnoreCase);
+
+    private JsonObject ExtractText(JsonObject arguments, CancellationToken token)
+    {
+        string? language = null;
+        if (arguments["language"] is { } node)
+        {
+            if (node is not JsonValue v || v.GetValueKind() != JsonValueKind.String || (string)v! is not { Length: >= 2 and <= 64 } tag
+                || !tag.All(c => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '-'))
+                throw new McpToolError("language must be a language tag such as en-US.");
+            language = tag;
+        }
+        var paths = PathsArgument(arguments);
+        if (paths.FirstOrDefault(p => !Catalog.IsImage(p) && !IsDocument(p)) is { } other)
+            throw new McpToolError("extract_text takes images or plain-text, DOCX, ODT, RTF or HTML documents; " + other + " is neither.");
+        // The OCR languages are read once; a tag is checked before any image is decoded and passed
+        // on as Windows spells it.
+        var languages = paths.Any(Catalog.IsImage) ? host.TextLanguages : Array.Empty<string>();
+        if (language is not null && languages.Count > 0)
+            language = languages.FirstOrDefault(l => string.Equals(l, language, StringComparison.OrdinalIgnoreCase))
+                ?? throw new McpToolError("The OCR language " + language + " is not installed in Windows. Installed: " + string.Join(", ", languages) + ".");
+        var files = new JsonArray(); int total = 0;
+        foreach (string path in paths)
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                host.Inspect(path);
+                bool image = Catalog.IsImage(path);
+                if (image && languages.Count == 0) throw new McpToolError(NoOcr);
+                string text = image ? host.RecognizeText(path, language, token) : host.ReadDocumentText(path, token);
+                token.ThrowIfCancellationRequested();
+                if (!IsWellFormed(text)) throw new McpToolError("The text is not valid Unicode.");
+                if (text.Length > MaxFileText) throw new McpToolError("The text has " + text.Length + " UTF-16 units, more than " + MaxFileText + "; open it in Swivel instead.");
+                if (total + text.Length > MaxReplyText) throw new McpToolError("The reply already holds " + total + " UTF-16 units of text; ask for this file on its own.");
+                total += text.Length;
+                files.Add(new JsonObject { ["path"] = path, ["ok"] = true, ["kind"] = image ? "image" : "document", ["text"] = text });
+            }
+            catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { files.Add(new JsonObject { ["path"] = path, ["ok"] = false, ["error"] = error.Message }); }
+        }
+        return new JsonObject { ["files"] = files };
+    }
+
+    private JsonObject ReadCodes(JsonObject arguments, CancellationToken token)
+    {
+        var paths = PathsArgument(arguments);
+        if (paths.FirstOrDefault(p => !Catalog.IsImage(p)) is { } other) throw new McpToolError("read_codes takes PNG, JPEG, BMP, TIFF or GIF images; " + other + " is not one.");
+        var codes = new JsonArray(); var unread = new JsonArray();
+        foreach (string path in paths)
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                host.Inspect(path);
+                var code = host.ReadCode(path, token);
+                token.ThrowIfCancellationRequested();
+                if (!IsWellFormed(code.Text)) throw new McpToolError("The code's text is not valid Unicode.");
+                codes.Add(new JsonObject { ["path"] = path, ["type"] = "QR", ["value"] = code.Text, ["version"] = code.Version, ["correction"] = "LMQH"[(int)code.Correction].ToString() });
+            }
+            catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { unread.Add(new JsonObject { ["path"] = path, ["error"] = error.Message }); }
+        }
+        return new JsonObject { ["codes"] = codes, ["not_read"] = unread, ["note"] = "The text is what the code holds; it does not show who made the code or that a link is safe." };
     }
 
     private JsonObject PlanAction(JsonObject arguments, CancellationToken token)
