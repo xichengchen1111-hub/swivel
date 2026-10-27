@@ -6,7 +6,7 @@ enum TextRecognition {
     static func recognize(_ url: URL) async throws -> String {
         let work = Task.detached(priority: .userInitiated) {
             try Task.checkCancellation()
-            let image = try Images.load(url, maxPixels: 8000)
+            let image = try Images.load(url, maxPixels: 8000, readOnly: true)
             let request = VNRecognizeTextRequest()
             request.recognitionLevel = .accurate
             request.usesLanguageCorrection = true
@@ -132,7 +132,7 @@ final class TextCaptureWindow: NSObject, NSWindowDelegate, NSTextViewDelegate {
     /// Decodes the preview off the main thread (a large HEIC takes a noticeable moment) and fades it in.
     private func loadPreview(_ url: URL) {
         Task { [weak self] in
-            guard let image = try? await Images.detached({ try Images.load(url, maxPixels: 1800) }), let self else { return }
+            guard let image = try? await Images.detached({ try Images.load(url, maxPixels: 1800, readOnly: true) }), let self else { return }
             preview.image = NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
             ToolUI.fadeIn(preview)
         }

@@ -24,7 +24,7 @@ enum CodeRecognition {
             var result: [DetectedCode] = []
             for url in urls {
                 try Task.checkCancellation()
-                let image = try Images.load(url, maxPixels: 8000)
+                let image = try Images.load(url, maxPixels: 8000, readOnly: true)
                 let request = VNDetectBarcodesRequest()
                 try VNImageRequestHandler(cgImage: image).perform([request])
                 var seen = Set<String>()
