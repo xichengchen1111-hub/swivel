@@ -46,14 +46,18 @@ enum FileKind: String, CaseIterable {
 
     static func of(_ url: URL) -> FileKind {
         let ext = url.pathExtension.lowercased()
-        if ["md", "markdown", "rtfd", "webarchive"].contains(ext) { return .document }
+        if ["md", "markdown", "rtfd"].contains(ext) { return .document }
         if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { return .folder }
+        // Disk images conform to "archive" but can't be unpacked with tar; macOS opens them itself.
+        if ext == "dmg" || ext == "sparseimage" || ext == "sparsebundle" { return .other }
+        // RAR and 7-Zip have no system type unless an app declares one; old-style RAR parts are .r00, .r01…
+        if Archives.extractableExtensions.contains(ext) || ext.wholeMatch(of: #/r\d\d/#) != nil { return .archive }
         guard let type = UTType(filenameExtension: ext) else { return .other }
         if type.conforms(to: .pdf) { return .pdf }
         if type.conforms(to: .image) { return .image }
         if type.conforms(to: .movie) { return .video }
         if type.conforms(to: .audio) { return .audio }
-        if type.conforms(to: .archive) || ["zip", "tar", "tgz", "gz"].contains(ext) { return .archive }
+        if type.conforms(to: .archive) { return .archive }
         if Docs.readableExtensions.contains(ext) { return .document }
         return .other
     }
@@ -120,6 +124,7 @@ enum Catalog {
     }
 
     static func defaultItems(for urls: [URL], mode: WheelMode) -> [WheelItem] {
+        if mode == .custom { return CustomWheel.items(for: urls) }
         if mode == .codes {
             guard Feature.qrCodes.isOn else { return [] }
             return [WheelItem(title: "QR Library") { _ in
@@ -149,7 +154,7 @@ enum Catalog {
         let multi = urls.count > 1
 
         switch mode {
-        case .apps, .codes: return [] // Handled above, including no-file shortcut wheels.
+        case .apps, .codes, .custom: return [] // Handled above, including no-file shortcut wheels.
         case .actions:
             var list = actions(multi: multi)
             if Feature.batchRename.isOn {
@@ -165,6 +170,7 @@ enum Catalog {
                     return ActionResult(message: urls.count == 1 ? L("Hung on the clothesline") : L("Hung %d images on the clothesline", urls.count))
                 }, at: 1)
             }
+            if kind == .document { list.append(each("Word Count", urls, Docs.wordCount)) }
             return Feature.shelf.isOn ? list : list.filter { $0.title != "Float" }
 
         case .convert:
@@ -190,8 +196,18 @@ enum Catalog {
                     .filter { !sourceExt.contains($0.ext) }
                     .map { format in each(format.name, urls) { try await Docs.convert($0, to: format) } }
             case .archive:
-                return [each("Extract", urls, Archives.extract)]
-            case .folder, .other:
+                return [WheelItem(title: "Extract") { urls in
+                    // Dropping every part of a multi-part RAR extracts it once.
+                    var seen: Set<URL> = []
+                    let selected = urls.filter { url in
+                        let first = (try? Archives.volumes(of: url).first) ?? url
+                        return seen.insert(first.standardizedFileURL).inserted
+                    }
+                    return try await each("Extract", selected, Archives.extract).run(selected)
+                }]
+            case .folder:
+                return []  // Change Style and compressing are in the Tools menu.
+            case .other:
                 return Archives.compressItems
             }
 
@@ -200,9 +216,15 @@ enum Catalog {
             case .image:
                 let editors: [WheelItem] = [
                     each("Crop", urls) { try await CropEditor(source: $0).present() },
+                    each("Upscale", urls) { try await UpscaleEditor(source: $0).present() },
+                    WheelItem(title: "Resize…") { try await Images.resize($0) },
                     each("Compress", urls) { try await CompressEditor(source: $0).present() },
                     each("Edit", urls) { try await AdjustEditor(source: $0).present() },
+                    each("ID Photo", urls) { try await IDPhotoEditor(source: $0).present() },
                     each("Add BG", urls) { try await BackgroundEditor(source: $0).present() },
+                    each("Remove BG", urls) { try await Cutout.removeBackground($0) },
+                    each("Blur BG", urls) { try await BlurBackgroundEditor(source: $0).present() },
+                    each("Retouch", urls) { try await RetouchEditor(source: $0).present() },
                     each("Redact", urls) { try await RedactEditor(source: $0).present() },
                     each("Metadata", urls) { try await MetadataEditor(source: $0).present() },
                     each("Annotate", urls) { try await AnnotateEditor(source: $0).present() },
@@ -232,12 +254,23 @@ enum Catalog {
                 return list
             case .video:
                 var list = [each("Trim", urls) { try await TrimEditor(source: $0).present() }]
-                    + Video.toolItems.map { option in each(option.title, urls, option.run) }
+                    + Video.toolItems.map { option in
+                        option.title == "Compress" ? WheelItem(title: "Compress") { try await Video.compress($0) }
+                            : each(option.title, urls, option.run)
+                    }
+                list.insert(each("Upscale", urls) { try await UpscaleEditor(source: $0, video: true).present() }, at: 1)
+                if #available(macOS 26, *) {
+                    list.insert(WheelItem(title: "Subtitles") { try await TranscriptionEditor.run($0, isVideo: true) }, at: 1)
+                }
                 if multi { list.insert(WheelItem(title: "Merge") { saved([try await Video.merge($0, audioOnly: false)]) }, at: 0) }
                 return list
             case .audio:
-                var list = [each("Trim", urls) { try await TrimEditor(source: $0).present() }]
+                var list = [each("Trim", urls) { try await TrimEditor(source: $0).present() },
+                            each("Reduce Noise", urls) { try await NoiseReductionEditor(source: $0).present() }]
                     + Audio.toolItems.map { option in each(option.title, urls, option.run) }
+                if #available(macOS 26, *) {
+                    list.insert(WheelItem(title: "Transcribe") { try await TranscriptionEditor.run($0, isVideo: false) }, at: 1)
+                }
                 if multi { list.insert(WheelItem(title: "Merge") { saved([try await Video.merge($0, audioOnly: true)]) }, at: 0) }
                 return list
             case .pdf:
@@ -252,8 +285,17 @@ enum Catalog {
                 if multi { list.insert(WheelItem(title: "Merge") { saved([try await PDFs.merge($0)]) }, at: 0) }
                 return list
             case .document:
-                return [each("Word Count", urls, Docs.wordCount)]
-            case .archive, .folder, .other:
+                return []  // Word Count is in the Actions menu.
+            case .folder:
+                return [WheelItem(title: "Change Style") { folders in
+                    let editor = try FolderStyleEditor(folders: folders)
+                    let changed = try await editor.present()
+                    let message = editor.restoredDefault
+                        ? (changed.count == 1 ? L("Restored the default folder icon") : L("Restored %d folder icons", changed.count))
+                        : (changed.count == 1 ? L("Restyled %@", changed[0].lastPathComponent) : L("Restyled %d folders", changed.count))
+                    return ActionResult(message: message)
+                }] + Archives.compressItems
+            case .archive, .other:
                 return Archives.compressItems
             }
         }
@@ -263,8 +305,18 @@ enum Catalog {
     static func each(_ title: String, _ urls: [URL],
                      _ work: @escaping @MainActor (URL) async throws -> [URL]) -> WheelItem {
         WheelItem(title: title) { urls in
-            var outputs: [URL] = []
-            for url in urls { outputs += try await work(url) }
+            var outputs: [URL] = [], failures: [String] = []
+            for url in urls {
+                do { try Task.checkCancellation(); outputs += try await work(url) }
+                catch {
+                    if outputs.isEmpty, error is Info || error is Cancelled || error is CancellationError { throw error }
+                    let partial = PartialOutputError.wrapping(error, files: [])
+                    outputs += partial.files
+                    failures += partial.failures.map { "\(url.lastPathComponent): \($0)" }
+                    if error is CancellationError || error is Cancelled || Task.isCancelled { break }
+                }
+            }
+            if !failures.isEmpty { throw PartialOutputError(files: outputs, failures: failures) }
             return saved(outputs)
         }
     }
@@ -298,8 +350,7 @@ enum Catalog {
                 return ActionResult(message: multi ? L("Copied %d files", urls.count) : L("Copied %@", urls[0].lastPathComponent))
             },
             WheelItem(title: "Move") { urls in
-                let moved = try FileActions.move(urls)
-                return moved.isEmpty ? ActionResult(message: L("Move cancelled")) : saved(moved).renamed()
+                try FileActions.move(urls)
             },
             WheelItem(title: "Copy Path") { urls in
                 NSPasteboard.general.clearContents()
@@ -336,20 +387,29 @@ struct ToolError: LocalizedError {
 
 enum FileActions {
     @MainActor
-    static func move(_ urls: [URL]) throws -> [URL] {
+    static func move(_ urls: [URL]) throws -> ActionResult {
         NSApp.activate()
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.prompt = L("Move Here")
-        panel.message = "Choose where to move \(urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) files")"
-        guard panel.runModal() == .OK, let folder = panel.url else { return [] }
-        return try urls.map { url in
-            let destination = Paths.unique(folder.appendingPathComponent(url.lastPathComponent))
-            try FileManager.default.moveItem(at: url, to: destination)
-            return destination
+        panel.message = L("Files on another disk will be copied. Their originals are kept.")
+        guard panel.runModal() == .OK, let folder = panel.url else { throw Cancelled() }
+        var files: [URL] = [], messages: [String] = [], failures: [String] = []
+        for url in urls {
+            do {
+                do {
+                    let moved = try Paths.move(url, into: folder)
+                    files.append(moved); messages.append(L("Moved %@", moved.lastPathComponent))
+                } catch let error where Paths.crossesVolumes(error) {
+                    let copied = try Paths.copy(url, into: folder)
+                    files.append(copied); messages.append(L("Copied %@ to another disk; the original was kept.", copied.lastPathComponent))
+                }
+            } catch { failures.append("\(url.path): \(error.localizedDescription)") }
         }
+        if !failures.isEmpty { throw PartialOutputError(files: files, failures: messages + failures) }
+        return ActionResult(message: messages.joined(separator: "\n"), files: files)
     }
 
     @MainActor
@@ -366,51 +426,361 @@ enum FileActions {
 }
 
 enum Paths {
-    /// `folder/name.ext`, or `name 2.ext`, `name 3.ext`… if taken.
+    /// `folder/name.ext`, or `name 2.ext`, `name 3.ext`… if taken. Only a forecast: another conversion can take the
+    /// name before this one writes, so writers claim theirs with `create`, `publish` or `produce` instead.
     static func output(for source: URL, ext: String, suffix: String = "") -> URL {
+        unique(preferred(for: source, ext: ext, suffix: suffix))
+    }
+
+    /// `folder/name<suffix>.ext` beside `source`, free or not: the name `create`, `publish` and `produce` start from.
+    static func preferred(for source: URL, ext: String, suffix: String = "") -> URL {
         let base = source.deletingPathExtension().lastPathComponent + suffix
-        let dir = source.deletingLastPathComponent()
-        return unique(dir.appendingPathComponent(base).appendingPathExtension(ext))
+        return source.deletingLastPathComponent().appendingPathComponent(base).appendingPathExtension(ext)
     }
 
     static func unique(_ url: URL) -> URL {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return url }
-        let dir = url.deletingLastPathComponent()
+        var n = 1
+        while taken(numbered(url, n)) { n += 1 }
+        return numbered(url, n)
+    }
+
+    /// `url` itself for 1, else `name n.ext`.
+    private static func numbered(_ url: URL, _ n: Int) -> URL {
+        guard n > 1 else { return url }
         let ext = url.pathExtension
-        let base = url.deletingPathExtension().lastPathComponent
-        var n = 2
-        while true {
-            var candidate = dir.appendingPathComponent("\(base) \(n)")
-            if !ext.isEmpty { candidate.appendPathExtension(ext) }
-            if !fm.fileExists(atPath: candidate.path) { return candidate }
-            n += 1
+        var candidate = url.deletingLastPathComponent().appendingPathComponent("\(url.deletingPathExtension().lastPathComponent) \(n)")
+        if !ext.isEmpty { candidate.appendPathExtension(ext) }
+        return candidate
+    }
+
+    /// Writes `data` as a new file at `preferred`, or `name 2.ext`, `name 3.ext`…, and returns where it went.
+    /// The write is exclusive (O_EXCL): a name another writer took after Swivel looked is skipped, never replaced.
+    static func create(_ data: Data, at preferred: URL) throws -> URL {
+        try produce(preferred) { try FileSafety.write(data, to: $0) }
+    }
+
+    /// Moves `item` (finished work in a temporary beside `preferred`) to `preferred` or the next free name, and returns
+    /// where it went. The rename is exclusive, so it never replaces anything that appeared after the name was chosen.
+    static func publish(_ item: URL, as preferred: URL) throws -> URL {
+        try claim(preferred) { try renameExclusively(item, to: $0) }
+    }
+
+    /// Moves `item` into `folder` under its own name, or `name 2.ext`…, and returns where it went. The rename claims
+    /// the name, as `publish` does. Cross-volume moves are refused: deleting a source by path after copying can
+    /// delete a newly saved version. The UI explicitly copies across disks and keeps originals instead.
+    static func move(_ item: URL, into folder: URL,
+                     rename: (URL, URL) throws -> Void = Paths.renameExclusively) throws -> URL {
+        try claim(folder.appendingPathComponent(item.lastPathComponent)) { try rename(item, $0) }
+    }
+
+    /// Copies `item` into `folder` under its own name, or `name 2.ext`…, and returns where it went. The copy is made
+    /// in a hidden temporary in `folder` and then published, so no half-copied file ever holds the name.
+    static func copy(_ item: URL, into folder: URL,
+                     rename: (URL, URL) throws -> Void = Paths.renameExclusively) throws -> URL {
+        let preferred = folder.appendingPathComponent(item.lastPathComponent)
+        let root = try FileSafety.privateDirectory(beside: preferred)
+        defer { discard(root) }
+        let work = root.appendingPathComponent(item.lastPathComponent)
+        try FileManager.default.copyItem(at: item, to: work)
+        return try claim(preferred) { try rename(work, $0) }
+    }
+
+    /// Whether a rename failed because the destination is on another volume.
+    static func crossesVolumes(_ error: Error) -> Bool {
+        let error = error as NSError
+        if error.domain == NSPOSIXErrorDomain && error.code == Int(EXDEV) { return true }
+        guard let underlying = error.userInfo[NSUnderlyingErrorKey] as? any Error else { return false }
+        return crossesVolumes(underlying)
+    }
+
+    /// Lets `make` write an output file into a private directory beside `preferred`, then publishes it.
+    /// Tools and exports that would replace an existing file only ever see the temporary, which never outlives the call.
+    static func produce(_ preferred: URL, _ make: (URL) throws -> Void) throws -> URL {
+        let root = try FileSafety.privateDirectory(beside: preferred)
+        defer { discard(root) }
+        let work = root.appendingPathComponent("output").appendingPathExtension(preferred.pathExtension)
+        try make(work)
+        try Task.checkCancellation()
+        try FileSafety.makePrivate(work)
+        return try publish(work, as: preferred)
+    }
+
+    static func produce(_ preferred: URL, _ make: (URL) async throws -> Void) async throws -> URL {
+        let root = try FileSafety.privateDirectory(beside: preferred)
+        defer { discard(root) }
+        let work = root.appendingPathComponent("output").appendingPathExtension(preferred.pathExtension)
+        try await make(work)
+        try Task.checkCancellation()
+        try FileSafety.makePrivate(work)
+        return try publish(work, as: preferred)
+    }
+
+    /// An unused hidden name beside `url` for work in progress, removed at quit if it's still there; `discard` removes it.
+    static func temporary(beside url: URL, ext: String) -> URL {
+        let name = ".swivel-\(UUID().uuidString)" + (ext.isEmpty ? "" : ".\(ext)")
+        let work = url.deletingLastPathComponent().appendingPathComponent(name)
+        TemporaryItems.register(work)
+        return work
+    }
+
+    static func discard(_ temporary: URL) {
+        Archives.makeAccessible(temporary)
+        do {
+            try FileManager.default.removeItem(at: temporary)
+            TemporaryItems.unregister(temporary)
+        } catch {
+            // A failed cleanup stays registered for the orderly shutdown retry.
+            if !taken(temporary) { TemporaryItems.unregister(temporary) }
+        }
+    }
+
+    /// Tries `attempt` at `preferred`, then `name 2.ext`, `name 3.ext`… `attempt` fails with "file exists" rather than
+    /// replace anything, and that is the only check: looking first and writing after would leave a gap between the two.
+    private static func claim(_ preferred: URL, _ attempt: (URL) throws -> Void) throws -> URL {
+        for n in 1...10_000 {
+            let candidate = numbered(preferred, n)
+            do {
+                try attempt(candidate)
+                return candidate
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                continue
+            }
+        }
+        throw fileError(EEXIST, preferred)
+    }
+
+    /// `renamex_np` with RENAME_EXCL. Volumes without it (exFAT, some network shares) answer ENOTSUP; there the name is
+    /// claimed by `renameOverPlaceholder` instead.
+    static func renameExclusively(_ item: URL, to destination: URL) throws {
+        let result = item.withUnsafeFileSystemRepresentation { from in
+            destination.withUnsafeFileSystemRepresentation { to in renamex_np(from!, to!, UInt32(RENAME_EXCL)) }
+        }
+        guard result != 0 else { return }
+        let code = errno
+        guard code == ENOTSUP else { throw fileError(code, destination) }
+        try renameOverPlaceholder(item, to: destination)
+    }
+
+    /// Claims `destination` with an exclusive create (an empty file, or folder for a folder), then renames `item` over
+    /// that placeholder. Nothing that was already there is replaced; only Swivel's own placeholder is.
+    static func renameOverPlaceholder(_ item: URL, to destination: URL) throws {
+        var info = stat()
+        guard lstat(item.path, &info) == 0 else { throw fileError(errno, item) }
+        let folder = info.st_mode & S_IFMT == S_IFDIR
+        if folder {
+            guard mkdir(destination.path, 0o700) == 0 else { throw fileError(errno, destination) }
+        } else {
+            let placeholder = open(destination.path, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0o600)
+            guard placeholder >= 0 else { throw fileError(errno, destination) }
+            close(placeholder)
+        }
+        guard rename(item.path, destination.path) == 0 else {
+            let code = errno
+            _ = folder ? rmdir(destination.path) : unlink(destination.path)
+            throw fileError(code, destination)
+        }
+    }
+
+    private static func fileError(_ code: Int32, _ url: URL) -> CocoaError {
+        let posix = POSIXErrorCode(rawValue: code) ?? .EIO
+        let cocoa: CocoaError.Code = switch posix {
+        case .EEXIST: .fileWriteFileExists
+        case .EACCES, .EPERM: .fileWriteNoPermission
+        case .ENOSPC, .EDQUOT: .fileWriteOutOfSpace
+        case .EROFS: .fileWriteVolumeReadOnly
+        case .ENOENT: .fileNoSuchFile
+        default: .fileWriteUnknown
+        }
+        return CocoaError(cocoa, userInfo: [NSFilePathErrorKey: url.path, NSUnderlyingErrorKey: POSIXError(posix)])
+    }
+
+    /// Anything at the path counts, a symlink included. `fileExists` follows links, so a dangling one planted under
+    /// the predicted output name (for example inside a downloaded archive) would look free and be written through.
+    static func taken(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0
+    }
+}
+
+/// Hidden working folders and files (extraction staging, encodes in progress) to clean up if Swivel quits first.
+enum TemporaryItems {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var items: Set<URL> = []
+    static func register(_ url: URL) { lock.lock(); items.insert(url); lock.unlock() }
+    static func unregister(_ url: URL) { lock.lock(); items.remove(url); lock.unlock() }
+    /// At quit: stops running tools first, so nothing writes into a folder while it's removed.
+    static func removeAll() {
+        Shell.stopAll()
+        lock.lock(); let all = items; items = []; lock.unlock()
+        for url in all {
+            Archives.makeAccessible(url)
+            try? FileManager.default.removeItem(at: url)
         }
     }
 }
 
 enum Shell {
+    /// Stops every running tool (Swivel is quitting): children would otherwise keep writing after it's gone.
+    static func stopAll() { ShellRun.stopAll(); ShellCapture.stopAll() }
+
     /// Runs a command-line tool and throws its stderr on failure.
-    static func run(_ tool: String, _ args: [String], in directory: URL? = nil) async throws {
+    ///
+    /// The tool reads `input` files in order (or an empty stdin), so it never waits on a terminal. Its stderr is
+    /// drained while it runs: a tool that writes more than a pipe's 64 KB would otherwise block forever. `watch` is
+    /// asked twice a second; returning a message stops the tool and throws that message. Cancelling the task stops it.
+    /// `outputLimit` counts what the tool writes to stdout (otherwise discarded) and stops it with the message past
+    /// that many bytes.
+    static func run(_ tool: String, _ args: [String], in directory: URL? = nil, input: [URL] = [],
+                    outputLimit: (bytes: Int64, message: String)? = nil,
+                    watch: (@Sendable () -> String?)? = nil) async throws {
+        let run = ShellRun(tool: tool, args: args, directory: directory, input: input, outputLimit: outputLimit, watch: watch)
+        try await withTaskCancellationHandler {
+            try await run.start()
+        } onCancel: {
+            run.stop(L("Cancelled"))
+        }
+    }
+}
+
+/// One tool run for `Shell.run`; its state is shared with Foundation's callback threads behind a lock.
+private final class ShellRun: @unchecked Sendable {
+    private let process = Process()
+    private let tool: String
+    private let input: [URL]
+    private let watch: (@Sendable () -> String?)?
+    private let outputLimit: (bytes: Int64, message: String)?
+    private let lock = NSLock()
+    private var errorTail = Data()
+    private var outputBytes: Int64 = 0
+    private var stopReason: String?
+    private var timer: DispatchSourceTimer?
+    private static let keptErrorBytes = 16_384
+
+    init(tool: String, args: [String], directory: URL?, input: [URL], outputLimit: (bytes: Int64, message: String)?,
+         watch: (@Sendable () -> String?)?) {
+        self.tool = tool
+        self.input = input
+        self.outputLimit = outputLimit
+        self.watch = watch
+        process.executableURL = URL(fileURLWithPath: tool)
+        process.arguments = args
+        if let directory { process.currentDirectoryURL = directory }
+    }
+
+    private static let registry = NSLock()
+    nonisolated(unsafe) private static var running: [ObjectIdentifier: ShellRun] = [:]
+    static func stopAll() {
+        let all = registry.withLock { Array(running.values) }
+        for run in all { run.stop(L("Cancelled")) }
+        for run in all where run.process.isRunning { run.process.waitUntilExit() }
+    }
+    private static func track(_ run: ShellRun, _ active: Bool) {
+        registry.withLock { running[ObjectIdentifier(run)] = active ? run : nil }
+    }
+
+    func start() async throws {
+        Self.track(self, true)
+        defer { Self.track(self, false) }
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: tool)
-            process.arguments = args
-            if let directory { process.currentDirectoryURL = directory }
             let errors = Pipe()
             process.standardError = errors
-            process.standardOutput = FileHandle.nullDevice
-            process.terminationHandler = { p in
-                let data = errors.fileHandleForReading.readDataToEndOfFile()
-                if p.terminationStatus == 0 {
-                    cont.resume()
-                } else {
-                    let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-                    let name = URL(fileURLWithPath: tool).lastPathComponent
-                    cont.resume(throwing: ToolError(text.isEmpty ? "\(name) failed" : "\(name): \(text)"))
+            let output = outputLimit == nil ? nil : Pipe()
+            process.standardOutput = output ?? FileHandle.nullDevice
+            output?.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                let data = handle.availableData
+                if data.isEmpty { handle.readabilityHandler = nil } else { self?.count(data.count) }
+            }
+            let feed = input.isEmpty ? nil : Pipe()
+            process.standardInput = feed ?? FileHandle.nullDevice
+            errors.fileHandleForReading.readabilityHandler = { [weak self] handle in
+                let data = handle.availableData
+                if data.isEmpty { handle.readabilityHandler = nil } else { self?.keep(data) }
+            }
+            process.terminationHandler = { [self] p in
+                errors.fileHandleForReading.readabilityHandler = nil
+                if let output {
+                    output.fileHandleForReading.readabilityHandler = nil
+                    count(output.fileHandleForReading.readDataToEndOfFile().count)
+                }
+                keep(errors.fileHandleForReading.readDataToEndOfFile())
+                lock.lock()
+                timer?.cancel()
+                let reason = stopReason, text = String(decoding: errorTail, as: UTF8.self)
+                lock.unlock()
+                if let reason { return cont.resume(throwing: ToolError(reason)) }
+                if p.terminationStatus == 0 { return cont.resume() }
+                let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let name = URL(fileURLWithPath: tool).lastPathComponent
+                cont.resume(throwing: ToolError(message.isEmpty ? "\(name) failed" : "\(name): \(message)"))
+            }
+            do { try process.run() } catch {
+                errors.fileHandleForReading.readabilityHandler = nil
+                output?.fileHandleForReading.readabilityHandler = nil
+                return cont.resume(throwing: error)
+            }
+            lock.lock(); let stoppedEarly = stopReason != nil; lock.unlock()
+            if stoppedEarly { process.terminate() }
+            if let feed { send(input, to: feed.fileHandleForWriting) }
+            if let watch {
+                let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+                timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
+                timer.setEventHandler { [weak self] in if let message = watch() { self?.stop(message) } }
+                lock.lock(); self.timer = timer; lock.unlock()
+                timer.resume()
+            }
+        }
+    }
+
+    /// Stops the tool; its run then throws `reason` (the first reason given wins).
+    func stop(_ reason: String) {
+        lock.lock()
+        let first = stopReason == nil
+        if first { stopReason = reason }
+        lock.unlock()
+        if process.isRunning { process.terminate() }
+        if first {
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [self] in
+                if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            }
+        }
+    }
+
+    private func count(_ bytes: Int) {
+        guard let outputLimit, bytes > 0 else { return }
+        lock.lock()
+        outputBytes += Int64(bytes)
+        let over = outputBytes > outputLimit.bytes
+        lock.unlock()
+        if over { stop(outputLimit.message) }
+    }
+
+    private func keep(_ data: Data) {
+        guard !data.isEmpty else { return }
+        lock.lock()
+        errorTail.append(data)
+        if errorTail.count > Self.keptErrorBytes { errorTail = errorTail.suffix(Self.keptErrorBytes) }
+        lock.unlock()
+    }
+
+    /// Streams the files into the tool's stdin on a background thread. A tool that exits early just ends the copy:
+    /// the write end ignores SIGPIPE, so the write fails instead of killing Swivel.
+    private func send(_ files: [URL], to handle: FileHandle) {
+        _ = fcntl(handle.fileDescriptor, F_SETNOSIGPIPE, 1)
+        Thread.detachNewThread {
+            defer { try? handle.close() }
+            for file in files {
+                let reader: FileHandle
+                do { reader = try FileHandle(forReadingFrom: file) }
+                catch { self.stop(error.localizedDescription); return }
+                defer { try? reader.close() }
+                while true {
+                    let chunk: Data
+                    do { chunk = try reader.read(upToCount: 1 << 20) ?? Data() }
+                    catch { self.stop(error.localizedDescription); return }
+                    if chunk.isEmpty { break }
+                    do { try handle.write(contentsOf: chunk) } catch { return }
                 }
             }
-            do { try process.run() } catch { cont.resume(throwing: error) }
         }
     }
 }

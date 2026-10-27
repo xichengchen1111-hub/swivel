@@ -156,9 +156,8 @@ final class CollageEditor: Editor {
         return try await Images.detached {
             let full = try urls.map { try Images.load($0, maxPixels: 3000) }
             guard let result = Self.render(full, width: 4000, look) else { throw ToolError("Collage too large") }
-            let out = Paths.unique(urls[0].deletingLastPathComponent().appendingPathComponent("Collage.png"))
-            try Images.write(result, to: out, type: .png, quality: 1)
-            return [out]
+            return [try Images.save(result, as: urls[0].deletingLastPathComponent().appendingPathComponent("Collage.png"),
+                                    type: .png, quality: 1)]
         }
     }
 }

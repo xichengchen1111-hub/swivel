@@ -54,8 +54,8 @@ final class AppActionsPane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     required init?(coder: NSCoder) { fatalError() }
     override func build() {
         stack.addArrangedSubview(label("Your files, your apps", size: 17, weight: .semibold))
-        stack.addArrangedSubview(label("Choose which apps appear in the Apps wheel. Add an app, choose a delivery method and optionally limit its file extensions.", secondary: true))
-        for (id, title, width) in [("enabled", "On", 45.0), ("app", "Application", 210.0), ("delivery", "Delivery", 215.0), ("types", "File extensions", 160.0)] {
+        stack.addArrangedSubview(label("Choose which apps and web pages appear in the Apps wheel. Add as many as you like, such as Word, Mail, Photoshop or an upload page, and optionally limit their file extensions.", secondary: true))
+        for (id, title, width) in [("enabled", "On", 45.0), ("app", "App or Web Page", 210.0), ("delivery", "Delivery", 215.0), ("types", "File extensions", 160.0)] {
             let column = NSTableColumn(identifier: .init(id)); column.title = L(title); column.width = width; table.addTableColumn(column)
         }
         table.style = .inset; table.rowHeight = 44; table.dataSource = self; table.delegate = self
@@ -64,11 +64,13 @@ final class AppActionsPane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         scroll.widthAnchor.constraint(equalToConstant: 720).isActive = true; scroll.heightAnchor.constraint(equalToConstant: 240).isActive = true
         stack.addArrangedSubview(scroll)
         let add = ToolUI.button("Add Application…", target: self, action: #selector(addTarget))
+        let addPage = ToolUI.button("Add Web Page…", target: self, action: #selector(addPage))
         editButton = ToolUI.button("Edit…", target: self, action: #selector(editTarget))
         removeButton = ToolUI.button("Remove", target: self, action: #selector(removeTarget))
-        stack.addArrangedSubview(ToolUI.stack([add, editButton!, removeButton!], vertical: false))
+        stack.addArrangedSubview(ToolUI.stack([add, addPage, editButton!, removeButton!], vertical: false))
         stack.addArrangedSubview(label("Codex and Claude Code open a new draft containing local file references. They do not upload attachments or send a message automatically. Review and send in the target app.", size: 12, secondary: true))
         stack.addArrangedSubview(label("Open files uses macOS to hand files to the app. Copy files and open app prepares attachments for you to paste. This only changes Swivel’s actions; your system’s default apps stay the same.", size: 12, secondary: true))
+        stack.addArrangedSubview(label("A web page opens in your browser, and the files appear on a small card: drag it into the page (or press ⌘V there) to attach them. Nothing is uploaded until you do.", size: 12, secondary: true))
     }
     override func refresh() {
         let latest = Prefs.fileAppTargets
@@ -78,10 +80,11 @@ final class AppActionsPane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     }
     func tableViewSelectionDidChange(_ notification: Notification) { refresh() }
     @objc private func addTarget() { showEditor(nil) }
+    @objc private func addPage() { showEditor(nil, web: true) }
     @objc private func editTarget() { if targets.indices.contains(table.selectedRow) { showEditor(targets[table.selectedRow]) } }
-    private func showEditor(_ target: FileAppTarget?) {
+    private func showEditor(_ target: FileAppTarget?, web: Bool = false) {
         guard let window = view.window else { return }
-        editor = AppTargetEditor(target) { [weak self] value in
+        editor = AppTargetEditor(target, web: web) { [weak self] value in
             guard let self else { return }
             var latest = Prefs.fileAppTargets
             if let index = latest.firstIndex(where: { $0.id == value.id }) { latest[index] = value } else { latest.append(value) }
@@ -109,7 +112,11 @@ final class AppActionsPane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         if tableColumn?.identifier.rawValue == "app" {
             let name = NSTextField(labelWithString: target.name); name.lineBreakMode = .byTruncatingTail
             let installed = FileAppRouting.application(for: target) != nil
-            return ToolUI.stack([name, ToolUI.note(installed ? L("Installed") : L("Choose the app to finish setup"))], spacing: 3)
+            let note = target.isWebPage ? (installed ? L("Web page · %@", target.pageHost) : L("Choose a browser to finish setup"))
+                                        : (installed ? L("Installed") : L("Choose the app to finish setup"))
+            let detail = ToolUI.note(note); detail.lineBreakMode = .byTruncatingTail; detail.maximumNumberOfLines = 1
+            detail.toolTip = target.webAddress
+            return ToolUI.stack([name, detail], spacing: 3)
         }
         let value = tableColumn?.identifier.rawValue == "delivery" ? target.delivery.title : target.extensions.isEmpty ? L("All files") : target.extensions.joined(separator: ", ")
         let label = NSTextField(labelWithString: value); label.lineBreakMode = .byTruncatingTail; label.toolTip = value; return label
@@ -117,54 +124,154 @@ final class AppActionsPane: Pane, NSTableViewDataSource, NSTableViewDelegate {
 }
 
 @MainActor
-final class AppTargetEditor: NSObject {
-    private let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 610, height: 410), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+final class AppTargetEditor: NSObject, NSTextFieldDelegate {
+    private let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 610, height: 440), styleMask: [.titled, .closable], backing: .buffered, defer: false)
     private var value: FileAppTarget
     private let saved: (FileAppTarget) -> Void
-    private let name = NSTextField(), extensions = NSTextField(), appLabel = ToolUI.note("")
+    private let kind = NSSegmentedControl(labels: [L("Application"), L("Web Page")], trackingMode: .selectOne, target: nil, action: nil)
+    private let name = NSTextField(), extensions = NSTextField(), address = NSTextField(), appLabel = ToolUI.note("")
     private let delivery = NSPopUpButton()
     private let installedApps = NSPopUpButton()
+    private let browsers = NSPopUpButton()
     private var applicationURLs: [URL] = []
+    private var browserURLs: [URL] = []
+    /// The application and the browser are kept apart, so switching between the two kinds loses neither.
+    private var app: (path: String, bundleID: String)
+    private var browser: (path: String, bundleID: String) = ("", "")
+    private let grid: NSGridView
+    private let chooseRow: NSStackView
+    private let pageNote = ToolUI.note("Swivel opens the page, copies the files and shows them on a small card: drag it into the page to attach them, or press ⌘V there. For Gmail, use a new-message link: https://mail.google.com/mail/?view=cm&fs=1. File names and contents are never added to the address.")
     private let issue = ToolUI.note("")
-    init(_ target: FileAppTarget?, saved: @escaping (FileAppTarget) -> Void) {
-        value = target ?? FileAppTarget(id: UUID().uuidString, name: "", bundleID: "", appPath: "", delivery: .openFiles)
-        self.saved = saved; super.init()
-        panel.title = L(target == nil ? "Add Application" : "Edit Application")
+    private var isWeb: Bool { kind.selectedSegment == 1 }
+
+    init(_ target: FileAppTarget?, web: Bool = false, saved: @escaping (FileAppTarget) -> Void) {
+        value = target ?? FileAppTarget(id: UUID().uuidString, name: "", bundleID: "", appPath: "", delivery: web ? .copyAndOpenPage : .openFiles,
+                                        webAddress: web ? "" : nil)
+        app = value.isWebPage ? ("", "") : (value.appPath, value.bundleID)
+        if value.isWebPage { browser = (value.appPath, value.bundleID) }
+        self.saved = saved
+        let choose = ToolUI.button("Choose Application…", target: nil, action: nil)
+        chooseRow = ToolUI.stack([choose, appLabel], vertical: false)
+        grid = NSGridView(views: [[NSTextField(labelWithString: L("Open in")), kind],
+                                  [NSTextField(labelWithString: L("Application")), installedApps],
+                                  [NSTextField(labelWithString: ""), chooseRow],
+                                  [NSTextField(labelWithString: L("Address")), address],
+                                  [NSTextField(labelWithString: L("Browser")), browsers],
+                                  [NSTextField(labelWithString: L("Name")), name],
+                                  [NSTextField(labelWithString: L("Delivery")), delivery],
+                                  [NSTextField(labelWithString: L("File extensions")), extensions]])
+        super.init()
+        choose.target = self; choose.action = #selector(chooseApp)
+        panel.title = L(target == nil ? (web ? "Add Web Page" : "Add Application") : (value.isWebPage ? "Edit Web Page" : "Edit Application"))
+        kind.selectedSegment = value.isWebPage ? 1 : 0
+        kind.target = self; kind.action = #selector(kindChanged); kind.setAccessibilityLabel(L("Open in"))
         name.stringValue = value.name; name.placeholderString = L("Name in the Wheel"); name.setAccessibilityLabel(L("Name in the Wheel"))
+        address.stringValue = value.webAddress ?? ""; address.placeholderString = "https://example.com/upload"
+        address.setAccessibilityLabel(L("Address")); address.delegate = self
         extensions.stringValue = value.extensions.joined(separator: ", "); extensions.placeholderString = L("Empty means all files, e.g. png, jpg, pdf")
         extensions.setAccessibilityLabel(L("File extensions"))
-        delivery.addItems(withTitles: FileAppTarget.Delivery.allCases.map(\.title))
-        delivery.selectItem(at: FileAppTarget.Delivery.allCases.firstIndex(of: value.delivery) ?? 0)
+        delivery.addItems(withTitles: FileAppTarget.Delivery.forApplications.map(\.title))
+        delivery.selectItem(at: FileAppTarget.Delivery.forApplications.firstIndex(of: value.delivery) ?? 0)
         delivery.target = self; delivery.action = #selector(deliveryChanged); delivery.setAccessibilityLabel(L("Delivery"))
-        let roots = ["/Applications", "/System/Applications", "/System/Applications/Utilities", "/Applications/Utilities", NSHomeDirectory() + "/Applications"]
-        applicationURLs = Array(Set(roots.flatMap { (try? FileManager.default.contentsOfDirectory(at: URL(fileURLWithPath: $0), includingPropertiesForKeys: nil)) ?? [] }))
-            .filter { $0.pathExtension == "app" && Bundle(url: $0)?.bundleIdentifier != nil && Bundle(url: $0)?.bundleIdentifier != "local.swivel.app" }
-            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        applicationURLs = Self.installedApplications()
         installedApps.addItem(withTitle: L("Choose an installed app…"))
-        installedApps.addItems(withTitles: applicationURLs.map { $0.deletingPathExtension().lastPathComponent })
-        if let index = applicationURLs.firstIndex(where: { $0.path == value.appPath }) { installedApps.selectItem(at: index + 1) }
+        for url in applicationURLs { installedApps.menu?.addItem(Self.menuItem(for: url)) }
+        if let index = applicationURLs.firstIndex(where: { $0.path == app.path }) { installedApps.selectItem(at: index + 1) }
         installedApps.target = self; installedApps.action = #selector(installedAppChanged); installedApps.setAccessibilityLabel(L("Application"))
-        let choose = ToolUI.button("Choose Application…", target: self, action: #selector(chooseApp))
-        let grid = NSGridView(views: [[NSTextField(labelWithString: L("Application")), installedApps],
-                                    [NSTextField(labelWithString: L("Name")), name],
-                                    [NSTextField(labelWithString: L("Delivery")), delivery],
-                                    [NSTextField(labelWithString: L("File extensions")), extensions]])
+        browserURLs = Self.installedBrowsers()
+        let fallback = URL(string: "https://example.com").flatMap { NSWorkspace.shared.urlForApplication(toOpen: $0) }
+        browsers.addItem(withTitle: fallback.map { L("Default Browser (%@)", $0.deletingPathExtension().lastPathComponent) } ?? L("Default Browser"))
+        for url in browserURLs { browsers.menu?.addItem(Self.menuItem(for: url)) }
+        if let index = browserURLs.firstIndex(where: { $0.path == browser.path }) { browsers.selectItem(at: index + 1) } else { browser = ("", "") }
+        browsers.target = self; browsers.action = #selector(browserChanged); browsers.setAccessibilityLabel(L("Browser"))
         grid.rowSpacing = 12; grid.columnSpacing = 12; grid.column(at: 0).xPlacement = .trailing
         name.widthAnchor.constraint(greaterThanOrEqualToConstant: 370).isActive = true
+        address.widthAnchor.constraint(greaterThanOrEqualToConstant: 370).isActive = true
         let cancel = ToolUI.button("Cancel", target: self, action: #selector(cancel)); cancel.keyEquivalent = "\u{1b}"
         let save = ToolUI.button("Save", target: self, action: #selector(save)); save.keyEquivalent = "\r"
         let bar = NSStackView(); bar.addView(cancel, in: .trailing); bar.addView(save, in: .trailing)
-        let root = ToolUI.stack([grid, ToolUI.stack([choose, appLabel], vertical: false), issue, bar])
+        let root = ToolUI.stack([grid, pageNote, issue, bar])
         panel.contentView = NSView(); ToolUI.embed(root, in: panel.contentView!)
         bar.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
-        issue.preferredMaxLayoutWidth = 550; updateAppLabel()
+        pageNote.preferredMaxLayoutWidth = 550; issue.preferredMaxLayoutWidth = 550
+        updateKind()
     }
     func present(on window: NSWindow) { window.beginSheet(panel) }
-    @objc private func deliveryChanged() {
-        value.delivery = FileAppTarget.Delivery.allCases[delivery.indexOfSelectedItem]; updateAppLabel()
+
+    /// Apps in the usual folders, and one folder down: Adobe's apps (and other suites) live in their own folders,
+    /// such as /Applications/Adobe Photoshop 2025/Adobe Photoshop 2025.app.
+    static func installedApplications(in roots: [String] = ["/Applications", "/System/Applications", "/System/Applications/Utilities",
+                                                            "/Applications/Utilities", NSHomeDirectory() + "/Applications"]) -> [URL] {
+        let fm = FileManager.default
+        var found = Set<URL>()
+        for root in roots {
+            for entry in (try? fm.contentsOfDirectory(at: URL(fileURLWithPath: root), includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? [] {
+                if entry.pathExtension == "app" { found.insert(entry.standardizedFileURL); continue }
+                guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+                for inner in (try? fm.contentsOfDirectory(at: entry, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? [] where inner.pathExtension == "app" {
+                    found.insert(inner.standardizedFileURL)
+                }
+            }
+        }
+        return found.filter { Bundle(url: $0)?.bundleIdentifier.map { $0 != "local.swivel.app" } ?? false }
+            .sorted { $0.deletingPathExtension().lastPathComponent.localizedStandardCompare($1.deletingPathExtension().lastPathComponent) == .orderedAscending }
+    }
+
+    /// Apps that open web pages.
+    static func installedBrowsers() -> [URL] {
+        guard let page = URL(string: "https://example.com") else { return [] }
+        var seen = Set<String>()
+        return NSWorkspace.shared.urlsForApplications(toOpen: page)
+            .filter { $0.pathExtension == "app" && Bundle(url: $0)?.bundleIdentifier.map { $0 != "local.swivel.app" && seen.insert($0).inserted } ?? false }
+            .sorted { $0.deletingPathExtension().lastPathComponent.localizedStandardCompare($1.deletingPathExtension().lastPathComponent) == .orderedAscending }
+    }
+
+    private static func menuItem(for url: URL) -> NSMenuItem {
+        let item = NSMenuItem(title: url.deletingPathExtension().lastPathComponent, action: nil, keyEquivalent: "")
+        let icon = NSWorkspace.shared.icon(forFile: url.path); icon.size = NSSize(width: 16, height: 16)
+        item.image = icon; item.toolTip = url.path
+        return item
+    }
+
+    @objc private func kindChanged() { updateKind() }
+    private func updateKind() {
+        let web = isWeb
+        for (row, showsForWeb) in [(1, false), (2, false), (3, true), (4, true), (6, false)] { grid.row(at: row).isHidden = web != showsForWeb }
+        pageNote.isHidden = !web
+        issue.stringValue = ""
+        if web { checkAddress() }
+        updateAppLabel()
+    }
+    @objc private func deliveryChanged() { updateAppLabel() }
+    @objc private func browserChanged() {
+        let index = browsers.indexOfSelectedItem - 1
+        browser = browserURLs.indices.contains(index) ? (browserURLs[index].path, Bundle(url: browserURLs[index])?.bundleIdentifier ?? "") : ("", "")
+    }
+    func controlTextDidChange(_ notification: Notification) { if notification.object as? NSTextField === address { checkAddress() } }
+    private func checkAddress() {
+        let text = address.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        issue.stringValue = text.isEmpty || FileAppTarget.pageURL(from: text) != nil ? "" : Self.addressProblem
+    }
+    private static var addressProblem: String { L("Enter a web address starting with https:// (http only for this Mac or your local network).") }
+
+    /// The target as the form shows it now.
+    private func current() -> FileAppTarget {
+        var result = value
+        result.name = name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        result.extensions = FileAppTarget.normalizedExtensions(extensions.stringValue)
+        if isWeb {
+            result.webAddress = address.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            result.delivery = .copyAndOpenPage; result.appPath = browser.path; result.bundleID = browser.bundleID
+            if result.name.isEmpty { result.name = String(result.pageHost.prefix(80)) }
+        } else {
+            result.webAddress = nil
+            result.delivery = FileAppTarget.Delivery.forApplications[max(delivery.indexOfSelectedItem, 0)]
+            result.appPath = app.path; result.bundleID = app.bundleID
+        }
+        return result
     }
     private func updateAppLabel() {
-        appLabel.stringValue = FileAppRouting.application(for: value)?.lastPathComponent ?? L("No application selected")
+        appLabel.stringValue = isWeb ? "" : FileAppRouting.application(for: current())?.lastPathComponent ?? L("No application selected")
         appLabel.lineBreakMode = .byTruncatingMiddle
     }
     @objc private func installedAppChanged() {
@@ -174,7 +281,7 @@ final class AppTargetEditor: NSObject {
     }
     private func selectApplication(_ url: URL) {
         guard let id = Bundle(url: url)?.bundleIdentifier, id != "local.swivel.app" else { return }
-        value.appPath = url.path; value.bundleID = id
+        app = (url.path, id)
         if name.stringValue.isEmpty { name.stringValue = url.deletingPathExtension().lastPathComponent }
         updateAppLabel()
     }
@@ -194,13 +301,16 @@ final class AppTargetEditor: NSObject {
     }
     @objc private func cancel() { panel.sheetParent?.endSheet(panel) }
     @objc private func save() {
-        value.name = name.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        value.extensions = FileAppTarget.normalizedExtensions(extensions.stringValue)
-        guard value.isValid else { issue.stringValue = L("Enter a name of 1–80 characters."); return }
-        if !extensions.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.extensions.isEmpty {
+        let result = current()
+        if isWeb, result.pageURL == nil { issue.stringValue = Self.addressProblem; return }
+        guard result.isValid else { issue.stringValue = L("Enter a name of 1–80 characters."); return }
+        if !extensions.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && result.extensions.isEmpty {
             issue.stringValue = L("Enter file extensions separated by commas."); return
         }
-        guard FileAppRouting.application(for: value) != nil else { issue.stringValue = L("Choose an installed application first."); return }
-        saved(value); panel.sheetParent?.endSheet(panel)
+        guard FileAppRouting.application(for: result) != nil else {
+            issue.stringValue = isWeb ? L("Choose an installed browser.") : L("Choose an installed application first."); return
+        }
+        value = result
+        saved(result); panel.sheetParent?.endSheet(panel)
     }
 }

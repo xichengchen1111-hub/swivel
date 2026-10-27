@@ -403,6 +403,31 @@ struct ClotheslineFeelTests {
         #expect(off.card == nil && off.putAway == [second, first])
     }
 
+    /// The card checks it really reached the screen (it once silently didn't). A panel that was never ordered in
+    /// must read as not shown, one ordered front as shown, and the logged summary carries no file names.
+    @Test func testTheCardCanTellWhetherItReallyReachedTheScreen() {
+        let panel = NSPanel(contentRect: NSRect(x: 40, y: 40, width: 120, height: 90),
+                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        panel.isReleasedWhenClosed = false
+        defer { panel.close() }
+        #expect(!CardVisibility(panel).isShown)
+        panel.orderFrontRegardless()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))  // the card checks after the same pause
+        let shown = CardVisibility(panel)
+        #expect(shown.visible)
+        #expect(shown.onScreen)
+        #expect(shown.isShown)
+        panel.orderOut(nil)
+        #expect(!CardVisibility(panel).isShown)
+        // AppKit thinking it is visible is not enough: the window server has to list it.
+        let lost = CardVisibility(onScreen: false, visible: true, occluded: false, activeSpace: true, appHidden: false,
+                                  regularApp: true, alpha: 1, frame: NSRect(x: 1287, y: 88, width: 225, height: 194), screens: 1)
+        #expect(!lost.isShown)
+        #expect(lost.summary == "onScreen=false visible=true occluded=false activeSpace=true appHidden=false regularApp=true alpha=1.00 frame=1287,88 225x194 screens=1")
+    }
+
     @Test func testAWaitingScreenshotIsSavedAndNeverLeftBehind() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("swivel-incoming-\(UUID().uuidString)", isDirectory: true)

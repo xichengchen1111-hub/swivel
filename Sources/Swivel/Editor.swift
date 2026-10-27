@@ -186,6 +186,9 @@ class Editor: NSObject, NSWindowDelegate {
     var hasUnsavedWork: Bool { false }
     /// The window is closing, either way: stop animations, renders and playback.
     func didClose() {}
+    /// Editors with a cooperative save worker can keep Cancel available during a save.
+    var canCancelSaving: Bool { false }
+    func cancelSaving() {}
 
     /// Call after a change that `hasUnsavedWork` depends on.
     func noteEdited() { window.isDocumentEdited = hasUnsavedWork }
@@ -263,6 +266,7 @@ class Editor: NSObject, NSWindowDelegate {
             } catch {
                 setSaving(false)
                 guard !closed else { return }
+                if error is CancellationError || error is Cancelled { return }
                 Feedback.refuse()
                 NSAlert(error: error).beginSheetModal(for: window, completionHandler: nil)
             }
@@ -281,6 +285,7 @@ class Editor: NSObject, NSWindowDelegate {
             savingSpinner.startAnimation(nil)
             disabledWhileSaving = (Self.controls(in: controls) + [resetButton, cancelButton, applyButton]).filter(\.isEnabled)
             for control in disabledWhileSaving { control.isEnabled = false }
+            if canCancelSaving { cancelButton.isEnabled = true }
         } else {
             savingSpinner.stopAnimation(nil)
             for control in disabledWhileSaving { control.isEnabled = true }
@@ -325,7 +330,7 @@ class Editor: NSObject, NSWindowDelegate {
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         // A save can't be abandoned halfway: its file would still appear after "Cancelled".
-        if isSaving { return false }
+        if isSaving { if canCancelSaving { cancelSaving() }; return false }
         guard isLoaded, hasUnsavedWork, !discardConfirmed else { return true }
         let alert = NSAlert()
         alert.messageText = L("Discard your changes?")
@@ -356,14 +361,20 @@ class Editor: NSObject, NSWindowDelegate {
     // MARK: Control builders
 
     func addRow(_ title: String, _ views: NSView...) {
+        let row = makeRow(title, views)
+        controls.addArrangedSubview(row)
+        row.widthAnchor.constraint(equalTo: controls.widthAnchor).isActive = true
+    }
+
+    /// A row as `addRow` builds it, for an editor that places its rows itself.
+    func makeRow(_ title: String, _ views: [NSView]) -> NSStackView {
         // Right-aligned "Label:" column, as in System Settings and inspector panels.
         let label = NSTextField(labelWithString: title.isEmpty ? "" : L(title) + (Language.resolved == .en ? ":" : "："))
         label.alignment = .right
         label.widthAnchor.constraint(equalToConstant: 96).isActive = true
         let row = NSStackView(views: [label] + views)
         row.spacing = 8
-        controls.addArrangedSubview(row)
-        row.widthAnchor.constraint(equalTo: controls.widthAnchor).isActive = true
+        return row
     }
 
     /// A continuous slider whose starting value is a soft detent (see `DetentSlider`).
@@ -692,10 +703,14 @@ final class ImagePreview: NSView {
         content.shadowPath = CGPath(rect: CGRect(origin: .zero, size: rect.size), transform: nil)
     }
 
+    func showOriginal(_ showing: Bool) {
+        comparing = showing
+        refresh()
+    }
+
     override func mouseDown(with event: NSEvent) {
         guard original != nil else { return super.mouseDown(with: event) }
-        comparing = true
-        refresh()
+        showOriginal(true)
     }
 
     override func mouseUp(with event: NSEvent) {

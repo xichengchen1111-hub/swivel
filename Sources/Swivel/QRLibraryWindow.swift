@@ -198,7 +198,12 @@ final class QRLibraryWindow: FileToolWindow, NSOutlineViewDataSource, NSOutlineV
         guard Feature.qrCodes.isOn, let selected else { return }
         do {
             let image = NSImage(cgImage: try QRImage.cgImage(selected.value), size: .zero)
-            NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([image]); Feedback.press(); status.stringValue = L("Copied")
+            let item = NSPasteboardItem()
+            item.setData(image.tiffRepresentation ?? Data(), forType: .tiff)
+            item.setData(Data(), forType: Clothesline.ownCopyType)
+            if DetectedCode.isSecret(selected.value) { item.setData(Data(), forType: DetectedCode.concealed) }
+            NSPasteboard.general.clearContents(); NSPasteboard.general.writeObjects([item])
+            Feedback.press(); status.stringValue = L("Copied")
         } catch { status.stringValue = error.localizedDescription }
     }
     @objc private func exportImage() {

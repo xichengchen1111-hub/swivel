@@ -2,15 +2,35 @@ import AppKit
 import ServiceManagement
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let watcher = DragWatcher()
     private let wheel = WheelController()
     private var statusItem: NSStatusItem!
+    private var lastReopen = Date.distantPast
+    private weak var keepAwakeItem: NSMenuItem?
     private var launchToast: Toast { Toast.shared }
+    private var signalSources: [DispatchSourceSignal] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        DistributedNotificationCenter.default().addObserver(forName: AppInstance.reopen, object: Bundle.main.bundleIdentifier, queue: .main) { _ in
-            MainActor.assumeIsolated { Clothesline.shared.reconcileScreenshotTakeover(); AppWindow.shared.show() }
+        // `kill`, `killall` and logout send SIGTERM rather than asking AppKit to quit: quit normally, so screenshots
+        // go back where they used to and temporary files are removed (applicationWillTerminate).
+        for number in [SIGTERM, SIGINT, SIGHUP] {
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+            source.setEventHandler { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+            source.resume()
+            signalSources.append(source)
+        }
+        // Any local process can post a distributed notification: only one from a second launch (its token matches
+        // the private file it wrote) brings the window forward, and a burst only once.
+        DistributedNotificationCenter.default().addObserver(forName: AppInstance.reopen, object: Bundle.main.bundleIdentifier, queue: .main) { [weak self] note in
+            let token = note.userInfo?["token"] as? String
+            MainActor.assumeIsolated {
+                guard let self, let id = Bundle.main.bundleIdentifier, AppInstance.acceptsReopen(token: token, id: id),
+                      Date().timeIntervalSince(self.lastReopen) > 2 else { return }
+                self.lastReopen = Date()
+                Clothesline.shared.reconcileScreenshotTakeover(); AppWindow.shared.show()
+            }
         }
         setUpStatusItem()
         watcher.onKeyTap = { [weak self] mode in
@@ -25,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         QuickActions.shared.syncSettings()
         ShortcutWheel.shared.sync()
+        CustomWheelLauncher.shared.sync()
         Clothesline.shared.start()
         if ProcessInfo.processInfo.environment["SWIVEL_SHOW_ROPE"] != nil {  // for testing
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { Clothesline.shared.toggle() }
@@ -34,7 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.rebuildMenu()
                 QuickActions.shared.syncSettings()
                 ShortcutWheel.shared.sync()
+                CustomWheelLauncher.shared.sync()
             }
+        }
+        NotificationCenter.default.addObserver(forName: KeepAwake.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.rebuildMenu() }
         }
 
         // Opened by hand (Finder, Launchpad, Spotlight): show the window. Started at login: stay in the menu bar.
@@ -50,7 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func applicationWillTerminate(_ notification: Notification) { Clothesline.shared.stop() }
+    func applicationWillTerminate(_ notification: Notification) {
+        Clothesline.shared.stop()
+        TemporaryItems.removeAll()
+    }
     func applicationDidBecomeActive(_ notification: Notification) { ShortcutWheel.shared.sync(); Clothesline.shared.reconcileScreenshotTakeover() }
 
     /// First launch: ask before redirecting screenshots.
@@ -98,13 +126,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wheelOn = Feature.wheel.isOn, ropeOn = Feature.clothesline.isOn
         let anyOn = Feature.allCases.contains { $0.isOn }
         watcher.isEnabled = wheelOn
-        statusItem.button?.image = NSImage(systemSymbolName: anyOn ? "circle.circle" : "circle.dashed",
+        // A filled ring while Keep Awake holds the Mac awake, so it's visible without opening the menu.
+        statusItem.button?.image = NSImage(systemSymbolName: !anyOn ? "circle.dashed" : KeepAwake.shared.isActive ? "circle.circle.fill" : "circle.circle",
                                            accessibilityDescription: "Swivel")
         statusItem.button?.appearsDisabled = !anyOn
-        let keys = WheelMode.allCases.map { "\(Prefs.key(for: $0).symbol) \($0.title)" }.joined(separator: " · ")
+        let keys = WheelMode.allCases.filter { Prefs.key(for: $0) != .off && ($0 != .custom || $0.isAvailable) }
+            .map { "\(Prefs.key(for: $0).symbol) \($0.title)" }.joined(separator: " · ")
         var tip: [String] = []
         if wheelOn { tip.append(L("Wheel: drag a file, then tap %@", keys)) }
         if ropeOn { tip.append(L("Clothesline: move to the top edge, or press ⌃⌥T")) }
+        if let awake = KeepAwake.shared.status { tip.append(awake) }
         statusItem.button?.toolTip = tip.isEmpty ? L(anyOn ? "Swivel — open the menu to use your enabled tools." : "Swivel — everything is off. Open this menu to turn a feature on.") : tip.joined(separator: "\n")
 
         let menu = NSMenu()
@@ -134,6 +165,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 item.submenu = Self.guide(for: mode)
                 menu.addItem(item)
             }
+            if !Prefs.customWheelItems.isEmpty {
+                let key = Prefs.key(for: .custom), shortcut = Prefs.customWheelShortcut.map { "  " + $0.title } ?? ""
+                let item = NSMenuItem(title: (key == .off ? L("My Wheel") : "\(key.title) — \(L("My Wheel"))") + shortcut,
+                                      action: #selector(showMyWheel), keyEquivalent: "")
+                item.target = self
+                item.image = NSImage(systemSymbolName: WheelMode.custom.symbol, accessibilityDescription: nil)
+                menu.addItem(item)
+            }
             add(to: menu, L("Menu Style: %@…", Prefs.style.title), #selector(openStyle))
 
         }
@@ -148,6 +187,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Feature.qrCodes.isOn { add(to: menu, "QR Library…", #selector(openCodeLibrary)) }
         if Feature.wheel.isOn && Prefs.shortcutWheelEnabled { add(to: menu, "Show Tool Wheel", #selector(showToolWheel)) }
         if Feature.appRouting.isOn { add(to: menu, "App Actions…", #selector(appActions)) }
+        if Feature.doctor.isOn { add(to: menu, "Mac Doctor…", #selector(openDoctor)) }
+        if Feature.keepAwake.isOn {
+            let item = NSMenuItem(title: keepAwakeTitle, action: nil, keyEquivalent: "")
+            item.image = NSImage(systemSymbolName: KeepAwake.shared.isActive ? "cup.and.saucer.fill" : "cup.and.saucer", accessibilityDescription: nil)
+            item.submenu = keepAwakeMenu()
+            menu.addItem(item)
+            keepAwakeItem = item
+        }
 
         if ropeOn {
             menu.addItem(.separator())
@@ -165,7 +212,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add(to: menu, "Open at Login", #selector(toggleLogin)).state = SMAppService.mainApp.status == .enabled ? .on : .off
         menu.addItem(.separator())
         menu.addItem(withTitle: L("Quit Swivel"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.delegate = self
         statusItem.menu = menu
+    }
+
+    private var keepAwakeTitle: String { KeepAwake.shared.status.map { L("Keep Awake — %@", $0) } ?? L("Keep Awake") }
+
+    /// The time left changes while the menu is closed; it's brought up to date as the menu opens.
+    func menuNeedsUpdate(_ menu: NSMenu) { keepAwakeItem?.title = keepAwakeTitle }
+
+    private func keepAwakeMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        add(to: menu, "Off", #selector(stopKeepingAwake)).state = KeepAwake.shared.isActive ? .off : .on
+        for (i, duration) in KeepAwake.durations.enumerated() {
+            let item = NSMenuItem(title: KeepAwake.title(for: duration), action: #selector(keepAwake(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = i
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        add(to: menu, "Keep the Display On", #selector(toggleKeepAwakeDisplay)).state = Prefs.keepAwakeDisplay ? .on : .off
+        return menu
+    }
+
+    @objc private func keepAwake(_ sender: NSMenuItem) {
+        KeepAwake.shared.start(for: KeepAwake.durations[sender.tag])
+        if let status = KeepAwake.shared.status { launchToast.show(status, symbol: "cup.and.saucer.fill") }
+    }
+    @objc private func stopKeepingAwake() { KeepAwake.shared.stop() }
+    @objc private func toggleKeepAwakeDisplay() {
+        Prefs.keepAwakeDisplay.toggle()
+        KeepAwake.shared.refreshType()
     }
 
     @discardableResult
@@ -228,7 +306,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func pdfPages() { FileActionsPane.chooseAndOpen(.pdfPages) }
     @objc private func readCodes() { FileActionsPane.chooseAndOpen(.qrCodes) }
     @objc private func appActions() { AppWindow.shared.show(.appRouting) }
+    @objc private func openDoctor() { DoctorWindow.present() }
     @objc private func openCodeLibrary() { QRLibraryWindow().show() }
+    @objc private func showMyWheel() { CustomWheelLauncher.shared.show() }
     @objc private func showToolWheel() { ShortcutWheel.shared.show() }
 
     @objc private func toggleLogin() {

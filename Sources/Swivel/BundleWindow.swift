@@ -3,7 +3,7 @@ import AppKit
 /// Sidebar of pages on the left (Overview, each feature, General), the selected page on the right.
 @MainActor
 final class BundleSplit: NSSplitViewController {
-    enum Page: Int, CaseIterable { case overview, wheel, clothesline, textCapture, shelf, imagePresets, quickActions, batchRename, pdfPages, qrCodes, appRouting, general, feel }
+    enum Page: Int, CaseIterable { case overview, wheel, clothesline, textCapture, shelf, imagePresets, quickActions, batchRename, pdfPages, qrCodes, appRouting, keepAwake, doctor, general, feel }
 
     private let sidebar = SidebarList()
     private let detail = NSViewController()
@@ -19,6 +19,8 @@ final class BundleSplit: NSSplitViewController {
         .pdfPages: FeaturePage(.pdfPages, content: FileActionsPane(.pdfPages)),
         .qrCodes: FeaturePage(.qrCodes, content: FileActionsPane(.qrCodes)),
         .appRouting: FeaturePage(.appRouting, content: AppActionsPane()),
+        .keepAwake: FeaturePage(.keepAwake, content: KeepAwakePane()),
+        .doctor: FeaturePage(.doctor, content: DoctorPane()),
         .general: GeneralPane(),
         .feel: FeelPane(),
     ]
@@ -52,6 +54,8 @@ final class BundleSplit: NSSplitViewController {
         case .pdfPages: showPage(.pdfPages)
         case .qrCodes: showPage(.qrCodes)
         case .appRouting: showPage(.appRouting)
+        case .keepAwake: showPage(.keepAwake)
+        case .doctor: showPage(.doctor)
         case .shortcuts, .style, .customize, .colors:
             showPage(.wheel)
             (pages[.wheel] as? WheelPage)?.select(tab)
@@ -120,6 +124,8 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         case .pdfPages: Feature.pdfPages.title
         case .qrCodes: Feature.qrCodes.title
         case .appRouting: Feature.appRouting.title
+        case .keepAwake: Feature.keepAwake.title
+        case .doctor: Feature.doctor.title
         case .general: L("General")
         case .feel: L("Feel & Text")
         }
@@ -138,6 +144,8 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         case .pdfPages: Feature.pdfPages.symbol
         case .qrCodes: Feature.qrCodes.symbol
         case .appRouting: Feature.appRouting.symbol
+        case .keepAwake: Feature.keepAwake.symbol
+        case .doctor: Feature.doctor.symbol
         case .general: "gearshape"
         case .feel: "slider.horizontal.3"
         }
@@ -155,6 +163,8 @@ final class SidebarList: NSViewController, NSTableViewDataSource, NSTableViewDel
         case .pdfPages: .pdfPages
         case .qrCodes: .qrCodes
         case .appRouting: .appRouting
+        case .keepAwake: .keepAwake
+        case .doctor: .doctor
         default: nil
         }
     }
@@ -332,13 +342,13 @@ final class FeatureHeader: NSView {
 
 /// Overview: one card per feature with its switch and a link to its settings.
 final class OverviewPage: Pane {
-    init() { super.init(size: NSSize(width: 820, height: 1780)) }
+    init() { super.init(size: NSSize(width: 820, height: 2120)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func build() {
         stack.addArrangedSubview(label("Swivel", size: 26, weight: .bold))
         stack.addArrangedSubview(label("A bundle of small Mac tools. Turn on the ones you want — each works on its own.", secondary: true))
-        for (feature, page) in [(Feature.wheel, BundleSplit.Page.wheel), (.clothesline, .clothesline), (.textCapture, .textCapture), (.shelf, .shelf), (.imagePresets, .imagePresets), (.quickActions, .quickActions), (.batchRename, .batchRename), (.pdfPages, .pdfPages), (.qrCodes, .qrCodes), (.appRouting, .appRouting)] {
+        for (feature, page) in [(Feature.wheel, BundleSplit.Page.wheel), (.clothesline, .clothesline), (.textCapture, .textCapture), (.shelf, .shelf), (.imagePresets, .imagePresets), (.quickActions, .quickActions), (.batchRename, .batchRename), (.pdfPages, .pdfPages), (.qrCodes, .qrCodes), (.appRouting, .appRouting), (.keepAwake, .keepAwake), (.doctor, .doctor)] {
             let card = CardView()
             let header = FeatureHeader(feature, compact: true)
             let settings = NSButton(title: L("Settings…"), target: self, action: #selector(openSettings(_:)))

@@ -1,15 +1,31 @@
 import AppKit
 
 MainActor.assumeIsolated {
+    // `Swivel --mcp`, exactly, is the one mode the installed app also accepts: the agent tool server (MCPServer.swift).
+    // An MCP host (Claude Desktop, Codex…) starts it as its own child and talks over stdin/stdout, so the host
+    // already holds the file access, and macOS attributes it to the host, not to Swivel. The server only touches
+    // the absolute paths the host passes (checked in MCPPaths), changes files only through a plan the host then
+    // applies (the menus' own converters: new files next to the originals, numbered rather than replacing; renames
+    // and moves that can be undone), listens on no port and reads no other arguments. It refuses to run when
+    // launchd is its parent (`open`), where Swivel itself would be the process macOS holds responsible.
+    if MCPStdio.isRequested(CommandLine.arguments) {
+        MCPStdio.handOffToHelper()
+        MCPStdio.run()
+    }
+    // The helper bundle is for the server only: no menu-bar app and none of the developer modes.
+    if MCPStdio.isHelper { exit(64) }
     let app = NSApplication.shared
     AppTypography.install()
     let delegate = AppDelegate()
-    let args = CommandLine.arguments
+    // The developer modes below (--tool, --run, --recognize…) are for unbundled builds and validation bundles. The
+    // installed app ignores them, so another process can't use them to act with Swivel's file access or to switch
+    // features on in the real preferences.
+    let args = Bundle.main.bundleIdentifier == "local.swivel.app" ? Array(CommandLine.arguments.prefix(1)) : CommandLine.arguments
 
     // Isolated preview: no screenshot takeover or background watchers. Uses the executable's defaults domain.
     if args.count >= 3, args[1] == "--tool" {
         if let directory = ProcessInfo.processInfo.environment["SWIVEL_QR_LIBRARY_DIR"] { QRLibraryStore.previewDirectory = URL(fileURLWithPath: directory, isDirectory: true) }
-        for feature in [Feature.textCapture, .shelf, .imagePresets, .quickActions, .batchRename, .pdfPages, .qrCodes, .appRouting] { Prefs.setFeatureEnabled(feature, true) }
+        for feature in [Feature.textCapture, .shelf, .imagePresets, .quickActions, .batchRename, .pdfPages, .qrCodes, .appRouting, .doctor] { Prefs.setFeatureEnabled(feature, true) }
         app.setActivationPolicy(.regular)
         app.mainMenu = AppWindow.mainMenu()
         if let appearance = ProcessInfo.processInfo.environment["SWIVEL_PREVIEW_APPEARANCE"] {
@@ -17,8 +33,9 @@ MainActor.assumeIsolated {
         }
         QuickActions.shared.syncSettings()
         ShortcutWheel.shared.sync()
+        CustomWheelLauncher.shared.sync()
         NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { QuickActions.shared.syncSettings(); ShortcutWheel.shared.sync() }
+            MainActor.assumeIsolated { QuickActions.shared.syncSettings(); ShortcutWheel.shared.sync(); CustomWheelLauncher.shared.sync() }
         }
         switch args[2] {
         case "text":
@@ -41,7 +58,26 @@ MainActor.assumeIsolated {
             if args.count > 3 { QRCodesWindow(args.dropFirst(3).map { URL(fileURLWithPath: $0) }).show() }
             else { AppWindow.shared.show(.qrCodes) }
         case "apps": AppWindow.shared.show(.appRouting)
+        case "customize": AppWindow.shared.show(.customize)
+        case "shortcuts": AppWindow.shared.show(.shortcuts)
+        case "mywheel": CustomizePane.open(.custom)
         case "library": QRLibraryWindow().show()
+        case "doctor":
+            // SWIVEL_DOCTOR_SECTION=<summary|storage|caches|performance|…> opens that page (for checking it in a real window).
+            let section = ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_SECTION"].flatMap(DoctorSection.init(rawValue:))
+            if args.count > 3 { DoctorWindow.present(app: URL(fileURLWithPath: args[3]), section: section) } else { DoctorWindow.present(section: section) }
+            // SWIVEL_DOCTOR_RUN=1 also runs that page's check, as its Check button would.
+            if let section, ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_RUN"] == "1" { DoctorCenter.shared.run(section) }
+            // SWIVEL_DOCTOR_PICK=<path> picks that folder (Folder Sizes, Duplicate Files, Project Builds) or app (Uninstall Apps).
+            if let section, let pick = ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_PICK"].map({ URL(fileURLWithPath: $0) }) {
+                switch section {
+                case .folders: DoctorCenter.shared.addFolder(pick)
+                case .duplicates, .projects: DoctorCenter.shared.addFolders([pick], to: section)
+                case .uninstall: DoctorCenter.shared.chooseUninstall(pick)
+                default: break
+                }
+            }
+        case "doctorsettings": AppWindow.shared.show(.doctor)
         case "launcher": Prefs.shortcutWheelEnabled = true; Prefs.isEnabled = true; ShortcutWheel.shared.sync(); ShortcutWheel.shared.show()
         default: AppWindow.shared.show()
         }
@@ -101,7 +137,7 @@ MainActor.assumeIsolated {
         app.run()
     }
 
-    // `Swivel --edit <crop|compress|edit|bg|redact|metadata|annotate|collage|trim> <file>` opens one editor directly (for testing).
+    // `Swivel --edit <crop|compress|edit|bg|blur|redact|metadata|annotate|collage|trim> <file>` opens one editor directly (for testing).
     if args.count >= 4, args[1] == "--edit" {
         let url = URL(fileURLWithPath: args[3])
         app.setActivationPolicy(.accessory)
@@ -111,11 +147,16 @@ MainActor.assumeIsolated {
                 case "compress": try CompressEditor(source: url)
                 case "edit": try AdjustEditor(source: url)
                 case "bg": try BackgroundEditor(source: url)
+                case "blur": try BlurBackgroundEditor(source: url)
+                case "retouch": try RetouchEditor(source: url)
                 case "redact": try RedactEditor(source: url)
                 case "metadata": try MetadataEditor(source: url)
                 case "annotate": try AnnotateEditor(source: url)
                 case "collage": try CollageEditor(urls: args[3...].map { URL(fileURLWithPath: $0) })
+                case "idphoto": IDPhotoEditor(source: url)
+                case "noise": NoiseReductionEditor(source: url)
                 case "trim": try await TrimEditor(source: url)
+                case "folder": try FolderStyleEditor(folders: args[3...].map { URL(fileURLWithPath: $0) })
                 default: try CropEditor(source: url)
                 }
                 print("OK", try await editor.present().map(\.path))

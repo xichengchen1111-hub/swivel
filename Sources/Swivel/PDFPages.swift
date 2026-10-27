@@ -42,8 +42,10 @@ struct PDFPagesSnapshot: Sendable {
 
     static func load(_ urls: [URL]) throws -> Self {
         var sources: [URL: Data] = [:], items: [PDFPageItem] = []
+        var remainingBytes = 256 * 1024 * 1024
         for url in urls {
-            let bytes = try Data(contentsOf: url)
+            let bytes = try sources[url] ?? FileSafety.read(url, limit: remainingBytes)
+            if sources[url] == nil { remainingBytes -= bytes.count }
             guard let document = PDFDocument(data: bytes), !document.isLocked, document.pageCount > 0 else {
                 throw ToolError(L("Could not open %@. Unlock password-protected PDFs first.", url.lastPathComponent))
             }
@@ -68,9 +70,7 @@ struct PDFPagesSnapshot: Sendable {
         guard let bytes = result.dataRepresentation(), let check = PDFDocument(data: bytes), check.pageCount == pages.count else {
             throw ToolError(L("Could not write PDF"))
         }
-        let out = Paths.output(for: first.source, ext: "pdf", suffix: " arranged")
-        try bytes.write(to: out, options: .withoutOverwriting)
-        return out
+        return try Paths.create(bytes, at: Paths.preferred(for: first.source, ext: "pdf", suffix: " arranged"))
     }
 }
 

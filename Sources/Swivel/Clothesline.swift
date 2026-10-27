@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import AVFoundation
 import ImageIO
 
@@ -25,9 +26,10 @@ final class Clothesline: NSObject {
     }()
 
     private(set) var items: [URL] = []
-    let panel = RopePanel()
+    private(set) var panel = RopePanel()
     private var watches: [DispatchSourceFileSystemObject] = []
     private var settingsObserver: NSObjectProtocol?
+    private var spaceObserver: NSObjectProtocol?
     private(set) var isRunning = false
     private var hoverTimer: Timer?
     private var monitors: [Any] = []
@@ -60,6 +62,14 @@ final class Clothesline: NSObject {
         settingsObserver = NotificationCenter.default.addObserver(forName: Prefs.changed, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.syncWatching(); self?.reconcileScreenshotTakeover() }
         }
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.isShown, !self.panel.rope.isLifting else { return }
+                self.showing &+= 1
+                self.confirmShown(self.showing, rebuilt: false)
+            }
+        }
         syncWatching()
         reconcileScreenshotTakeover()
     }
@@ -91,6 +101,7 @@ final class Clothesline: NSObject {
         watches.forEach { $0.cancel() }; watches.removeAll()
         hotKey?.unregister(); hotKey = nil
         if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver); self.settingsObserver = nil }
+        if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver); self.spaceObserver = nil }
         ScreenshotTakeover.restore()  // first, so a screenshot taken from here on goes straight to the usual folder
         putAwayWaiting(animated: false)
     }
@@ -160,7 +171,12 @@ final class Clothesline: NSObject {
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys,
                                                                   options: [.skipsHiddenFiles])) ?? []
         return files
-            .filter { Self.mediaExtensions.contains($0.pathExtension.lowercased()) }
+            // Only plain files: a link or folder planted here would be previewed, opened and copied through.
+            .filter { url in
+                var info = stat()
+                return Self.mediaExtensions.contains(url.pathExtension.lowercased())
+                    && lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
+            }
             .map { url -> (URL, Date) in
                 let values = try? url.resourceValues(forKeys: Set(keys))
                 return (url, values?.addedToDirectoryDate ?? values?.creationDate ?? .distantPast)
@@ -179,14 +195,14 @@ final class Clothesline: NSObject {
     /// landed. `thumbnails` (from the card) saves decoding the image again.
     @discardableResult
     func receive(_ urls: [URL], arrival: RopeView.Arrival = .fromAbove, thumbnails: [URL: CGImage] = [:]) -> [URL] {
-        let fm = FileManager.default
         var landed: [URL] = []
         for url in urls where Self.mediaExtensions.contains(url.pathExtension.lowercased()) {
-            let destination = Paths.unique(folder.appendingPathComponent(url.lastPathComponent))
             let waiting = url.deletingLastPathComponent().standardizedFileURL == incoming.standardizedFileURL
                 || IncomingCard.shared.takeSaved(url)
+            let destination: URL
             do {
-                if waiting { try fm.moveItem(at: url, to: destination) } else { try fm.copyItem(at: url, to: destination) }
+                // Each claims its name as it lands (never over a print that arrived meanwhile), even from another volume.
+                destination = waiting ? try Paths.move(url, into: folder) : try Paths.copy(url, into: folder)
             } catch {
                 // Nothing to hang for a file that didn't make it; a waiting screenshot still leaves Incoming.
                 if waiting { IncomingCard.shared.putAway(url) }
@@ -243,12 +259,44 @@ final class Clothesline: NSObject {
     }
 
     /// A small picture of an image or the first frame of a movie.
-    static func thumbnail(_ url: URL, maxPixels: Int) -> CGImage? {
-        guard ["mov", "mp4"].contains(url.pathExtension.lowercased()) else { return try? Images.load(url, maxPixels: maxPixels) }
-        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+    /// Made on the main thread, so the picture is checked and scaled from one open source of at most `sourceLimit`
+    /// pixels (a 48 MP photo fits): a tiny file claiming a gigantic picture would take seconds or minutes to scale.
+    static func thumbnail(_ url: URL, maxPixels: Int, sourceLimit: Double = 60_000_000) -> CGImage? {
+        guard ["mov", "mp4"].contains(url.pathExtension.lowercased()) else {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                  Images.claimedPixels(source).map({ $0 <= sourceLimit }) == true else { return nil }
+            return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true, kCGImageSourceThumbnailMaxPixelSize: maxPixels] as CFDictionary)
+        }
+        return movieFrame(url, maxPixels: maxPixels)
+    }
+
+    /// A movie's first frame, decoded on another thread; the main thread waits at most `wait` seconds, so a crafted
+    /// or slow movie leaves a plain print instead of freezing the rope.
+    nonisolated static func movieFrame(_ url: URL, maxPixels: Int, wait: TimeInterval = 0.5) -> CGImage? {
+        let generator = AVAssetImageGenerator(asset: Video.openAsset(url))
         generator.appliesPreferredTrackTransform = true
         generator.maximumSize = CGSize(width: maxPixels, height: maxPixels)
-        return try? generator.copyCGImage(at: .zero, actualTime: nil)
+        final class Result: @unchecked Sendable { var image: CGImage? }
+        let result = Result(), done = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) let unsafeGenerator = generator
+        DispatchQueue.global(qos: .userInitiated).async {
+            result.image = try? unsafeGenerator.copyCGImage(at: .zero, actualTime: nil)
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + wait) == .success else {
+            generator.cancelAllCGImageGeneration()
+            return nil
+        }
+        return result.image
+    }
+
+    /// Still the plain file that was listed: a link or folder put in its place since is never opened, previewed,
+    /// copied or dragged out (the app on the other end would read what the link points at).
+    nonisolated static func isPlainFile(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
     }
 
     // MARK: Showing and hiding
@@ -257,19 +305,106 @@ final class Clothesline: NSObject {
 
     func toggle() {
         // Caught while it's still lifting, the shortcut brings it back instead of hiding it again.
-        if isShown && !panel.rope.isLifting { hide() } else { pinned = true; show() }
+        // A rope the window server isn't showing counts as hidden: pressing once must bring it back.
+        if isShown && !panel.rope.isLifting && Self.reallyShown(panel) { hide() } else { pinned = true; show() }
     }
 
     func show(force: Bool = false) {
-        guard Prefs.clotheslineEnabled, force || !items.isEmpty else { return }
+        guard Prefs.clotheslineEnabled else { return }
+        // Believed down but not really on this screen and Space (see `confirmShown`): `lower` would see a visible
+        // panel and do nothing, so the rope moves into a fresh panel first (even if there's nothing to lower now).
+        var rebuilt = false
+        if panel.isVisible, !panel.rope.isLifting, !panel.rope.isHandlingPrint, !Self.reallyShown(panel) {
+            log.error("Rope was not on screen when asked to show; rebuilding its window: \(CardVisibility(self.panel).summary, privacy: .public)")
+            rebuildPanel()
+            rebuilt = true
+        }
+        guard force || !items.isEmpty else { return }
         guard let screen = screen(containing: NSEvent.mouseLocation) ?? NSScreen.main else { return }
+        let moving = !panel.isVisible || panel.rope.isLifting
         panel.lower(on: screen)
+        showing &+= 1
+        confirmShown(showing, rebuilt: rebuilt, expectFrames: moving)
     }
 
     func hide() {
         pinned = false
         leftSince = nil
+        // A panel the window server isn't showing may never get the frames that finish lifting it, and the next
+        // lowering must not reuse it: swap in a fresh (hidden) one now.
+        // (A lift in progress is left marked as lifting; the fresh panel's next lowering starts from hidden.)
+        if panel.isVisible, !panel.rope.isHandlingPrint, !Self.reallyShown(panel) {
+            log.error("Rope was not on screen when asked to hide; rebuilding its window: \(CardVisibility(self.panel).summary, privacy: .public)")
+            rebuildPanel()
+            return
+        }
         panel.raise()
+    }
+
+    /// Counts lowerings and checks, so a check scheduled for an earlier one does nothing.
+    private var showing = 0
+
+    /// In long sessions the window server has stopped putting Swivel's panels on the current Space although they
+    /// join all Spaces (2026-10-24 for the screenshot card; 2026-10-26 for the rope: screenshots were hung but the
+    /// rope never appeared until Swivel was restarted). A moment after each lowering, and when the Space changes,
+    /// the rope checks it really is on screen and animating; if not, it logs what it found and moves into a new
+    /// panel (or gets a new display link), once. A print being held or dragged off waits until it's let go.
+    func confirmShown(_ generation: Int, rebuilt: Bool, expectFrames: Bool = false, framesSince: Int? = nil) {
+        let framesBefore = framesSince ?? panel.rope.frames
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.checkSeconds) { [weak self] in
+            guard let self, self.isRunning || Self.checksWhileStopped, self.showing == generation, self.isShown,
+                  !self.panel.rope.isLifting, !NSApp.isHidden else { return }
+            if self.panel.rope.isHandlingPrint {
+                self.confirmShown(generation, rebuilt: rebuilt, expectFrames: false)
+                return
+            }
+            let state = CardVisibility(self.panel)
+            if Self.reallyShown(self.panel) {
+                if expectFrames, self.panel.rope.frames == framesBefore {
+                    // A busy main thread can run this before the first frame: look once more before acting.
+                    guard framesSince != nil else {
+                        self.confirmShown(generation, rebuilt: rebuilt, expectFrames: true, framesSince: framesBefore)
+                        return
+                    }
+                    log.error("Rope is on screen but drew no frames; restarting its display link: \(state.summary, privacy: .public)")
+                    self.panel.rope.restartFrames()
+                } else if rebuilt {
+                    log.notice("Rope recovered in a new window: \(state.summary, privacy: .public)")
+                }
+                return
+            }
+            guard !rebuilt else {
+                log.fault("Rope still not on screen after rebuilding its window: \(state.summary, privacy: .public)")
+                return
+            }
+            log.error("Rope was not on screen; rebuilding its window: \(state.summary, privacy: .public)")
+            let screen = self.panel.screen ?? self.screen(containing: NSEvent.mouseLocation) ?? NSScreen.main
+            self.rebuildPanel()
+            if let screen { self.panel.lower(on: screen) }
+            self.showing &+= 1
+            self.confirmShown(self.showing, rebuilt: true, expectFrames: true)
+        }
+    }
+    static let checkSeconds: TimeInterval = 0.4
+    /// Tests run the checks without starting the clothesline's watchers.
+    static var checksWhileStopped = false
+
+    /// On screen (as the window server lists it) and on the Space the user is looking at. While Swivel itself is
+    /// hidden nothing is on screen and nothing needs fixing. Tests replace it.
+    static var reallyShown: (NSWindow) -> Bool = { panel in
+        if NSApp.isHidden { return true }
+        let state = CardVisibility(panel)
+        return state.isShown && state.activeSpace
+    }
+
+    /// Moves the rope, with its prints, into a fresh panel. The new panel starts hidden; `lower` brings it in.
+    func rebuildPanel() {
+        let old = panel
+        let rope = old.rope
+        old.orderOut(nil)
+        old.contentView = nil
+        panel = RopePanel(rope: rope)
+        old.close()
     }
 
     /// A card is being dragged: lower the rope and keep it down until the drag ends.
@@ -307,7 +442,8 @@ final class Clothesline: NSObject {
         let atTopEdge = point.y >= screen.frame.maxY - 2
         let reachedTopEdge = atTopEdge && !wasAtTopEdge
         wasAtTopEdge = atTopEdge
-        if reachedTopEdge && NSEvent.pressedMouseButtons & 1 == 0 && (!isShown || panel.rope.isLifting) {
+        if reachedTopEdge && NSEvent.pressedMouseButtons & 1 == 0
+            && (!isShown || panel.rope.isLifting || !Self.reallyShown(panel)) {
             show()
         }
     }
@@ -367,27 +503,51 @@ final class Clothesline: NSObject {
         guard pasteboard.changeCount != pasteboardCount else { return }
         pasteboardCount = pasteboard.changeCount
         guard Prefs.clotheslineHangCopied, let types = pasteboard.types else { return }
-        // Only bare images: skip anything copied with text or files, and anything marked private.
-        let skip: Set<NSPasteboard.PasteboardType> = [.string, .fileURL, .URL, .rtf, .html,
-                                                      .init("org.nspasteboard.ConcealedType"), .init("org.nspasteboard.TransientType")]
-        guard types.allSatisfy({ !skip.contains($0) }),
+        // Only bare images: skip anything copied with text or files, anything marked private or generated by an app,
+        // and Swivel's own copies.
+        let skip: Set<NSPasteboard.PasteboardType> = [.string, .fileURL, .URL, .rtf, .html, Self.ownCopyType,
+                                                      .init("org.nspasteboard.ConcealedType"), .init("org.nspasteboard.TransientType"),
+                                                      .init("org.nspasteboard.AutoGeneratedType")]
+        guard types.allSatisfy({ !skip.contains($0) }), Self.isSmallEnough(pasteboard, types: types),
               let image = NSImage(pasteboard: pasteboard),
               let tiff = image.tiffRepresentation,
               let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        // Lands in Incoming, so it shows up as a card like a screenshot.
-        try? png.write(to: Paths.unique(incoming.appendingPathComponent("Copied \(formatter.string(from: Date())).png")))
+        // Lands in Incoming, so it shows up as a card like a screenshot. It is marked as a copy: left alone, the card
+        // is discarded rather than saved where screenshots go (the image is still on the clipboard).
+        guard let file = try? Paths.create(png, at: incoming.appendingPathComponent("Copied \(formatter.string(from: Date())).png")) else { return }
+        _ = setxattr(file.path, Self.copiedMarker, "1", 1, 0, XATTR_NOFOLLOW)
+    }
+
+    /// Copied images are decoded on the main thread, so a huge one (another app can put anything on the clipboard)
+    /// is left alone: its size is read from the header first, and an image whose size can't be read isn't hung.
+    nonisolated static let maxCopiedPixels = 64_000_000.0
+    nonisolated static func isSmallEnough(_ pasteboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
+        for type in types {
+            guard let data = pasteboard.data(forType: type), let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? Double,
+                  let height = properties[kCGImagePropertyPixelHeight] as? Double else { continue }
+            return width * height <= maxCopiedPixels
+        }
+        return false
+    }
+
+    /// Marks pasteboard contents Swivel wrote itself, so they aren't hung as copied images.
+    nonisolated static let ownCopyType = NSPasteboard.PasteboardType("local.swivel.own-copy")
+    nonisolated static let copiedMarker = "local.swivel.copied-image"
+    nonisolated static func isCopiedImage(_ url: URL) -> Bool {
+        getxattr(url.path, copiedMarker, nil, 0, 0, XATTR_NOFOLLOW) > 0
     }
 
     // MARK: Item actions
 
     func copy(_ url: URL) {
+        guard Self.isPlainFile(url) else { return reload() }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        var objects: [NSPasteboardWriting] = [url as NSURL]
-        if let image = NSImage(contentsOf: url) { objects.append(image) }
-        pasteboard.writeObjects(objects)
+        pasteboard.writeObjects([Self.pasteboardItem(for: url)])
         pasteboardCount = pasteboard.changeCount  // don't re-hang our own copy
         // Confirmed where the user is looking (on the print), with the name at the bottom of the screen.
         panel.rope.confirmCopy(url)
@@ -395,7 +555,50 @@ final class Clothesline: NSObject {
         Toast.shared.show(L("Copied %@", url.lastPathComponent), symbol: "doc.on.doc")
     }
 
+    /// One clipboard item for a print: the file, plus its picture for apps that paste images rather than files. Two
+    /// separate items (the file and an NSImage) made chat apps send two attachments: the file and a large TIFF.
+    /// `maxBytes` bounds the picture's bytes read into memory; past it only the file reference is copied.
+    nonisolated static func pasteboardItem(for url: URL, maxBytes: Int64 = 256_000_000) -> NSPasteboardItem {
+        pasteboardItem(for: url, maxBytes: maxBytes, read: nil)
+    }
+
+    /// Several files, with at most `totalBytes` of pictures among them (dozens of large images would otherwise all be
+    /// read into memory at once); the rest are copied as references only.
+    nonisolated static func pasteboardItems(for urls: [URL], totalBytes: Int64 = 512_000_000) -> [NSPasteboardItem] {
+        var left = totalBytes
+        return urls.map { url in
+            var used: Int64 = 0
+            let item = pasteboardItem(for: url, maxBytes: min(256_000_000, left), read: &used)
+            left -= used
+            return item
+        }
+    }
+
+    private nonisolated static func pasteboardItem(for url: URL, maxBytes: Int64, read used: UnsafeMutablePointer<Int64>?) -> NSPasteboardItem {
+        let item = NSPasteboardItem()
+        item.setString(url.absoluteString, forType: .fileURL)
+        // Only the print's own regular file, never through a link, and not unbounded: checked and read on one descriptor.
+        guard let type = UTType(filenameExtension: url.pathExtension), type.conforms(to: .image) else { return item }
+        let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard fd >= 0 else { return item }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        var info = stat()
+        // Read at most one byte past the limit, in case the file grew after fstat.
+        guard maxBytes > 0, fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG, Int64(info.st_size) <= maxBytes,
+              let data = try? handle.read(upToCount: Int(maxBytes) + 1), Int64(data.count) <= maxBytes,
+              CGImageSourceCreateWithData(data as CFData, nil).map({ CGImageSourceGetCount($0) > 0 }) == true else { return item }
+        used?.pointee = Int64(data.count)
+        // The file's own bytes under its own type (a PNG screenshot is pasted as that PNG, not re-encoded).
+        item.setData(data, forType: NSPasteboard.PasteboardType(type.identifier))
+        // Apps that only take PNG or TIFF get PNG, made only if one of them asks.
+        if type != .png, type != .tiff {
+            item.setDataProvider(PNGOnDemand(data), forTypes: [.png])
+        }
+        return item
+    }
+
     func openInPreview(_ url: URL) {
+        guard Self.isPlainFile(url) else { return reload() }
         let isMovie = ["mov", "mp4"].contains(url.pathExtension.lowercased())
         let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: isMovie ? "com.apple.QuickTimePlayerX" : "com.apple.Preview")
         if let app { NSWorkspace.shared.open([url], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil) } else { NSWorkspace.shared.open(url) }
@@ -405,6 +608,7 @@ final class Clothesline: NSObject {
 
     /// Quick Look grows out of the print, and the rope lifts once it has started.
     func quickLook(_ url: URL) {
+        guard Self.isPlainFile(url) else { return reload() }
         let rope = panel.rope
         let picture = rope.image(of: url).map { NSImage(cgImage: $0, size: NSSize(width: $0.width / 2, height: $0.height / 2)) }
         QuickLooker.shared.show(url, from: { [weak rope] in rope?.screenFrame(of: url) }, image: picture)
@@ -565,10 +769,12 @@ private func renderImage(_ size: NSSize, scale: CGFloat, _ draw: (CGContext) -> 
 /// A full-width strip under the menu bar. It only catches the mouse over a print (or while something is being
 /// dragged to it); everywhere else clicks fall through to the windows below.
 final class RopePanel: NSPanel {
-    let rope = RopeView()
+    let rope: RopeView
     static let height: CGFloat = 214
 
-    init() {
+    /// `rope` is passed in when the rope moves into a fresh panel (see `Clothesline.rebuildPanel`), prints and all.
+    init(rope: RopeView = RopeView()) {
+        self.rope = rope
         super.init(contentRect: NSRect(x: 0, y: 0, width: 800, height: Self.height),
                    styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isOpaque = false
@@ -966,6 +1172,24 @@ final class RopeView: NSView, NSDraggingSource {
         if window?.isVisible == true { driver.start() }
     }
 
+    /// A display link belongs to the window it was made for; moved into a fresh panel, the rope makes a new one.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        driver.stop()
+    }
+
+    /// Display frames drawn so far, so the clothesline can tell a rope that is on screen but never animates.
+    private(set) var frames = 0
+    /// A print is held or being dragged off: moving the rope to a new panel now would drop the gesture. A press
+    /// counts only while the button is down: its mouse-up can go elsewhere (Quick Look takes focus), and a stale
+    /// press must not hold off recovery for good.
+    var isHandlingPrint: Bool { isDraggingItem || (downURL != nil && NSEvent.pressedMouseButtons & 1 != 0) }
+    /// Replaces the frame loop's display link and runs it again.
+    func restartFrames() {
+        driver.stop()
+        wake()
+    }
+
     /// Something happened: the breeze blows for a little while, then dies down.
     private func stir() { calmAt = clock + RopeTuning.breezeHold }
 
@@ -1012,6 +1236,7 @@ final class RopeView: NSView, NSDraggingSource {
     /// Returns false once there is nothing left on screen to animate.
     @discardableResult
     func advance(_ dt: CGFloat) -> Bool {
+        frames &+= 1
         let reduced = isMotionReduced
         updateHover(reduced: reduced)
         if reduced {
@@ -1476,6 +1701,7 @@ final class RopeView: NSView, NSDraggingSource {
         handled = true
         longPress?.cancel()
         setPressed(print, false)
+        guard Clothesline.isPlainFile(url) else { return }
         // Unclipped: what stays on the rope dims to a ghost, the rope springs up as the weight leaves, and the
         // trackpad gives a small detent.
         print.lifted = true
@@ -1670,13 +1896,56 @@ enum RopeDropFeedback {
 
 // MARK: - Screenshot card
 
+/// What the window server and AppKit say about a panel that should be showing. `summary` names no files.
+struct CardVisibility {
+    var onScreen: Bool          // the window server lists it on screen
+    var visible: Bool           // AppKit's isVisible
+    var occluded: Bool
+    var activeSpace: Bool
+    var appHidden: Bool
+    var regularApp: Bool
+    var alpha: Double
+    var frame: NSRect
+    var screens: Int
+
+    var isShown: Bool { onScreen && visible }
+
+    @MainActor
+    init(_ panel: NSWindow) {
+        let number = CGWindowID(max(panel.windowNumber, 0))
+        let info = number == 0 ? [] : (CGWindowListCopyWindowInfo(.optionIncludingWindow, number) as? [[String: Any]] ?? [])
+        self.init(onScreen: info.first?[kCGWindowIsOnscreen as String] as? Bool ?? false,
+                  visible: panel.isVisible,
+                  occluded: !panel.occlusionState.contains(.visible),
+                  activeSpace: panel.isOnActiveSpace,
+                  appHidden: NSApp.isHidden,
+                  regularApp: NSApp.activationPolicy() == .regular,
+                  alpha: Double(panel.alphaValue),
+                  frame: panel.frame,
+                  screens: NSScreen.screens.count)
+    }
+
+    init(onScreen: Bool, visible: Bool, occluded: Bool, activeSpace: Bool, appHidden: Bool, regularApp: Bool,
+         alpha: Double, frame: NSRect, screens: Int) {
+        self.onScreen = onScreen; self.visible = visible; self.occluded = occluded; self.activeSpace = activeSpace
+        self.appHidden = appHidden; self.regularApp = regularApp; self.alpha = alpha; self.frame = frame
+        self.screens = screens
+    }
+
+    var summary: String {
+        "onScreen=\(onScreen) visible=\(visible) occluded=\(occluded) activeSpace=\(activeSpace) "
+            + "appHidden=\(appHidden) regularApp=\(regularApp) alpha=\(String(format: "%.2f", alpha)) "
+            + "frame=\(Int(frame.minX)),\(Int(frame.minY)) \(Int(frame.width))x\(Int(frame.height)) screens=\(screens)"
+    }
+}
+
 /// The new screenshot, waiting in the bottom-right corner like the system thumbnail. Drag it up to the rope or
 /// click it to hang it; drag it into an app or folder like any file; ignore it and it goes to the usual folder.
 @MainActor
 final class IncomingCard: NSObject, NSDraggingSource {
     static let shared = IncomingCard()
 
-    private let panel: NSPanel
+    private var panel: NSPanel
     private let view = IncomingView()
     private(set) var url: URL?
     private var dismissal: DispatchWorkItem?
@@ -1694,11 +1963,19 @@ final class IncomingCard: NSObject, NSDraggingSource {
     }
     private static let waitSeconds: TimeInterval = 2.5
     private static let resumeSeconds: TimeInterval = 1
+    /// Back from a drag into another app (or dropped nowhere): long enough to drag it somewhere else too.
+    private static let afterDragSeconds: TimeInterval = 5
 
     override init() {
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 170),
-                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel = Self.makePanel()
         super.init()
+        panel.contentView = view
+        view.card = self
+    }
+
+    private static func makePanel() -> NSPanel {
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 220, height: 170),
+                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = false
@@ -1707,8 +1984,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.animationBehavior = .none
-        panel.contentView = view
-        view.card = self
+        return panel
     }
 
     func present(_ url: URL) {
@@ -1742,6 +2018,48 @@ final class IncomingCard: NSObject, NSDraggingSource {
         panel.orderFrontRegardless()
         view.enter()
         scheduleDismissal()
+        confirmShown(presentation, rebuilt: false)
+    }
+
+    /// In a long session the window server once stopped putting this panel on screen (2026-10-24): it was ordered
+    /// front at the right frame and never appeared, so every screenshot went to the usual folder unseen until
+    /// Swivel was restarted. A moment after each presentation the card checks that it really is on screen; if not,
+    /// it logs what it found and shows itself again in a new window, once.
+    private func confirmShown(_ generation: Int, rebuilt: Bool) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.checkSeconds) { [weak self] in
+            guard let self, self.presentation == generation, self.url != nil, !self.dragging else { return }
+            let state = CardVisibility(self.panel)
+            if state.isShown {
+                if rebuilt { log.notice("Screenshot card recovered in a new window: \(state.summary, privacy: .public)") }
+                return
+            }
+            guard !rebuilt else {
+                log.fault("Screenshot card still not on screen after rebuilding its window: \(state.summary, privacy: .public)")
+                return
+            }
+            log.error("Screenshot card was not on screen; rebuilding its window: \(state.summary, privacy: .public)")
+            self.rebuildPanel()
+            self.confirmShown(generation, rebuilt: true)
+        }
+    }
+    private static let checkSeconds: TimeInterval = 0.4
+
+    /// Moves the card into a fresh panel at the same place and shows it there.
+    private func rebuildPanel() {
+        let old = panel
+        let frame = old.frame
+        view.halt()
+        old.orderOut(nil)
+        old.contentView = nil
+        panel = Self.makePanel()
+        panel.contentView = view
+        panel.setFrame(frame, display: false)
+        view.layoutCard()
+        view.resetInteraction(hovered: NSPointInRect(NSEvent.mouseLocation, view.cardScreenRect))
+        panel.alphaValue = 1
+        panel.orderFrontRegardless()
+        view.enter()
+        old.close()
     }
 
     /// The card's thumbnail, for the rope to reuse instead of decoding the file again.
@@ -1755,7 +2073,9 @@ final class IncomingCard: NSObject, NSDraggingSource {
         dismissal = nil
     }
 
-    func resumeDismissal() { scheduleDismissal(after: Self.resumeSeconds) }
+    func resumeDismissal(afterDrag: Bool = false) {
+        scheduleDismissal(after: afterDrag ? Self.afterDragSeconds : Self.resumeSeconds)
+    }
 
     private func scheduleDismissal(after delay: TimeInterval? = nil) {
         pauseDismissal()
@@ -1781,23 +2101,20 @@ final class IncomingCard: NSObject, NSDraggingSource {
     private func release(_ url: URL) -> URL? {
         // Saved already (a drag moved it out first): it stays where it is.
         guard url.deletingLastPathComponent().standardizedFileURL == Clothesline.shared.incoming.standardizedFileURL else { return url }
+        // A copied image that wasn't hung is only a temporary file: it never lands on the Desktop by itself.
+        if Clothesline.isCopiedImage(url) { try? FileManager.default.removeItem(at: url); return nil }
         return Self.save(url, to: ScreenshotTakeover.originalLocation, otherwise: Clothesline.shared.folder)
     }
 
-    /// Moves a waiting screenshot into `folder` without overwriting anything. If that fails (the folder is gone or
-    /// read-only, or it is Incoming itself) it hangs on the rope (`fallback`) instead, so it never stays behind in the
-    /// hidden Incoming folder. Returns where it went, or nil if neither worked (the next launch tries again).
-    nonisolated static func save(_ url: URL, to folder: URL, otherwise fallback: URL) -> URL? {
-        let fm = FileManager.default
+    /// Moves a waiting screenshot into `folder` without overwriting anything, even a file that appears there while it
+    /// moves; `folder` can be on another volume (`Paths.move`). If that fails (the folder is gone or read-only, or it
+    /// is Incoming itself) it hangs on the rope (`fallback`) instead, so it never stays behind in the hidden Incoming
+    /// folder. Returns where it went, or nil if neither worked (the next launch tries again). `rename` is for tests.
+    nonisolated static func save(_ url: URL, to folder: URL, otherwise fallback: URL,
+                                 rename: (URL, URL) throws -> Void = Paths.renameExclusively) -> URL? {
         let home = url.deletingLastPathComponent().resolvingSymlinksInPath().path
         for directory in [folder, fallback] where directory.resolvingSymlinksInPath().path != home {
-            let destination = Paths.unique(directory.appendingPathComponent(url.lastPathComponent))
-            do {
-                try fm.moveItem(at: url, to: destination)
-                return destination
-            } catch {
-                continue
-            }
+            if let saved = try? Paths.move(url, into: directory, rename: rename) { return saved }
         }
         return nil
     }
@@ -1878,7 +2195,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
     }
 
     func beginDrag(with event: NSEvent) {
-        guard var url else { return }
+        guard var url, Clothesline.isPlainFile(url) else { return }
         // Another app may read a dropped file long after the drop (a chat attachment is read when it is sent), so
         // the file goes where screenshots normally go before the drag starts, and the path it hands over stays valid.
         if let saved = release(url), saved != url { url = saved; self.url = saved; savedForDrag = saved }
@@ -1929,7 +2246,7 @@ final class IncomingCard: NSObject, NSDraggingSource {
         } else {
             // Copied into an app, or dropped nowhere: the card comes back and waits again.
             view.setDimmed(false)
-            resumeDismissal()
+            resumeDismissal(afterDrag: true)
         }
     }
 }
@@ -2444,5 +2761,36 @@ final class CardFlight {
         landed?()
         driver.stop()
         panel.orderOut(nil)
+    }
+}
+
+/// Makes a PNG of a copied print only when an app pastes it as PNG. Held until the clipboard changes, since the
+/// pasteboard item may not keep its provider alive.
+final class PNGOnDemand: NSObject, NSPasteboardItemDataProvider, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var current: PNGOnDemand?
+    /// The bytes read when the print was copied: the file isn't opened again, so a link swapped in later isn't followed.
+    private let data: Data
+
+    init(_ data: Data) {
+        self.data = data
+        super.init()
+        Self.lock.withLock { Self.current = self }
+    }
+
+    func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
+        guard type == .png, let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = props[kCGImagePropertyPixelWidth] as? Int, let height = props[kCGImagePropertyPixelHeight] as? Int,
+              Double(width) * Double(height) <= Images.maxDecodePixels,
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: max(width, height)] as CFDictionary),
+              let png = try? Images.encode(image, type: .png, quality: 1) else { return }
+        item.setData(png, forType: .png)
+    }
+
+    func pasteboardFinishedWithDataProvider(_ pasteboard: NSPasteboard) {
+        Self.lock.withLock { if Self.current === self { Self.current = nil } }
     }
 }

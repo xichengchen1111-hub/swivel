@@ -7,7 +7,7 @@ import ServiceManagement
 final class AppWindow: NSObject, NSWindowDelegate {
     static let shared = AppWindow()
 
-    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions, feel, colors, batchRename, pdfPages, qrCodes, appRouting }
+    enum Tab: Int { case general, shortcuts, style, customize, clothesline, overview, textCapture, shelf, imagePresets, quickActions, feel, colors, batchRename, pdfPages, qrCodes, appRouting, keepAwake, doctor }
 
     private var window: NSWindow?
     private var split: BundleSplit?
@@ -382,7 +382,7 @@ final class GeneralPane: Pane {
     private var loginPending = 0
     private nonisolated static let loginQueue = DispatchQueue(label: "local.swivel.login")
 
-    init() { super.init(size: NSSize(width: 680, height: 560)) }
+    init() { super.init(size: NSSize(width: 680, height: 680)) }
     required init?(coder: NSCoder) { fatalError() }
 
     override func build() {
@@ -421,6 +421,15 @@ final class GeneralPane: Pane {
         languages.target = self
         languages.action = #selector(languageChanged(_:))
         stack.addArrangedSubview(row("Language", languages))
+        if #available(macOS 26, *) {
+            let speech = NSPopUpButton(frame: .zero, pullsDown: false)
+            speech.addItems(withTitles: Prefs.transcriptionLanguageTitles.map { L($0) })
+            speech.selectItem(at: Prefs.transcriptionLanguages.firstIndex(of: Prefs.transcriptionLanguage) ?? 0)
+            speech.target = self
+            speech.action = #selector(speechLanguageChanged(_:))
+            stack.addArrangedSubview(row("Transcription Language", speech))
+        }
+
 
         let steps = label("""
             1.  Start dragging any file in Finder and keep holding the mouse button.
@@ -434,6 +443,7 @@ final class GeneralPane: Pane {
         let shelf = NSButton(title: L("Show Shelf"), target: self, action: #selector(showShelf))
         let rope = NSButton(title: L("Show Clothesline"), target: self, action: #selector(showClothesline))
         stack.addArrangedSubview(row("", shelf, rope))
+        stack.addArrangedSubview(row("Agents", MCPSetupView()))
     }
 
     override func refresh() {
@@ -484,6 +494,10 @@ final class GeneralPane: Pane {
                 if let window = self.view.window { alert.beginSheetModal(for: window, completionHandler: nil) } else { alert.runModal() }
             }
         }
+    }
+
+    @objc private func speechLanguageChanged(_ sender: NSPopUpButton) {
+        Prefs.transcriptionLanguage = Prefs.transcriptionLanguages[sender.indexOfSelectedItem]
     }
 
     @objc private func languageChanged(_ sender: NSPopUpButton) {
@@ -573,7 +587,7 @@ final class ShortcutsPane: Pane {
 
     override func build() {
         stack.addArrangedSubview(label("Choose which key opens each menu. Start dragging first, then tap the key.", secondary: true))
-        for (mode, title) in [(WheelMode.convert, "Convert formats"), (.tools, "File tools"), (.actions, "File actions"), (.apps, "App Actions"), (.codes, "QR Library")] {
+        for (mode, title) in [(WheelMode.convert, "Convert formats"), (.tools, "File tools"), (.actions, "File actions"), (.apps, "App Actions"), (.codes, "QR Library"), (.custom, "My Wheel")] {
             let popup = NSPopUpButton(frame: .zero, pullsDown: false)
             popup.addItems(withTitles: TriggerKey.allCases.map(\.title))
             popup.target = self
@@ -584,6 +598,7 @@ final class ShortcutsPane: Pane {
         }
         stack.addArrangedSubview(row("", label("""
             Picking a key that another menu uses swaps the two.
+            My Wheel’s actions and shortcut are in Customize.
             For fn / 🌐: System Settings → Keyboard →
             “Press 🌐 key to” → “Do Nothing”.
             """, size: 11, secondary: true)))
@@ -923,6 +938,15 @@ struct DropSlot {
 /// presets, Hang and Float come and go with their features), so the stored entries for every other title are carried
 /// over: they stay hidden if they were, and each keeps its place right after the title it followed.
 enum Arrangement {
+    /// My Wheel's picks after editing: the ticked rows in their order, with picks that aren't listed right now (their
+    /// tool is off, their app was turned off) kept where they were.
+    static func mergedPicks(rows: [(title: String, shown: Bool)], stored: [String]) -> [String] {
+        var picks = rows.filter(\.shown).map(\.title)
+        let present = Set(rows.map(\.title))
+        for (index, id) in stored.enumerated() where !present.contains(id) { picks.insert(id, at: min(index, picks.count)) }
+        return picks
+    }
+
     static func merged(rows: [(title: String, shown: Bool)], storedOrder: [String],
                        storedHidden: Set<String>) -> (order: [String], hidden: Set<String>) {
         let present = Set(rows.map(\.title))
@@ -991,8 +1015,39 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     private var previewKey: PreviewKey?
     private var appEditor: AppTargetEditor?
     private lazy var addAppButton = ToolUI.button("Add Application…", target: self, action: #selector(addApplication))
+    private lazy var addPageButton = ToolUI.button("Add Web Page…", target: self, action: #selector(addWebPage))
     private lazy var manageAppsButton = ToolUI.button("Manage Applications…", target: self, action: #selector(manageApplications))
     private lazy var libraryButton = ToolUI.button("Open QR Library…", target: self, action: #selector(openLibrary))
+    // My Wheel: its key during a drag and its shortcut, beside the actions it shows.
+    private let customKey = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let recorder = ShortcutRecorder()
+    private lazy var showCustom = ToolUI.button("Show My Wheel", target: self, action: #selector(showCustomWheel))
+    private let customStatus = ToolUI.note("")
+    private var recorderProblem: String?
+    private lazy var customControls = ToolUI.stack([
+        ToolUI.note("Tick actions from every menu to build My Wheel. While dragging, it shows only the ones that fit the file."),
+        ToolUI.stack([NSTextField(labelWithString: L("Key while dragging:")), customKey,
+                      NSTextField(labelWithString: L("Shortcut:")), recorder, showCustom], vertical: false, spacing: 8),
+        customStatus,
+    ], spacing: 6)
+    private var listHeight: NSLayoutConstraint?
+    private var previewHeight: NSLayoutConstraint?
+    /// The menu to show when the page opens (set by `open(_:)`).
+    private static var requestedMode: WheelMode?
+    private static weak var current: CustomizePane?
+
+    /// Opens Settings on this page with a menu chosen, e.g. My Wheel when its shortcut finds nothing picked.
+    static func open(_ mode: WheelMode) {
+        requestedMode = mode
+        AppWindow.shared.show(.customize)
+        current?.applyRequestedMode()
+    }
+    private func applyRequestedMode() {
+        guard isViewLoaded, let mode = Self.requestedMode, let index = WheelMode.allCases.firstIndex(of: mode) else { return }
+        Self.requestedMode = nil
+        modePopup.selectItem(at: index)
+        load(crossfade: false)
+    }
 
     /// What the preview shows; it is rebuilt only when this changes.
     private struct PreviewKey: Equatable {
@@ -1010,7 +1065,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
 
     override func build() {
         stack.addArrangedSubview(label("Pick which options each menu shows and in what order. Untick to hide, drag to reorder.", secondary: true))
-        modePopup.addItems(withTitles: ["Convert formats", "File tools", "File actions", "App Actions", "QR Library"].map { L($0) })
+        modePopup.addItems(withTitles: ["Convert formats", "File tools", "File actions", "App Actions", "QR Library", "My Wheel"].map { L($0) })
         kindPopup.addItems(withTitles: kinds.map(\.title))
         for (popup, i) in [(modePopup, 0), (kindPopup, 1)] {
             popup.target = self
@@ -1025,7 +1080,16 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
                                           NSTextField(labelWithString: L("File type:")), kindPopup, reset])
         pickers.spacing = 8
         stack.addArrangedSubview(pickers)
-        stack.addArrangedSubview(ToolUI.stack([addAppButton, manageAppsButton, libraryButton], vertical: false, spacing: 8))
+        stack.addArrangedSubview(ToolUI.stack([addAppButton, addPageButton, manageAppsButton, libraryButton], vertical: false, spacing: 8))
+        customKey.addItems(withTitles: TriggerKey.allCases.map(\.title))
+        customKey.target = self; customKey.action = #selector(customKeyChanged); customKey.setAccessibilityLabel(L("Key while dragging"))
+        recorder.onProblem = { [weak self] problem in self?.recorderProblem = problem; self?.updateCustomControls() }
+        customStatus.preferredMaxLayoutWidth = 780
+        stack.addArrangedSubview(customControls)
+        NotificationCenter.default.addObserver(forName: CustomWheelLauncher.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateCustomControls() }
+        }
+        Self.current = self
 
         let column = NSTableColumn(identifier: .init("item"))
         column.title = "Option"
@@ -1047,7 +1111,8 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         scroll.borderType = .noBorder
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.widthAnchor.constraint(equalToConstant: 260).isActive = true
-        scroll.heightAnchor.constraint(equalToConstant: 420).isActive = true
+        listHeight = scroll.heightAnchor.constraint(equalToConstant: 420)
+        listHeight?.isActive = true
 
         let wallpaper = WallpaperView()
         wallpaper.translatesAutoresizingMaskIntoConstraints = false
@@ -1056,8 +1121,10 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         NSLayoutConstraint.activate([
             host.leadingAnchor.constraint(equalTo: wallpaper.leadingAnchor), host.trailingAnchor.constraint(equalTo: wallpaper.trailingAnchor),
             host.topAnchor.constraint(equalTo: wallpaper.topAnchor), host.bottomAnchor.constraint(equalTo: wallpaper.bottomAnchor),
-            wallpaper.widthAnchor.constraint(equalToConstant: 500), wallpaper.heightAnchor.constraint(equalToConstant: 420),
+            wallpaper.widthAnchor.constraint(equalToConstant: 500),
         ])
+        previewHeight = wallpaper.heightAnchor.constraint(equalToConstant: 420)
+        previewHeight?.isActive = true
         let previewColumn = NSStackView(views: [wallpaper, tryItHint()])
         previewColumn.orientation = .vertical
         previewColumn.alignment = .leading
@@ -1066,6 +1133,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         split.spacing = 20
         split.alignment = .top
         stack.addArrangedSubview(split)
+        if let mode = Self.requestedMode, let index = WheelMode.allCases.firstIndex(of: mode) { Self.requestedMode = nil; modePopup.selectItem(at: index) }
         load()
     }
 
@@ -1075,18 +1143,31 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     private func load(crossfade: Bool = false) {
-        addAppButton.isHidden = mode != .apps; manageAppsButton.isHidden = mode != .apps
-        addAppButton.isEnabled = Feature.appRouting.isOn
+        for button in [addAppButton, addPageButton, manageAppsButton] { button.isHidden = mode != .apps }
+        addAppButton.isEnabled = Feature.appRouting.isOn; addPageButton.isEnabled = Feature.appRouting.isOn
         libraryButton.isHidden = mode != .codes; libraryButton.isEnabled = Feature.qrCodes.isOn
-        kindPopup.isEnabled = mode != .codes
-        let all = Catalog.allItems(mode: mode, kind: kind)
-        let hidden = Prefs.hidden(mode, kind)
-        let order = Prefs.order(mode, kind)
-        let sorted = all.enumerated().sorted { a, b in
-            (order.firstIndex(of: a.element) ?? order.count + a.offset) < (order.firstIndex(of: b.element) ?? order.count + b.offset)
-        }.map(\.element)
-        let fresh = sorted.map { (title: $0, shown: !hidden.contains($0)) }
-        let freshLabels = sorted.map { Catalog.displayTitle($0) }
+        kindPopup.isEnabled = mode != .codes && mode != .custom
+        customControls.isHidden = mode != .custom
+        // My Wheel's key and shortcut take a little of the list's height.
+        listHeight?.constant = mode == .custom ? 360 : 420; previewHeight?.constant = listHeight?.constant ?? 420
+        updateCustomControls()
+        let fresh: [(title: String, shown: Bool)], freshLabels: [String]
+        if mode == .custom {
+            // Every action from every menu: the picked ones first, in their order, then the rest in menu order.
+            let candidates = CustomWheel.candidates(), available = Set(candidates.map(\.id))
+            let picked = Prefs.customWheelItems.filter(available.contains), pickedSet = Set(picked)
+            fresh = picked.map { (title: $0, shown: true) } + candidates.map(\.id).filter { !pickedSet.contains($0) }.map { (title: $0, shown: false) }
+            freshLabels = fresh.map { CustomWheel.Ref(id: $0.title).map(CustomWheel.label) ?? $0.title }
+        } else {
+            let all = Catalog.allItems(mode: mode, kind: kind)
+            let hidden = Prefs.hidden(mode, kind)
+            let order = Prefs.order(mode, kind)
+            let sorted = all.enumerated().sorted { a, b in
+                (order.firstIndex(of: a.element) ?? order.count + a.offset) < (order.firstIndex(of: b.element) ?? order.count + b.offset)
+            }.map(\.element)
+            fresh = sorted.map { (title: $0, shown: !hidden.contains($0)) }
+            freshLabels = sorted.map { Catalog.displayTitle($0) }
+        }
         // Reload only for a real change from elsewhere (another menu or file type, Restore Defaults, a renamed
         // preset). Reloading for every settings change rebuilt the rows under the pointer, mid-click.
         if fresh.map(\.title) != rows.map(\.title) || fresh.map(\.shown) != rows.map(\.shown) || freshLabels != labels {
@@ -1097,8 +1178,26 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
         updatePreview(crossfade: crossfade)
     }
 
+    private func updateCustomControls() {
+        guard mode == .custom else { return }
+        customKey.selectItem(at: TriggerKey.allCases.firstIndex(of: Prefs.key(for: .custom)) ?? 0)
+        recorder.refresh()
+        showCustom.isEnabled = Feature.wheel.isOn && !Prefs.customWheelItems.isEmpty
+        let status: String = switch CustomWheelLauncher.shared.status {
+        case .none: Prefs.customWheelShortcut == nil ? L("Record a shortcut to open My Wheel without dragging; picked actions then ask for files.") : ""
+        case .ready: L("Shortcut is ready")
+        case .reservedBySystem: L("This shortcut is used by macOS. Choose a different shortcut.")
+        case .usedBySwivel: L("Another Swivel shortcut uses these keys. Choose a different one.")
+        case .unavailable: L("This shortcut is unavailable. Choose another shortcut or open the panel below.")
+        }
+        customStatus.stringValue = recorderProblem ?? status
+        customStatus.textColor = recorderProblem == nil && CustomWheelLauncher.shared.status != .reservedBySystem
+            && CustomWheelLauncher.shared.status != .usedBySwivel ? .secondaryLabelColor : .systemRed
+    }
+
     private func updatePreview(crossfade: Bool) {
-        let titles = rows.filter(\.shown).map(\.title)
+        // My Wheel's rows are "menu/title" ids; the menu draws the titles.
+        let titles = rows.filter(\.shown).map { mode == .custom ? CustomWheel.Ref(id: $0.title)?.title ?? $0.title : $0.title }
         let key = PreviewKey(style: Prefs.style, mode: mode, titles: titles, labels: titles.map { Catalog.displayTitle($0) })
         guard key != previewKey else { return }
         previewKey = key
@@ -1108,6 +1207,14 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     /// Writes the rows over the stored arrangement, keeping what's stored for items whose tools are off right now.
     /// (Restore Defaults is the one thing that clears those too.)
     private func save() {
+        if mode == .custom {
+            isSaving = true
+            Prefs.customWheelItems = Arrangement.mergedPicks(rows: rows, stored: Prefs.customWheelItems)
+            isSaving = false
+            updateCustomControls()
+            updatePreview(crossfade: true)
+            return
+        }
         let merged = Arrangement.merged(rows: rows, storedOrder: Prefs.order(mode, kind), storedHidden: Prefs.hidden(mode, kind))
         isSaving = true
         Prefs.setArrangement(order: merged.order, hidden: merged.hidden, mode, kind)
@@ -1116,9 +1223,11 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     }
 
     @objc private func selectionChanged() { load(crossfade: true) }
-    @objc private func addApplication() {
+    @objc private func addApplication() { addTarget(web: false) }
+    @objc private func addWebPage() { addTarget(web: true) }
+    private func addTarget(web: Bool) {
         guard Feature.appRouting.isOn, let window = view.window else { return }
-        appEditor = AppTargetEditor(nil) { [weak self] value in
+        appEditor = AppTargetEditor(nil, web: web) { [weak self] value in
             var latest = Prefs.fileAppTargets; latest.append(value); Prefs.fileAppTargets = latest
             self?.load(crossfade: true)
         }
@@ -1126,7 +1235,21 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     }
     @objc private func manageApplications() { AppWindow.shared.show(.appRouting) }
     @objc private func openLibrary() { QRLibraryWindow().show() }
-    @objc private func resetContents() { Prefs.resetContents(mode, kind) }
+    @objc private func resetContents() {
+        guard mode == .custom else { Prefs.resetContents(mode, kind); return }
+        guard !Prefs.customWheelItems.isEmpty else { return }
+        let alert = NSAlert()
+        alert.messageText = L("Remove every action from My Wheel?")
+        alert.informativeText = L("Its key and shortcut stay as they are.")
+        alert.addButton(withTitle: L("Remove All")); alert.addButton(withTitle: L("Cancel"))
+        if let window = view.window {
+            alert.beginSheetModal(for: window) { response in
+                if response == .alertFirstButtonReturn { Prefs.customWheelItems = [] }
+            }
+        }
+    }
+    @objc private func customKeyChanged() { Prefs.setKey(TriggerKey.allCases[customKey.indexOfSelectedItem], for: .custom) }
+    @objc private func showCustomWheel() { CustomWheelLauncher.shared.show() }
 
     @objc private func toggled(_ sender: NSButton) {
         // The row, not a tag: rows that were dragged keep their views but not their old index.
