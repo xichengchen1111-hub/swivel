@@ -21,7 +21,7 @@ internal static class DoctorControlChecks
                 "Settings action uses a fixed local protocol without arguments or elevation");
         }
         var destinations = Enum.GetValues<WindowsSettingsPage>().Select(page => WindowsSettings.StartInfo(page).FileName).ToHashSet(StringComparer.Ordinal);
-        check(destinations.SetEquals(new[] { "ms-settings:network-status", "ms-settings:network-proxy", "ms-settings:storagesense", "ms-settings:powersleep" }), "Settings destinations stay within the four approved local pages");
+        check(destinations.SetEquals(new[] { "ms-settings:network-status", "ms-settings:network-proxy", "ms-settings:storagesense", "ms-settings:powersleep", "ms-settings:appsfeatures" }), "Settings destinations stay within the five approved local pages");
         reject(() => WindowsSettings.StartInfo((WindowsSettingsPage)999), "Unknown Settings page refused without activation");
         // Synthetic snapshot only: no App.Run, clipboard access, settings activation
         // or live diagnosis occurs while constructing/toggling this window.

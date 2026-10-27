@@ -158,11 +158,11 @@ internal static class AppCacheChecks
             D("discord", N("Cache", Dir, denied: true)));
         return new(D("AppData", local, roaming));
     }
-    private static Fake F(string name, long bytes = 0) => new(name, false, bytes, 0x20);
-    private static Fake D(string name, params Fake[] children) => new(name, true, 0, 0x10, children);
-    private static Fake N(string name, uint attributes, bool denied = false) => new(name, true, 0, attributes) { Denied = denied };
+    internal static Fake F(string name, long bytes = 0) => new(name, false, bytes, 0x20);
+    internal static Fake D(string name, params Fake[] children) => new(name, true, 0, 0x10, children);
+    internal static Fake N(string name, uint attributes, bool denied = false) => new(name, true, 0, attributes) { Denied = denied };
 
-    private sealed class Fake : IFolderMetadata
+    internal sealed class Fake : IFolderMetadata
     {
         private readonly bool directory; private readonly long bytes; private readonly uint attributes; private readonly Fake[] children;
         public string Name { get; }

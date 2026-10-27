@@ -4104,10 +4104,10 @@
     "檢查目前使用者和本機 Run/RunOnce 登錄檢視。記錄不證明啟用、可信或殘留歸屬。啟動資料夾、工作、服務、停用與移除仍待做。",
     "現在のユーザーとマシンの Run/RunOnce 登録ビューを調べます。記録は有効状態・信頼・残留物の所有関係を証明しません。スタートアップフォルダー・タスク・サービス・無効化・削除は未実装です。"
   ],
-  "Inspect desktop installation records only. An installation record is not a safe removal plan. Uninstalling, leftover ownership checks and reversible cleanup are not implemented.": [
-    "仅检查桌面程序安装记录。安装记录不等于安全移除方案。尚未实现卸载、残留文件归属核验或可撤销清理。",
-    "僅檢查桌面程式安裝記錄。安裝記錄不等於安全移除方案。尚未實作解除安裝、殘留檔案歸屬核驗或可復原清理。",
-    "デスクトップアプリのインストール記録だけを調べます。記録は安全な削除計画ではありません。アンインストール・残留物の所有確認・元に戻せる削除は未実装です。"
+  "Inspect desktop installation records, uninstall through Installed Apps in Windows Settings, then find plain folders named exactly as apps removed since the list was read and move chosen ones to the Recycle Bin, with Undo. A matching name does not prove ownership; registry entries, services, scheduled tasks and Store apps are not cleaned.": [
+    "检查桌面程序安装记录，通过 Windows 设置中的“已安装的应用”卸载，然后查找名称与列表读取后被卸载的应用完全相同的普通文件夹，把选中的移到回收站，并可撤销。名称相同不能证明归属；注册表项、服务、计划任务和应用商店应用不会被清理。",
+    "檢查桌面程式安裝記錄，透過 Windows 設定中的「已安裝的應用程式」解除安裝，然後尋找名稱與清單讀取後被解除安裝的應用程式完全相同的一般資料夾，把選取的移到資源回收筒，並可復原。名稱相同不能證明歸屬；登錄項目、服務、排程工作和市集應用程式不會被清理。",
+    "デスクトップアプリのインストール記録を調べ、Windows の設定の「インストールされているアプリ」からアンインストールし、一覧の読み取り後に削除されたアプリと名前が完全に一致する通常のフォルダーを探して、選んだものをごみ箱に移動します（元に戻せます）。名前が一致しても所有の証明にはなりません。レジストリ項目、サービス、タスク、ストアアプリは片付けません。"
   ],
   "Inspect mounted drive-letter types, filesystem declarations, caller capacity and read-only flags. Drive type does not identify external hardware; unmounted devices, USB identity, write-access diagnosis and safe eject remain planned.": [
     "检查已挂载盘符的类型、文件系统声明、当前用户容量及只读标志。磁盘类型不能判断外接硬件；未挂载设备、USB 身份、写入权限诊断和安全弹出仍待做。",
@@ -13298,5 +13298,215 @@
     "关闭请求结果",
     "關閉要求結果",
     "閉じる要求の結果"
+  ],
+  "After you uninstall apps in Windows Settings, this looks for folders they may have left in your app data: a plain folder named exactly as an app that was in the installation records when that window opened and is in none of them now, directly in Local, Roaming or LocalLow app data or your own Programs folder, or in a folder there named exactly as that app's publisher. An app counts as removed only when each of its own earlier installation records can no longer be opened. A matching name does not prove that a folder belonged to the app: another app, a newer edition or a portable copy can use the same name, and the folder can hold saved games, documents or settings you still want. Names also used by an app that is still recorded or by its publisher, names that a recorded app's name begins with (\"Zoom\" while \"Zoom Workplace\" is recorded), and shared folders such as Microsoft, Packages, Programs and Temp are never listed. A publisher's own folder is never listed, only the app's folder inside it, and a publisher folder named as an app is not searched. Nothing is selected for you. Before each move the app must still be missing from the installation records, the folder must still be a plain local folder at the same place, on a fixed drive with a Recycle Bin, and no running program whose path Windows reports may be inside it (protected programs may report none, and short 8.3 paths are not matched). If a folder is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move puts back the last moved folders while this window is open, unless something new is in their place. Afterwards, restore them from the Recycle Bin.": [
+    "在 Windows 设置中卸载应用后，这里会在你的应用数据中查找它们可能留下的文件夹：名称与某个应用完全相同的普通文件夹——该应用在打开那个窗口时还在安装记录中、现在已不在任何记录中——位于本地（Local）、漫游（Roaming）或 LocalLow 应用数据、你自己的 Programs 文件夹中，或位于其中以该应用发布者完整命名的文件夹里。只有当某个应用之前的每条安装记录本身都已无法打开时，才把它算作已卸载。名称相同并不能证明文件夹属于该应用：其他应用、新版本或便携版可能使用同名文件夹，文件夹里也可能有你仍需要的游戏存档、文档或设置。仍有记录的应用或其发布者使用的名称、某个已记录应用名称的开头部分（例如仍记录了“Zoom Workplace”时的“Zoom”），以及 Microsoft、Packages、Programs、Temp 等共享文件夹都不会列出。发布者文件夹本身不会列出，只列出其中该应用的文件夹；与某个应用同名的发布者文件夹不会被搜索。不会替你预先选择任何项。每次移动前，该应用必须仍不在安装记录中，文件夹必须仍是同一位置的普通本地文件夹，位于有回收站的固定磁盘上，且其中没有 Windows 报告了路径的正在运行的程序（受保护的程序可能不报告路径，8.3 短路径不会匹配）。如果文件夹太大、放不进回收站，Windows 会先询问是否永久删除。在此窗口打开期间，“撤销移动”可放回上次移动的文件夹，除非原位置已有新内容。之后请从回收站恢复。",
+    "在 Windows 設定中解除安裝應用程式後，這裡會在你的應用程式資料中尋找它們可能留下的資料夾：名稱與某個應用程式完全相同的一般資料夾——該應用程式在開啟那個視窗時還在安裝記錄中、現在已不在任何記錄中——位於本機（Local）、漫遊（Roaming）或 LocalLow 應用程式資料、你自己的 Programs 資料夾中，或位於其中以該應用程式發行者完整命名的資料夾裡。只有當某個應用程式先前的每筆安裝記錄本身都已無法開啟時，才把它算作已解除安裝。名稱相同並不能證明資料夾屬於該應用程式：其他應用程式、新版本或可攜版可能使用同名資料夾，資料夾裡也可能有你仍需要的遊戲存檔、文件或設定。仍有記錄的應用程式或其發行者使用的名稱、某個已記錄應用程式名稱的開頭部分（例如仍記錄了「Zoom Workplace」時的「Zoom」），以及 Microsoft、Packages、Programs、Temp 等共用資料夾都不會列出。發行者資料夾本身不會列出，只列出其中該應用程式的資料夾；與某個應用程式同名的發行者資料夾不會被搜尋。不會替你預先選取任何項目。每次移動前，該應用程式必須仍不在安裝記錄中，資料夾必須仍是同一位置的一般本機資料夾，位於有資源回收筒的固定磁碟上，且其中沒有 Windows 回報了路徑的正在執行的程式（受保護的程式可能不回報路徑，8.3 短路徑不會比對）。如果資料夾太大、放不進資源回收筒，Windows 會先詢問是否永久刪除。在此視窗開啟期間，「復原移動」可放回上次移動的資料夾，除非原位置已有新內容。之後請從資源回收筒還原。",
+    "Windows の設定でアプリをアンインストールした後、そのアプリが残した可能性のあるフォルダーをアプリデータから探します。対象は、あのウィンドウを開いたときにはインストール記録にあり、今はどの記録にもないアプリと名前が完全に一致する通常のフォルダーで、Local・Roaming・LocalLow のアプリデータやご自分の Programs フォルダーの直下、またはそこにあるそのアプリの発行元と完全に一致する名前のフォルダーの中にあるものです。アプリが削除されたとみなすのは、そのアプリの以前のインストール記録そのものがどれも開けなくなったときだけです。名前が一致しても、そのフォルダーがそのアプリのものとは限りません。別のアプリ、新しいエディション、ポータブル版が同じ名前を使うことがあり、まだ必要なゲームのセーブデータ、文書、設定が入っていることもあります。まだ記録されているアプリやその発行元が使う名前、記録中のアプリ名の先頭部分にあたる名前（「Zoom Workplace」が記録されているときの「Zoom」など）、Microsoft・Packages・Programs・Temp などの共有フォルダーは表示しません。発行元のフォルダー自体は表示せず、その中のアプリのフォルダーだけを表示します。アプリと同じ名前の発行元フォルダーの中は探しません。あらかじめ選択されている項目はありません。移動の直前に、そのアプリがまだインストール記録になく、フォルダーが同じ場所の通常のローカルフォルダーで、ごみ箱のある固定ドライブ上にあり、Windows がパスを報告している実行中のプログラムが中にないことを確認します（保護されたプログラムはパスを報告しないことがあり、8.3 形式の短いパスは照合しません）。フォルダーが大きすぎてごみ箱に入らない場合は、Windows が完全に削除してよいか確認します。このウィンドウを開いている間は「移動を取り消す」で直前に移動したフォルダーを戻せます（元の場所に新しいものがある場合を除く）。その後はごみ箱から復元してください。"
+  ],
+  "Search: at most 4,096 entries per folder, 256 folders and 20,000 entries in all. Sizes: one shared metadata budget of 100,000 entries and about 30 soft seconds, shared fairly among the folders, with at most 20,000 entries and four levels below any one folder; an incomplete size is a lower bound. Sizes are logical bytes from directory records, not reclaimable space: links, cloud placeholders and system items inside are skipped. Apps from the Microsoft Store, other Windows users, other drives, registry entries, services and scheduled tasks are not looked at.": [
+    "搜索：每个文件夹最多 4,096 项，最多 256 个文件夹，总计 20,000 项。大小：共享一个 100,000 项、约 30 秒软限制的元数据预算，在各文件夹间公平分配，任一文件夹以下最多 20,000 项、四层；不完整的大小为下限。大小是目录记录中的逻辑字节，不是可回收空间：其中的链接、云占位文件和系统项会被跳过。不查看 Microsoft Store 应用、其他 Windows 用户、其他磁盘、注册表项、服务和计划任务。",
+    "搜尋：每個資料夾最多 4,096 項，最多 256 個資料夾，總計 20,000 項。大小：共用一個 100,000 項、約 30 秒軟限制的中繼資料預算，在各資料夾間公平分配，任一資料夾以下最多 20,000 項、四層；不完整的大小為下限。大小是目錄記錄中的邏輯位元組，不是可回收空間：其中的連結、雲端預留位置檔案和系統項目會被略過。不檢查 Microsoft Store 應用程式、其他 Windows 使用者、其他磁碟、登錄項目、服務和排定的工作。",
+    "検索: フォルダーごとに最大 4,096 項目、最大 256 フォルダー、合計 20,000 項目。サイズ: 100,000 項目・約 30 秒（目安）のメタデータ予算を各フォルダーで公平に分け合い、1 つのフォルダーの下は最大 20,000 項目・4 階層まで。不完全なサイズは下限値です。サイズはディレクトリ記録上の論理バイト数で、解放できる容量ではありません。中のリンク、クラウドのプレースホルダー、システム項目は飛ばします。Microsoft Store アプリ、他の Windows ユーザー、他のドライブ、レジストリ項目、サービス、タスク スケジューラのタスクは調べません。"
+  ],
+  "The installation records could not all be read just now, so apps that are still installed cannot be told apart from removed ones. Nothing was searched. The list read earlier is kept: choose Find Leftovers again in a moment. If the installation records window itself reports a partial snapshot (for example an entry that cannot be read, or more than 1,024 entries in one view), this keeps happening and leftovers cannot be looked for on this PC.": [
+    "刚才未能读取全部安装记录，因此无法区分仍已安装和已卸载的应用。未进行搜索。之前读取的列表会保留：请稍后再次选择查找残留。如果安装记录窗口本身显示快照不完整（例如有条目无法读取，或某个视图超过 1,024 个条目），这种情况会一直出现，此电脑上无法查找残留。",
+    "剛才未能讀取全部安裝記錄，因此無法區分仍已安裝和已解除安裝的應用程式。未進行搜尋。先前讀取的清單會保留：請稍後再次選擇尋找殘留。如果安裝記錄視窗本身顯示快照不完整（例如有項目無法讀取，或某個檢視超過 1,024 個項目），這種情況會一直出現，此電腦上無法尋找殘留。",
+    "インストール記録をすべて読み取れなかったため、まだインストールされているアプリと削除されたアプリを区別できません。検索は行っていません。先に読み取った一覧はそのまま残ります。少し待ってからもう一度残りを探してください。インストール記録ウィンドウ自体がスナップショットの一部欠落を示している場合（読み取れない項目がある、または 1 つのビューに 1,024 件を超える項目があるなど）、この状態は続き、この PC では残りを探せません。"
+  ],
+  "This folder could not be read.": [
+    "无法读取此文件夹。",
+    "無法讀取此資料夾。",
+    "このフォルダーを読み取れませんでした。"
+  ],
+  "Some publisher folders in it could not be read.": [
+    "其中有些发布者文件夹无法读取。",
+    "其中有些發行者資料夾無法讀取。",
+    "その中の一部の発行元フォルダーを読み取れませんでした。"
+  ],
+  "A running program is inside it, or Swivel could not list the running programs, so it was left alone. Quit that program and try again.": [
+    "其中有正在运行的程序，或 Swivel 无法列出正在运行的程序，因此未处理它。请退出该程序后重试。",
+    "其中有正在執行的程式，或 Swivel 無法列出正在執行的程式，因此未處理它。請結束該程式後重試。",
+    "中で実行中のプログラムがあるか、Swivel が実行中のプログラムを一覧にできなかったため、そのままにしました。そのプログラムを終了してからもう一度お試しください。"
+  ],
+  "Local app data": [
+    "本地应用数据（Local）",
+    "本機應用程式資料（Local）",
+    "ローカル アプリデータ（Local）"
+  ],
+  "Roaming app data": [
+    "漫游应用数据（Roaming）",
+    "漫遊應用程式資料（Roaming）",
+    "ローミング アプリデータ（Roaming）"
+  ],
+  "LocalLow app data": [
+    "LocalLow 应用数据",
+    "LocalLow 應用程式資料",
+    "LocalLow アプリデータ"
+  ],
+  "Your Programs folder": [
+    "你的 Programs 文件夹",
+    "你的 Programs 資料夾",
+    "ご自分の Programs フォルダー"
+  ],
+  "To uninstall an app, use Open Installed Apps in Settings: Windows and the app's own uninstaller do the work, and Swivel never runs an uninstall command. Keep this window open meanwhile, then choose Find Leftovers of Apps Removed Since This List Was Read… to look for folders named exactly as the apps that are gone from the records.": [
+    "要卸载应用，请使用“在设置中打开已安装的应用”：由 Windows 和应用自己的卸载程序完成卸载，Swivel 从不运行卸载命令。卸载期间请保持此窗口打开，然后选择“查找此列表读取后被卸载的应用的残留…”，查找与已从记录中消失的应用名称完全相同的文件夹。",
+    "要解除安裝應用程式，請使用「在設定中開啟已安裝的應用程式」：由 Windows 和應用程式自己的解除安裝程式完成，Swivel 從不執行解除安裝命令。解除安裝期間請保持此視窗開啟，然後選擇「尋找此清單讀取後被解除安裝的應用程式的殘留…」，尋找與已從記錄中消失的應用程式名稱完全相同的資料夾。",
+    "アプリをアンインストールするには「設定でインストール済みアプリを開く」を使ってください。アンインストールは Windows とアプリ自身のアンインストーラーが行い、Swivel がアンインストール コマンドを実行することはありません。その間このウィンドウを開いたままにし、終わったら「この一覧の読み取り後に削除されたアプリの残りを探す…」を選ぶと、記録から消えたアプリと名前が完全に一致するフォルダーを探します。"
+  ],
+  "Open Installed Apps in Settings": [
+    "在设置中打开已安装的应用",
+    "在設定中開啟已安裝的應用程式",
+    "設定でインストール済みアプリを開く"
+  ],
+  "Find Leftovers of Apps Removed Since This List Was Read…": [
+    "查找此列表读取后被卸载的应用的残留…",
+    "尋找此清單讀取後被解除安裝的應用程式的殘留…",
+    "この一覧の読み取り後に削除されたアプリの残りを探す…"
+  ],
+  "Reading installation records again and looking for leftover folders…": [
+    "正在重新读取安装记录并查找残留文件夹…",
+    "正在重新讀取安裝記錄並尋找殘留資料夾…",
+    "インストール記録を読み直し、残ったフォルダーを探しています…"
+  ],
+  "Leftover review finished. Folders moved to the Recycle Bin or removed: {0}": [
+    "残留检查完成。已移到回收站或被删除的文件夹：{0}",
+    "殘留檢查完成。已移到資源回收筒或被刪除的資料夾：{0}",
+    "残りフォルダーの確認が終わりました。ごみ箱に移動したか削除されたフォルダー: {0}"
+  ],
+  "Leftover review closed. No folder from this window is in the Recycle Bin now.": [
+    "残留检查已关闭。此窗口中没有文件夹现在在回收站中。",
+    "殘留檢查已關閉。此視窗中沒有資料夾現在在資源回收筒中。",
+    "残りフォルダーの確認を閉じました。このウィンドウのフォルダーで、今ごみ箱にあるものはありません。"
+  ],
+  "Leftovers of Removed Apps": [
+    "已卸载应用的残留",
+    "已解除安裝應用程式的殘留",
+    "削除されたアプリの残り"
+  ],
+  "Move 1 leftover folder to the Recycle Bin?": [
+    "将 1 个残留文件夹移到回收站？",
+    "將 1 個殘留資料夾移到資源回收筒？",
+    "残りフォルダー 1 個をごみ箱に移動しますか？"
+  ],
+  "Move {0} leftover folders to the Recycle Bin?": [
+    "将 {0} 个残留文件夹移到回收站？",
+    "將 {0} 個殘留資料夾移到資源回收筒？",
+    "残りフォルダー {0} 個をごみ箱に移動しますか？"
+  ],
+  "A matching name does not prove that a folder belonged to the removed app. Check each path, and keep any folder that holds saved games, documents or settings you still want. If a folder is too large for the Recycle Bin, Windows asks before deleting it permanently.": [
+    "名称相同并不能证明文件夹属于已卸载的应用。请逐个检查路径，保留其中有你仍需要的游戏存档、文档或设置的文件夹。如果文件夹太大、放不进回收站，Windows 会先询问是否永久删除。",
+    "名稱相同並不能證明資料夾屬於已解除安裝的應用程式。請逐一檢查路徑，保留其中有你仍需要的遊戲存檔、文件或設定的資料夾。如果資料夾太大、放不進資源回收筒，Windows 會先詢問是否永久刪除。",
+    "名前が一致しても、そのフォルダーが削除したアプリのものとは限りません。パスを一つずつ確認し、まだ必要なゲームのセーブデータ、文書、設定が入ったフォルダーは残してください。フォルダーが大きすぎてごみ箱に入らない場合は、Windows が完全に削除してよいか確認します。"
+  ],
+  "Check Running Programs Again": [
+    "重新检查正在运行的程序",
+    "重新檢查正在執行的程式",
+    "実行中のプログラムを再確認"
+  ],
+  "No app from the earlier list is confirmed removed from the installation records now. Go back to the installation records, uninstall an app with Open Installed Apps in Settings, wait for its uninstaller to finish, then choose Find Leftovers again.": [
+    "之前列表中没有应用被确认已从安装记录中移除。请返回安装记录，用“在设置中打开已安装的应用”卸载应用，等它的卸载程序完成后，再次选择查找残留。",
+    "先前清單中沒有應用程式被確認已從安裝記錄中移除。請返回安裝記錄，用「在設定中開啟已安裝的應用程式」解除安裝應用程式，等它的解除安裝程式完成後，再次選擇尋找殘留。",
+    "先ほどの一覧のアプリで、インストール記録から削除されたと確認できたものはありません。インストール記録に戻り、「設定でインストール済みアプリを開く」でアプリをアンインストールし、アンインストーラーが終わるのを待ってから、もう一度残りを探してください。"
+  ],
+  "No folder named exactly as a removed app was found in the places looked at.": [
+    "在查找的位置中没有找到与已卸载应用名称完全相同的文件夹。",
+    "在搜尋的位置中沒有找到與已解除安裝應用程式名稱完全相同的資料夾。",
+    "調べた場所に、削除されたアプリと名前が完全に一致するフォルダーは見つかりませんでした。"
+  ],
+  "Place": [
+    "位置",
+    "位置",
+    "場所"
+  ],
+  "Apps removed since the list was read: {0} · folders listed: {1} · measured {2:N0} bytes": [
+    "列表读取后被卸载的应用：{0} · 列出的文件夹：{1} · 已测量 {2:N0} 字节",
+    "清單讀取後被解除安裝的應用程式：{0} · 列出的資料夾：{1} · 已測量 {2:N0} 位元組",
+    "一覧の読み取り後に削除されたアプリ: {0} · 表示フォルダー: {1} · 測定済み {2:N0} バイト"
+  ],
+  "The search stopped at a limit; some folders may not be listed.": [
+    "搜索在达到限制时停止；有些文件夹可能未列出。",
+    "搜尋在達到限制時停止；有些資料夾可能未列出。",
+    "上限で検索を止めたため、表示されていないフォルダーがある可能性があります。"
+  ],
+  "Some places could not be read; some folders may not be listed.": [
+    "有些位置无法读取；有些文件夹可能未列出。",
+    "有些位置無法讀取；有些資料夾可能未列出。",
+    "読み取れなかった場所があるため、表示されていないフォルダーがある可能性があります。"
+  ],
+  "Removed since the list was read: {0}": [
+    "列表读取后被卸载：{0}",
+    "清單讀取後被解除安裝：{0}",
+    "一覧の読み取り後に削除: {0}"
+  ],
+  "Not looked for (a shared folder name, a name still used by a recorded app or publisher, or not a valid folder name): {0}": [
+    "未查找（共享文件夹名称、仍被已记录的应用或发布者使用的名称，或不是有效的文件夹名称）：{0}",
+    "未搜尋（共用資料夾名稱、仍被已記錄的應用程式或發行者使用的名稱，或不是有效的資料夾名稱）：{0}",
+    "探さなかった名前（共有フォルダー名、記録中のアプリや発行元がまだ使っている名前、またはフォルダー名として無効）: {0}"
+  ],
+  "Not found": [
+    "未找到",
+    "找不到",
+    "見つかりません"
+  ],
+  "Listed up to a limit": [
+    "已列出至限制",
+    "已列出至限制",
+    "上限まで一覧"
+  ],
+  "Listed in full": [
+    "已完整列出",
+    "已完整列出",
+    "すべて一覧"
+  ],
+  "Swivel could not list the running programs, so no folder can be moved now.": [
+    "Swivel 无法列出正在运行的程序，因此现在不能移动任何文件夹。",
+    "Swivel 無法列出正在執行的程式，因此現在不能移動任何資料夾。",
+    "Swivel が実行中のプログラムを一覧にできなかったため、今はどのフォルダーも移動できません。"
+  ],
+  "Running from a listed folder now (quit them first): {0}": [
+    "正在从列出的文件夹运行（请先退出）：{0}",
+    "正在從列出的資料夾執行（請先結束）：{0}",
+    "表示中のフォルダーから実行中（先に終了してください）: {0}"
+  ],
+  "No running program was found inside the listed folders.": [
+    "列出的文件夹中没有发现正在运行的程序。",
+    "列出的資料夾中沒有發現正在執行的程式。",
+    "表示中のフォルダーの中で実行中のプログラムは見つかりませんでした。"
+  ],
+  "A program is running from it; quit it first": [
+    "有程序正从中运行；请先退出",
+    "有程式正從中執行；請先結束",
+    "中のプログラムが実行中です。先に終了してください"
+  ],
+  "Its app is in the installation records again, or they could not all be read or checked just now, so it was left alone.": [
+    "它的应用又出现在安装记录中，或刚才未能读取或核对全部记录，因此未处理它。",
+    "它的應用程式又出現在安裝記錄中，或剛才未能讀取或核對全部記錄，因此未處理它。",
+    "そのアプリがまたインストール記録にあるか、記録をすべて読み取りまたは確認できなかったため、そのままにしました。"
+  ],
+  "Windows did not move it to the Recycle Bin. If Windows removed part of it, that part cannot be restored with Undo.": [
+    "Windows 没有把它移到回收站。如果 Windows 删除了其中一部分，那部分无法用撤销恢复。",
+    "Windows 沒有把它移到資源回收筒。如果 Windows 刪除了其中一部分，那部分無法用復原還原。",
+    "Windows はごみ箱に移動しませんでした。Windows が一部を削除した場合、その部分は取り消しでは戻せません。"
+  ],
+  "Back to Installation Records": [
+    "返回安装记录",
+    "返回安裝記錄",
+    "インストール記録に戻る"
+  ],
+  "Missing from the list now but not looked for, because its own installation record is still there or could not be checked (an uninstaller may still be running): {0}": [
+    "现已不在列表中、但未查找，因为它自己的安装记录还在或无法核对（卸载程序可能仍在运行）：{0}",
+    "現已不在清單中、但未尋找，因為它自己的安裝記錄還在或無法核對（解除安裝程式可能仍在執行）：{0}",
+    "一覧からは消えたものの、自身のインストール記録がまだあるか確認できなかったため探していないもの（アンインストーラーがまだ動いている可能性があります）：{0}"
+  ],
+  "Running programs could not be listed; it cannot be moved now": [
+    "无法列出正在运行的程序；现在不能移动它",
+    "無法列出正在執行的程式；現在不能移動它",
+    "実行中のプログラムを一覧にできないため、今は移動できません"
+  ],
+  "Nothing was searched. The installation records read earlier are kept.": [
+    "未进行搜索。之前读取的安装记录会保留。",
+    "未進行搜尋。先前讀取的安裝記錄會保留。",
+    "検索は行っていません。先に読み取ったインストール記録はそのまま残ります。"
   ]
 }

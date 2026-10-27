@@ -10,6 +10,8 @@ namespace Swivel.Windows;
 internal static class AppMemoryReader
 {
     internal static AppMemorySnapshot Read(CancellationToken token)=>AppMemory.Scan(new Source(),token);
+    /// The same limited process queries, for checks that need running programs' paths.
+    internal static IAppMemorySource Processes=>new Source();
     private static bool Unavailable(Exception e)=>e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException or PlatformNotSupportedException;
     private sealed class Source : IAppMemorySource
     {

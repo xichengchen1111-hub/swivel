@@ -538,8 +538,27 @@ public sealed partial class App : Application
                 report(L("Reading desktop installation records…"));
                 var installed = await AwaitDoctorReadAsync(Task.Run(() => InstalledAppsReader.Read(token), token),token);
                 token.ThrowIfCancellationRequested();
-                await ShowDoctorOperationAsync(new InstalledAppsDialog(this, installed),DoctorAssistantSummary.Installed(installed),owner,token,DoctorLabels.Installed(installed));
-                report(token.IsCancellationRequested ? L("Cancelled.") : L("Read-only installation-record inspection finished. No apps or files were changed.")); return;
+                // The list read first stays the comparison: after a failed or empty search, or Back
+                // from the review, the same records window opens again.
+                int moved = 0; bool searched = false;
+                while (true)
+                {
+                    var records = new InstalledAppsDialog(this, installed);
+                    await ShowDoctorOperationAsync(records,DoctorAssistantSummary.Installed(installed),owner,token,DoctorLabels.Installed(installed));
+                    if (!records.LeftoversRequested || token.IsCancellationRequested) break;
+                    report(L("Reading installation records again and looking for leftover folders…"));
+                    AppLeftoverResult leftovers;
+                    try { leftovers = await AwaitDoctorReadAsync(Task.Run(() => AppLeftoverReader.Read(installed, token), token),token); }
+                    catch (UserError error) when (!token.IsCancellationRequested)
+                    { report(L("Nothing was searched. The installation records read earlier are kept.")); if (!exiting) ShowError(error); continue; }
+                    token.ThrowIfCancellationRequested(); searched = true;
+                    var review = new AppLeftoversDialog(this, leftovers, AppLeftoverReader.ProgramPaths, AppLeftoverReader.RecordsCheck);
+                    bool back = ShowOperationDialog(review,owner,token); moved += review.Moved;
+                    report(moved > 0 ? string.Format(L("Leftover review finished. Folders moved to the Recycle Bin or removed: {0}"), moved) : L("Leftover review closed. No folder from this window is in the Recycle Bin now."));
+                    if (!back) break;
+                }
+                report(token.IsCancellationRequested ? L("Cancelled.") : moved > 0 ? string.Format(L("Leftover review finished. Folders moved to the Recycle Bin or removed: {0}"), moved)
+                    : searched ? L("Leftover review closed. No folder from this window is in the Recycle Bin now.") : L("Read-only installation-record inspection finished. No apps or files were changed.")); return;
             }
             if (action.Id == "doctor.appmemory")
             {

@@ -21,6 +21,8 @@ internal sealed class InstalledAppsDialog:Window
     private readonly TextBox details=new(){IsReadOnly=true,AcceptsReturn=true,TextWrapping=TextWrapping.NoWrap,Height=180,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto};
     private readonly Button copySelected;
     internal bool IncludeKeys=>keys.IsChecked==true;
+    /// Set when the window closed to look for leftovers of apps removed since it was read.
+    internal bool LeftoversRequested{get;private set;}
     internal string CurrentReport=>InstalledApps.Report(snapshot,IncludeKeys,app.L,default);
     internal string? SelectedReport=>tabs.SelectedIndex==0&&records.SelectedItem is RecordRow selected?InstalledApps.Header(snapshot,IncludeKeys,app.L)+Environment.NewLine+
         string.Join(Environment.NewLine,snapshot.Roots.Select(r=>InstalledApps.Origin(r.Source,app.L)+": "+r.Recorded.ToString(CultureInfo.InvariantCulture)+" · "+InstalledApps.RootStatus(r.Issues,app.L)))+Environment.NewLine+InstalledApps.Describe(snapshot.Records[selected.Index],IncludeKeys,app.L):null;
@@ -28,6 +30,9 @@ internal sealed class InstalledAppsDialog:Window
     {
         this.app=app;this.snapshot=snapshot;Title=app.L("Desktop Installation Records");Width=1000;Height=900;MinWidth=560;MinHeight=440;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var root=new DockPanel{Margin=new Thickness(20)};var footer=new WrapPanel();DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
+        // Windows Settings does the uninstalling; Swivel never runs an uninstall command.
+        footer.Children.Add(UI.Button(app.L("Open Installed Apps in Settings"),()=>app.Try(()=>WindowsSettings.Open(WindowsSettingsPage.Apps))));
+        footer.Children.Add(UI.Button(app.L("Find Leftovers of Apps Removed Since This List Was Read…"),()=>{LeftoversRequested=true;DialogResult=true;}));
         footer.Children.Add(UI.Button(app.L("Copy Report"),()=>app.Try(()=>Clipboard.SetText(CurrentReport))));
         copySelected=UI.Button(app.L("Copy Selected Details"),()=>app.Try(()=>{if(SelectedReport is string text)Clipboard.SetText(text);}));copySelected.IsEnabled=false;footer.Children.Add(copySelected);
         var close=UI.Button(app.L("Close"),()=>DialogResult=false);close.IsCancel=true;footer.Children.Add(close);
@@ -35,7 +40,7 @@ internal sealed class InstalledAppsDialog:Window
         body.Children.Add(UI.Text(snapshot.RecordedUtc.ToString("O",CultureInfo.InvariantCulture),12));
         body.Children.Add(UI.Text(app.L(snapshot.Partial?"Installation-record snapshot is partial.":"All available registry views were enumerated within the limits."),14));
         body.Children.Add(UI.Text(string.Format(app.L("Recorded registry entries: {0} (not a count of unique installed apps)"),snapshot.Records.Count),14));
-        foreach(string notice in new[]{InstalledApps.Scope,InstalledApps.Limits,InstalledApps.Privacy})body.Children.Add(UI.Text(app.L(notice),12));
+        foreach(string notice in new[]{InstalledApps.Scope,InstalledApps.Limits,InstalledApps.Privacy,InstalledApps.Uninstall})body.Children.Add(UI.Text(app.L(notice),12));
         keys.Content=app.L("Show Registry Subkey Names");AutomationProperties.SetName(keys,app.L("Show Registry Subkey Names"));body.Children.Add(keys);
         body.Children.Add(UI.Text(app.L("List text may be shortened. Select a record for complete reported text and field status. Subkey names are never used as a fallback app name."),12));
         records.View=Columns(("Reported App Name","Name",250),("Reported Version","Version",140),("Reported Publisher","Publisher",250),("Registry View","Source",240));

@@ -187,6 +187,12 @@ public static partial class NativeFiles
         RestoreRecycled(folder, stored, true);
     }
 
+    /// Rechecks a folder from Leftovers of Removed Apps (a plain local folder at the same place,
+    /// then `check`, which throws a UserError when its app is recorded again or a program runs
+    /// inside it), then moves it to the Recycle Bin.
+    internal static string RecycleLeftover(string folder, Action check, IntPtr owner = default)
+        => Recycle(folder, true, _ => check(), owner, () => throw new UserError(AppLeftovers.NotRecycled));
+
     private static bool StillCompared(SafeFileHandle handle, DuplicateStamp compared)
     {
         try { return ReadDuplicateStamp(handle, ReadIdentity(handle).Volume) == compared; }

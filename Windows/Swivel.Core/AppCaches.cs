@@ -200,23 +200,36 @@ public static class AppCaches
             apps.Add(new(app, container, AppCacheAppState.Found, issue, profiles, partial, unreadable));
         }
 
-        // One shared, fair metadata budget, as Compare Common Folders divides its own.
         var watch = Stopwatch.StartNew(); elapsed ??= () => watch.Elapsed;
-        var items = new List<AppCacheItem>(found.Count); int remainingEntries = limits.MeasureEntries; bool entryLimit = false, timeLimit = false;
-        for (int i = 0; i < found.Count; i++)
+        var sizes = MeasureShared(found.Select(folder => folder.Path).ToArray(), open, token, limits.MeasureEntries, limits.MeasureSeconds, elapsed, out bool entryLimit, out bool timeLimit);
+        var items = found.Select((folder, i) => new AppCacheItem(folder, sizes[i])).ToArray();
+        return new(new ReadOnlyCollection<AppCacheAppResult>(apps), new ReadOnlyCollection<AppCacheItem>(items), folderLimit, discoveryLimit, entryLimit, timeLimit, DateTimeOffset.Now);
+    }
+
+    /// Measures each folder with one shared, fair metadata budget, as Compare Common Folders
+    /// divides its own: at most 20,000 entries and four levels below any one folder. Null
+    /// where the entries or the time ran out before the folder was reached.
+    internal static IReadOnlyList<AppCacheSize?> MeasureShared(IReadOnlyList<string> paths, Func<string, IFolderMetadata> open, CancellationToken token,
+        int measureEntries, int measureSeconds, Func<TimeSpan> elapsed, out bool entryLimit, out bool timeLimit)
+    {
+        ArgumentNullException.ThrowIfNull(paths); ArgumentNullException.ThrowIfNull(open); ArgumentNullException.ThrowIfNull(elapsed);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(measureEntries); ArgumentOutOfRangeException.ThrowIfGreaterThan(measureEntries, 100000);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(measureSeconds); ArgumentOutOfRangeException.ThrowIfGreaterThan(measureSeconds, 30);
+        var sizes = new AppCacheSize?[paths.Count]; int remainingEntries = measureEntries; entryLimit = timeLimit = false;
+        for (int i = 0; i < paths.Count; i++)
         {
             token.ThrowIfCancellationRequested();
-            var folder = found[i]; int remainingFolders = found.Count - i; double seconds = elapsed().TotalSeconds;
-            if (remainingEntries == 0) { entryLimit = true; items.Add(new(folder, null)); continue; }
-            if (seconds >= limits.MeasureSeconds) { timeLimit = true; items.Add(new(folder, null)); continue; }
+            int remainingFolders = paths.Count - i; double seconds = elapsed().TotalSeconds;
+            if (remainingEntries == 0) { entryLimit = true; continue; }
+            if (seconds >= measureSeconds) { timeLimit = true; continue; }
             int quota = Math.Clamp(remainingEntries / remainingFolders, 1, 20000);
-            int deadline = Math.Clamp((int)Math.Ceiling(seconds + (limits.MeasureSeconds - seconds) / remainingFolders), 1, limits.MeasureSeconds);
+            int deadline = Math.Clamp((int)Math.Ceiling(seconds + (measureSeconds - seconds) / remainingFolders), 1, measureSeconds);
             // Deducted once the folder opens, as Compare Common Folders does: a folder that cannot
             // be opened uses none of the budget, one whose scan then fails uses its whole share.
             IFolderMetadata directory;
-            try { directory = open(folder.Path); }
+            try { directory = open(paths[i]); }
             catch (Exception error) when (!token.IsCancellationRequested && Expected(error))
-            { items.Add(new(folder, new(0, 0, 0, true, error is UserError ? error.Message : Unreadable))); continue; }
+            { sizes[i] = new(0, 0, 0, true, error is UserError ? error.Message : Unreadable); continue; }
             remainingEntries -= quota;
             using (directory)
             {
@@ -225,21 +238,21 @@ public static class AppCaches
                     var scan = FolderSizes.Scan(directory, token, new(quota, 4, deadline), elapsed);
                     remainingEntries += quota - scan.Entries;
                     entryLimit |= scan.EntryLimit; timeLimit |= scan.TimeLimit;
-                    items.Add(new(folder, new(scan.Root.Bytes, scan.Root.Files, scan.Entries, scan.Root.Incomplete || scan.EntryLimit || scan.TimeLimit, null)));
+                    sizes[i] = new(scan.Root.Bytes, scan.Root.Files, scan.Entries, scan.Root.Incomplete || scan.EntryLimit || scan.TimeLimit, null);
                 }
                 catch (Exception error) when (!token.IsCancellationRequested && Expected(error))
-                { items.Add(new(folder, new(0, 0, 0, true, error is UserError ? error.Message : Unreadable))); }
+                { sizes[i] = new(0, 0, 0, true, error is UserError ? error.Message : Unreadable); }
             }
         }
         token.ThrowIfCancellationRequested();
-        return new(new ReadOnlyCollection<AppCacheAppResult>(apps), new ReadOnlyCollection<AppCacheItem>(items), folderLimit, discoveryLimit, entryLimit, timeLimit, DateTimeOffset.Now);
+        return Array.AsReadOnly(sizes);
     }
 
-    private static bool IsPlain(FolderEntry entry)
+    internal static bool IsPlain(FolderEntry entry)
     {
         if ((entry.Attributes & FolderSizes.SkippedAttributes) != 0 || entry.Directory != ((entry.Attributes & 0x10) != 0)) return false;
         try { WindowsPathPolicy.ValidateName(entry.Name); return true; } catch (UserError) { return false; }
     }
-    private static bool Missing(Exception error) => error is FileNotFoundException or DirectoryNotFoundException || error is Win32Exception { NativeErrorCode: 2 or 3 };
-    private static bool Expected(Exception error) => error is IOException or UnauthorizedAccessException or Win32Exception or UserError or NotSupportedException or SecurityException;
+    internal static bool Missing(Exception error) => error is FileNotFoundException or DirectoryNotFoundException || error is Win32Exception { NativeErrorCode: 2 or 3 };
+    internal static bool Expected(Exception error) => error is IOException or UnauthorizedAccessException or Win32Exception or UserError or NotSupportedException or SecurityException;
 }

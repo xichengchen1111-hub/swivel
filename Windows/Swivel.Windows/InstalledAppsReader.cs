@@ -19,14 +19,31 @@ internal static class InstalledAppsReader
     {
         public RegistrationOpen Open(RegistrationSource source)
         {
-            bool machine=source is RegistrationSource.Machine64 or RegistrationSource.Machine32;
-            uint view=source switch{RegistrationSource.Machine64 or RegistrationSource.User64=>View64,RegistrationSource.Machine32 or RegistrationSource.User32=>View32,_=>throw new ArgumentOutOfRangeException(nameof(source))};
-            using var predefined=new SafeRegistryHandle(new IntPtr(unchecked((int)(machine?0x80000002u:0x80000001u))),ownsHandle:false);
+            uint view=View(source);
+            using var predefined=Predefined(source);
             int error=OpenKey(predefined,UninstallKey,Enumerate|view,out var handle);
             if(error!=Success||handle is null)return new(null,error==NotFound?RegistrationOpenState.Missing:RegistrationOpenState.Unavailable);
             return new(new Root(handle,view),RegistrationOpenState.Open);
         }
     }
+    /// Opens one earlier record's own subkey again in its view. Gone only when the view's
+    /// Uninstall key opens and the subkey itself is reported as not found.
+    internal static RecordKeyState Recheck(RegistrationSource source,string key)
+    {
+        if(!InstalledApps.ValidKey(key))return RecordKeyState.Unknown;
+        uint view=View(source);
+        using var predefined=Predefined(source);
+        if(OpenKey(predefined,UninstallKey,Query|view,out var root)!=Success||root is null)return RecordKeyState.Unknown;
+        using(root)
+        {
+            int error=OpenKey(root,key,Query|view,out var entry);entry?.Dispose();
+            return error==Success?RecordKeyState.Present:error==NotFound?RecordKeyState.Gone:RecordKeyState.Unknown;
+        }
+    }
+    private static uint View(RegistrationSource source)=>source switch{RegistrationSource.Machine64 or RegistrationSource.User64=>View64,RegistrationSource.Machine32 or RegistrationSource.User32=>View32,_=>throw new ArgumentOutOfRangeException(nameof(source))};
+    // A predefined key is borrowed, never closed.
+    private static SafeRegistryHandle Predefined(RegistrationSource source)
+        =>new(new IntPtr(unchecked((int)(source is RegistrationSource.Machine64 or RegistrationSource.Machine32?0x80000002u:0x80000001u))),ownsHandle:false);
     private sealed class Root(SafeRegistryHandle handle,uint view):IRegistrationRoot
     {
         public RegistrationKey At(uint index)

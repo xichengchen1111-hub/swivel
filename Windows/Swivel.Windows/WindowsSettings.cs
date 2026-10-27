@@ -6,7 +6,7 @@ using Swivel.Core;
 
 namespace Swivel.Windows;
 
-internal enum WindowsSettingsPage { Network, Proxy, Storage, Power }
+internal enum WindowsSettingsPage { Network, Proxy, Storage, Power, Apps }
 internal static class WindowsSettings
 {
     // Closed local Windows protocol targets, never built from a report, file,
@@ -16,6 +16,7 @@ internal static class WindowsSettings
         WindowsSettingsPage.Proxy => "ms-settings:network-proxy",
         WindowsSettingsPage.Storage => "ms-settings:storagesense",
         WindowsSettingsPage.Power => "ms-settings:powersleep",
+        WindowsSettingsPage.Apps => "ms-settings:appsfeatures",
         _ => throw new ArgumentOutOfRangeException(nameof(page))
     }) { UseShellExecute = true };
     public static void Open(WindowsSettingsPage page)
