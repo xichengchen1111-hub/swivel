@@ -426,6 +426,11 @@ public sealed class MainWindow : Window
             try { Clipboard.SetText(McpSetup.Text(command)); SetStatus(app.L("Setup copied. Paste it into your agent host's configuration.")); }
             catch (System.Runtime.InteropServices.ExternalException) { SetStatus(app.L("The clipboard is in use. Try again.")); }
         }));
+        page.Children.Add(UI.Button(app.L("Install in Claude Desktop…"), () =>
+        {
+            try { ClaudeExtension.Open(); SetStatus(NativeIdentity.HasPackage ? app.L("The extension was handed to the app that opens .mcpb files (normally Claude Desktop): choose Install there.") : app.L("The extension was handed to the app that opens .mcpb files (normally Claude Desktop): choose Install there, then choose this Swivel.exe in the extension's settings.")); }
+            catch (UserError error) { SetStatus(app.L(error.Message)); }
+        }));
         page.Children.Add(UI.Button(app.L("Wheel Drag Gesture…"), app.OpenWheelGesture));
         page.Children.Add(UI.Button(app.L("Open Clothesline"),app.OpenClothesline));
         page.Children.Add(UI.Button(app.L("Image Arrival Cards…"),app.OpenImageArrivalCards));

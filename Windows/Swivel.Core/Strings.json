@@ -13513,5 +13513,35 @@
     "这张图片的宽或高超出了 Windows OCR 能接受的范围。请先缩小或裁剪；不会自动缩小。",
     "這張圖片的寬或高超出了 Windows OCR 能接受的範圍。請先縮小或裁剪；不會自動縮小。",
     "この画像は Windows OCR が受け付ける幅または高さを超えています。先に縮小するかトリミングしてください。自動での縮小は行いません。"
+  ],
+  "Install in Claude Desktop…": [
+    "在 Claude Desktop 中安装…",
+    "在 Claude Desktop 中安裝…",
+    "Claude Desktop にインストール…"
+  ],
+  "The extension was handed to the app that opens .mcpb files (normally Claude Desktop): choose Install there.": [
+    "扩展已交给打开 .mcpb 文件的应用（通常是 Claude Desktop）：请在那里选择“安装”。",
+    "延伸模組已交給開啟 .mcpb 檔案的應用程式（通常是 Claude Desktop）：請在那裡選擇「安裝」。",
+    "拡張機能を .mcpb ファイルを開くアプリ（通常は Claude Desktop）に渡しました。そこで「インストール」を選んでください。"
+  ],
+  "The extension was handed to the app that opens .mcpb files (normally Claude Desktop): choose Install there, then choose this Swivel.exe in the extension's settings.": [
+    "扩展已交给打开 .mcpb 文件的应用（通常是 Claude Desktop）：请在那里选择“安装”，然后在扩展的设置中选择这个 Swivel.exe。",
+    "延伸模組已交給開啟 .mcpb 檔案的應用程式（通常是 Claude Desktop）：請在那裡選擇「安裝」，然後在延伸模組的設定中選擇這個 Swivel.exe。",
+    "拡張機能を .mcpb ファイルを開くアプリ（通常は Claude Desktop）に渡しました。そこで「インストール」を選び、拡張機能の設定でこの Swivel.exe を選んでください。"
+  ],
+  "This build has no Claude Desktop extension. Use Copy Agent Tools Setup instead.": [
+    "这个版本没有附带 Claude Desktop 扩展。请改用“复制 Agent 工具设置”。",
+    "這個版本沒有附帶 Claude Desktop 延伸模組。請改用「複製 Agent 工具設定」。",
+    "このビルドには Claude Desktop 拡張機能が含まれていません。代わりに「エージェントツールの設定をコピー」を使ってください。"
+  ],
+  "No app on this PC opens Claude Desktop extensions (.mcpb). Install Claude Desktop, or use Copy Agent Tools Setup.": [
+    "这台电脑上没有能打开 Claude Desktop 扩展（.mcpb）的应用。请安装 Claude Desktop，或改用“复制 Agent 工具设置”。",
+    "這台電腦上沒有能開啟 Claude Desktop 延伸模組（.mcpb）的應用程式。請安裝 Claude Desktop，或改用「複製 Agent 工具設定」。",
+    "この PC には Claude Desktop 拡張機能（.mcpb）を開けるアプリがありません。Claude Desktop をインストールするか、「エージェントツールの設定をコピー」を使ってください。"
+  ],
+  "Windows could not open the Claude Desktop extension.": [
+    "Windows 无法打开 Claude Desktop 扩展。",
+    "Windows 無法開啟 Claude Desktop 延伸模組。",
+    "Windows で Claude Desktop 拡張機能を開けませんでした。"
   ]
 }

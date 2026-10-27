@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Threading;
+using System.Xml.Linq;
 using Swivel.Core;
 
 internal static class McpChecks
@@ -164,6 +166,32 @@ internal static class McpChecks
     private static bool IsError(JsonObject reply) => reply["result"]!["isError"]!.GetValue<bool>();
     private static JsonArray Paths(params string[] paths) => new(paths.Select(p => (JsonNode)p).ToArray());
 
+    /// The Claude Desktop extension (Packaging/mcpb): same tools and version as the app, Windows only,
+    /// and a launcher that starts nothing but Swivel.exe --mcp (a chosen portable Swivel.exe or the MSIX alias).
+    private static void BundleChecks(string[] tools, Action<bool, string> check)
+    {
+        var windows = new DirectoryInfo(AppContext.BaseDirectory);
+        while (windows is not null && !Directory.Exists(Path.Combine(windows.FullName, "Swivel.Windows"))) windows = windows.Parent;
+        if (windows is null) { check(false, "MCPB sources found in the repository"); return; }
+        string folder = Path.Combine(windows.FullName, "Packaging", "mcpb");
+        var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json")))!.AsObject();
+        string version = XDocument.Load(Path.Combine(windows.FullName, "Directory.Build.props")).Descendants("Version").Single().Value;
+        check((string?)manifest["version"] == version && (string?)manifest["manifest_version"] == "0.3" && (string?)manifest["name"] == McpSetup.ServerName, "MCPB manifest has the app's version and the setup's server name: " + manifest["version"]);
+        var listed = ((JsonArray)manifest["tools"]!).Select(t => (string)t!["name"]!).ToArray();
+        check(listed.SequenceEqual(tools) && ((JsonArray)manifest["tools"]!).All(t => ((string)t!["description"]!).Length is > 0 and < 160), "MCPB manifest lists the server's tools in order: " + string.Join(",", listed));
+        var server = manifest["server"]!; var config = server["mcp_config"]!;
+        check((string?)server["type"] == "node" && (string?)server["entry_point"] == "index.js" && File.Exists(Path.Combine(folder, "index.js"))
+            && (string?)config["command"] == "node" && ((JsonArray)config["args"]!).Select(a => (string)a!).SequenceEqual(new[] { "${__dirname}/index.js" })
+            && ((JsonObject)config["env"]!).Count == 1 && (string?)config["env"]!["SWIVEL_EXE"] == "${user_config.swivel_exe}", "MCPB runs index.js with Claude Desktop's Node.js and passes only the chosen Swivel.exe");
+        check((string?)manifest["user_config"]!["swivel_exe"]!["type"] == "file" && manifest["user_config"]!["swivel_exe"]!["required"]!.GetValue<bool>() == false && ((JsonObject)manifest["user_config"]!).Count == 1,
+            "MCPB asks only for an optional Swivel.exe (portable ZIP)");
+        check(((JsonArray)manifest["compatibility"]!["platforms"]!).Select(p => (string)p!).SequenceEqual(new[] { "win32" }) && File.Exists(Path.Combine(windows.FullName, "Packaging", "Assets", "Square150x150Logo.png")), "MCPB is for Windows only and has its icon source");
+        string launcher = File.ReadAllText(Path.Combine(folder, "index.js"));
+        check(launcher.Contains("spawn(command, ['--mcp'], { stdio: 'inherit', windowsHide: true, shell: false })", StringComparison.Ordinal) && launcher.Contains("'" + McpSetup.Alias + "'", StringComparison.Ordinal)
+            && launcher.Contains("!== 'swivel.exe'", StringComparison.Ordinal) && System.Text.RegularExpressions.Regex.Matches(launcher, @"\bspawn\(").Count == 1 && System.Text.RegularExpressions.Regex.Matches(launcher, @"\brequire\(").Count == 2 && !System.Text.RegularExpressions.Regex.IsMatch(launcher, @"\b(execFile|execSync|exec|fork|spawnSync)\(")
+            && !launcher.Contains("shell: true", StringComparison.Ordinal) && !launcher.Contains("http", StringComparison.Ordinal), "MCPB launcher spawns only Swivel.exe --mcp, without a shell");
+    }
+
     internal static void Run(Action<bool, string> check, Action<Action, string> reject)
     {
         var host = new FakeHost(); var session = new McpSession(host, "0.86.0");
@@ -182,6 +210,7 @@ internal static class McpChecks
         var listed = (JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!;
         check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes" or "plan_compress" or "plan_rename" or "plan_move").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
             "MCP extract_text, read_codes and the plan tools are marked read-only");
+        BundleChecks(tools, check);
         check((int)Call(session, "format_disk", new JsonObject())["error"]!["code"]! == -32602, "MCP unknown tool is an invalid-params error");
 
         host.Enabled = false;

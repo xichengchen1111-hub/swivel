@@ -1047,6 +1047,16 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.110 Claude Desktop 扩展 Swivel.mcpb（G02 部分）
+
+批次开始 `git fetch`：origin/main 仍为 `c053dd0`（Mac 1.14.5），不含 `Windows/` 改动；0.109 已推送，Windows CI 40516148024 通过（核心 4,520,464、原生 5,368）。
+
+新增 `Packaging/mcpb/manifest.json`（manifest_version 0.3，name 与 `McpSetup.ServerName` 同为 `swivel-windows`，版本随应用，`server.type` node，`mcp_config` 为 `node ${__dirname}/index.js`，环境变量只有 `SWIVEL_EXE=${user_config.swivel_exe}`；可选 `user_config.swivel_exe` 类型 file，供便携 ZIP；只支持 win32；工具列表与服务器相同）与 `Packaging/mcpb/index.js`。按 MCPB 库的替换规则，未设置的可选项不会被替换（收到字面 `${user_config.swivel_exe}`），清空则收到空串，两者都按未选处理。启动脚本：选了的路径先 `path.win32.normalize`，须为盘符开头的本地路径且文件名为 Swivel.exe；否则用 `LOCALAPPDATA`（须为本地路径）下的 `Microsoft\WindowsApps\swivel-preview.exe`（AppxManifest 声明的别名）；`spawn(command, ['--mcp'], { stdio: 'inherit', windowsHide: true, shell: false })`，找不到报 ENOENT 提示，退出码原样传回。宿主若只结束 Node 进程，Swivel 在宿主关闭输入管道时读到 EOF 退出，但已在进行的 apply_plan 会做完。`build.ps1`／`build.sh` 把清单、脚本和 `Assets/Square150x150Logo.png`（改名 icon.png）平铺打成 `Swivel.mcpb` 放进便携输出（MSIX 构建会一并复制）。
+
+Windows `ClaudeExtension`：`Swivel.exe` 旁有 `Swivel.mcpb` 时以 ShellExecute 默认动作打开（与资源管理器双击相同，不带参数）；没有文件提示本版本未附带；ERROR_NO_ASSOCIATION（1155）提示没有应用能打开 .mcpb。设置页新增 “Install in Claude Desktop…”，成功状态说明已交给打开 .mcpb 的应用（通常是 Claude Desktop），便携版再提醒在扩展设置里选这个 Swivel.exe。新文字四语。
+
+独立 agent 审查（只读；对照 MCPB 官方 MANIFEST.md 与 schema/替换源码）：无 P1。已修 P2：原先用 AssocQueryString 预先检查 .mcpb 关联，Claude Desktop 若以打包应用或 DelegateExecute 方式登记会被误判为没有（现在直接 ShellExecute，只把 1155 映射为提示）；LOCALAPPDATA 不是本地路径时提示原说“未设置”（已改）。已修 P3：成功状态改为“交给打开 .mcpb 的应用”；选中路径先规范化；build.ps1 清理失败不再掩盖原错误，build.sh 用 trap 清理临时目录；启动脚本测试改为分别数 spawn/require 并拒绝 exec/fork 等。未验证：真实 Claude Desktop 的安装、文件选择、内置 Node 与 .mcpb 关联；从 Node 启动真实命令别名。
+
 ## 0.109 MCP 文档文字转换与逐个文件再核对（G02 部分）
 
 批次开始 `git fetch`：origin/main 仍为 `c053dd0`（Mac 1.14.5），不含 `Windows/` 改动；0.108 已推送，Windows CI 40509653918 通过（核心 4,520,456、原生 5,358）。

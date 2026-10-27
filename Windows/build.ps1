@@ -7,8 +7,8 @@ $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
 Push-Location $PSScriptRoot
 try {
-    $output = Join-Path $PSScriptRoot "../build/windows/0.109.0/$Runtime"
-    $zip = Join-Path $PSScriptRoot "../build/windows/Swivel-Windows-0.109.0-$Runtime.zip"
+    $output = Join-Path $PSScriptRoot "../build/windows/0.110.0/$Runtime"
+    $zip = Join-Path $PSScriptRoot "../build/windows/Swivel-Windows-0.110.0-$Runtime.zip"
     if ((Test-Path $output) -or (Test-Path $zip)) { throw 'This version already has output. Preserve it and choose a new version before rebuilding.' }
     & (Join-Path $PSScriptRoot 'ThirdParty/U2Net/fetch-model.ps1') # pinned background model, checked by SHA-256
     & (Join-Path $PSScriptRoot 'ThirdParty/RealESRGAN/fetch-model.ps1') # pinned upscaling model, converted and checked by SHA-256
@@ -28,6 +28,15 @@ try {
     Copy-Item TESTING.md (Join-Path $output 'TESTING.md')
     Copy-Item PORTING.md (Join-Path $output 'PORTING.md')
     ((Get-Content PROGRESS.md -Raw).Replace('../reports/Windows与macOS兼容调研.md', 'COMPATIBILITY.md') -replace '\[([^\]]+)\]\(([^)]*\.(cs|swift))\)', '$1: `$2`') | Set-Content (Join-Path $output 'PROGRESS.md') -Encoding utf8
+    # Claude Desktop extension: manifest, icon and launcher at the archive root (no folders, so no path separators differ).
+    $bundle = Join-Path ([IO.Path]::GetTempPath()) ('swivel-mcpb-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $bundle | Out-Null
+    try {
+        Copy-Item Packaging/mcpb/manifest.json, Packaging/mcpb/index.js $bundle
+        Copy-Item Packaging/Assets/Square150x150Logo.png (Join-Path $bundle 'icon.png')
+        Compress-Archive -Path "$bundle/*" -DestinationPath "$bundle.zip"
+        Move-Item -LiteralPath "$bundle.zip" -Destination (Join-Path $output 'Swivel.mcpb')
+    } finally { Remove-Item -LiteralPath $bundle, "$bundle.zip" -Recurse -Force -ErrorAction SilentlyContinue }
     # No Force: a previous archive, including a concurrent one, must not be replaced.
     Compress-Archive -Path "$output/*" -DestinationPath $zip
     Get-FileHash $zip -Algorithm SHA256

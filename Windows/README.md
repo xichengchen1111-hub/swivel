@@ -10,6 +10,14 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.110 新增：Claude Desktop 扩展（MCPB）
+
+便携 ZIP 与 MSIX 安装版的程序文件夹里多了 `Swivel.mcpb`。设置页 Agent 工具下新增 **Install in Claude Desktop…**：把这个文件交给登记打开 `.mcpb` 的应用（通常是 Claude Desktop），由它显示自己的安装对话框；没有任何应用登记时提示改用 **Copy Agent Tools Setup**。也可以直接在资源管理器里双击它。
+
+扩展里只有清单、图标和一个约 40 行的启动脚本，由 Claude Desktop 自带的 Node.js 运行；它不含 Swivel 的副本，只启动本机已装的 Swivel：默认是 MSIX 安装版的命令别名 `%LOCALAPPDATA%\Microsoft\WindowsApps\swivel-preview.exe`（文字识别需要它的包身份）；用便携 ZIP 的话，在扩展设置里选那份 `Swivel.exe`（必须是本地盘上的完整路径、文件名正是 Swivel.exe，否则拒绝并说明）。启动时只带 `--mcp` 一个参数，不经命令行外壳，标准输入输出直接交给 Swivel，Swivel 退出码原样返回。仍需先在 Swivel 设置里打开 Agent Tools。
+
+未验证：真实 Claude Desktop 在 Windows 上的安装对话框、文件选择与是否用内置 Node 运行；它是否登记 `.mcpb` 关联；从 Claude Desktop 经命令别名启动 MSIX 版。Swivel 本身仍只用 .NET；Mac 版扩展（仓库根 `mcpb/`）未改。
+
 ## 0.109 新增：Agent 工具转换文档文字
 
 Agent 工具（MCP）的 `plan_action` 新增五个文档动作：`document.txt`、`document.rtf`、`document.docx`、`document.html`、`document.odt`。它们把纯文本（TXT、TEXT、MD、MARKDOWN、CSV、TSV、LOG、SRT，严格 UTF-8 或带 BOM 的 UTF-16）、DOCX、ODT、RTF 或不含脚本的静态 HTML/HTM 文档（最大 8 MiB、200 万字符）的**文字**另存为新文件 `名称 text.扩展名`，放在原文件旁，名字被占用时依次加编号，绝不覆盖；与“检查文档文字”窗口的保存完全相同，只保留文字，格式、图片、表格布局、页眉页脚、批注和对象都不保留（计划结果里会写明）。`list_actions` 分别列出图片与文档动作各自接受的文件，`inspect_files` 只列出适用于该文件的动作，用错种类的文件和超过 8 MiB 的文档在计划时就拒绝；文档在应用时才读取，读不了的（其他文字编码、带脚本的 HTML、超过 200 万字符）会在那时报错并停下，前面已生成的保留。

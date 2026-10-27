@@ -1327,6 +1327,14 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.110 — Claude Desktop extension Swivel.mcpb (G02 part, 2026-10-28)
+
+- Core 4,520,481 on Mac; native compiled 0 warnings/errors there (CI result below).
+- `McpChecks.BundleChecks` (core): the MCPB manifest has the app's version (Directory.Build.props), manifest_version 0.3 and the setup's server name; lists the server's tools in order with short descriptions; runs index.js with Claude Desktop's Node.js, passing only `SWIVEL_EXE=${user_config.swivel_exe}`; asks only for an optional file `swivel_exe`; is win32-only with its icon source present; the launcher has exactly one `spawn(command, ['--mcp'], { stdio: 'inherit', windowsHide: true, shell: false })`, two `require`s, no exec/fork/spawnSync, no `shell: true`, no http, and uses the MSIX alias name from `McpSetup.Alias`.
+- Native (compiled only), `McpBundleNativeChecks`: needs node.exe on PATH (skips with a message otherwise). Runs index.js with SWIVEL_EXE set to the Swivel.exe apphost in the test output: initialize and tools/list pass through (tool names equal the manifest's) and the launcher exits 0 when input ends; refuses notepad.exe, a relative `Swivel.exe`, a UNC path and `Swivel.exe.bak` before starting anything; with SWIVEL_EXE unset, empty or the literal `${user_config.swivel_exe}`, looks for `<LOCALAPPDATA>\Microsoft\WindowsApps\swivel-preview.exe` and reports it missing; reports a chosen Swivel.exe that does not exist. `ClaudeExtension.Bundle` is beside Swivel.exe.
+- Independent agent review (read-only, against the MCPB MANIFEST.md, 0.3 schema and variable-substitution source): no P1. P2 fixed: the .mcpb association pre-check (AssocQueryString executable) could refuse a working packaged/DelegateExecute registration; now ShellExecute directly and map only ERROR_NO_ASSOCIATION; the non-local LOCALAPPDATA message. P3 fixed: status wording, path normalization, build-script cleanup, a less brittle launcher text check.
+- Not tested: real Claude Desktop installing the .mcpb (dialog, file picker, built-in Node, .mcpb association), spawning the real MSIX alias from Node, an orphaned Swivel.exe when only the launcher is killed (it exits at EOF; a running apply_plan completes).
+
 ## Windows0.109 — MCP document text actions and per-file recheck (G02 part, 2026-10-27)
 
 - Core 4,520,463 on Mac; native compiled 0 warnings/errors there. Windows CI run 40516148024 on GitHub's Windows runner passed: core 4,520,464, native 5,368, including the document and stale-stamp checks below.
