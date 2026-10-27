@@ -709,10 +709,10 @@
     "瀏覽器應用程式",
     "ブラウザーアプリ"
   ],
-  "Browsing these areas does not scan. Checks remain read-only and optional; content comparisons require confirmation. Window-close requests require selecting one eligible window and a separate confirmation. No cleanup, uninstall, eject, administrator command or settings change runs here. Settings buttons only open the named Windows Settings page. Optional assistant requests require a full preview and explicit Send.": [
-    "浏览分区不会扫描。检查保持只读且自选，内容比较需确认。关闭窗口需先选择一个符合条件的窗口，再单独确认。这里不执行清理、卸载、弹出、管理员命令或修改设置；设置按钮仅打开对应 Windows 设置页。可选助手请求仍需完整预览并明确发送。",
-    "瀏覽分區不會掃描。檢查保持唯讀且自選，內容比較須確認。關閉視窗須先選擇一個符合條件的視窗，再單獨確認。此處不執行清理、解除安裝、退出、管理員命令或修改設定；設定按鈕僅開啟對應 Windows 設定頁。可選助理請求仍須完整預覽並明確傳送。",
-    "分類を閲覧してもスキャンしません。検査は任意で読み取り専用、内容比較は確認が必要です。ウィンドウを閉じる要求には対象を1つ選び、別途確認します。クリーンアップ、アンインストール、取り出し、管理者コマンド、設定変更は実行しません。設定ボタンは該当する Windows 設定ページを開くだけです。任意のアシスタント要求には完全なプレビューと明示的な送信が必要です。"
+  "Browsing these areas does not scan. Checks start only from their button and only read; content comparisons require confirmation. Items are moved to the Recycle Bin only from a results window, when you select them, after a recheck and a confirmation, with Undo while that window is open. Window-close requests require selecting one eligible window and a separate confirmation. No uninstall, eject, administrator command or settings change runs here. Settings buttons only open the named Windows Settings page. Optional assistant requests require a full preview and explicit Send.": [
+    "浏览这些分区不会扫描。检查只在点按其按钮后开始，且只读取；内容比较需要确认。只有在结果窗口中、由你选中项目，并经重新检查和确认后，才会把项目移到回收站；该窗口打开期间可撤销。窗口关闭请求需要选中一个符合条件的窗口并另行确认。这里不会卸载、弹出、运行管理员命令或更改设置。设置按钮只会打开指定的 Windows 设置页面。可选的助手请求需要完整预览并明确点按“发送”。",
+    "瀏覽這些分區不會掃描。檢查只在按下其按鈕後開始，且只讀取；內容比較需要確認。只有在結果視窗中、由你選取項目，並經重新檢查和確認後，才會把項目移到資源回收筒；該視窗開啟期間可復原。視窗關閉要求需要選取一個符合條件的視窗並另行確認。這裡不會解除安裝、退出、執行系統管理員命令或變更設定。設定按鈕只會開啟指定的 Windows 設定頁面。選用的助理要求需要完整預覽並明確按下「傳送」。",
+    "これらの項目を見るだけではスキャンしません。チェックはボタンを押したときにだけ始まり、読み取るだけです。内容の比較には確認が必要です。ごみ箱への移動は、結果ウィンドウで項目を選び、再確認と確認のあとにだけ行われ、そのウィンドウを開いている間は元に戻せます。ウィンドウを閉じる要求には、対象となるウィンドウを 1 つ選んで別途確認する必要があります。ここでアンインストール、取り出し、管理者コマンドの実行、設定の変更は行いません。設定ボタンは指定した Windows 設定ページを開くだけです。オプションのアシスタントへの要求には、完全なプレビューと明示的な［送信］が必要です。"
   ],
   "Browsing these areas does not scan. Existing checks remain read-only and optional; file-content comparisons require their existing confirmation. No cleanup, uninstall, eject, administrator command or settings change runs here. Settings buttons only open the named Windows Settings page. Optional assistant requests still require a separate full preview and explicit Send.": [
     "浏览分区不会扫描。既有检查仍为可选只读操作，文件内容比较仍须原有确认。此处不执行清理、卸载、弹出、管理员命令或设置更改。设置按钮只打开指定的 Windows 设置页。可选助手请求仍须单独完整预览并明确发送。",
@@ -7949,10 +7949,10 @@
     "請檢查要還原的名稱。檔案已變更或原名稱被佔用時，復原會拒絕執行。",
     "復元する名前を確認してください。変更されたファイルや使用中の元の名前には取り消しを実行しません。"
   ],
-  "Review two Windows-reported temporary/legacy WinINET locations and explicitly measure one with the read-only size map. These are location hints, not safe-delete classifications; modern browser cache inventory, cleanup and reliable Recycle Bin undo remain incomplete.": [
-    "审阅 Windows 报告的临时/旧版 WinINET 两个位置，再明确选择一个进行只读空间测量。这些只是位置线索，不是安全删除分类；现代浏览器缓存清单、清理和可靠的回收站撤销仍未完成。",
-    "檢閱 Windows 回報的暫存/舊版 WinINET 兩個位置，再明確選取一個進行唯讀空間測量。這些只是位置線索，不是安全刪除分類；現代瀏覽器快取清單、清理和可靠的資源回收筒復原仍未完成。",
-    "Windows が報告した一時フォルダー・従来の WinINET の 2 つの場所を確認し、1 つを選んで読み取り専用で容量を計測します。場所の手掛かりであり安全な削除の分類ではありません。現代のブラウザーのキャッシュ一覧、削除、確実なごみ箱からの復元は未完成です。"
+  "Review the Windows temporary and legacy WinINET folders, or the default cache folders of known browsers and apps. Old temporary items and cache folders of closed apps can be moved to the Recycle Bin after a recheck, with Undo. These are fixed location lists, not safe-delete classifications; Store apps, portable copies and custom cache folders are not found.": [
+    "查看 Windows 临时文件夹和旧版 WinINET 文件夹，或已知浏览器和应用的默认缓存文件夹。旧的临时项目和已关闭应用的缓存文件夹可在重新检查后移到回收站，并可撤销。这些是固定的位置清单，不是“可安全删除”的判定；不会找到 Microsoft Store 应用、便携版和自定义的缓存文件夹。",
+    "查看 Windows 暫存資料夾和舊版 WinINET 資料夾，或已知瀏覽器和應用程式的預設快取資料夾。舊的暫存項目和已關閉應用程式的快取資料夾可在重新檢查後移到資源回收筒，並可復原。這些是固定的位置清單，不是「可安全刪除」的判定；不會找到 Microsoft Store 應用程式、可攜版和自訂的快取資料夾。",
+    "Windows の一時フォルダーと旧 WinINET フォルダー、または既知のブラウザーとアプリの既定のキャッシュフォルダーを確認します。古い一時項目と、終了しているアプリのキャッシュフォルダーは、再確認のうえごみ箱に移動でき、元に戻せます。これは決まった場所の一覧で、安全に削除できるかの判定ではありません。Microsoft Store アプリ、ポータブル版、独自に設定したキャッシュフォルダーは見つかりません。"
   ],
   "Revision": [
     "修订值",
@@ -13038,5 +13038,180 @@
     "此驱动器没有回收站；不提供撤销",
     "此磁碟機沒有資源回收筒；不提供復原",
     "このドライブにはごみ箱がないため取り消し対象外"
+  ],
+  "Review Browser and App Caches…": [
+    "检查浏览器和应用缓存…",
+    "檢查瀏覽器和應用程式快取…",
+    "ブラウザーとアプリのキャッシュを確認…"
+  ],
+  "Only the default cache folders of the apps listed below are looked for, in your local and roaming app data. Beta, Dev, Canary, Insiders and other editions, apps from the Microsoft Store, portable copies, other Windows users and custom cache folders are not found. Each listed folder holds data its app downloads or builds again when needed: moving it keeps bookmarks, passwords, history, cookies, extensions and settings, which are stored elsewhere, but pages and the app may load more slowly at first. Nothing is selected for you. A folder is moved, or put back with Undo, only while none of the programs named for its app is running: Edge and Chrome can keep running in the background after their windows close, any running node, python or dotnet program counts for npm, Yarn, pip and NuGet, and other users' programs count too. Before each move the folder must still be a plain local folder at the same place, on a fixed drive with a Recycle Bin; if it is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move restores the last moved folders while this window is open, unless the app has made a new folder in their place. Afterwards, restore them from the Recycle Bin.": [
+    "只查找下面列出的应用的默认缓存文件夹，位于你的本地和漫游应用数据中。不会找到 Beta、Dev、Canary、Insiders 等其他版本，以及 Microsoft Store 应用、便携版、其他 Windows 用户和自定义的缓存文件夹。列出的每个文件夹存放的是其应用需要时会重新下载或生成的数据：移走它会保留书签、密码、历史记录、Cookie、扩展和设置（它们存放在别处），但网页和应用起初可能加载得更慢。不会替你预先选择任何项目。只有在为该应用列出的程序都没有运行时，才会移动文件夹或用“撤销”放回：Edge 和 Chrome 在窗口关闭后可能仍在后台运行；任何正在运行的 node、python 或 dotnet 程序都会计入 npm、Yarn、pip 和 NuGet；其他用户的程序也会计入。每次移动前，文件夹必须仍是同一位置的普通本地文件夹，且位于带回收站的固定驱动器上；如果它太大放不进回收站，Windows 会先询问是否永久删除。在此窗口打开期间，“撤销移动”可恢复最近移动的文件夹，除非应用已在原位置新建了文件夹。之后请从回收站中恢复。",
+    "只尋找下面列出的應用程式的預設快取資料夾，位於你的本機和漫遊應用程式資料中。不會找到 Beta、Dev、Canary、Insiders 等其他版本，以及 Microsoft Store 應用程式、可攜版、其他 Windows 使用者和自訂的快取資料夾。列出的每個資料夾存放的是其應用程式需要時會重新下載或產生的資料：移走它會保留書籤、密碼、歷程記錄、Cookie、擴充功能和設定（它們存放在別處），但網頁和應用程式起初可能載入得較慢。不會替你預先選取任何項目。只有在為該應用程式列出的程式都沒有執行時，才會移動資料夾或用「復原」放回：Edge 和 Chrome 在視窗關閉後可能仍在背景執行；任何正在執行的 node、python 或 dotnet 程式都會計入 npm、Yarn、pip 和 NuGet；其他使用者的程式也會計入。每次移動前，資料夾必須仍是同一位置的一般本機資料夾，且位於有資源回收筒的固定磁碟機上；如果它太大放不進資源回收筒，Windows 會先詢問是否永久刪除。在此視窗開啟期間，「復原移動」可還原最近移動的資料夾，除非應用程式已在原位置建立了新資料夾。之後請從資源回收筒還原。",
+    "下に挙げたアプリの既定のキャッシュフォルダーだけを、ローカルとローミングのアプリデータから探します。Beta、Dev、Canary、Insiders などのほかのエディション、Microsoft Store アプリ、ポータブル版、ほかの Windows ユーザー、独自に設定したキャッシュフォルダーは見つかりません。一覧の各フォルダーには、アプリが必要なときに再ダウンロードまたは再生成するデータが入っています。移動してもブックマーク、パスワード、履歴、Cookie、拡張機能、設定は別の場所に保存されているので残りますが、最初はページやアプリの読み込みが遅くなることがあります。あらかじめ選択される項目はありません。フォルダーの移動と「取り消し」による復元は、そのアプリについて挙げたプログラムがどれも動いていないときだけ行います。Edge と Chrome はウィンドウを閉じてもバックグラウンドで動き続けることがあります。npm、Yarn、pip、NuGet では、動いている node、python、dotnet のプログラムをすべて数えます。ほかのユーザーのプログラムも数えます。移動の直前に、フォルダーが同じ場所にある通常のローカルフォルダーで、ごみ箱のある固定ドライブ上にあることをもう一度確認します。ごみ箱に入りきらないほど大きい場合、Windows は完全に削除する前に確認します。このウィンドウを開いている間は、「移動を取り消す」で最後に移動したフォルダーを戻せます（アプリが元の場所に新しいフォルダーを作っていた場合を除く）。その後はごみ箱から戻してください。"
+  ],
+  "Search: at most 4,096 entries per folder, 64 profiles per app, 256 cache folders and 20,000 entries in all. Sizes: one shared metadata budget of 100,000 entries and about 30 soft seconds, shared fairly among the folders, with at most 20,000 entries and four levels below any one cache folder; an incomplete size is a lower bound. Sizes are logical bytes from directory records, not reclaimable space: links, cloud placeholders and system items inside are skipped.": [
+    "搜索：每个文件夹最多 4,096 个条目，每个应用最多 64 个配置文件，总计最多 256 个缓存文件夹和 20,000 个条目。大小：一个共享的元数据预算，共 100,000 个条目、约 30 秒（软限制），在各文件夹之间公平分配，任一缓存文件夹最多 20,000 个条目、向下四层；不完整的大小只是下限。大小是目录记录中的逻辑字节数，不是可回收空间：其中的链接、云占位符和系统项目会被跳过。",
+    "搜尋：每個資料夾最多 4,096 個項目，每個應用程式最多 64 個設定檔，總計最多 256 個快取資料夾和 20,000 個項目。大小：一個共用的中繼資料預算，共 100,000 個項目、約 30 秒（軟限制），在各資料夾之間公平分配，任一快取資料夾最多 20,000 個項目、向下四層；不完整的大小只是下限。大小是目錄記錄中的邏輯位元組數，不是可回收空間：其中的連結、雲端預留位置和系統項目會被略過。",
+    "検索：フォルダーごとに最大 4,096 項目、アプリごとに最大 64 プロファイル、合計で最大 256 個のキャッシュフォルダーと 20,000 項目。サイズ：共有のメタデータ予算として合計 100,000 項目、約 30 秒（目安）をフォルダー間で公平に分け合い、1 つのキャッシュフォルダーにつき最大 20,000 項目、4 階層下までです。不完全なサイズは下限です。サイズはディレクトリ記録の論理バイト数で、解放できる容量ではありません。中のリンク、クラウドのプレースホルダー、システム項目はスキップされます。"
+  ],
+  "This folder could not be measured.": [
+    "无法测量此文件夹。",
+    "無法測量此資料夾。",
+    "このフォルダーを測定できませんでした。"
+  ],
+  "This app's folder could not be read.": [
+    "无法读取此应用的文件夹。",
+    "無法讀取此應用程式的資料夾。",
+    "このアプリのフォルダーを読み取れませんでした。"
+  ],
+  "Not measured": [
+    "未测量",
+    "未測量",
+    "未測定"
+  ],
+  "Could not be measured": [
+    "无法测量",
+    "無法測量",
+    "測定できません"
+  ],
+  "at least {0}": [
+    "至少 {0}",
+    "至少 {0}",
+    "{0} 以上"
+  ],
+  "Its app is running, or Swivel could not list the running programs, so it was left alone. Close the app, including any copy still running in the background, and try again.": [
+    "它的应用正在运行，或者 Swivel 无法列出正在运行的程序，所以未处理它。请关闭该应用（包括仍在后台运行的副本），然后重试。",
+    "它的應用程式正在執行，或者 Swivel 無法列出正在執行的程式，所以未處理它。請關閉該應用程式（包括仍在背景執行的副本），然後重試。",
+    "アプリが動いているか、Swivel が実行中のプログラムを一覧できなかったため、そのままにしました。アプリ（バックグラウンドで動いているものも含む）を終了してからやり直してください。"
+  ],
+  "Windows did not move it to the Recycle Bin. If Windows removed part of it, that part cannot be restored with Undo; its app rebuilds missing cache files when needed.": [
+    "Windows 没有将它移到回收站。如果 Windows 删除了其中一部分，这部分无法用“撤销”恢复；它的应用会在需要时重新生成缺少的缓存文件。",
+    "Windows 沒有將它移到資源回收筒。如果 Windows 刪除了其中一部分，這部分無法用「復原」還原；它的應用程式會在需要時重新產生缺少的快取檔案。",
+    "Windows はごみ箱に移動しませんでした。Windows が一部を削除していた場合、その部分は取り消しで戻せません。足りないキャッシュファイルはアプリが必要なときに作り直します。"
+  ],
+  "Browser and App Caches": [
+    "浏览器和应用缓存",
+    "瀏覽器和應用程式快取",
+    "ブラウザーとアプリのキャッシュ"
+  ],
+  "Move 1 cache folder to the Recycle Bin?": [
+    "将 1 个缓存文件夹移到回收站？",
+    "將 1 個快取資料夾移到資源回收筒？",
+    "1 個のキャッシュフォルダーをごみ箱に移動しますか？"
+  ],
+  "Move {0} cache folders to the Recycle Bin?": [
+    "将 {0} 个缓存文件夹移到回收站？",
+    "將 {0} 個快取資料夾移到資源回收筒？",
+    "{0} 個のキャッシュフォルダーをごみ箱に移動しますか？"
+  ],
+  "Close each app first, including any copy running in the background. Its next start may be slower while it builds the cache again.": [
+    "请先关闭每个应用，包括在后台运行的副本。应用下次启动时重建缓存，可能会慢一些。",
+    "請先關閉每個應用程式，包括在背景執行的副本。應用程式下次啟動時重建快取，可能會慢一些。",
+    "先に各アプリ（バックグラウンドで動いているものも含む）を終了してください。次回の起動はキャッシュを作り直すため遅くなることがあります。"
+  ],
+  "Check Running Apps Again": [
+    "重新检查正在运行的应用",
+    "重新檢查正在執行的應用程式",
+    "実行中のアプリを再確認"
+  ],
+  "No cache folders of the listed apps were found at their default places.": [
+    "在默认位置没有找到所列应用的缓存文件夹。",
+    "在預設位置沒有找到所列應用程式的快取資料夾。",
+    "一覧のアプリのキャッシュフォルダーは既定の場所に見つかりませんでした。"
+  ],
+  "App": [
+    "应用",
+    "應用程式",
+    "アプリ"
+  ],
+  "Profile": [
+    "配置文件",
+    "設定檔",
+    "プロファイル"
+  ],
+  "Listed: {0} cache folders from {1} apps · measured {2:N0} bytes": [
+    "已列出：{1} 个应用的 {0} 个缓存文件夹 · 已测量 {2:N0} 字节",
+    "已列出：{1} 個應用程式的 {0} 個快取資料夾 · 已測量 {2:N0} 位元組",
+    "一覧：{1} 個のアプリの {0} 個のキャッシュフォルダー · 測定済み {2:N0} バイト"
+  ],
+  "Some sizes are partial or not measured.": [
+    "部分大小不完整或未测量。",
+    "部分大小不完整或未測量。",
+    "一部のサイズは途中までか、未測定です。"
+  ],
+  "The search stopped at a limit; some cache folders may not be listed.": [
+    "搜索在达到限制时停止；可能有缓存文件夹未列出。",
+    "搜尋在達到限制時停止；可能有快取資料夾未列出。",
+    "上限に達したため検索を止めました。一覧にないキャッシュフォルダーがあるかもしれません。"
+  ],
+  "Not found at the default place: {0}": [
+    "在默认位置未找到：{0}",
+    "在預設位置找不到：{0}",
+    "既定の場所に見つかりません：{0}"
+  ],
+  "Swivel could not list the running programs, so no folder can be moved or put back now.": [
+    "Swivel 无法列出正在运行的程序，所以现在不能移动或放回任何文件夹。",
+    "Swivel 無法列出正在執行的程式，所以現在不能移動或放回任何資料夾。",
+    "Swivel が実行中のプログラムを一覧できなかったため、今はどのフォルダーも移動したり戻したりできません。"
+  ],
+  "Running now (close them first): {0}": [
+    "正在运行（请先关闭）：{0}",
+    "正在執行（請先關閉）：{0}",
+    "実行中（先に終了してください）：{0}"
+  ],
+  "None of the listed apps is running now.": [
+    "所列应用现在都没有运行。",
+    "所列應用程式現在都沒有執行。",
+    "一覧のアプリはどれも今は動いていません。"
+  ],
+  "Its app is running; close it first": [
+    "它的应用正在运行；请先关闭",
+    "它的應用程式正在執行；請先關閉",
+    "アプリが実行中です。先に終了してください"
+  ],
+  "Looking for browser and app cache folders…": [
+    "正在查找浏览器和应用缓存文件夹…",
+    "正在尋找瀏覽器和應用程式快取資料夾…",
+    "ブラウザーとアプリのキャッシュフォルダーを探しています…"
+  ],
+  "Cache review finished. Folders moved to the Recycle Bin or removed: {0}": [
+    "缓存检查已结束。移到回收站或被删除的文件夹：{0}",
+    "快取檢查已結束。移到資源回收筒或被刪除的資料夾：{0}",
+    "キャッシュの確認を終えました。ごみ箱に移動または削除されたフォルダー：{0}"
+  ],
+  "Cache review closed. No cache folder from this window is in the Recycle Bin now.": [
+    "缓存检查已关闭。此窗口中没有缓存文件夹现在位于回收站。",
+    "快取檢查已關閉。此視窗中沒有快取資料夾現在位於資源回收筒。",
+    "キャッシュの確認を閉じました。このウィンドウから移動したキャッシュフォルダーで、今ごみ箱にあるものはありません。"
+  ],
+  "Some folders in it could not be read.": [
+    "其中有些文件夹无法读取。",
+    "其中有些資料夾無法讀取。",
+    "中の一部のフォルダーを読み取れませんでした。"
+  ],
+  "Some app folders could not be read; some cache folders may not be listed.": [
+    "有些应用文件夹无法读取；可能有缓存文件夹未列出。",
+    "有些應用程式資料夾無法讀取；可能有快取資料夾未列出。",
+    "一部のアプリフォルダーを読み取れませんでした。一覧にないキャッシュフォルダーがあるかもしれません。"
+  ],
+  "Apps looked for, and the programs checked before a move or Undo: {0}": [
+    "查找的应用，以及移动或撤销前检查的程序：{0}",
+    "尋找的應用程式，以及移動或復原前檢查的程式：{0}",
+    "探すアプリと、移動や取り消しの前に確認するプログラム：{0}"
+  ],
+  "Found without a listed cache folder: {0}": [
+    "已找到，但没有列出的缓存文件夹：{0}",
+    "已找到，但沒有列出的快取資料夾：{0}",
+    "見つかりましたが、一覧の対象となるキャッシュフォルダーはありません：{0}"
+  ],
+  "Not on a fixed drive; it cannot be moved": [
+    "不在固定驱动器上；无法移动",
+    "不在固定磁碟機上；無法移動",
+    "固定ドライブ上にないため移動できません"
+  ],
+  "Its app is running, or Swivel could not list the running programs, so it was not put back yet. Close the app and choose Undo Move again.": [
+    "它的应用正在运行，或者 Swivel 无法列出正在运行的程序，所以暂未放回。请关闭该应用，然后再次选择“撤销移动”。",
+    "它的應用程式正在執行，或者 Swivel 無法列出正在執行的程式，所以暫未放回。請關閉該應用程式，然後再次選擇「復原移動」。",
+    "アプリが動いているか、Swivel が実行中のプログラムを一覧できなかったため、まだ戻していません。アプリを終了してから、もう一度「移動を取り消す」を選んでください。"
   ]
 }

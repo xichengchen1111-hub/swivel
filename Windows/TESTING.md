@@ -1327,6 +1327,43 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.102 — Browser and app caches to the Recycle Bin (F06 now limited-implemented, 2026-10-27)
+
+- Core 4,519,998 on Mac; native compiled 0 warnings/errors (not run here).
+- New core `AppCacheChecks` with a fake folder tree that counts opens and releases, child folders included:
+  - finds exactly the catalogue folders in order (Chrome root and profile caches, a Vivaldi profile named ShaderCache, Firefox cache2, VS Code, Discord and Steam `htmlcache\Cache`);
+  - never lists Crashpad, folders without a Preferences file, links, site data, cookies or Steam's whole htmlcache;
+  - reports a missing app as not found, a linked app folder as unavailable with its reason, and an unreadable folder as unreadable rather than as a limit;
+  - checks the per-folder, profile (including exactly reaching the limit), folder and total search limits, and a cache-named folder whose listing was cut short;
+  - checks the shared size budget and time budget; a folder that cannot be opened leaves its share to the next one;
+  - cancellation before reading opens nothing, and cancelling mid-measurement releases every handle;
+  - running-program matching ignores case, `Programs` names the checked and the running programs, and the catalogue is immutable;
+  - the action is off by default, and every text is translated.
+- New native `AppCacheNativeChecks` on real folders:
+  - native search skips a system-marked folder and, when policy allows creating one, a symlinked folder; the four plain folders are measured with directory records, and handle release is proven by renaming the tree;
+  - running-process names are listed ignoring case;
+  - a move while the app runs is refused with its message, and a folder replaced by a file is refused as changed;
+  - the window lists the folders unselected with Move disabled; its report names the apps looked for with their programs, those not found and the limits; it states when programs cannot be listed;
+  - with a Recycle Bin: the cache folder moves and the profile's other data stays; Undo is refused while the app runs, then restores; Undo is refused when a new folder exists; after that folder is removed, Undo restores again, so nothing stays in the Recycle Bin.
+- Not tested: Windows removing only part of a folder (`CacheNotRecycled`), because it cannot be forced on a test machine.
+- Independent review:
+  - P2 fixed and rechecked: Steam's `htmlcache` is its built-in browser's whole data folder (cookies, local storage), which contradicted the notice; now only the cache folders inside it are listed.
+  - P3 fixed and rechecked:
+    - the budget is deducted only after a folder opens;
+    - the notice names the node/python/dotnet programs and the Beta, Dev, Canary and Insiders editions;
+    - the apps looked for and their programs are listed;
+    - "found without a cache folder" and "unreadable" have their own lines;
+    - the per-folder cap is stated;
+    - the closing message is accurate;
+    - the profile limit no longer over-reports;
+    - a cache-named profile is searched as a profile;
+    - the fixed-drive status is shown;
+    - Undo waits while the app runs;
+    - the tests were strengthened;
+    - the zh wording was corrected.
+  - The recheck's two minor P3s were also fixed: a cut-short listing of a cache-named folder, and an app shown on two lines.
+- Open: whether a newer Steam keeps its cache one level deeper (it would then show as found without a listed cache folder); the check is by process name only.
+
 ## Windows0.101 — ZIP64 extraction (B08 part, 2026-10-27)
 
 - Core 4,519,873 on Mac; native compiled 0 warnings/errors (not run here; no native ZIP change).

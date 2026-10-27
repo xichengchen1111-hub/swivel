@@ -245,6 +245,7 @@ public static class Catalog
         ,new("doctor.startupapproved", "Inspect StartupApproved Records…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.sleepstates", "Inspect Sleep Capabilities…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.caches", "Inspect User Cache Locations…", Core.Feature.Doctor, RequiresFiles: false)
+        ,new("doctor.appcaches", "Review Browser and App Caches…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.power", "Inspect Power & Sleep Settings…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.drives", "Inspect Mounted Drives…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.folder", "Measure Folder Sizes…", Core.Feature.Doctor, RequiresFiles: false)

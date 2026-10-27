@@ -169,6 +169,24 @@ public static partial class NativeFiles
         catch (UserError error) when (error.Message == RecycleChanged) { throw new UserError(CopyChanged); }
     }
 
+    internal const string CacheAppRunning = "Its app is running, or Swivel could not list the running programs, so it was left alone. Close the app, including any copy still running in the background, and try again.";
+    internal const string CacheNotRecycled = "Windows did not move it to the Recycle Bin. If Windows removed part of it, that part cannot be restored with Undo; its app rebuilds missing cache files when needed.";
+
+    /// Rechecks a folder from Browser and App Caches (a plain local folder at the same place,
+    /// and no process of its app running just before the move), then moves it to the Recycle Bin.
+    internal static string RecycleAppCache(string folder, Func<bool> appRunning, IntPtr owner = default)
+        => Recycle(folder, true, _ => { if (appRunning()) throw new UserError(CacheAppRunning); }, owner, () => throw new UserError(CacheNotRecycled));
+
+    internal const string CacheRestoreRunning = "Its app is running, or Swivel could not list the running programs, so it was not put back yet. Close the app and choose Undo Move again.";
+
+    /// Undo for Browser and App Caches: only while no process of the folder's app runs, so a
+    /// running app never finds its old cache back under it.
+    internal static void RestoreAppCache(string folder, string stored, Func<bool> appRunning)
+    {
+        if (appRunning()) throw new UserError(CacheRestoreRunning);
+        RestoreRecycled(folder, stored, true);
+    }
+
     private static bool StillCompared(SafeFileHandle handle, DuplicateStamp compared)
     {
         try { return ReadDuplicateStamp(handle, ReadIdentity(handle).Volume) == compared; }

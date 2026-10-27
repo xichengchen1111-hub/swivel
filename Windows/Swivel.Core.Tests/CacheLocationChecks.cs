@@ -23,6 +23,6 @@ internal static class CacheLocationChecks
         reject(()=>CacheLocations.FromReported((CacheLocationKind)99,@"C:\cache"),"Unknown location kind rejected");reject(()=>((IList<CacheLocation>)choices).Clear(),"Shared chooser list is immutable");
         var prefs=new Prefs();string before=prefs.Serialize();_ =CacheLocations.FromReported(CacheLocationKind.Temporary,@"C:\does-not-exist");check(prefs.Serialize()==before&&!prefs.IsOn(Feature.Doctor),"Constructing location hints performs no preference mutation or implicit enablement");
         var action=Catalog.Actions.Single(a=>a.Id=="doctor.caches");check(action.Feature==Feature.Doctor&&!action.RequiresFiles&&!Catalog.Available(prefs,Array.Empty<string>()).Any(a=>a.Id==action.Id),"Cache-location check default-off and uses no unrelated file selection");
-        prefs.Set(Feature.Doctor,true);check(Catalog.Available(prefs,Array.Empty<string>()).Any(a=>a.Id==action.Id)&&WindowsDoctor.Areas.Single(a=>a.Id=="caches").ActionIds.SequenceEqual(new[]{action.Id}),"Cache area exposes only explicit limited readonly action when enabled");
+        prefs.Set(Feature.Doctor,true);check(Catalog.Available(prefs,Array.Empty<string>()).Any(a=>a.Id==action.Id)&&WindowsDoctor.Areas.Single(a=>a.Id=="caches").ActionIds.SequenceEqual(new[]{action.Id,"doctor.appcaches"}),"Cache area exposes the location check and the app-cache review when enabled");
     }
 }

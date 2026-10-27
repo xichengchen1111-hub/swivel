@@ -489,6 +489,14 @@ public sealed partial class App : Application
                 ShowOperationDialog(new FolderMapDialog(this,selected.Path!,scan,CacheLocations.ResultContext,CacheLocations.Name(selected.Kind)),owner,token);
                 report(token.IsCancellationRequested?L("Cancelled."):L("Cache-location inspection closed. No files were removed."));return;
             }
+            if(action.Id=="doctor.appcaches")
+            {
+                if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
+                workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();report(L("Looking for browser and app cache folders…"));
+                var found=await AwaitDoctorReadAsync(Task.Run(()=>AppCacheReader.Read(token),token),token);token.ThrowIfCancellationRequested();
+                var caches=new AppCacheDialog(this,found,AppCacheReader.RunningNames);ShowOperationDialog(caches,owner,token);
+                report(caches.Moved>0?string.Format(L("Cache review finished. Folders moved to the Recycle Bin or removed: {0}"),caches.Moved):token.IsCancellationRequested?L("Cancelled."):L("Cache review closed. No cache folder from this window is in the Recycle Bin now."));return;
+            }
             if(action.Id=="doctor.power")
             {
                 if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");

@@ -10,6 +10,10 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.102 新增：清理浏览器和应用缓存
+
+Windows Doctor 的 Caches 区新增 **Review Browser and App Caches…**：在你的本地和漫游应用数据中，只查找一份固定清单里各应用的默认缓存文件夹——Chrome、Edge、Brave、Vivaldi（每个配置文件的 Cache、Code Cache、GPUCache 和 Dawn 着色器缓存，以及 User Data 下的 ShaderCache、GrShaderCache、GraphiteDawnCache；只把带 Preferences 文件的文件夹当作配置文件；与缓存同名但带 Preferences 的文件夹按配置文件处理）、Firefox（每个配置文件的 cache2、startupCache）、VS Code、Discord、Slack（Cache、Code Cache、GPUCache 等，VS Code 另含 CachedData）、Steam 内置浏览器数据文件夹 htmlcache 里的 Cache、Code Cache、GPUCache 等（htmlcache 本身含 Cookie，不整个移走）、npm 的 `_cacache`、pip 和 Yarn 的 Cache、NuGet 的 v3-cache／plugins-cache。查找和测量只读目录记录，不打开文件内容；大小共用 100,000 项、约 30 秒的预算，在各文件夹之间公平分配，没测完的标为“至少”。窗口列出应用、配置文件、文件夹、大小和状态，窗口开头列出查找的应用及移动前检查的程序文件名（如 npm 检查 node.exe），没找到的应用、找到了但没有缓存文件夹的应用、读不了的位置也分开写明，读不了与达到上限也分开提示。不替你预选，可 **Select All Listed**，再 **Move Selected to Recycle Bin…**。只有为该应用列出的程序都没有运行时才移动或撤销放回（Edge、Chrome 关窗后可能仍在后台；任何 node、python、dotnet 程序都计入 npm、Yarn、pip、NuGet；也计入其他用户的程序；列不出进程时一律不动），**Check Running Apps Again** 可在关闭应用后刷新；每次移动前再核对它仍是原位置的普通本地文件夹、所在固定盘有回收站；不在固定盘上的直接显示无法移动。书签、密码、历史记录、Cookie、扩展和设置都不在这些文件夹里，会保留；应用下次启动可能慢一些。窗口打开期间可撤销，应用已在原处新建文件夹时不覆盖。Beta／Dev／Canary／Insiders 等其他版本、Microsoft Store 版、便携版、其他 Windows 用户和自定义缓存位置找不到。F06 部分→已实现限定范围；固定 52 项为 27／23／0／2，普通剩余 23。
+
 ## 0.101 新增：解压 ZIP64
 
 **Extract Archive…** 现在也能解压 ZIP64 格式的 ZIP（大文件或网盘、流式打包工具常用），限制不变：压缩包和解压后都不超过 2 GB、最多 10,000 项、32 层，仍只支持存储／Deflate。ZIP64 的结束记录和定位记录必须紧挨着放在目录之后、结束记录之前，32 位字段要么是标记值、要么与 64 位值一致；每个条目的 ZIP64 字段只能包含被标记的那几项，多一项、少一项或重复都按损坏拒绝（唯一例外：本地头里没有标记、却重复写了与自身一致的两个大小，旧版 Python 和 Commons Compress 会这样写，照常接受）。允许版本需求到 4.5（ZIP64），拒绝补丁数据。已用 Python zipfile（强制 ZIP64、流式数据描述符、降低阈值写出 ZIP64 结束记录）和 Info-ZIP `zip -fz`（写文件与标准输出重定向到文件）生成的 6 个压缩包核对；独立审查另用 libarchive、macOS `ditto` 及旧版 Python 写法复核：文件数与字节数一致。从管道读入数据的 Info-ZIP 条目带 FIFO 类型，按“特殊文件”拒绝。7z／RAR、加密 ZIP 和文件夹树归档仍未做，B08 仍为部分实现；固定 52 项仍为 26／24／0／2，普通剩余 24。
