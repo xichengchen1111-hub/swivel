@@ -191,6 +191,12 @@ enum Prefs {
         defaults.set(enabled, forKey: "feature.\(feature.rawValue)"); post()
     }
 
+    /// Files AirDrop saves to Downloads also appear on the File Shelf. Off until asked for: it needs Downloads access.
+    static var shelfAirDrop: Bool {
+        get { defaults.bool(forKey: "shelf.airdrop") }
+        set { defaults.set(newValue, forKey: "shelf.airdrop"); post() }
+    }
+
     static var imagePresets: [ImagePreset] {
         get {
             guard let data = defaults.data(forKey: "imagePresets.v1"),

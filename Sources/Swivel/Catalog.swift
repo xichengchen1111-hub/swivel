@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 enum FileKind: String, CaseIterable {
     case image, video, audio, pdf, document, archive, folder, other
+    case subtitle, data, model3D = "model", font
 
     var title: String {
         switch self {
@@ -14,6 +15,10 @@ enum FileKind: String, CaseIterable {
         case .archive: L("Archives")
         case .folder: L("Folders")
         case .other: L("Other files")
+        case .subtitle: L("Subtitles")
+        case .data: L("Data files")
+        case .model3D: L("3D models")
+        case .font: L("Fonts")
         }
     }
 
@@ -27,6 +32,10 @@ enum FileKind: String, CaseIterable {
         case .archive: L("archivebox")
         case .folder: L("folder")
         case .other: L("doc")
+        case .subtitle: L("captions.bubble")
+        case .data: L("curlybraces")
+        case .model3D: L("cube")
+        case .font: L("textformat")
         }
     }
 
@@ -39,6 +48,10 @@ enum FileKind: String, CaseIterable {
         case .pdf: ["a.pdf", "b.pdf"]
         case .document: ["a.docx"]
         case .archive: ["a.zip"]
+        case .subtitle: ["a.srt", "b.srt"]
+        case .data: ["a.json", "b.json"]
+        case .model3D: ["a.obj", "b.obj"]
+        case .font: ["a.ttf", "b.ttf"]
         case .folder, .other: ["a.unknownext"]
         }
         return names.map { URL(fileURLWithPath: "/nonexistent/\($0)") }
@@ -50,6 +63,10 @@ enum FileKind: String, CaseIterable {
         if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { return .folder }
         // Disk images conform to "archive" but can't be unpacked with tar; macOS opens them itself.
         if ext == "dmg" || ext == "sparseimage" || ext == "sparsebundle" { return .other }
+        if SubtitleFormats.inputExtensions.contains(ext) { return .subtitle }
+        if DataFormats.inputExtensions.contains(ext) { return .data }
+        if Models3D.inputExtensions.contains(ext) { return .model3D }
+        if FontFormats.inputExtensions.contains(ext) { return .font }
         // RAR and 7-Zip have no system type unless an app declares one; old-style RAR parts are .r00, .r01…
         if Archives.extractableExtensions.contains(ext) || ext.wholeMatch(of: #/r\d\d/#) != nil { return .archive }
         guard let type = UTType(filenameExtension: ext) else { return .other }
@@ -179,6 +196,7 @@ enum Catalog {
                 var list = Images.outputFormats
                     .filter { !$0.extensions.contains(where: sourceExt.contains) || multi }
                     .map { format in each(format.name, urls) { try await Images.convert($0, to: format) } }
+                list += Images.iconFormats.map { format in each(format.name, urls) { try await Images.makeIcon($0, as: format) } }
                 list.append(WheelItem(title: "PDF") { urls in
                     saved(try await Images.makePDF(urls))
                 })
@@ -205,6 +223,14 @@ enum Catalog {
                     }
                     return try await each("Extract", selected, Archives.extract).run(selected)
                 }]
+            case .subtitle:
+                return SubtitleFormats.items(sourceExt: sourceExt).map { option in each(option.title, urls, option.run) }
+            case .data:
+                return DataFormats.items(sourceExt: sourceExt).map { option in each(option.title, urls, option.run) }
+            case .model3D:
+                return Models3D.items(sourceExt: sourceExt).map { option in each(option.title, urls, option.run) }
+            case .font:
+                return FontFormats.items(sourceExt: sourceExt).map { option in each(option.title, urls, option.run) }
             case .folder:
                 return []  // Change Style and compressing are in the Tools menu.
             case .other:
@@ -295,7 +321,7 @@ enum Catalog {
                         : (changed.count == 1 ? L("Restyled %@", changed[0].lastPathComponent) : L("Restyled %d folders", changed.count))
                     return ActionResult(message: message)
                 }] + Archives.compressItems
-            case .archive, .other:
+            case .archive, .other, .subtitle, .data, .model3D, .font:
                 return Archives.compressItems
             }
         }

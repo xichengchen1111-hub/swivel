@@ -645,6 +645,155 @@ extension DoctorSafetyTests {
             #expect(DoctorApps.usage([]).isEmpty)
         }
 
+        @Test @MainActor func lastUseIsNotedOnlyWhileDoctorIsOnAndAppsAreSortedEitherWay() throws {
+            // In memory: a UserDefaults suite would leave a settings file behind.
+            final class Store: DoctorActivityStore {
+                var values: [String: Any] = [:]
+                func object(forKey key: String) -> Any? { values[key] }
+                func set(_ value: Any?, forKey key: String) { values[key] = value }
+                func removeObject(forKey key: String) { values[key] = nil }
+            }
+            let defaults = Store()
+            let now = Date(timeIntervalSince1970: 2_000_000_000)
+            let day: TimeInterval = 24 * 3600
+            // Nothing noted while Mac Doctor is off; turning it off forgets what was noted.
+            let activity = DoctorAppActivity(defaults: defaults)
+            activity.activated("com.example.a", at: now.addingTimeInterval(-40 * day), enabled: false)
+            #expect(defaults.object(forKey: DoctorAppActivity.usedKey) == nil)
+            activity.activated("com.example.a", at: now.addingTimeInterval(-40 * day), enabled: true)
+            activity.activated("com.example.b", at: now.addingTimeInterval(-10 * day), enabled: true)
+            // a left the front when b came: used until then.
+            let a = activity.lastUse(bundleID: "com.example.a", launched: nil, now: now)
+            #expect(a.exact && a.date == now.addingTimeInterval(-10 * day) && !a.front)
+            #expect(activity.lastUse(bundleID: "com.example.b", launched: nil, now: now).front)
+            // Never seen: counts from when noting began, or from its launch if later.
+            let c = activity.lastUse(bundleID: "com.example.c", launched: nil, now: now)
+            #expect(!c.exact && c.date == now.addingTimeInterval(-40 * day) && c.idle(now: now, after: 30 * day))
+            let relaunched = activity.lastUse(bundleID: "com.example.a", launched: now.addingTimeInterval(-day), now: now)
+            #expect(!relaunched.exact && relaunched.date == now.addingTimeInterval(-day) && !relaunched.idle(now: now, after: 7 * day))
+            activity.activated("com.example.a", at: now, enabled: false)
+            #expect(defaults.object(forKey: DoctorAppActivity.usedKey) == nil && defaults.object(forKey: DoctorAppActivity.sinceKey) == nil)
+            // Nothing noted yet: nothing is idle.
+            #expect(!DoctorAppActivity.lastUse(seen: nil, since: nil, launched: nil, front: false, now: now).idle(now: now, after: day))
+
+            func usage(_ pid: pid_t, _ bytes: Int64, _ daysAgo: Double) -> DoctorApps.Usage {
+                DoctorApps.Usage(app: .init(pid: pid, bundleID: "com.example.\(pid)", name: "App \(pid)", bundlePath: "/Applications/\(pid).app",
+                                            launched: nil), bytes: bytes,
+                                 lastUse: .init(date: now.addingTimeInterval(-daysAgo * day), exact: true, front: false))
+            }
+            let rows = DoctorApps.rows([usage(1, 3_000_000_000, 0.5), usage(2, 200_000_000, 60), usage(3, 900_000_000, 9)], now: now)
+            let byUse = DoctorApps.sorted(rows, by: .lastUsed).compactMap(\.quit?.pid)
+            let byMemory = DoctorApps.sorted(rows, by: .memory).compactMap(\.quit?.pid)
+            #expect(byUse == [2, 3, 1] && byMemory == [1, 3, 2])
+            #expect(DoctorApps.sorted(rows, by: .memory).first?.id == "apps")
+            #expect(rows.first { $0.quit?.pid == 2 }?.value.contains("·") == true)
+            #expect(DoctorAppActivity.idleChoices.contains(DoctorAppActivity.idleAfter))
+        }
+
+        @Test func cleanUpFindsLeftoversOfRemovedAppsAndSelectsOnlyWhatIsSafe() throws {
+            // Identifiers only: never Apple's, app groups, plain words or two-part names.
+            #expect(DoctorSweep.identifier("com.example.gone.plist") == "com.example.gone")
+            #expect(DoctorSweep.identifier("com.example.Gone.savedState") == "com.example.gone")
+            #expect(DoctorSweep.identifier("com.apple.Safari.plist") == nil)
+            #expect(DoctorSweep.identifier("group.com.example.app") == nil)
+            #expect(DoctorSweep.identifier("Google") == nil && DoctorSweep.identifier("com.example") == nil)
+            #expect(DoctorSweep.identifier("com.example..x") == nil && DoctorSweep.identifier("com.exa/mple.x") == nil)
+            // Installed (or a helper of an installed app), or running: in use.
+            let installed: (String) -> Bool = { $0 == "com.example.editor" }
+            #expect(DoctorSweep.inUse("com.example.editor.helper", registered: installed, running: []))
+            #expect(DoctorSweep.inUse("com.example.tool", registered: { _ in false }, running: ["com.example.tool"]))
+            #expect(!DoctorSweep.inUse("com.example.gone", registered: installed, running: []))
+
+            let home = FileManager.default.temporaryDirectory.appendingPathComponent("sweep-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: home) }
+            let support = home.appendingPathComponent("Library/Application Support")
+            let prefs = home.appendingPathComponent("Library/Preferences")
+            for folder in [support, prefs] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true) }
+            try FileManager.default.createDirectory(at: support.appendingPathComponent("com.example.gone"), withIntermediateDirectories: true)
+            try Data(count: 4096).write(to: support.appendingPathComponent("com.example.gone/data"))
+            try Data("x".utf8).write(to: prefs.appendingPathComponent("com.example.editor.plist"))
+            try Data("x".utf8).write(to: prefs.appendingPathComponent("com.vendor.old.plist"))
+            try Data("x".utf8).write(to: prefs.appendingPathComponent("com.apple.finder.plist"))
+            try Data("x".utf8).write(to: prefs.appendingPathComponent("com.example.gone.plist"))
+            let found = DoctorSweep.orphans(home: home, installed: ["com.vendor.new"], running: [], registered: installed)
+            #expect(Set(found.map { $0.url.lastPathComponent }) == ["com.example.gone", "com.example.gone.plist", "com.vendor.old.plist"])
+            #expect(found.first { $0.url.lastPathComponent == "com.vendor.old.plist" }?.vendorInstalled == true)
+            for item in found {
+                let target = DoctorTrashTarget(path: item.path, mode: item.isFolder ? .folder : .item, identity: item.identity, origin: .orphan)
+                #expect(DoctorTrash.isAllowed(target))
+            }
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Library/Preferences/com.apple.finder.plist", mode: .item,
+                                                              identity: FileIdentity(device: 1, inode: 1), origin: .orphan)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "~/Documents/com.example.gone", mode: .folder,
+                                                              identity: FileIdentity(device: 1, inode: 1), origin: .orphan)))
+            #expect(!DoctorTrash.isAllowed(DoctorTrashTarget(path: "/Applications/Big.app", mode: .folder,
+                                                              identity: FileIdentity(device: 1, inode: 1), origin: .app)))
+
+            // Old and from a maker with no app left: selected. Recent, or the maker has another app: listed only.
+            let now = Date()
+            var old = found
+            for index in old.indices { old[index].modified = now.addingTimeInterval(-200 * 86400) }
+            let rows = DoctorSweep.result(.init(orphans: old), now: now, months: 3).rows
+            #expect(rows.first?.id == "cleanup.orphans")
+            #expect(rows.first { $0.title.hasSuffix("com.example.gone.plist") }?.severity == .info)
+            // A support folder may hold the user's data: never selected for you.
+            #expect(rows.first { $0.title.contains("com.example.gone") }?.severity == .review)
+            #expect(rows.first { $0.title.contains("com.vendor.old") }?.severity == .review)
+            let fresh = DoctorSweep.result(.init(orphans: found), now: now, months: 3).rows
+            #expect(fresh.filter { $0.level == 1 }.allSatisfy { $0.severity == .review })
+            // Never opened: counts from when it was added; nothing known: not suggested.
+            #expect(DoctorSweep.lastUse(opened: nil, added: now) == now && DoctorSweep.lastUse(opened: nil, added: nil) == nil)
+        }
+
+        @Test func onlyBrowserCacheFoldersAreOfferedNeverProfileData() throws {
+            let home = FileManager.default.temporaryDirectory.appendingPathComponent("browsers-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: home) }
+            let chrome = home.appendingPathComponent("Library/Application Support/Google/Chrome")
+            for folder in ["GrShaderCache", "Default/GPUCache", "Default/Code Cache", "Profile 2/DawnWebGPUCache",
+                           "Default/IndexedDB", "Default/Service Worker", "Profile x/GPUCache", "Snapshots/GPUCache"] {
+                try FileManager.default.createDirectory(at: chrome.appendingPathComponent(folder), withIntermediateDirectories: true)
+            }
+            // A link to a cache folder is never followed.
+            try FileManager.default.createSymbolicLink(at: chrome.appendingPathComponent("ShaderCache"), withDestinationURL: home)
+            let found = DoctorBrowserCaches.find(home: home).map(\.path)
+            let base = "~/Library/Application Support/Google/Chrome/"
+            #expect(Set(found) == Set(["GrShaderCache", "Default/GPUCache", "Default/Code Cache", "Profile 2/DawnWebGPUCache"].map { base + $0 }))
+            func allowed(_ path: String, _ mode: DoctorTrashPlan.Mode = .contents) -> Bool {
+                DoctorTrash.isAllowed(DoctorTrashTarget(path: path, mode: mode))
+            }
+            for path in found { #expect(allowed(path)) }
+            #expect(!allowed(base + "Default/IndexedDB") && !allowed(base + "Default/Service Worker") && !allowed(base + "Default"))
+            #expect(!allowed(base + "Profile x/GPUCache") && !allowed(base + "Profile 02/GPUCache") && !allowed(base + "Default/../Default/GPUCache"))
+            #expect(!allowed(base + "Default/GPUCache", .folder) && !allowed(base + "Default/GPUCache/x"))
+            #expect(allowed("~/Library/Application Support/Arc/User Data/Default/GPUCache"))
+            #expect(!allowed("~/Library/Application Support/Google/Chrome Betas/Default/GPUCache"))
+            #expect(DoctorBrowserCaches.owners(of: base + "Default/GPUCache") == ["com.google.Chrome"])
+        }
+
+        @Test func cleanUpListsEverythingUnderHeadingsAndKeepsOneCopyOfEachFile() {
+            func row(_ id: String, origin: DoctorTrashTarget.Origin = .standard, level: Int = 1, bytes: Int64 = 1_000) -> DoctorRow {
+                DoctorRow(id: id, title: id, value: "", detail: "", severity: .review, bytes: bytes, location: URL(fileURLWithPath: "/tmp/" + id + ".dmg"),
+                          trash: DoctorTrashTarget(path: "~/Downloads/" + id, mode: .item, identity: FileIdentity(device: 1, inode: 1), origin: origin),
+                          level: level)
+            }
+            var caches = DoctorResult(section: .caches, severity: .info, badge: "", headline: "")
+            caches.rows = [row("cache.a"), DoctorRow(id: "space.free", title: "", value: "", detail: "", severity: .info)]
+            var duplicates = DoctorResult(section: .duplicates, severity: .info, badge: "", headline: "")
+            duplicates.rows = [row("dup.0", origin: .duplicate, level: 0), row("dup.0.0", origin: .duplicate), row("dup.0.1", origin: .duplicate),
+                               row("sim.0.0", origin: .similar), row("sim.0.1", origin: .similar)]
+            var installers = DoctorResult(section: .storage, severity: .info, badge: "", headline: "")
+            installers.rows = [row("file.0")]
+            let combined = DoctorSweep.combine(own: nil, caches: caches, background: nil, installers: installers,
+                                               duplicates: duplicates, projects: nil, pending: ["Apps"])
+            let ids = combined.rows.map(\.id)
+            #expect(ids == ["cleanup.caches", "cache.a", "cleanup.installers", "file.0", "cleanup.duplicates", "dup.0.1", "sim.0.1"])
+            #expect(combined.rows.first { $0.id == "dup.0.1" }?.severity == .info)
+            #expect(combined.rows.first { $0.id == "sim.0.1" }?.severity == .review)
+            #expect(combined.notes.first?.contains("Apps") == true)
+            let empty = DoctorSweep.combine(own: nil, caches: nil, background: nil, installers: nil, duplicates: nil, projects: nil, pending: [])
+            #expect(empty.rows.isEmpty && !empty.headline.isEmpty)
+        }
+
         @Test func liveReadingsAreSaneAndTheChartsTakeThem() {
             var live = DoctorLive()
             #expect(live.cpu() == nil)

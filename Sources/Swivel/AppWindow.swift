@@ -1007,7 +1007,7 @@ final class CustomizePane: Pane, NSTableViewDataSource, NSTableViewDelegate {
     private var rows: [(title: String, shown: Bool)] = []
     private var labels: [String] = []  // display titles: renaming an image preset keeps its stored title
     private static let rowType = NSPasteboard.PasteboardType("local.swivel.row")
-    private let kinds: [FileKind] = [.image, .video, .audio, .pdf, .document, .archive, .other]
+    private let kinds: [FileKind] = [.image, .video, .audio, .pdf, .document, .archive, .subtitle, .data, .model3D, .font, .other]
     /// Set while this pane writes Prefs: it already shows the change, so it ignores the notifications that follow.
     private var isSaving = false
     private var dragged: Int?

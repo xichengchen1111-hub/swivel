@@ -249,6 +249,24 @@ enum DoctorStorage {
                                          trash: DoctorTrashTarget(path: entry.path, mode: .contents),
                                          bundleIDs: owners[entry.id] ?? []))
         }
+        // Code, graphics and shader caches inside Chromium browsers' profiles.
+        for (index, found) in DoctorBrowserCaches.find(home: env.home).enumerated() {
+            if Task.isCancelled { break }
+            guard let url = try? DoctorTrash.resolve(found.path, home: env.home) else { continue }
+            let size = await scan(url, home: env.home)
+            guard size.bytes >= smallestCache else { continue }
+            total += size.bytes
+            let title = found.browser.name + " · " + L(DoctorBrowserCaches.kind(found.folder))
+                + (found.profile.map { $0 == "Default" ? "" : " (" + DoctorText.visible($0) + ")" } ?? "")
+            let detail = L("A cache the browser builds again by itself.") + "\n"
+                + L("Keeps: %@", L("Cookies, logins, passwords, bookmarks, history, extensions, profiles, and open tabs.")) + "\n"
+                + L("Quit the browser first. The first launch and first page loads may be slower.")
+            result.rows.append(DoctorRow(id: "cache.browser-\(index)", title: title, value: DoctorFormat.bytes(size.bytes),
+                                         detail: DoctorFormat.path(url) + "\n" + detail, severity: .info,
+                                         bytes: size.bytes, location: url,
+                                         trash: DoctorTrashTarget(path: found.path, mode: .contents),
+                                         bundleIDs: found.browser.bundleIDs))
+        }
         result.rows.sort { ($0.bytes ?? 0) > ($1.bytes ?? 0) }
         result.badge = DoctorFormat.bytes(total)
         if result.rows.isEmpty {
@@ -264,7 +282,7 @@ enum DoctorStorage {
         result.notes.append(L("Command-line tools that use a cache (Gradle daemons, swift build, cargo) aren’t apps Mac Doctor can see: stop them first."))
         result.notes.append(L("Cache list from ClearDisk (MIT License)."))
         result.report.append(L("Caches Mac Doctor can move to the Trash: %d, together %@.", result.rows.count, DoctorFormat.bytes(total)))
-        result.names += result.rows.prefix(10).map { "\(DoctorText.reportName(catalogueName($0.id, catalogue))): \($0.value)" }
+        result.names += result.rows.filter { !$0.id.hasPrefix("cache.browser-") }.prefix(10).map { "\(DoctorText.reportName(catalogueName($0.id, catalogue))): \($0.value)" }
         return result
     }
 

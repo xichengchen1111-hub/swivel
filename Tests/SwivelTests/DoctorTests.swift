@@ -494,6 +494,19 @@ struct DoctorTests {
 @Suite(.serialized)
 @MainActor
 struct DoctorLiveTests {
+    /// Clean Up Files' own part: apps not opened for three months and Library leftovers of removed apps (reads
+    /// /Applications, Spotlight's dates and ~/Library only; Containers are never read).
+    private func unusedAndLeftovers(home: URL) -> DoctorResult {
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier?.lowercased() })
+        let now = Date()
+        let unused = DoctorSweep.unusedApps(home: home, now: now, after: 90 * 86400, running: running)
+        let installed = Set(DoctorSweep.installedApps(home: home).compactMap { Bundle(url: $0)?.bundleIdentifier })
+        let orphans = DoctorSweep.orphans(home: home, installed: installed, running: running, registered: DoctorSweep.registered)
+        var result = DoctorSweep.result(.init(apps: unused.apps, orphans: orphans, noRecords: unused.noRecords), now: now, months: 3)
+        result.headline = "\(unused.apps.count) unused apps, \(orphans.count) leftovers"
+        return result
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_LIVE"] != nil))
     func liveChecksReadThisMac() async throws {
         let env = DoctorEnvironment.live
@@ -514,6 +527,7 @@ struct DoctorLiveTests {
             DoctorDrives.check(DoctorDrives.volumes().filter { !$0.local }, unmounted: []),
             DoctorBackground.check(DoctorBackground.items(home: env.home), loaded: jobs, systemLoaded: [], home: env.home),
             DoctorApp.check(findings, app: calculator),
+            unusedAndLeftovers(home: env.home),
         ]
         for result in results {
             print("[\(result.section.rawValue)] \(result.severity) · \(result.badge) · \(result.headline)")

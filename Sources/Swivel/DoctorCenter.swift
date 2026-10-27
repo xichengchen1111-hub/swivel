@@ -26,6 +26,7 @@ final class DoctorCenter {
         var all = stored
         if let speed { all[.network] = DoctorNetwork.withSpeed(stored[.network], speed) }
         if let largeFiles { all[.storage] = DoctorLargeFiles.merge(stored[.storage], largeFiles, home: environment.home) }
+        if cleanUpMode, uninstallApp == nil { all[.uninstall] = cleanUpResult(stored: all) }
         return all
     }
     private(set) var running: Set<DoctorSection> = []
@@ -39,6 +40,9 @@ final class DoctorCenter {
     /// The app chosen on Uninstall Apps, and what was found for it.
     private(set) var uninstallApp: URL?
     private var uninstallInfo: DoctorUninstall.App?
+    /// Clean Up Files shows everything to clean (after Find Things to Clean) rather than one chosen app.
+    private(set) var cleanUpMode = false
+    private var cleanUp: DoctorSweep.Outcome?
     /// The app App Check last looked at, also for this session only.
     private(set) var app: URL?
     /// One receipt per Move to Trash, newest last, until Swivel quits.
@@ -113,7 +117,8 @@ final class DoctorCenter {
                     let found = DoctorProjects.find(projectFolders, home: env.home)
                     return DoctorProjects.result(found.found, cancelled: found.cancelled, home: env.home)
                 }.value
-            case .uninstall: await self?.inspectUninstall(uninstallApp, home: env.home)
+            case .uninstall:
+                if uninstallApp == nil { await self?.findUnused(home: env.home) } else { await self?.inspectUninstall(uninstallApp, home: env.home) }
             case .performance: await Self.performance(env)
             case .power: await Self.power()
             case .network: await DoctorNetwork.check(dns: try? env.run(.dnsConfiguration), proxy: try? env.run(.proxySettings))
@@ -269,9 +274,114 @@ final class DoctorCenter {
     @discardableResult
     func chooseUninstall(_ url: URL) -> Bool {
         guard let app = DoctorCommand.validatedApp(url) else { return false }
+        cleanUpMode = false
         uninstallApp = app
         run(.uninstall)
         return true
+    }
+
+    // MARK: Clean Up Files
+
+    /// Looks for everything the Mac may no longer need: unused apps and leftovers here, and caches, leftover launch
+    /// agents, installers, duplicates in the common folders and build folders anywhere in the home folder through the
+    /// other checks. Each part shows up as soon as it is done.
+    func findThingsToClean() {
+        guard Feature.doctor.isOn else { return }
+        uninstallApp = nil
+        uninstallInfo = nil
+        stored[.uninstall] = nil
+        cleanUp = nil
+        cleanUpMode = true
+        duplicateFolders = Self.commonFolders.compactMap { DoctorLargeFiles.folder($0, home: environment.home) }
+        projectFolders = [(try? DoctorTrash.realHome(environment.home)) ?? environment.home]
+        for section in [DoctorSection.uninstall, .caches, .background, .duplicates, .projects] { run(section) }
+        stopFileSearch()
+        searchLargeFiles()
+    }
+
+    /// The parts of Find Things to Clean still running.
+    var cleanUpPending: [String] {
+        guard cleanUpMode else { return [] }
+        var names: [String] = []
+        if running.contains(.uninstall) { names.append(L("Apps")) }
+        if running.contains(.caches) { names.append(L("Caches")) }
+        if searchingFiles { names.append(L("Installers and disk images")) }
+        if running.contains(.duplicates) { names.append(L("Duplicate files")) }
+        if running.contains(.projects) { names.append(L("Project build folders")) }
+        return names
+    }
+
+    func stopCleanUp() {
+        for section in [DoctorSection.uninstall, .caches, .background, .duplicates, .projects] where running.contains(section) { cancel(section) }
+        stopFileSearch()
+    }
+
+    private func cleanUpResult(stored all: [DoctorSection: DoctorResult]) -> DoctorResult {
+        let installers = largeFiles.map { DoctorLargeFiles.merge(nil, $0, home: environment.home) }
+        var result = DoctorSweep.combine(own: cleanUp.map { DoctorSweep.result($0, now: Date()) },
+                                           caches: all[.caches], background: all[.background], installers: installers,
+                                           duplicates: all[.duplicates], projects: all[.projects], pending: cleanUpPending)
+        result.checked = ([cleanUp?.checked, all[.caches]?.checked, all[.background]?.checked, largeFiles?.checked,
+                           all[.duplicates]?.checked, all[.projects]?.checked].compactMap { $0 }).max() ?? Date()
+        return result
+    }
+
+    private func findUnused(home: URL) async -> DoctorResult? {
+        guard cleanUpMode else { return nil }
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier?.lowercased() })
+        let after = DoctorSweep.unusedAfter
+        let task = Task.detached(priority: .utility) { () -> DoctorSweep.Outcome in
+            let now = Date()
+            let unused = DoctorSweep.unusedApps(home: home, now: now, after: after, running: running)
+            let installed = Set(DoctorSweep.installedApps(home: home).compactMap { Bundle(url: $0)?.bundleIdentifier })
+            let orphans = DoctorSweep.orphans(home: home, installed: installed, running: running, registered: DoctorSweep.registered)
+            return DoctorSweep.Outcome(apps: unused.apps, orphans: orphans, noRecords: unused.noRecords, checked: now)
+        }
+        let outcome = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+        if !Task.isCancelled { cleanUp = outcome }
+        return nil
+    }
+
+    /// Moves what was selected on Clean Up Files: each app with the files named after its identifier, everything else
+    /// by its own check's rule, as one step Undo can reverse.
+    func cleanUp(_ rows: [DoctorRow]) async throws -> DoctorTrashReceipt {
+        guard Feature.doctor.isOn else { throw ToolError(L("This feature is turned off.")) }
+        let home = environment.home
+        var apps: [DoctorUninstall.App] = []
+        var refused: [String] = []
+        for row in rows where row.trash?.origin == .app {
+            guard let target = row.trash, let id = row.bundleIDs.first else { continue }
+            if !NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty {
+                refused.append(L("Quit %@ first", row.title))
+                continue
+            }
+            let url = URL(fileURLWithPath: target.path)
+            let app = await Task.detached(priority: .userInitiated) { DoctorUninstall.inspect(url, home: home) }.value
+            guard let app, app.identity == target.identity, app.bundleID == id, app.refusal == nil else {
+                refused.append(L("%@ changed since the check, so it was left in place.", row.title))
+                continue
+            }
+            apps.append(app)
+        }
+        // Only what is named exactly after each app's identifier goes with it; nothing when the identifier is shared.
+        let leftovers = apps.flatMap { app -> [DoctorRow] in
+            guard !app.sharedIdentifier else { return [] }
+            return app.leftovers.filter { !$0.byName }.enumerated().compactMap { index, item in
+                let target = DoctorTrashTarget(path: item.path, mode: item.isFolder ? .folder : .item, identity: item.identity, origin: .leftover)
+                guard DoctorTrash.isAllowed(target) else { return nil }
+                return DoctorRow(id: "left.\(index)", title: DoctorText.visible(item.url.lastPathComponent), value: "", detail: "",
+                                 severity: .info, bytes: item.bytes, location: item.url, trash: target, group: "app:" + app.bundleID)
+            }
+        }
+        let others = rows.filter { $0.trash != nil && $0.trash?.origin != .app }
+        var receipt = DoctorTrashReceipt()
+        if !apps.isEmpty || !others.isEmpty { receipt = try await move(others + leftovers, apps: apps) }
+        receipt.failures = refused + receipt.failures
+        let moved = Set(receipt.moved.map(\.original.path))
+        cleanUp?.apps.removeAll { moved.contains($0.app.url.path) }
+        cleanUp?.orphans.removeAll { moved.contains($0.url.path) }
+        post()
+        return receipt
     }
 
     private func inspectUninstall(_ app: URL?, home: URL) async -> DoctorResult? {
@@ -293,7 +403,7 @@ final class DoctorCenter {
     /// Plans and moves the given rows to the Trash. Rows are re-checked here: only catalogue caches and your own
     /// leftover launch agents can be moved, and never while their app runs. Blocking file work runs off the main thread.
     func moveToTrash(_ rows: [DoctorRow]) async throws -> DoctorTrashReceipt {
-        try await move(rows, app: nil)
+        try await move(rows, apps: [])
     }
 
     /// Moves the inspected app and the chosen leftover rows to the Trash, as one step Undo can reverse.
@@ -312,7 +422,8 @@ final class DoctorCenter {
             }
         }
         guard busy.isEmpty else { throw ToolError(L("Quit %@ first", busy.compactMap(\.localizedName).joined(separator: ", "))) }
-        let receipt = try await move(rows.filter { $0.trash?.origin == .leftover }, app: inspected)
+        let leftovers = rows.filter { $0.trash?.origin == .leftover }.map { row in var row = row; row.group = "app:" + inspected.bundleID; return row }
+        let receipt = try await move(leftovers, apps: [inspected])
         if receipt.moved.contains(where: { $0.original == app }) {
             uninstallApp = nil
             uninstallInfo = nil
@@ -326,19 +437,20 @@ final class DoctorCenter {
     /// only catalogue caches, your own leftover launch agents, files the searches found (still the same files),
     /// rebuildable project folders whose project file is still there, extra copies whose kept copy still has the
     /// same content, and a removed app's own Library items. Never while an owning app runs. Off the main thread.
-    private func move(_ rows: [DoctorRow], app: DoctorUninstall.App?) async throws -> DoctorTrashReceipt {
+    private func move(_ rows: [DoctorRow], apps: [DoctorUninstall.App]) async throws -> DoctorTrashReceipt {
         guard Feature.doctor.isOn else { throw ToolError(L("This feature is turned off.")) }
         let owners = runningOwners(rows.filter { $0.trash?.origin == .standard })
         guard owners.isEmpty else { throw ToolError(L("Quit %@ first", owners.joined(separator: ", "))) }
         let env = environment
         let catalogue = ClearDiskCatalog.entries
         let keepers = try duplicateKeepers(rows)
-        let jobs = rows.compactMap { row -> (DoctorTrashTarget, String, Keeper?)? in
+        let jobs = rows.compactMap { row -> (DoctorTrashTarget, String, Keeper?, String?)? in
             guard let target = row.trash, DoctorTrash.isAllowed(target, catalogue: catalogue) else { return nil }
             let name = catalogue.first { $0.path == target.path }?.name ?? row.title
-            return (target, name, row.group.flatMap { keepers[$0] })
+            return (target, name, row.group.flatMap { keepers[$0] }, row.group)
         }
-        guard !jobs.isEmpty || app != nil else { throw ToolError(L("Mac Doctor can’t move these items.")) }
+        guard !jobs.isEmpty || !apps.isEmpty else { throw ToolError(L("Mac Doctor can’t move these items.")) }
+        let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier?.lowercased() })
         let receipt = try await Images.detached { () -> DoctorTrashReceipt in DoctorWalk.withoutDownloads {
             var total = DoctorTrashReceipt()
             // Each kept copy is read once per move, however many of its copies go; nil when it can't be read.
@@ -349,16 +461,18 @@ final class DoctorCenter {
                 keptDigests[keeper] = value
                 return value
             }
-            if let app {
+            var kept: Set<String> = []
+            for app in apps {
                 do {
                     total.moved.append(try DoctorUninstall.trashApp(app.url, identity: app.identity, bundleID: app.bundleID, move: env.trash))
                 } catch {
                     // Without the app, its files stay too: they may still be needed.
                     total.failures.append(error.localizedDescription)
-                    return total
+                    kept.insert("app:" + app.bundleID)
                 }
             }
-            for (target, name, keeper) in jobs {
+            for (target, name, keeper, group) in jobs {
+                if let group, kept.contains(group) { continue }
                 do {
                     switch target.origin {
                     case .duplicate:
@@ -388,7 +502,14 @@ final class DoctorCenter {
                               keeper.identity == FileIdentity(device: kept.st_dev, inode: UInt64(kept.st_ino)) else {
                             throw ToolError(L("Keep at least one copy of each file: deselect one copy of “%@”.", DoctorTrash.displayPath(URL(fileURLWithPath: target.path))))
                         }
-                    case .standard, .leftover: break
+                    case .orphan:
+                        // Still named after an app that isn't installed or running now.
+                        let name = URL(fileURLWithPath: target.path).lastPathComponent
+                        guard let id = DoctorSweep.identifier(name),
+                              !DoctorSweep.inUse(id, registered: DoctorSweep.registered, running: running) else {
+                            throw ToolError(L("%@ belongs to an installed app now, so it was left in place.", target.path))
+                        }
+                    case .standard, .leftover, .app: break
                     }
                     let receipt = try DoctorTrash.execute(try DoctorTrash.plan(target, name: name, home: env.home), move: env.trash)
                     total.moved += receipt.moved
@@ -463,7 +584,7 @@ final class DoctorCenter {
         case "file": .storage
         case "dup", "sim": .duplicates
         case "build": .projects
-        case "left": .uninstall
+        case "left", "uapp", "orphan": .uninstall
         default: .caches
         }
     }
@@ -503,11 +624,18 @@ final class DoctorCenter {
                                              uptime: DoctorPerformance.timeSinceRestart())
         result.ran = [DoctorCommand.processCPU.displayString, DoctorCommand.processMemory.displayString]
         let apps = DoctorApps.candidates()
-        let usage = await Task.detached(priority: .utility) { DoctorApps.usage(apps) }.value
+        let activity = DoctorAppActivity.shared
+        activity.start()
+        let now = Date()
+        let usage = await Task.detached(priority: .utility) { DoctorApps.usage(apps) }.value.map { item -> DoctorApps.Usage in
+            var item = item
+            item.lastUse = activity.lastUse(bundleID: item.app.bundleID, launched: item.app.launched, now: now)
+            return item
+        }
         if !usage.isEmpty {
             // Apps the user can quit first, then every busy or large process (macOS's own included) below a heading.
             let processes = result.rows.map { row -> DoctorRow in var row = row; row.level = 1; return row }
-            result.rows = DoctorApps.rows(usage)
+            result.rows = DoctorApps.rows(usage, now: now)
             if !processes.isEmpty {
                 result.rows.append(DoctorRow(id: "processes", title: L("Busiest and largest processes, macOS included"), value: "",
                                              detail: L("For reading only: macOS restarts its own processes when they are needed."),
@@ -516,6 +644,12 @@ final class DoctorCenter {
             }
             result.report.append(L("Apps that could be quit: %d, together using %@ of memory.", usage.count,
                                    DoctorFormat.memory(usage.reduce(0) { $0 + $1.bytes })))
+            let idle = usage.filter { $0.lastUse?.idle(now: now) ?? false }
+            if !idle.isEmpty {
+                result.report.append(L("Apps not used for %@ or longer: %d, together using %@ of memory.",
+                                       DoctorAppActivity.idleName(DoctorAppActivity.idleAfter), idle.count,
+                                       DoctorFormat.memory(idle.reduce(0) { $0 + $1.bytes })))
+            }
         }
         return result
     }
