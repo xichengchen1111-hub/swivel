@@ -8,18 +8,19 @@ namespace Swivel.Core;
 /// beside the upper image. No overlap matching.
 public static class ImageStitch
 {
-    public const int EdgeLimit = 32_768;
-    public const long PixelLimit = 40_000_000;
+    // The result must open in every other image tool, so it keeps their 16 MP / 16,384 limit
+    // (Mac allows 40 MP, 32,768 tall).
+    public const int EdgeLimit = 16_384;
+    public const long PixelLimit = ImageRules.MaxPixels;
     public const string Suffix = " stitched";
     public const string ChooseTwo = "Choose two different hung images to stitch.";
-    public const string TooLarge = "These images are too large to stitch: the result may have at most 40 million pixels and 32,768 pixels on a side.";
+    public const string TooLarge = "These images are too large to stitch: the result may have at most 16 megapixels and 16384 pixels per side.";
 
     /// Output width and each image's height at that width.
     public static (int Width, int Top, int Bottom) Size(int topWidth, int topHeight, int bottomWidth, int bottomHeight)
     {
         foreach (int side in new[] { topWidth, topHeight, bottomWidth, bottomHeight })
             if (side is < 1 or > EdgeLimit) throw new UserError(TooLarge);
-        if ((long)topWidth * topHeight + (long)bottomWidth * bottomHeight > PixelLimit) throw new UserError(TooLarge);
         int width = Math.Min(topWidth, bottomWidth);
         int Height(int w, int h) => (int)Math.Max(1, Math.Round((double)h * width / w, MidpointRounding.AwayFromZero));
         int top = Height(topWidth, topHeight), bottom = Height(bottomWidth, bottomHeight);

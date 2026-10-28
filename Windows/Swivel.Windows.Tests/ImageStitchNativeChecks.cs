@@ -37,6 +37,19 @@ internal static class ImageStitchNativeChecks
         check(At(75, 50).SequenceEqual(new byte[] { 255, 0, 0, 128 }) && At(149, 199).SequenceEqual(new byte[] { 255, 0, 0, 128 }), "The lower image follows directly below, keeping its transparency");
         check(Path.GetFileName(ImageStitcher.Save(top, bottom, default)) == "截图 top stitched 2.png", "Stitching again takes the next numbered name");
 
+        // A wider, half-transparent image below is scaled down premultiplied: colour stays, alpha stays.
+        string wide = Png(Path.Combine(folder, "wide.png"), 301, 151, 0, 255, 0, 128);
+        string narrow = Png(Path.Combine(folder, "narrow.png"), 100, 20, 0, 0, 255, 255);
+        string scaledMade = ImageStitcher.Save(narrow, wide, default);
+        var scaledFrame = BitmapDecoder.Create(new Uri(scaledMade), BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+        var scaled = new byte[scaledFrame.PixelWidth * scaledFrame.PixelHeight * 4];
+        new FormatConvertedBitmap(scaledFrame, PixelFormats.Bgra32, null, 0).CopyPixels(scaled, scaledFrame.PixelWidth * 4, 0);
+        int bad = 0;
+        for (int y = 20; y < scaledFrame.PixelHeight; y++) for (int x = 0; x < scaledFrame.PixelWidth; x++)
+        { int i = (y * scaledFrame.PixelWidth + x) * 4; if (Math.Abs(scaled[i + 1] - 255) > 2 || scaled[i] > 2 || scaled[i + 2] > 2 || Math.Abs(scaled[i + 3] - 128) > 2) bad++; }
+        check(scaledFrame.PixelWidth == 100 && scaledFrame.PixelHeight == 20 + 50 && bad == 0,
+            $"A 301×151 half-transparent green image scaled to 100 wide keeps its colour and alpha at every pixel, edges included: {scaledFrame.PixelWidth}×{scaledFrame.PixelHeight}, {bad} off");
+
         // A JPEG on top of the PNG: names follow the upper image.
         string jpeg = Path.Combine(folder, "photo.jpg");
         var encoderJ = new JpegBitmapEncoder(); encoderJ.Frames.Add(BitmapFrame.Create(BitmapSource.Create(100, 40, 96, 96, PixelFormats.Bgr24, null, Enumerable.Repeat((byte)90, 100 * 40 * 3).ToArray(), 300)));

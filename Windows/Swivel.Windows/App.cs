@@ -755,11 +755,14 @@ public sealed partial class App : Application
                     using var tile = ImageTools.OpenTile(output, 248, 206, false, CancellationToken.None);
                     return (output, tile.Bitmap);
                 });
+                string saved = string.Format(L("Saved {0} beside the upper image. The originals were not changed; hang them again to see them on the line."), System.IO.Path.GetFileName(made));
+                // Already published: if the line was cleared or the work cancelled meanwhile, say so but leave the line alone.
+                if (token.IsCancellationRequested) { report(saved); return; }
                 // The new image takes the upper print's place; both originals stay on disk, off the line.
                 int place = Prints.ToList().FindIndex(p => string.Equals(p.Path, files[0], StringComparison.OrdinalIgnoreCase));
                 foreach (var used in Prints.Where(p => files.Contains(p.Path, StringComparer.OrdinalIgnoreCase)).ToArray()) Prints.Remove(used);
                 Prints.Insert(place < 0 ? Prints.Count : Math.Min(place, Prints.Count), new HungPrint(made, thumbnail));
-                report(string.Format(L("Saved {0} beside the upper image. The originals were not changed; hang them again to see them on the line."), System.IO.Path.GetFileName(made))); return;
+                report(saved); return;
             }
             if (action.Id == "rename.undo")
             {

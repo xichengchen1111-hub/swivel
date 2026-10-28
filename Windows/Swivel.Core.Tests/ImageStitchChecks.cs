@@ -12,12 +12,14 @@ internal static class ImageStitchChecks
         check(ImageStitch.Size(300, 200, 300, 50) == (300, 200, 50), "Equal widths keep both images as they are");
         check(ImageStitch.Size(3, 3, 2, 9) == (2, 2, 9) && ImageStitch.Size(4, 1, 2, 5) == (2, 1, 5) && ImageStitch.Size(1000, 1, 10, 10) == (10, 1, 10),
             "Heights round half up and never reach zero");
-        check(ImageStitch.Size(1, 16384, 1, 16384) == (1, 16384, 16384), "Two 16,384-pixel-tall images fit the 32,768 limit");
+        // The result keeps the 16 MP / 16,384 limit every other image tool opens.
+        check(ImageStitch.Size(1, 8192, 1, 8192) == (1, 8192, 8192) && ImageStitch.Size(4000, 3000, 4000, 1000) == (4000, 3000, 1000), "Results up to 16,384 tall and exactly 16 MP fit");
         reject(() => ImageStitch.Size(0, 5, 5, 5), "An empty image is refused");
-        reject(() => ImageStitch.Size(1, 20000, 1, 20000), "A result taller than 32,768 pixels is refused");
-        reject(() => ImageStitch.Size(6000, 6000, 6000, 1000), "More than 40 million source pixels is refused");
-        reject(() => ImageStitch.Size(32769, 1, 1, 1), "A side over 32,768 is refused");
-        string? message = null; try { ImageStitch.Size(1, 20000, 1, 20000); } catch (UserError error) { message = error.Message; }
+        reject(() => ImageStitch.Size(1080, 9000, 1080, 9000), "Two long 1080×9000 screenshots (18,000 tall) are refused");
+        reject(() => ImageStitch.Size(4000, 3000, 4000, 1001), "A result over 16 MP is refused (two 4000×3000 photos would be 24 MP)");
+        reject(() => ImageStitch.Size(16385, 1, 1, 1), "A side over 16,384 is refused");
+        check(ImageStitch.EdgeLimit == 16384 && ImageStitch.PixelLimit == ImageRules.MaxPixels, "The stitch limits are the image tools' limits");
+        string? message = null; try { ImageStitch.Size(1, 9000, 1, 9000); } catch (UserError error) { message = error.Message; }
         check(message == ImageStitch.TooLarge && Strings.Table.ContainsKey(ImageStitch.TooLarge) && Strings.Table.ContainsKey(ImageStitch.ChooseTwo), "The size refusal is a translated user message");
 
         // Stacking: upper rows, then lower rows.
@@ -42,7 +44,7 @@ internal static class ImageStitchChecks
         check(!hover.IsReady(t + TimeSpan.FromSeconds(5)) && hover.Update("a.png", "b.png", 80, 100, t + TimeSpan.FromSeconds(5)) == StitchHoverState.Holding, "Leaving the print resets the hold");
 
         foreach (string text in new[] { "Stitch Another Print Below", "Stitch Images", "Stitching images…", "Release to save {1} below {0} as a new image.", "Keep holding to stitch {1} below {0}…",
-            "Not stitched: hold over the lower half of a print for half a second before releasing.", "Saved {0} beside the upper image. The originals were not changed; hang them again to see them on the line." })
-            check(Strings.Table.TryGetValue(text, out var translated) && translated.All(x => !text.Contains("{1}") || x.Contains("{1}") && x.Contains("{0}")), "Stitch text translated with its placeholders: " + text);
+            "Not stitched: hold over the lower half of a print for half a second before releasing.", "To stitch two images, drag one onto the lower half of another and hold for half a second, then release: it is saved below that image as a new PNG. Or right-click a print and choose Stitch Another Print Below.", "Saved {0} beside the upper image. The originals were not changed; hang them again to see them on the line." })
+            check(Strings.Table.TryGetValue(text, out var translated) && translated.All(x => (!text.Contains("{0}") || x.Contains("{0}")) && (!text.Contains("{1}") || x.Contains("{1}"))), "Stitch text translated with its placeholders: " + text);
     }
 }
