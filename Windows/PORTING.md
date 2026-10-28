@@ -1047,6 +1047,16 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.117 跟进 Mac 1.13–1.14.4：晾衣绳图片拼接（A05 增强）
+
+批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.116 已推送，CI 40682974347 通过。
+
+按 Mac `ImageStitch.swift` 移植：`Swivel.Core/ImageStitch.cs` 的 `Size`（窄者宽度、高度按比例四舍五入且至少 1，永不放大）、`Stack`（上图行后接下图行）、`StitchHover`（只认目标下半部、0.5 秒停留，换目标或移到上半部重来，不能拼到自己）。Mac 的结果上限为 40 MP/32768；Windows 取图片工具的 16 MP/16384，避免保存的结果无法挂回或再处理（审查发现原 40 MP 上限会写出文件后再报错）。原生 `ImageStitcher.Save`：两张都经 `ImageTools.Open`（持有、转正、SDR/单帧检查），宽者转 Pbgra32 后缩放（透明边不变暗），WPF 若取整不同则补到精确尺寸，PNG 经 `NativeFiles.WriteBeside` 写到上图旁。App `clothesline.stitch`：功能开关、路径校验、Busy/取消；已写出后若取消或晾衣绳被清空则只报告已保存、不改晾衣绳；否则新图替换上图位置并取下两张原图。晾衣绳窗口：拖出的数据加自定义格式，只接受本窗口当前拖动且仍在晾衣绳上的图片；每张图片 DragEnter/Over/Leave/Drop（只在指针离开图片范围时算离开，避免缩略图与文字切换时重计时）、50 ms 计时器在停留到时变为可松开状态、边框加粗与双缩略图预览、拼接在 DoDragDrop 返回后执行；过早松开或离开时显示“未拼接”提示；右键“在下方拼接另一张”子菜单（文件名以 TextBlock 显示，提示框为完整路径）。Mac 的融合动画、减少动画处理与预览到挂图的连续交接无 Windows 对应。
+
+验证：核心 `ImageStitchChecks`（尺寸与边界、拒绝、Stack 顺序、悬停区与计时、重来、自身、翻译与占位符）。Windows CI 原生 `ImageStitchNativeChecks`：300×100 红图在上、150×150 半透明蓝图在下得 150×200，颜色与透明度准确、原图不变、重名编号；301×151 半透明绿图缩到 100 宽，每个像素颜色与透明度误差 ≤2；JPEG 在上得以 JPEG 命名的 PNG；自身、预先取消、损坏图片均不写文件。
+
+独立 agent 审查：无 P1。已修 P2：结果超过 16 MP 时写出后报错且晾衣绳不更新；状态栏在不可拼接后仍显示“松开即拼接”；在图片内部移动会重计时。已修 P3：过早松开无提示、计时器在可松开后不停、可接受其他来源的自定义拖动数据、取消后仍更新晾衣绳、下划线文件名在菜单里被吃掉、测试未覆盖半透明缩放与 {0} 占位符。未改：16 MP 时约数百 MB 峰值内存（有界）。复查无 P1/P2。未验证：真实 Windows 上鼠标拖放手感、静止停留时 OLE 是否持续刷新光标、触控笔/触屏拖动。固定 52 项仍 27／23／0／2。
+
 ## 0.116 跟进 Mac 1.14.4：转换为 ICO（C01 增强）
 
 批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.115 已推送，CI 40657735049 通过。

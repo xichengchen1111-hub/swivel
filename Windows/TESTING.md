@@ -1327,6 +1327,14 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.117 — Clothesline stitching, from Mac 1.13–1.14.4 (A05, 2026-10-28)
+
+- Core 4,520,886 on Mac; native compiled 0 warnings/errors there. Windows CI: 40692481495 (first version, core 4,520,885, native 5,477) and 40693994867 after the review fixes (core 4,520,887, native 5,478) passed.
+- `ImageStitchChecks` (core): narrower width with proportional heights in either order; equal widths unchanged; half-up rounding never zero; 8,192+8,192 tall and exactly 16 MP fit; empty, two 1080×9000 screenshots, 4000×3000+4000×1001 and a 16,385 side refused with the translated message; limits equal the image tools'; Stack order, width mismatch and cancellation; hover zone is the lower half, holding then ready at 0.5 s while moving within it, upper half cancels and returning restarts, another print restarts, never onto itself (case-insensitive), reset; translations keep {0}/{1}.
+- Native, `ImageStitchNativeChecks`: red 300×100 above half-transparent blue 150×150 gives 150×200 with exact colours and alpha at edges, originals unchanged, "截图 top stitched.png" then "… 2.png"; a half-transparent green 301×151 scaled to 100 wide keeps colour and alpha within 2 at every pixel; a JPEG above a PNG gives "photo stitched.png" 100×140; the same image, a pre-cancelled token and a damaged PNG write nothing.
+- Independent agent review: no P1; three P2s (over-16 MP results saved then refused, stale "Release" status, restarts when moving inside a print) and P3s fixed; recheck no P1/P2; the last P3 (no hint when released too early) fixed after.
+- Not tested: real mouse/pen/touch drags in the window on Windows, whether OLE keeps refreshing the cursor while the pointer rests, the drag preview's look.
+
 ## Windows0.116 — Convert to ICO, from Mac 1.14.4 (C01, 2026-10-28)
 
 - Core 4,520,838 on Mac; native compiled 0 warnings/errors there. Windows CI run 40681758853 passed before the review fixes (core 4,520,839, native 5,467); after the fixes, docs and version, run 40682974347 passed (core 4,520,839, native 5,467).

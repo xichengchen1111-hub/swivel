@@ -85,7 +85,10 @@ internal sealed class ClotheslineWindow : Window
                         pendingStitch = null; dragSource = print.Path;
                         try { DragDrop.DoDragDrop(source,data,DragDropEffects.Copy); } finally { dragSource = null; }
                     });
+                    // Released while still holding (too early): say why nothing happened.
+                    bool early = shown is { State: StitchHoverState.Holding };
                     ClearHover();
+                    if (early) status.Text = app.L("Not stitched: hold over the lower half of a print for half a second before releasing.");
                     // Run after the drag has ended, never inside the drag loop.
                     if (pendingStitch is { } stitch) { pendingStitch = null; Stitch(stitch.Top,stitch.Bottom); }
                 }) { ToolTip = print.Path, MinHeight = 36 };
