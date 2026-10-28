@@ -1047,6 +1047,18 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.114 跟进 Mac 1.14.4：数据文件互转（E03 增强）
+
+批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.113 已推送，Windows CI 40641688433 通过。
+
+按 Mac `DataFormats.swift` 移植为 `Swivel.Core/DataFileFormats.cs`（WPF 已有 `DataFormats` 类，改名避免冲突）。值树：null、bool、`DataNumber`（保留原文、双精度值、是否整数）、字符串、UTC 日期、字节数组、列表、字典。读取：JSON 用 System.Text.Json（最深 128 层，键重复拒绝——Mac 的 Foundation 会静默保留一个），先用 Utf8JsonReader 计数，超过 400 万个值不建树；JSONL/NDJSON 逐行；CSV（RFC 4180，按 Unicode 标量读，引号内 CR LF 原样保留）/TSV（无引号）；plist 没有 Windows 系统 API，原创实现 XML 读取（先严格解码为 UTF-8/UTF-16，再交给 XmlReader，DTD 忽略、无解析器，实体无法取文件）与二进制 `bplist00` 读取（尾部与偏移表全部边界检查，1/2/4/8 字节整数及 16 字节无符号，单/双精度，日期，data，ASCII/UTF-16BE 字符串，数组，字典；共享对象只解码一次，引用环拒绝，UID 与集合拒绝）。写出：JSON（两空格缩进、键按序、数字原文、不转义 `/` 与非 ASCII）、JSONL（每项一行紧凑 JSON，空列表输出一个换行，同 Mac）、XML plist（制表缩进，整数仅限 64 位有/无符号，实数须与双精度最短表示数值相同，否则拒绝，同 Mac）、CSV/TSV（带 BOM，CR LF）、YAML（字符串与键一律加引号，转义控制符/行分隔符/BOM/非字符，指数写成 `1.0e+20` 以便 YAML 1.1 读成数字）。写之前遍历检查：展开后的值数（共享对象每处都算）、深度、估算输出字节、JSON/CSV/TSV 中的 NaN/无穷。表格转记录时先按“列名字节 × 行数”估算再建记录。目录：`data.json/jsonl/plist/csv/tsv/yaml` 六个动作，不设开关（同 Mac 的转换菜单），不提供自身格式，.ndjson 视为 JSONL；与字幕共用“持有原件读一次、写到旁边”的原生路径。Agent 工具 plan_action 同有，plan 时拒绝 32 MiB 以上。`UserError` 新增带参数模板（如“第 {0} 行不是有效的 JSON”），`ShowError` 先翻译模板再填值；消息中的键名截到 80 字符并显示控制字符。
+
+与 Mac 的差异（Windows 内存与平台原因）：旧编码拒绝；JSON 最多 400 万个值、表格 500 万单元格、输出估算 128 MB（Mac 无 JSON 值数限制、1000 万单元格、256 MB）；重复键拒绝；JSON 输出 `"a": 1`（Mac 为 `"a" : 1`）。
+
+独立 agent 审查（只读，/private/tmp 探针）：首轮 1 个 P1、3 个 P2，均已修并复查确认。P1：CSV/TSV 转 JSON/JSONL/YAML/PLIST 时记录重复全部列名而输出字节未检查，18.8 MB 的构造 CSV 会膨胀到约 34 GB，内存耗尽，MCP 进程崩溃（现先估算并检查，复查约 640 MB 峰值即拒绝，再按复查建议改为建记录前估算）。P2：JSON 中孤立代理转义抛出非用户错误（现报“不是有效 JSON”）；超出双精度的 JSON 数字被当成无穷（YAML 静默写成 .inf、plist 静默写错）——现只有 plist 的 nan/inf 才算非有限，JSON 大数保留原文、plist 拒绝；普通 32 MB JSON 峰值 2.5 GB、共享 plist 1.4 GB（现预计数、检查时先算子项再入栈，分别降到约 310 MB 和 890 MB 拒绝）。P3 已修：XML plist 声明 ISO-8859-1 可绕过编码规则、二进制 plist 按尾部数目预分配、YAML 指数写法、空 JSONL、只含换行的表头、逐字符分配、错误消息中的超长键；复查 P3：宽表头拒绝前要建全部记录约 6 秒且不可取消（现建之前估算并可取消）、超出 64 位的整数写 plist 时被四舍五入成实数（现拒绝，同 Mac）。
+
+核心 4,520,764；Windows CI 40645059262（首次提交）通过：核心 4,520,752、原生 5,448；审查修复后 40646234854 通过（核心 4,520,764、原生 5,448）；复查修复后 40647198371 通过（核心 4,520,765、原生 5,448）。未验证：真实的 Mac 导出 plist（键控归档拒绝）、Excel 打开输出的 CSV、大文件在真实 Windows 上的内存与耗时。固定 52 项仍 27／23／0／2。
+
 ## 0.113 跟进 Mac 1.14.4–1.14.6：字幕格式互转、只读工具接受 16 位图片（D05/C09/E05）
 
 批次开始 `git fetch`：origin/main 为 `60a3487`（Mac 1.14.6）。Windows 分支合并基线仍是 `4166d5d`（Mac 1.12.9）；按 `git diff 4166d5d origin/main -- Sources` 逐项对照 1.14.4–1.14.6 的新功能，状态表见 [PROGRESS](PROGRESS.md#mac-新增功能差距与本次同步)。本批移植其中两项，Mac 源码只读不改。

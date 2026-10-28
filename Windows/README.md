@@ -10,6 +10,14 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.114 新增：数据文件互转（跟进 Mac 1.14.4）
+
+JSON、JSON Lines（.jsonl／.ndjson）、属性列表（.plist，XML 或二进制）、CSV、TSV 文件的工具里有 **Convert Data to JSON／JSONL／PLIST／CSV／TSV／YAML**（不提供文件本身的格式），也可放进 Wheel／My Wheel，可一次选多个，Agent 工具的 `plan_action` 也有。新文件存在原文件旁，同名换扩展名，重名时编号，不覆盖。
+
+与 Mac 相同的规则：值不猜测——CSV/TSV 单元格一律是文字；表格第一行是列名（空的叫 `column N`），每行变成一条记录，短行补空；记录转表格时列按首次出现顺序，嵌套值写成 JSON 文字；CSV 带 BOM 方便 Excel 打开中文；JSON 键排序、数字保留原文；YAML 字符串一律加引号；plist 的日期和二进制数据在 JSON/YAML 里写成 ISO 8601 和 Base64。目标格式装不下的值会停止并说明：plist 不能存 null 或超出 64 位整数/双精度的数，JSON/CSV/TSV 不能存 NaN/无穷大，TSV 单元格不能有制表符或换行。
+
+Windows 的差异：只读 UTF-8 或带 BOM 的 UTF-16（旧编码拒绝）；同一对象里重复的键直接拒绝而不是保留其中一个；为控制内存，JSON 最多 400 万个值、表格最多 500 万个单元格、输出估算最多 128 MB（Mac 为 1000 万单元格、256 MB）。输入最大 32 MB、100 万行、16384 列、嵌套 128 层；二进制 plist 中被多处引用的对象按展开后的总量计算。
+
 ## 0.113 新增：字幕格式互转，识别 16 位图片（跟进 Mac 1.14.4–1.14.6）
 
 打开 **Subtitles**（原 SRT Subtitles）开关后，SRT、WebVTT（.vtt）、ASS、SSA、LRC、SBV 字幕文件的工具里有 **Convert Subtitles to SRT／VTT／ASS／LRC／SBV／TXT**（不提供文件本身的格式），也可放进 Wheel／My Wheel，可一次选多个。每条字幕的文字和时间都保留；斜体、颜色、位置等样式不保留（ASS 输出用一个默认样式）。新文件存在原文件旁，名字相同、扩展名换成新格式（如 `talk.vtt` → `talk.srt`），已存在则为 `talk 2.srt`…，不覆盖，原文件不变；输出是 UTF-8、Windows 换行。读入要求 UTF-8 或带字节顺序标记的 UTF-16、最大 8 MB、10 万条；GBK、Big5 等旧编码会被拒绝并提示先用记事本另存为 UTF-8（Mac 版会自动识别这些编码，Windows 暂未做）。LRC 歌词每行持续到下一行，最后一行 4 秒，`[offset:]` 生效。Agent 工具的 `plan_action` 也提供这 6 个转换。
