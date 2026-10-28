@@ -1327,6 +1327,15 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.111 — Videos stored with a rotation flag (G02/D06 part, 2026-10-28)
+
+- Probe (temporary branch, CI run 40613950551, branch deleted): for an MP4 whose video tkhd matrix encodes a clockwise 90/180/270° turn, Windows' media editing API reports the upright size with MF_MT_VIDEO_ROTATION 0, thumbnails are upright, and rendering at the reported size gives an upright MP4 with an identity matrix (rendering at the stored size gave black frames; writing a rotation into the encoding profile gave a turned matrix with a wrong picture).
+- Core 4,520,482 on Mac; native compiled 0 warnings/errors there. Windows CI run 40615291253 on GitHub's Windows runner passed: core 4,520,483, native 5,399, including the checks below.
+- `SubtitleBurnChecks` (core): 2160×3840 is accepted like 3840×2160; 2400×2400 (short side over 2160) and 2160×3841 are refused.
+- Native, `RotatedVideoNativeChecks`: a 640×360 marker video (red top-left, green bottom-right, blue elsewhere) shows RBBG; turned 90/180/270° by rewriting the tkhd matrix it shows BRGB/GBBR/BGRB at 360×640/640×360/360×640; `VideoCompress` reports that upright size, and compressing to 400,000 bytes keeps the upright size and about 3 s within the target, with an identity matrix and the same quarters. Burn In Subtitles on the 90° video reads 360×640, draws the cue inside the picture, and the result is upright (identity matrix, BRGB, 360×640) with white near the bottom during the cue (0.016) and none after (0.000). A 3840×2160 marker video turned 90° opens at 2160×3840 and burns upright at 2160×3840 (2 s in 8.3 s, 143,529 bytes).
+- Independent agent review (read-only): no P1. P2 fixed: the 3840×2160 width/height limit refused a turned 4K phone video (now long edge 3840, short edge 2160). P3 fixed: subtitle placement was only bounds-checked; "sideways" wording; the remaining refusal message; translations. A recheck raised that Microsoft's software H.264 encoder documents 4096×2304 as its maximum; the CI run encoded 2160×3840 successfully.
+- Not tested: real phone MP4/MOV files, hardware encoders with portrait 4K, subtitle burning of 180°/270° videos.
+
 ## Windows0.110 — Claude Desktop extension Swivel.mcpb (G02 part, 2026-10-28)
 
 - Core 4,520,481 on Mac; native compiled 0 warnings/errors there. Windows CI run 40600961106 on GitHub's Windows runner passed: core 4,520,482, native 5,379, including the launcher round trip through Node.js and the real Swivel.exe (2.8 s) and all refusal cases below.

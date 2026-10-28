@@ -1047,6 +1047,18 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.111 带旋转标记的视频：压缩与烧录字幕（G02/D06 部分）
+
+批次开始 `git fetch`：origin/main 为 `60a3487`（Mac 1.14.6），不含 `Windows/` 改动；0.110 已推送，Windows CI 40600961106 通过。
+
+探测：在临时分支（`codex/windows-probe-rotation`，跑完即删，不进历史）上让 CI 只运行一个探测程序。用 Windows 把左上红、右下绿、其余蓝的 640×360 图片编码成 MP4，再按手机写法改写视频轨 tkhd 矩阵为顺时针 90°/180°/270°。结果（CI 40613950551）：`MediaClip.GetVideoEncodingProperties` 报告转正后的尺寸（90°/270° 为 360×640）且 `MF_MT_VIDEO_ROTATION` 为 0（UInt32）；`GetThumbnailAsync` 显示转正的画面；按转正尺寸渲染得到正向画面与单位矩阵；按存储尺寸渲染得到黑帧；在编码配置里写入旋转值得到带矩阵但画面错误的文件。也就是说 Media Foundation 的 MP4 源已经应用了轨道头矩阵，`VideoCompress` 与 `VideoSubtitles` 原有的“非零旋转即拒绝”对这类文件从不触发，而现有按报告尺寸编码的路径本来就输出正向视频。
+
+因此不改算法：`RotatedVideoNativeChecks` 用同样的夹具对 90/180/270° 检查 `VideoCompress` 的报告尺寸、压缩后尺寸/长度/目标大小、单位矩阵与四角颜色；90° 视频烧录字幕检查报告尺寸、字幕框在画面内、字幕时间内底部三分之一出现白字且之后没有、输出正向；3840×2160 夹具转 90° 后按 2160×3840 烧录并检查正向。`SubtitleBurn.CheckVideo` 改为长边 ≤3840、短边 ≤2160（原先宽 ≤3840、高 ≤2160，会拒绝转正后的 4K 竖拍）。仍保留的拒绝分支（Windows 报告非零旋转、可能未应用）改为如实说明。烧录对话框、拒绝文字与 MCP plan_compress 描述改写，四语。
+
+独立 agent 审查（只读，对照 ISO/IEC 14496-12 tkhd 布局）：无 P1，夹具解析/矩阵/期望颜色正确。已修 P2：4K 竖拍转正后 2160×3840 被烧录上限拒绝，而说明称已支持（现长短边限制，CI 实测软件编码 2 秒竖向 4K 用时 8.3 秒成功）。已修 P3：字幕位置原先只查边界（现查字幕时间内外底部白色占比 0.016／0.000）；“sideways”易误解为横屏、不含 180°（改为“rotation flag”／“带旋转标记”）；保留的拒绝消息原称“暂不支持”（改为说明 Windows 报告的旋转可能未应用）；译文改为“自动转正”等。复查确认，并提示微软软件 H.264 编码器文档写最大 4096×2304，可能拒竖向 4K——CI 实测已通过，但真实电脑上的硬件编码器仍未验证。
+
+核心 4,520,482；Windows CI 40615291253 通过：核心 4,520,483、原生 5,399。未验证：真实手机拍摄的 MP4/MOV、硬件编码器的竖向 4K、180°/270° 视频的字幕烧录。G02、D06 状态不变，固定 52 项仍 27／23／0／2。
+
 ## 0.110 Claude Desktop 扩展 Swivel.mcpb（G02 部分）
 
 批次开始 `git fetch`：origin/main 仍为 `c053dd0`（Mac 1.14.5），不含 `Windows/` 改动；0.109 已推送，Windows CI 40516148024 通过（核心 4,520,464、原生 5,368）。

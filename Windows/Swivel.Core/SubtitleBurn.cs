@@ -15,7 +15,7 @@ public static class SubtitleBurn
     public const double MaxSeconds = 2 * 3600;
     public static readonly string[] SizeNames = { "Small", "Medium", "Large" };
     private static readonly double[] Sizes = { 0.045, 0.058, 0.075 };
-    public const string Unsupported = "Choose a video from 64 × 64 to 3840 × 2160 pixels, upright or portrait (even width and height), and at most two hours long.";
+    public const string Unsupported = "Choose a video from 64 × 64 to 3840 × 2160 pixels, landscape or portrait (even width and height), and at most two hours long.";
     public const string NoCues = "None of the subtitles fall within the video's length.";
 
     /// The 3840 × 2160 limit holds either way round, so a 4K phone video turned upright (2160 × 3840) fits.
