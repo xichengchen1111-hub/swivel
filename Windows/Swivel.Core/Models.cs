@@ -199,6 +199,7 @@ public static class Catalog
         new("pdf.raster", "Render PDF Pages…", Feature.PdfPages, Extensions:new[]{"pdf"}),
         new("audio.systemdecode", "Decode Audio with Windows…", SingleFile:true, Extensions:new[]{"wav","mp3","aac","flac"}),
         new("audio.transcribe", "Transcribe Speech…", SingleFile: true, Extensions: new[] { "wav", "mp3", "aac", "flac" }),
+        new("video.trim", "Trim Video…", SingleFile: true, Extensions: new[] { "mp4", "mov", "m4v", "wmv" }),
         new("video.subtitles", "Burn In Subtitles…", SingleFile: true, Extensions: new[] { "mp4", "mov", "m4v", "wmv" }),
         new("audio.g711", "Decode G.711 WAV…", Extensions: new[]{"wav"}, SingleFile: true),
         new("audio.floatpcm", "Convert Float WAV to PCM…", SingleFile: true, Extensions: new[] { "wav" }),

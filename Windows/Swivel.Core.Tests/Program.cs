@@ -87,6 +87,7 @@ FolderStyleChecks.Run(Check, Reject);
         UpscaleChecks.Run(Check, Reject);
         TranscribeChecks.Run(Check, Reject);
         SubtitleBurnChecks.Run(Check, Reject);
+        VideoTrimChecks.Run(Check, Reject);
 CopyFilesChecks.Run(Check, Reject);
 ImageExtraChecks.Run(Check, Reject);
 CustomizationChecks.Run(Check, Reject);

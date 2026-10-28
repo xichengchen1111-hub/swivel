@@ -117,7 +117,7 @@ internal static class RotatedVideoNativeChecks
     }
 
     // The BGRA frame Windows shows at a time (ms), scaled to the given size.
-    private static (int Width, int Height, byte[] Pixels) Frame(string path, int width, int height, long ms)
+    internal static (int Width, int Height, byte[] Pixels) Frame(string path, int width, int height, long ms)
     {
         var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
         var composition = new MediaComposition();
@@ -130,7 +130,7 @@ internal static class RotatedVideoNativeChecks
     }
 
     // The identity matrix in the video track's header: stored upright.
-    private static bool Straight(string path)
+    internal static bool Straight(string path)
     {
         var bytes = File.ReadAllBytes(path);
         int matrix = MatrixAt(bytes, VideoTrackHeader(bytes));
@@ -139,7 +139,7 @@ internal static class RotatedVideoNativeChecks
     }
 
     // Rewrites the video track's matrix as a phone stores a clockwise turn (ISO/IEC 14496-12 tkhd).
-    private static void Turn(byte[] bytes, int degrees, int width, int height)
+    internal static void Turn(byte[] bytes, int degrees, int width, int height)
     {
         int matrix = MatrixAt(bytes, VideoTrackHeader(bytes)), one = 0x10000;
         int[] values = degrees switch

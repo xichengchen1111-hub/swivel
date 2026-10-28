@@ -13543,5 +13543,95 @@
     "Windows 报告这个视频带旋转，但可能不会把画面转正，因此 Swivel 无法确保输出方向正确。",
     "Windows 回報這個影片帶旋轉，但可能不會把畫面轉正，因此 Swivel 無法確保輸出方向正確。",
     "Windows はこの動画に回転があると報告していますが、映像に適用しない場合があるため、Swivel は正しい向きで出力できるか確認できません。"
+  ],
+  "Trim Video…": [
+    "剪辑视频…",
+    "剪輯影片…",
+    "動画をトリミング…"
+  ],
+  "Start time": [
+    "开始时间",
+    "開始時間",
+    "開始時間"
+  ],
+  "End time": [
+    "结束时间",
+    "結束時間",
+    "終了時間"
+  ],
+  "Frame at the start": [
+    "开始处的画面",
+    "開始處的畫面",
+    "開始位置のフレーム"
+  ],
+  "Last frame kept": [
+    "保留的最后一帧",
+    "保留的最後一格",
+    "残す最後のフレーム"
+  ],
+  "Keep the sound": [
+    "保留声音",
+    "保留聲音",
+    "音声を残す"
+  ],
+  "Trim": [
+    "剪辑",
+    "剪輯",
+    "トリミング"
+  ],
+  "Keeps {0}, from {1} to {2}.": [
+    "保留 {0}，从 {1} 到 {2}。",
+    "保留 {0}，從 {1} 到 {2}。",
+    "{1} から {2} までの {0} を残します。"
+  ],
+  "The sound is removed.": [
+    "声音会被移除。",
+    "聲音會被移除。",
+    "音声は削除されます。"
+  ],
+  "This video has no sound track that Windows can decode.": [
+    "这个视频没有 Windows 能解码的音轨。",
+    "這部影片沒有 Windows 能解碼的音軌。",
+    "この動画には Windows がデコードできる音声トラックがありません。"
+  ],
+  "Windows could not show a frame from this video. You can still trim it.": [
+    "Windows 无法显示这个视频的画面。仍然可以剪辑。",
+    "Windows 無法顯示這部影片的畫面。仍然可以剪輯。",
+    "Windows はこの動画のフレームを表示できませんでした。トリミングはできます。"
+  ],
+  "Type times as seconds, minutes:seconds or hours:minutes:seconds, with up to three decimals (for example 1:05.5). The frames shown are the first and the last kept frame.": [
+    "时间可写成秒、分:秒或时:分:秒，最多三位小数（例如 1:05.5）。显示的是保留部分的第一帧和最后一帧。",
+    "時間可寫成秒、分:秒或時:分:秒，最多三位小數（例如 1:05.5）。顯示的是保留部分的第一格和最後一格。",
+    "時間は秒、分:秒、または時:分:秒で入力します。小数は 3 桁まで（例：1:05.5）。表示されるのは残す部分の最初と最後のフレームです。"
+  ],
+  "Windows encodes the kept part as a new H.264/AAC MP4 at the original size and frame rate, cut at the exact times. It is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 (either way round) and two hours.": [
+    "Windows 把保留部分按原尺寸和帧率重新编码成新的 H.264/AAC MP4，在精确时间处剪开。因为会重新编码，需要一些时间并略损画质；HDR 会变成 SDR，额外音轨、章节和元数据不会保留。最大 3840 × 2160（横竖均可）、两小时。",
+    "Windows 把保留部分按原尺寸和影格速率重新編碼成新的 H.264/AAC MP4，在精確時間處剪開。因為會重新編碼，需要一些時間並略損畫質；HDR 會變成 SDR，額外音軌、章節和中繼資料不會保留。最大 3840 × 2160（橫豎皆可）、兩小時。",
+    "Windows は残す部分を元のサイズとフレームレートで新しい H.264/AAC MP4 に再エンコードし、指定した時間ちょうどで切り出します。再エンコードのため時間がかかり、画質がわずかに落ちます。HDR は SDR になり、追加の音声トラック、チャプター、メタデータは残りません。最大 3840 × 2160（縦横どちらも）、2 時間まで。"
+  ],
+  "The new file is saved beside the original as “name trimmed.mp4” without replacing existing files. The original stays unchanged. Cancelling saves no video.": [
+    "新文件以“名称 trimmed.mp4”保存在原文件旁边，不会替换已有文件。原文件保持不变。取消则不保存视频。",
+    "新檔案以「名稱 trimmed.mp4」儲存在原檔案旁邊，不會取代現有檔案。原檔案保持不變。取消則不儲存影片。",
+    "新しいファイルは元のファイルの隣に「名前 trimmed.mp4」として保存され、既存のファイルは置き換えません。元のファイルは変更されません。キャンセルすると動画は保存されません。"
+  ],
+  "Type a time such as 12, 1:05 or 1:02:03.5 (hours, minutes, seconds; up to three decimals).": [
+    "请输入时间，例如 12、1:05 或 1:02:03.5（时、分、秒；最多三位小数）。",
+    "請輸入時間，例如 12、1:05 或 1:02:03.5（時、分、秒；最多三位小數）。",
+    "12、1:05、1:02:03.5 のように時間を入力してください（時・分・秒、小数は 3 桁まで）。"
+  ],
+  "The start must come before the end, both within the video, keeping at least 0.1 seconds.": [
+    "开始必须早于结束，两者都在视频范围内，且至少保留 0.1 秒。",
+    "開始必須早於結束，兩者都在影片範圍內，且至少保留 0.1 秒。",
+    "開始は終了より前で、どちらも動画の範囲内にあり、0.1 秒以上残す必要があります。"
+  ],
+  "This keeps the whole video with its sound. Move the start or end, or remove the sound.": [
+    "这样会保留带声音的整个视频。请调整开始或结束，或移除声音。",
+    "這樣會保留帶聲音的整部影片。請調整開始或結束，或移除聲音。",
+    "これでは音声付きの動画全体がそのまま残ります。開始か終了を動かすか、音声を削除してください。"
+  ],
+  "Windows could not encode the trimmed video. No file was saved.": [
+    "Windows 无法编码剪辑后的视频。没有保存任何文件。",
+    "Windows 無法編碼剪輯後的影片。沒有儲存任何檔案。",
+    "Windows はトリミングした動画をエンコードできませんでした。ファイルは保存されていません。"
   ]
 }

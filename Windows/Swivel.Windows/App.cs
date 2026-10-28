@@ -978,6 +978,23 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested();if(!save)return;
                 report(L("Processing…"));result=new BatchResult();result.Outputs.Add(await Task.Run(()=>document.Save(token),token));
             }
+            else if (action.Id == "video.trim")
+            {
+                report(L("Loading video…"));
+                using var video = await Task.Run(() => VideoTrimmer.OpenAsync(files[0], token), token);
+                token.ThrowIfCancellationRequested();
+                var dialog = new TrimVideoDialog(this, video); bool trim;
+                try { trim = ShowOperationDialog(dialog, owner, token); } finally { await dialog.FinishAsync(); }
+                token.ThrowIfCancellationRequested();
+                if (!trim || dialog.Plan is not { } plan) return;
+                result = new BatchResult();
+                try
+                {
+                    report(string.Format(L("Encoding the video: {0}% done…"), 0));
+                    result.Outputs.Add(await Task.Run(() => video.TrimAsync(plan, done => Dispatcher.BeginInvoke(() => report(string.Format(L("Encoding the video: {0}% done…"), (int)(done * 100)))), token), token));
+                }
+                catch (OperationCanceledException) { result.Cancelled = true; } catch (Exception error) { result.Error = error; }
+            }
             else if (action.Id == "video.subtitles")
             {
                 report(L("Loading video…"));

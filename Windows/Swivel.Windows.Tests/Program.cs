@@ -124,6 +124,7 @@ internal static class Program
             Group("TranscribeNativeChecks", () => TranscribeNativeChecks.Run(directory,Check,Reject));
             Group("SubtitleBurnNativeChecks", () => SubtitleBurnNativeChecks.Run(directory,Check,Reject));
             Group("RotatedVideoNativeChecks", () => RotatedVideoNativeChecks.Run(directory,Check));
+            Group("VideoTrimNativeChecks", () => VideoTrimNativeChecks.Run(directory,Check));
             Group("CopyFilesNativeChecks", () => CopyFilesNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalNativeChecks", () => ImageArrivalNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalWindowNativeChecks", () => ImageArrivalWindowNativeChecks.Run(Check,Reject));
