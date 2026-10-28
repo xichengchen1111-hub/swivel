@@ -239,7 +239,7 @@ public static class ImageTools
             // User-supplied preset names are display-only and never become file paths.
             suffix = " preset";
         }
-        else if (action is not "convert.png" and not "convert.jpg" and not "convert.bmp" and not "convert.tiff" and not "convert.gif")
+        else if (action is not "convert.png" and not "convert.jpg" and not "convert.bmp" and not "convert.tiff" and not "convert.gif" and not "convert.ico")
             throw new ArgumentException("Unknown image action.");
         cancellation.ThrowIfCancellationRequested();
         if (extension is "jpg" or "bmp") source = OnWhite(source);
@@ -257,6 +257,12 @@ public static class ImageTools
             var pixels = ReadPixels(clean, 0, cancellation);
             return NativeFiles.WriteBeside(document.Input, Path.GetFileNameWithoutExtension(path) + suffix, "gif",
                 output => GifExport.Write(pixels, output, cancellation), cancellation);
+        }
+        if (extension == "ico")
+        {
+            var images = IconImages(clean, cancellation);
+            return NativeFiles.WriteBeside(document.Input, Path.GetFileNameWithoutExtension(path) + suffix, "ico",
+                output => IcoFile.Write(output, images, cancellation), cancellation);
         }
         BitmapEncoder encoder = extension switch {
             "jpg" => new JpegBitmapEncoder { QualityLevel = quality },
@@ -287,6 +293,26 @@ public static class ImageTools
             using var memory = new MemoryStream(); jpeg.Save(memory); return memory.ToArray();
         }, cancellation);
         return NativeFiles.WriteBeside(document.Input, Path.GetFileNameWithoutExtension(path) + " compressed", "jpg", stream => stream.Write(fit.Data), cancellation);
+    }
+
+    /// Each icon size scaled from the whole picture (premultiplied, so transparent edges don't
+    /// darken), centred on its square; 256 is stored as PNG.
+    private static List<(int Size, byte[] Data)> IconImages(BitmapSource clean, CancellationToken cancellation)
+    {
+        var premultiplied = new FormatConvertedBitmap(clean, PixelFormats.Pbgra32, null, 0);
+        var images = new List<(int, byte[])>();
+        foreach (int size in IcoFile.SizesFor(clean.PixelWidth, clean.PixelHeight))
+        {
+            cancellation.ThrowIfCancellationRequested();
+            var (width, height) = IcoFile.Fit(clean.PixelWidth, clean.PixelHeight, size);
+            var scaled = ReadPixels(new TransformedBitmap(premultiplied, new ScaleTransform((double)width / clean.PixelWidth, (double)height / clean.PixelHeight)), 0, cancellation);
+            var square = IcoFile.Square(scaled, size);
+            if (size < 256) { images.Add((size, IcoFile.Bitmap(square))); continue; }
+            var png = new PngBitmapEncoder();
+            png.Frames.Add(BitmapFrame.Create(BitmapSource.Create(size, size, 96, 96, PixelFormats.Bgra32, null, square.Bgra, size * 4)));
+            using var memory = new MemoryStream(); png.Save(memory); images.Add((size, memory.ToArray()));
+        }
+        return images;
     }
 
     public static PixelImage ReadPixels(BitmapSource source, int previewEdge, CancellationToken cancellation)

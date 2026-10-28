@@ -168,6 +168,7 @@ public static class Catalog
         new("convert.jpg", "Convert to JPEG", ImageOnly: true),
         new("convert.bmp", "Convert to BMP", ImageOnly: true),
         new("convert.tiff", "Convert to TIFF", ImageOnly: true),
+        new("convert.ico", "Convert to ICO", ImageOnly: true),
         new("image.gifpalette", "Reduce Colors to GIF…", ImageOnly: true, SingleFile: true),
         new("image.preview", "Preview Image", ImageOnly: true, SingleFile: true),
         new("image.resize", "Resize…", ImageOnly: true),

@@ -23,6 +23,7 @@ internal sealed class ConversionDialog : Window
         body.Children.Add(UI.Text(app.L("Images are saved as 8-bit SDR without source metadata or embedded color profiles. This is not an archival copy.")));
         if (format == "gif") body.Children.Add(UI.Text(app.L(GifExport.Notice)));
         if (format == "gif" && action.Id.StartsWith("preset.", System.StringComparison.Ordinal)) body.Children.Add(UI.Text(app.L(ImageRecipe.GifNotice)));
+        if (format == "ico") body.Children.Add(UI.Text(app.L(IcoFile.Notice)));
         if (format == "jpg") body.Children.Add(UI.Text(app.L("JPEG uses lossy compression. Fine detail may change, even at high quality.")));
         if (format is "jpg" or "bmp") body.Children.Add(UI.Text(app.L("Transparent areas become white in this output format.")));
         body.Children.Add(UI.Text(app.L("New files are saved beside each original without replacing existing files. Originals stay unchanged. The batch stops at the first error; completed files are kept.")));

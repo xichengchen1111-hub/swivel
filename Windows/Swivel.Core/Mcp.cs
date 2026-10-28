@@ -105,6 +105,8 @@ public sealed class McpSession
         new("convert.png", "Convert to PNG", " converted"), new("convert.jpg", "Convert to JPEG", " converted"),
         new("convert.bmp", "Convert to BMP", " converted"), new("convert.tiff", "Convert to TIFF", " converted"),
         new("convert.gif", "Convert to Static GIF", " converted"),
+        // Every icon size up to the picture's longer side (16–256), centred on transparent squares.
+        new("convert.ico", "Convert to ICO", " converted"),
         new("image.rotate", "Rotate 90° Clockwise", " rotated"), new("image.flip", "Flip Horizontally", " flipped"),
         new("image.gray", "Grayscale", " grayscale"),
         // Run on this PC with the pinned U²-Net model; the result is a PNG either way.

@@ -13858,5 +13858,15 @@
     "无法压缩这个字体。",
     "無法壓縮這個字型。",
     "フォントを圧縮できませんでした。"
+  ],
+  "Convert to ICO": [
+    "转换为 ICO",
+    "轉換為 ICO",
+    "ICO に変換"
+  ],
+  "ICO saves the picture at 16, 32, 48, 64, 128 and 256 pixels, as many as fit within its longer side (16 at least). Each size is centred on a transparent square without stretching or cropping. Sizes up to 128 are 32-bit bitmaps, 256 is PNG.": [
+    "ICO 会按 16、32、48、64、128 和 256 像素保存图片，只保存不超过图片长边的尺寸（至少 16）。每个尺寸都居中放在透明方块上，不拉伸也不裁切。128 及以下为 32 位位图，256 为 PNG。",
+    "ICO 會按 16、32、48、64、128 和 256 像素儲存圖片，只儲存不超過圖片長邊的尺寸（至少 16）。每個尺寸都置中放在透明方塊上，不拉伸也不裁切。128 及以下為 32 位元點陣圖，256 為 PNG。",
+    "ICO は画像を 16・32・48・64・128・256 ピクセルで保存します。画像の長辺を超えないサイズだけを保存します（最小 16）。各サイズは透明な正方形の中央に置かれ、引き伸ばしや切り抜きはしません。128 以下は 32 ビットビットマップ、256 は PNG です。"
   ]
 }
