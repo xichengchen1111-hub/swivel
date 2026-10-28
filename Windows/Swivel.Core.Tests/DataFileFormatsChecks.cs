@@ -97,6 +97,29 @@ internal static class DataFileFormatsChecks
         reject(() => Out(Bplist(doubling), "plist", "json"), "A binary plist that expands to millions of copies is refused");
         check(clock.ElapsedMilliseconds < 10_000, $"The expanding plist is refused quickly ({clock.ElapsedMilliseconds} ms)");
 
+        // Review fixes: a table whose header repeats into a huge output is refused before writing.
+        var wideHeader = new StringBuilder();
+        for (int c = 0; c < 2000; c++) wideHeader.Append(c > 0 ? "," : "").Append(c).Append(new string('h', 7000));
+        wideHeader.Append('\n');
+        for (int r = 0; r < 2400; r++) wideHeader.Append(new string(',', 1999)).Append("x\n");
+        clock.Restart();
+        reject(() => Out(wideHeader.ToString(), "csv", "jsonl"), "A CSV whose header names repeat into gigabytes of JSON is refused");
+        check(clock.ElapsedMilliseconds < 15_000, $"The repeating header is refused without building the output ({clock.ElapsedMilliseconds} ms)");
+        check(Assert(() => Out("[\"\\ud800\"]", "json", "yaml")) is UserError { Message: DataFileFormats.BadJson } && Assert(() => Out("{}\n{\"\\udc00\":1}\n", "jsonl", "yaml")) is UserError { Message: "Line 2 is not valid JSON." },
+            "A lone surrogate escape is reported as invalid JSON");
+        string huge = "[1e400, " + "1" + new string('0', 400) + "]";
+        check(Out(huge, "json", "json") == "[\n  1e400,\n  1" + new string('0', 400) + "\n]\n" && Out(huge, "json", "yaml") == "---\n- 1.0e+400\n- 1" + new string('0', 400) + "\n",
+            "JSON numbers beyond a double keep their exact text in JSON and YAML");
+        reject(() => Out(huge, "json", "plist"), "A plist refuses numbers beyond a double");
+        check(Out("[1E+20, 2e-3, 3.5E2]", "json", "yaml") == "---\n- 1.0e+20\n- 2.0e-3\n- 3.5e+2\n", "YAML exponents get a dot and a sign so YAML 1.1 reads them as numbers");
+        clock.Restart();
+        reject(() => Out("[" + string.Join(",", Enumerable.Repeat("0", (int)DataFileFormats.MaxJsonValues)) + "]", "json", "yaml"), "JSON with more than 4 million values is refused before its tree is built");
+        check(clock.ElapsedMilliseconds < 10_000, $"A huge flat JSON array is refused quickly ({clock.ElapsedMilliseconds} ms)");
+        check(Out("[]", "json", "jsonl") == "\n", "An empty list becomes an empty line of JSON Lines, as on the Mac");
+        check(Out("\"\r\n\",a\n1,2\n", "csv", "json").Contains("\"\\r\\n\": \"1\""), "A header of only a line break keeps its name, as on the Mac");
+        reject(() => DataFileFormats.Convert(Encoding.Latin1.GetBytes("<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><plist><string>caf\u00e9</string></plist>"), "plist", DataFileFormats.Formats[0]), "An XML plist in a legacy encoding is refused");
+        check(DataFileFormats.Short(new string('k', 200)).Length == 81 && DataFileFormats.Short("a\nb\u202E") == "aU+000AbU+202E", "Keys shown in messages are shortened and controls made visible");
+
         // Values formats can't hold.
         reject(() => Out("{\"a\": null}", "json", "plist"), "A plist can't hold null");
         reject(() => Out("[12345678901234567890123]", "json", "plist"), "A plist refuses an integer beyond 64 bits that a double would round");

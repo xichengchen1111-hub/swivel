@@ -13,7 +13,11 @@ namespace Swivel.Core;
 
 /// A number as written in the source: JSON keeps its exact text; plist integers and reals become
 /// the shortest text that reads back as the same value.
-public sealed record DataNumber(string Text, double Value, bool Integer);
+public sealed record DataNumber(string Text, double Value, bool Integer)
+{
+    /// Only a plist real can be NaN or infinite; a JSON number too large for a double keeps its text.
+    public bool NotFinite => Text is "nan" or "inf" or "-inf";
+}
 
 /// JSON, JSON Lines, property lists (XML or binary), CSV and TSV ↔ each other, plus YAML out, as
 /// the Mac's Convert menu does (1.14.4). Values are never guessed: CSV cells stay text, and a value
@@ -37,6 +41,9 @@ public static class DataFileFormats
     /// A binary plist can point at one object many times; written out, every reference is a full copy.
     /// The estimate counts text, indentation and a little per value.
     public const long MaxValues = 20_000_000, MaxOutputBytes = 128L * 1024 * 1024;
+    /// Values read from JSON or JSON Lines: each becomes a .NET object of 50–100 bytes, so a file is
+    /// counted before its tree is built.
+    public const long MaxJsonValues = 4_000_000;
 
     public const string TooLarge = "Data files are limited to 32 MB.";
     public const string BadEncoding = "Swivel reads data files in UTF-8 or UTF-16 (with a byte order mark). Save this file as UTF-8 and try again.";
@@ -83,21 +90,22 @@ public static class DataFileFormats
                 return new Content(null, Table(Decode(data, false), extension == "tsv" ? '\t' : ',', token));
             case "jsonl": case "ndjson":
             {
-                var values = new List<object?>(); int number = 0;
+                var values = new List<object?>(); int number = 0; long counted = 0;
                 foreach (string line in Decode(data, true).Split('\n'))
                 {
                     number++;
                     if (number % 4096 == 0) token.ThrowIfCancellationRequested();
                     if (line.Trim().Length == 0) continue;
                     if (values.Count >= MaxRows) throw new UserError(TooManyRows);
-                    try { values.Add(Json(line)); }
-                    catch (JsonException) { throw new UserError(BadJsonLine, number); }
+                    try { values.Add(Json(line, ref counted)); }
+                    catch (Exception error) when (error is JsonException or InvalidOperationException) { throw new UserError(BadJsonLine, number); }
                 }
                 return new Content(values, null);
             }
             default:
-                try { return new Content(Json(Decode(data, true)), null); }
-                catch (JsonException) { throw new UserError(BadJson); }
+                long count = 0;
+                try { return new Content(Json(Decode(data, true), ref count), null); }
+                catch (Exception error) when (error is JsonException or InvalidOperationException) { throw new UserError(BadJson); }
         }
     }
 
@@ -122,8 +130,17 @@ public static class DataFileFormats
     private static readonly JsonDocumentOptions JsonOptions = new() { MaxDepth = MaxDepth + 1, AllowTrailingCommas = false, CommentHandling = JsonCommentHandling.Disallow };
 
     /// Any JSON value, including a bare number or string at the top. Numbers keep their exact text.
-    public static object? Json(string text)
+    public static object? Json(string text) { long count = 0; return Json(text, ref count); }
+
+    /// A lone surrogate in an escape (\ud800) makes .NET throw InvalidOperationException; callers
+    /// report it as invalid JSON.
+    private static object? Json(string text, ref long count)
     {
+        // Counted first with the forward-only reader, so a huge flat array is refused before its tree is built.
+        var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(text), new JsonReaderOptions { MaxDepth = MaxDepth + 1 });
+        while (reader.Read())
+            if (reader.TokenType is not (JsonTokenType.EndArray or JsonTokenType.EndObject or JsonTokenType.PropertyName) && ++count > MaxJsonValues)
+                throw new UserError(TooManyValues);
         using var document = JsonDocument.Parse(text, JsonOptions);
         return Tree(document.RootElement);
     }
@@ -135,7 +152,7 @@ public static class DataFileFormats
             case JsonValueKind.Object:
                 var map = new Dictionary<string, object?>(StringComparer.Ordinal);
                 foreach (var property in element.EnumerateObject())
-                    if (!map.TryAdd(property.Name, Tree(property.Value))) throw new UserError(DuplicateKey, property.Name);
+                    if (!map.TryAdd(property.Name, Tree(property.Value))) throw new UserError(DuplicateKey, Short(property.Name));
                 return map;
             case JsonValueKind.Array: return element.EnumerateArray().Select(Tree).ToList();
             case JsonValueKind.String: return element.GetString();
@@ -155,7 +172,8 @@ public static class DataFileFormats
         var settings = new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore, XmlResolver = null, IgnoreComments = true, IgnoreWhitespace = true, IgnoreProcessingInstructions = true, MaxCharactersInDocument = 4L * MaxBytes };
         try
         {
-            using var reader = XmlReader.Create(new MemoryStream(data, false), settings);
+            // Decoded strictly first, so an encoding="ISO-8859-1" declaration can't bring in a legacy encoding.
+            using var reader = XmlReader.Create(new StringReader(Decode(data, false)), settings);
             reader.MoveToContent();
             if (reader.NodeType != XmlNodeType.Element || reader.Name != "plist") throw new UserError(BadPlist);
             if (reader.IsEmptyElement || !reader.Read()) throw new UserError(BadPlist);
@@ -194,7 +212,7 @@ public static class DataFileFormats
                 {
                     if (reader.NodeType != XmlNodeType.Element || reader.Name != "key") throw new UserError(BadPlist);
                     string key = reader.ReadElementContentAsString();
-                    if (!map.TryAdd(key, PlistValue(reader, depth + 1))) throw new UserError(DuplicateKey, key);
+                    if (!map.TryAdd(key, PlistValue(reader, depth + 1))) throw new UserError(DuplicateKey, Short(key));
                 }
                 reader.Read();
                 return map;
@@ -276,7 +294,7 @@ public static class DataFileFormats
                     if (index < text.Length && text[index] == '"') { field.Append('"'); index++; }
                     else quoted = false;
                 }
-                else field.Append(rune.ToString());
+                else field.Append(text, index - rune.Utf16SequenceLength, rune.Utf16SequenceLength);
                 continue;
             }
             if (quoting && rune.Value == '"' && atStart && field.Length == 0) quoted = true;
@@ -287,7 +305,7 @@ public static class DataFileFormats
                 if (index < text.Length && text[index] == '\n') index++;
                 EndRow(); continue;
             }
-            else field.Append(rune.ToString());
+            else field.Append(text, index - rune.Utf16SequenceLength, rune.Utf16SequenceLength);
             atStart = false;
         }
         if (quoted) throw new UserError(Unclosed);
@@ -311,8 +329,8 @@ public static class DataFileFormats
         var names = new List<string>(); var seen = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 0; i < rows[0].Count; i++)
         {
-            string name = rows[0][i].Trim().Length == 0 ? "column " + (i + 1).ToString(CultureInfo.InvariantCulture) : rows[0][i];
-            if (!seen.Add(name)) throw new UserError(DuplicateColumn, name);
+            string name = rows[0][i].All(c => char.IsWhiteSpace(c) && c is not '\n' and not '\r') ? "column " + (i + 1).ToString(CultureInfo.InvariantCulture) : rows[0][i];
+            if (!seen.Add(name)) throw new UserError(DuplicateColumn, Short(name));
             names.Add(name);
         }
         // Short rows are padded to the header's width, so a wide header times many rows is the real size.
@@ -367,7 +385,9 @@ public static class DataFileFormats
 
     public static byte[] Write(Content content, string extension, CancellationToken token = default)
     {
-        if (content.Tree is not null || content.Table is null) Check(content.Tree, extension is "json" or "jsonl" or "csv" or "tsv", token);
+        // A table becomes records that repeat every header name, so its tree is checked as well.
+        if (content.Table is null) Check(content.Tree, extension is "json" or "jsonl" or "csv" or "tsv", token);
+        else if (extension is not ("csv" or "tsv")) { content = new Content(TreeOf(content), null); Check(content.Tree, false, token); }
         var text = new StringBuilder();
         switch (extension)
         {
@@ -386,7 +406,9 @@ public static class DataFileFormats
             case "jsonl":
             {
                 var value = TreeOf(content);
-                foreach (var item in value is List<object?> list ? list : new List<object?> { value }) { JsonText(item, -1, text); text.Append('\n'); }
+                var items = value is List<object?> list ? list : new List<object?> { value };
+                foreach (var item in items) { JsonText(item, -1, text); text.Append('\n'); }
+                if (items.Count == 0) text.Append('\n');
                 break;
             }
             case "yaml":
@@ -412,6 +434,10 @@ public static class DataFileFormats
             count++; bytes += 8 + 2 * depth;
             if (count % 65536 == 0) token.ThrowIfCancellationRequested();
             if (count > MaxValues || depth > MaxDepth) throw new UserError(TooManyValues);
+            // Children are counted before they are pushed, so a list of millions of shared items is
+            // refused without first filling the stack with them.
+            long children = value switch { Dictionary<string, object?> m => m.Count, List<object?> l => l.Count, _ => 0 };
+            if (count + stack.Count + children > MaxValues) throw new UserError(TooManyValues);
             switch (value)
             {
                 case Dictionary<string, object?> map: foreach (var (key, item) in map) { bytes += Encoding.UTF8.GetByteCount(key); stack.Push((item, depth + 1)); } break;
@@ -420,7 +446,7 @@ public static class DataFileFormats
                 case byte[] data: bytes += data.LongLength * 4 / 3; break;
                 case DataNumber number:
                     bytes += number.Text.Length;
-                    if (json && !double.IsFinite(number.Value)) throw new UserError(NotFinite);
+                    if (json && number.NotFinite) throw new UserError(NotFinite);
                     break;
             }
             if (bytes > MaxOutputBytes) throw new UserError(TooManyValues);
@@ -502,8 +528,8 @@ public static class DataFileFormats
                 // JSON numbers beyond 64-bit integers or double precision would be silently rounded.
                 if (number.Integer && (long.TryParse(number.Text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _) || ulong.TryParse(number.Text, NumberStyles.None, CultureInfo.InvariantCulture, out _)))
                     out_.Append("<integer>").Append(number.Text).Append("</integer>");
-                else if (!double.IsFinite(number.Value)) out_.Append("<real>").Append(number.Text).Append("</real>");
-                else if (SameDecimal(number.Text, number.Value.ToString("R", CultureInfo.InvariantCulture)))
+                else if (number.NotFinite) out_.Append("<real>").Append(number.Text).Append("</real>");
+                else if (double.IsFinite(number.Value) && SameDecimal(number.Text, number.Value.ToString("R", CultureInfo.InvariantCulture)))
                     out_.Append("<real>").Append(number.Value.ToString("R", CultureInfo.InvariantCulture)).Append("</real>");
                 else throw new UserError(PlistNumber);
                 break;
@@ -587,6 +613,32 @@ public static class DataFileFormats
         else foreach (var item in (List<object?>)value!) Line("-", item);
     }
 
+    /// YAML 1.1 readers take 1e+20 as text unless the mantissa has a dot and the exponent a sign:
+    /// 1E+20 and 1e20 are written 1.0e+20.
+    public static string YamlNumber(string text)
+    {
+        int e = text.IndexOfAny(new[] { 'e', 'E' });
+        if (e < 0) return text;
+        string mantissa = text[..e], exponent = text[(e + 1)..];
+        if (!mantissa.Contains('.')) mantissa += ".0";
+        if (!exponent.StartsWith('-') && !exponent.StartsWith('+')) exponent = "+" + exponent;
+        return mantissa + "e" + exponent;
+    }
+
+    /// User text shown in a message: at most 80 characters, controls made visible.
+    public static string Short(string text)
+    {
+        var builder = new StringBuilder();
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (builder.Length >= 80) return builder.Append('…').ToString();
+            if (Rune.IsControl(rune) || Rune.GetUnicodeCategory(rune) is UnicodeCategory.Format or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
+                builder.Append("U+").Append(rune.Value.ToString("X4", CultureInfo.InvariantCulture));
+            else builder.Append(rune.ToString());
+        }
+        return builder.ToString();
+    }
+
     private static string? Scalar(object? value)
     {
         switch (value)
@@ -594,9 +646,9 @@ public static class DataFileFormats
             case null: return "null";
             case bool flag: return flag ? "true" : "false";
             case DataNumber number:
-                if (double.IsNaN(number.Value)) return ".nan";
-                if (double.IsInfinity(number.Value)) return number.Value > 0 ? ".inf" : "-.inf";
-                return number.Text;
+                if (number.Text == "nan") return ".nan";
+                if (number.NotFinite) return number.Text == "inf" ? ".inf" : "-.inf";
+                return YamlNumber(number.Text);
             case Dictionary<string, object?> { Count: 0 }: return "{}";
             case List<object?> { Count: 0 }: return "[]";
             case Dictionary<string, object?> or List<object?>: return null;
@@ -634,7 +686,8 @@ internal static class BinaryPlist
     {
         private readonly byte[] data; private readonly CancellationToken token;
         private readonly int offsetSize, refSize; private readonly long count, top, table;
-        private readonly object?[] decoded; private readonly byte[] state; // 0 new, 1 in progress, 2 done
+        // Grown as objects are reached, not sized from the trailer's count.
+        private readonly Dictionary<long, object?> decoded = new(); private readonly HashSet<long> inProgress = new();
         private long made;
 
         public Reader(byte[] data, CancellationToken token)
@@ -649,7 +702,7 @@ internal static class BinaryPlist
             if (offsetSize is < 1 or > 8 || refSize is < 1 or > 8 || count < 1 || count > data.Length || top < 0 || top >= count
                 || table < 8 || table > data.Length - 32 || count * offsetSize > data.Length - 32 - table)
                 throw new UserError(DataFileFormats.BadPlist);
-            decoded = new object?[count]; state = new byte[count];
+
         }
 
         public object? Top() => Object(top, 0);
@@ -673,12 +726,11 @@ internal static class BinaryPlist
         private object? Object(long index, int depth)
         {
             if (index < 0 || index >= count || depth > DataFileFormats.MaxDepth) throw new UserError(DataFileFormats.BadPlist);
-            if (state[index] == 2) return decoded[index];
-            if (state[index] == 1) throw new UserError(DataFileFormats.BadPlist); // a cycle
+            if (decoded.TryGetValue(index, out var known)) return known;
+            if (!inProgress.Add(index)) throw new UserError(DataFileFormats.BadPlist); // a cycle
             if (++made % 4096 == 0) token.ThrowIfCancellationRequested();
-            state[index] = 1;
             var value = Decode(Offset(index), depth);
-            decoded[index] = value; state[index] = 2;
+            decoded[index] = value; inProgress.Remove(index);
             return value;
         }
 
@@ -777,7 +829,7 @@ internal static class BinaryPlist
                     for (long i = 0; i < length; i++)
                     {
                         if (Object(Unsigned(start + i * refSize, refSize), depth + 1) is not string key) throw new UserError(DataFileFormats.BadPlist);
-                        if (!map.TryAdd(key, Object(Unsigned(start + (length + i) * refSize, refSize), depth + 1))) throw new UserError(DataFileFormats.DuplicateKey, key);
+                        if (!map.TryAdd(key, Object(Unsigned(start + (length + i) * refSize, refSize), depth + 1))) throw new UserError(DataFileFormats.DuplicateKey, DataFileFormats.Short(key));
                     }
                     return map;
                 }
