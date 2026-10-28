@@ -13818,5 +13818,45 @@
     "无法写出这些数据，其中可能有所选格式无法保存的文字。",
     "無法寫出這些資料，其中可能有所選格式無法儲存的文字。",
     "このデータを書き出せませんでした。選んだ形式で保存できない文字が含まれている可能性があります。"
+  ],
+  "Unpack Web Font to TTF/OTF": [
+    "将网页字体还原为 TTF/OTF",
+    "將網頁字型還原為 TTF/OTF",
+    "Web フォントを TTF/OTF に戻す"
+  ],
+  "Convert Font to WOFF": [
+    "将字体转换为 WOFF",
+    "將字型轉換為 WOFF",
+    "フォントを WOFF に変換"
+  ],
+  "Convert Font to WOFF2": [
+    "将字体转换为 WOFF2",
+    "將字型轉換為 WOFF2",
+    "フォントを WOFF2 に変換"
+  ],
+  "This is not a font file Swivel can read.": [
+    "这不是 Swivel 能读取的字体文件。",
+    "這不是 Swivel 能讀取的字型檔案。",
+    "Swivel が読み込めるフォントファイルではありません。"
+  ],
+  "This is not a font file Swivel can read. Font collections (TTC) aren't supported.": [
+    "这不是 Swivel 能读取的字体文件。不支持字体集合（TTC）。",
+    "這不是 Swivel 能讀取的字型檔案。不支援字型集合（TTC）。",
+    "Swivel が読み込めるフォントファイルではありません。フォントコレクション（TTC）には対応していません。"
+  ],
+  "This font file is damaged.": [
+    "这个字体文件已损坏。",
+    "這個字型檔案已損毀。",
+    "このフォントファイルは壊れています。"
+  ],
+  "Font files are limited to 64 MB.": [
+    "字体文件最大 64 MB。",
+    "字型檔案最大 64 MB。",
+    "フォントファイルは 64 MB までです。"
+  ],
+  "Couldn't compress the font.": [
+    "无法压缩这个字体。",
+    "無法壓縮這個字型。",
+    "フォントを圧縮できませんでした。"
   ]
 }

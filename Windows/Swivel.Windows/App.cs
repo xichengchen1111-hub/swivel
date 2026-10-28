@@ -1164,15 +1164,15 @@ public sealed partial class App : Application
                 report(L("Processing…"));result = new BatchResult();
                 result.Outputs.Add(await Task.Run(() => document.Save(format,token),token));
             }
-            else if (SubtitleFormats.ForId(action.Id) is { } || DataFileFormats.ForId(action.Id) is { })
+            else if (SubtitleFormats.ForId(action.Id) is { } || DataFileFormats.ForId(action.Id) is { } || FontFileFormats.ForId(action.Id) is { })
             {
                 // Like the Mac's Convert menu: no options, one file at a time, stop at the first error.
-                var subtitleFormat = SubtitleFormats.ForId(action.Id); var dataFormat = DataFileFormats.ForId(action.Id);
+                var subtitleFormat = SubtitleFormats.ForId(action.Id); var dataFormat = DataFileFormats.ForId(action.Id); var fontFormat = FontFileFormats.ForId(action.Id);
                 result = new BatchResult();
                 for (int i = 0; i < files.Length; i++)
                 {
                     report(string.Format(L("Processing file {0} of {1}…"), i + 1, files.Length));
-                    try { string file = files[i]; result.Outputs.Add(await Task.Run(() => subtitleFormat is not null ? SubtitleConvert.Run(file, subtitleFormat, token) : SubtitleConvert.Run(file, dataFormat!, token), token)); }
+                    try { string file = files[i]; result.Outputs.Add(await Task.Run(() => subtitleFormat is not null ? SubtitleConvert.Run(file, subtitleFormat, token) : dataFormat is not null ? SubtitleConvert.Run(file, dataFormat, token) : SubtitleConvert.Run(file, fontFormat!, token), token)); }
                     catch (OperationCanceledException) { result.Cancelled = true; break; }
                     catch (Exception error) { result.Error = error; break; }
                 }

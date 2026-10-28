@@ -37,8 +37,8 @@ internal static class McpChecks
             if (!Files[path].SameObjectAndContent(expected)) throw new UserError(McpSession.Changed);
             Ran.Add((action, path));
             var allowed = McpSession.Actions.First(a => a.Id == action);
-            string output = System.IO.Path.ChangeExtension(path, null) + (allowed.Subtitle || allowed.Data ? "." : allowed.Document ? " text." : " converted.") + allowed.Extension;
-            while (Files.ContainsKey(output)) output = allowed.Subtitle || allowed.Data ? System.IO.Path.ChangeExtension(output, null) + " 2." + allowed.Extension : output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
+            string output = System.IO.Path.ChangeExtension(path, null) + (allowed.Subtitle || allowed.Data || allowed.Font ? "." : allowed.Document ? " text." : " converted.") + allowed.Extension;
+            while (Files.ContainsKey(output)) output = allowed.Subtitle || allowed.Data || allowed.Font ? System.IO.Path.ChangeExtension(output, null) + " 2." + allowed.Extension : output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
             Add(output); return output;
         }
         public readonly Dictionary<string, VideoProbe> Videos = new(StringComparer.OrdinalIgnoreCase);
@@ -221,7 +221,7 @@ internal static class McpChecks
         string photo = @"C:\Users\me\Pictures\photo.jpg", doc = @"C:\Users\me\notes.txt";
         host.Add(photo); host.Add(doc);
         var inspected = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\missing.png") }))["files"]!;
-        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document && !a.Subtitle && !a.Data).Select(a => a.Id))
+        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document && !a.Subtitle && !a.Data && !a.Font).Select(a => a.Id))
             && ((JsonArray)inspected[1]!["actions"]!).Select(a => (string)a!).SequenceEqual(new[] { "document.txt", "document.rtf", "document.docx", "document.html", "document.odt" }) && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path with the actions for its kind");
         check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes", "plan_compress", "plan_rename", "plan_move" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }),
             "MCP inspect_files names the read-only tools for images and documents");
@@ -290,6 +290,20 @@ internal static class McpChecks
         var dataApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)dataPlan["plan_id"]! }));
         check((string?)dataApplied["outputs"]![0] == @"C:\Users\me\sales.csv" && paper.Ran[^1] == ("data.csv", table), "MCP apply runs the data conversion");
         check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\sales.csv"), "MCP undo recycles a data conversion");
+        // Fonts: web fonts unpack to TTF or OTF; WOFF/WOFF2 for any font but its own format.
+        string webFont = @"C:\Users\me\brand.woff2", collection = @"C:\Users\me\set.ttc"; paper.Add(webFont); paper.Add(collection);
+        var fontInspect = (JsonArray)Body(Call(papers, "inspect_files", new JsonObject { ["paths"] = Paths(webFont, collection) }))["files"]!;
+        check(((JsonArray)fontInspect[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(new[] { "font.desktop", "font.woff" }) && ((JsonArray)fontInspect[1]!["actions"]!).Count == 0,
+            "MCP inspect_files offers a WOFF2 font unpacking and WOFF, and a TTC nothing");
+        var unpackListed = listedActions.Single(a => (string?)a!["id"] == "font.desktop")!;
+        check(((string)unpackListed["writes"]!).Contains("'<name>.ttf' or '<name>.otf'"), "MCP list_actions says unpacking gives TTF or OTF");
+        check(((string)Body(Call(papers, "plan_action", new JsonObject { ["action"] = "font.desktop", ["paths"] = Paths(collection) }))["error"]!).EndsWith("needs a WOFF or WOFF2 web font.", StringComparison.Ordinal),
+            "MCP plan_action refuses unpacking a font that isn't a web font");
+        var fontPlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "font.desktop", ["paths"] = Paths(webFont) }));
+        check((string?)fontPlan["inputs"]![0]!["output"] == @"C:\Users\me\brand.ttf or .otf, whichever its outlines are (or the next free numbered name)" && ((string)fontPlan["note"]!).StartsWith("Tables are copied as they are"),
+            "MCP plan_action plans unpacking a web font");
+        check((string?)Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)fontPlan["plan_id"]! }))["outputs"]![0] == @"C:\Users\me\brand.ttf" && paper.Ran[^1] == ("font.desktop", webFont), "MCP apply runs the font conversion");
+        check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>(), "MCP undo recycles a font conversion");
         string grayFirst = @"C:\Users\me\a1.png", grayLater = @"C:\Users\me\a2.png"; paper.Add(grayFirst); paper.Add(grayLater);
         var heldPlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "image.gray", ["paths"] = Paths(grayFirst, grayLater) }));
         bool touched = false;

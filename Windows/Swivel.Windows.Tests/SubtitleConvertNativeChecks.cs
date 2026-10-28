@@ -50,6 +50,23 @@ internal static class SubtitleConvertNativeChecks
         try { SubtitleConvert.Run(huge, D("yaml"), default); } catch (UserError error) { tooBig = error.Message; }
         check(tooBig == DataFileFormats.TooLarge && !File.Exists(Path.Combine(root, "huge.yaml")), "A data file over 32 MB is refused before reading and nothing is written");
 
+        // Fonts: Windows' own Arial to WOFF and WOFF2 and back; Windows loads every result.
+        string arialSource = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "arial.ttf");
+        check(File.Exists(arialSource), "Windows has Arial for the font checks");
+        if (File.Exists(arialSource))
+        {
+            string arial = Path.Combine(root, "arial.ttf"); File.Copy(arialSource, arial);
+            int Glyphs(string path) => new System.Windows.Media.GlyphTypeface(new Uri(path)).GlyphCount;
+            int glyphs = Glyphs(arial);
+            string woff = SubtitleConvert.Run(arial, FontFileFormats.Woff, default), woff2 = SubtitleConvert.Run(arial, FontFileFormats.Woff2, default);
+            check(Path.GetFileName(woff) == "arial.woff" && Path.GetFileName(woff2) == "arial.woff2" && new FileInfo(woff2).Length < new FileInfo(woff).Length && new FileInfo(woff).Length < new FileInfo(arial).Length,
+                $"Arial becomes a smaller WOFF and an even smaller WOFF2: {new FileInfo(arial).Length} → {new FileInfo(woff).Length} → {new FileInfo(woff2).Length} bytes");
+            string fromWoff2 = SubtitleConvert.Run(woff2, FontFileFormats.Desktop, default);
+            check(Path.GetFileName(fromWoff2) == "arial 2.ttf" && Glyphs(fromWoff2) == glyphs, $"Arial's WOFF2 unpacks to a TTF Windows loads with all {glyphs} glyphs");
+            string fromWoff = SubtitleConvert.Run(woff, FontFileFormats.Desktop, default);
+            check(Path.GetFileName(fromWoff) == "arial 3.ttf" && Glyphs(fromWoff) == glyphs && File.ReadAllBytes(fromWoff).SequenceEqual(File.ReadAllBytes(fromWoff2)), "WOFF and WOFF2 unpack to the same TTF");
+        }
+
         string gbk = Path.Combine(root, "legacy.srt");
         File.WriteAllBytes(gbk, Encoding.ASCII.GetBytes("1\r\n00:00:01,000 --> 00:00:02,000\r\n").Concat(new byte[] { 0xC4, 0xE3, 0xBA, 0xC3 }).ToArray());
         string? message = null;
