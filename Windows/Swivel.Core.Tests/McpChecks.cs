@@ -37,8 +37,8 @@ internal static class McpChecks
             if (!Files[path].SameObjectAndContent(expected)) throw new UserError(McpSession.Changed);
             Ran.Add((action, path));
             var allowed = McpSession.Actions.First(a => a.Id == action);
-            string output = System.IO.Path.ChangeExtension(path, null) + (allowed.Document ? " text." : " converted.") + allowed.Extension;
-            while (Files.ContainsKey(output)) output = output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
+            string output = System.IO.Path.ChangeExtension(path, null) + (allowed.Subtitle ? "." : allowed.Document ? " text." : " converted.") + allowed.Extension;
+            while (Files.ContainsKey(output)) output = allowed.Subtitle ? System.IO.Path.ChangeExtension(output, null) + " 2." + allowed.Extension : output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
             Add(output); return output;
         }
         public readonly Dictionary<string, VideoProbe> Videos = new(StringComparer.OrdinalIgnoreCase);
@@ -221,7 +221,7 @@ internal static class McpChecks
         string photo = @"C:\Users\me\Pictures\photo.jpg", doc = @"C:\Users\me\notes.txt";
         host.Add(photo); host.Add(doc);
         var inspected = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\missing.png") }))["files"]!;
-        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document).Select(a => a.Id))
+        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document && !a.Subtitle).Select(a => a.Id))
             && ((JsonArray)inspected[1]!["actions"]!).Select(a => (string)a!).SequenceEqual(new[] { "document.txt", "document.rtf", "document.docx", "document.html", "document.odt" }) && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path with the actions for its kind");
         check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes", "plan_compress", "plan_rename", "plan_move" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }),
             "MCP inspect_files names the read-only tools for images and documents");
@@ -253,6 +253,25 @@ internal static class McpChecks
         var docApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)docPlan["plan_id"]! }));
         check((string?)docApplied["outputs"]![0] == @"C:\Users\me\notes text.docx" && paper.Ran[^1] == ("document.docx", doc) && (string?)docApplied["action"] == "document.docx", "MCP apply runs the document action");
         check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\notes text.docx") && paper.Files.ContainsKey(doc), "MCP undo recycles a document conversion");
+        // Subtitle conversions: every other format is offered, named like the original.
+        string captions = @"C:\Users\me\talk.vtt"; paper.Add(captions);
+        var subtitleInspect = (JsonArray)Body(Call(papers, "inspect_files", new JsonObject { ["paths"] = Paths(captions) }))["files"]!;
+        check(((JsonArray)subtitleInspect[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(new[] { "subtitle.srt", "subtitle.ass", "subtitle.lrc", "subtitle.sbv", "subtitle.txt" })
+            && ((JsonArray)subtitleInspect[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "plan_rename", "plan_move" }), "MCP inspect_files offers a VTT file every other subtitle format");
+        var srtListed = listedActions.Single(a => (string?)a!["id"] == "subtitle.srt")!;
+        check(((string)srtListed["inputs"]!).StartsWith("SRT, WebVTT (VTT), ASS/SSA, LRC or SBV") && ((string)srtListed["writes"]!).Contains("with each cue's text and timing") && ((string)srtListed["writes"]!).Contains("'<name>.srt'"),
+            "MCP list_actions describes the subtitle conversions");
+        check(((string)Body(Call(papers, "plan_action", new JsonObject { ["action"] = "subtitle.vtt", ["paths"] = Paths(captions) }))["error"]!).EndsWith("in another format.", StringComparison.Ordinal)
+            && ((string)Body(Call(papers, "plan_action", new JsonObject { ["action"] = "subtitle.srt", ["paths"] = Paths(photo) }))["error"]!).StartsWith(photo + ": this action needs a subtitle file", StringComparison.Ordinal),
+            "MCP plan_action refuses a subtitle file's own format and a non-subtitle file");
+        string bigSubtitle = @"C:\Users\me\big.srt"; paper.Files[bigSubtitle] = new FileStamp(1, 998, 8 * 1024 * 1024 + 1, 1000, 2000);
+        check(((string)Body(Call(papers, "plan_action", new JsonObject { ["action"] = "subtitle.vtt", ["paths"] = Paths(bigSubtitle) }))["error"]!).Contains("limited to 8 MiB"), "MCP plan_action refuses a subtitle file over 8 MiB");
+        paper.Files.Remove(bigSubtitle);
+        var subtitlePlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "subtitle.srt", ["paths"] = Paths(captions) }));
+        check((string?)subtitlePlan["inputs"]![0]!["output"] == @"C:\Users\me\talk.srt (or the next free numbered name)" && ((string)subtitlePlan["note"]!).StartsWith("Each cue's text and timing are kept"), "MCP plan_action plans a subtitle conversion beside the original");
+        var subtitleApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)subtitlePlan["plan_id"]! }));
+        check((string?)subtitleApplied["outputs"]![0] == @"C:\Users\me\talk.srt" && paper.Ran[^1] == ("subtitle.srt", captions), "MCP apply runs the subtitle conversion");
+        check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\talk.srt") && paper.Files.ContainsKey(captions), "MCP undo recycles a subtitle conversion");
         string grayFirst = @"C:\Users\me\a1.png", grayLater = @"C:\Users\me\a2.png"; paper.Add(grayFirst); paper.Add(grayLater);
         var heldPlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "image.gray", ["paths"] = Paths(grayFirst, grayLater) }));
         bool touched = false;

@@ -2604,11 +2604,6 @@
     "編輯選取的標註…",
     "選択したマークを編集…"
   ],
-  "Edit UTF-8 SRT, shift timing, change timing speed and export plain text. This does not recognize speech or burn subtitles into video.": [
-    "可编辑 UTF-8 SRT、偏移时间、调整时间速度并导出纯文本；不包含语音识别或视频字幕烧录。",
-    "可編輯 UTF-8 SRT、偏移時間、調整時間速度並匯出純文字；不包含語音辨識或影片字幕燒錄。",
-    "UTF-8 SRT の編集、時刻シフト、時間速度の変更、テキスト出力に対応。音声認識や動画への焼き込みは含みません。"
-  ],
   "Edit WAV Audio…": [
     "编辑 WAV 音频…",
     "編輯 WAV 音訊…",
@@ -13638,5 +13633,65 @@
     "时间可写成秒、分:秒或时:分:秒，最多三位小数（例如 1:05.5）。显示的大致是保留部分的第一帧和最后一帧，可能相差一帧。",
     "時間可寫成秒、分:秒或時:分:秒，最多三位小數（例如 1:05.5）。顯示的大致是保留部分的第一格和最後一格，可能相差一格。",
     "時間は秒、分:秒、または時:分:秒で入力します。小数は 3 桁まで（例：1:05.5）。表示されるのは残す部分のおおよその最初と最後のフレームで、1 フレームずれることがあります。"
+  ],
+  "Edit UTF-8 SRT (shift timing, change timing speed, export plain text), and convert between SRT, WebVTT, ASS/SSA, LRC and SBV or to plain text from UTF-8 or UTF-16 files. Each cue's text and timing are kept; styling, colours and positions are not. Transcription and burning subtitles into video are separate audio and video tools.": [
+    "编辑 UTF-8 SRT（偏移时间、调整时间速度、导出纯文本），并可在 SRT、WebVTT、ASS/SSA、LRC、SBV 之间互转或转为纯文本（读取 UTF-8 或 UTF-16 文件）。保留每条字幕的文字和时间；样式、颜色和位置不保留。语音转文字和把字幕烧录进视频是单独的音视频工具。",
+    "編輯 UTF-8 SRT（偏移時間、調整時間速度、匯出純文字），並可在 SRT、WebVTT、ASS/SSA、LRC、SBV 之間互轉或轉為純文字（讀取 UTF-8 或 UTF-16 檔案）。保留每則字幕的文字和時間；樣式、顏色和位置不保留。語音轉文字和把字幕燒錄進影片是獨立的影音工具。",
+    "UTF-8 SRT の編集（時刻シフト、時間速度の変更、テキスト出力）に加え、SRT・WebVTT・ASS/SSA・LRC・SBV の相互変換やプレーンテキストへの変換ができます（UTF-8 または UTF-16 のファイル）。各字幕のテキストと時間は保たれ、スタイル・色・位置は保たれません。文字起こしと動画への字幕の焼き込みは別の音声・動画ツールです。"
+  ],
+  "Convert Subtitles to SRT": [
+    "将字幕转换为 SRT",
+    "將字幕轉換為 SRT",
+    "字幕を SRT に変換"
+  ],
+  "Convert Subtitles to VTT": [
+    "将字幕转换为 VTT",
+    "將字幕轉換為 VTT",
+    "字幕を VTT に変換"
+  ],
+  "Convert Subtitles to ASS": [
+    "将字幕转换为 ASS",
+    "將字幕轉換為 ASS",
+    "字幕を ASS に変換"
+  ],
+  "Convert Subtitles to LRC": [
+    "将字幕转换为 LRC",
+    "將字幕轉換為 LRC",
+    "字幕を LRC に変換"
+  ],
+  "Convert Subtitles to SBV": [
+    "将字幕转换为 SBV",
+    "將字幕轉換為 SBV",
+    "字幕を SBV に変換"
+  ],
+  "Convert Subtitles to TXT": [
+    "将字幕转换为 TXT",
+    "將字幕轉換為 TXT",
+    "字幕を TXT に変換"
+  ],
+  "Swivel reads subtitle files in UTF-8 or UTF-16 (with a byte order mark). Save this file as UTF-8, for example with Notepad's Save As, and try again.": [
+    "Swivel 读取 UTF-8 或带字节顺序标记的 UTF-16 字幕文件。请先把这个文件另存为 UTF-8（例如用记事本的“另存为”）再试。",
+    "Swivel 讀取 UTF-8 或帶位元組順序標記的 UTF-16 字幕檔案。請先把這個檔案另存為 UTF-8（例如用記事本的「另存新檔」）再試。",
+    "Swivel が読み込める字幕ファイルは UTF-8 または BOM 付き UTF-16 です。このファイルを UTF-8 で保存し直してから（メモ帳の「名前を付けて保存」など）もう一度お試しください。"
+  ],
+  "Subtitle files are limited to 8 MB.": [
+    "字幕文件最大 8 MB。",
+    "字幕檔案最大 8 MB。",
+    "字幕ファイルは 8 MB までです。"
+  ],
+  "No subtitles with timing were found in this file.": [
+    "这个文件里没有找到带时间的字幕。",
+    "這個檔案裡沒有找到帶時間的字幕。",
+    "このファイルには時間付きの字幕が見つかりませんでした。"
+  ],
+  "This subtitle file has too many cues.": [
+    "这个字幕文件的条目太多。",
+    "這個字幕檔案的條目太多。",
+    "この字幕ファイルは字幕の数が多すぎます。"
+  ],
+  "This ASS/SSA file has no valid Format line for its events.": [
+    "这个 ASS/SSA 文件的事件部分没有有效的 Format 行。",
+    "這個 ASS/SSA 檔案的事件部分沒有有效的 Format 行。",
+    "この ASS/SSA ファイルのイベントには有効な Format 行がありません。"
   ]
 }

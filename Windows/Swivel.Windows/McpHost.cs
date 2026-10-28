@@ -71,6 +71,8 @@ public sealed class McpHost : IMcpHost
     public string Run(string action, string path, FileStamp expected, CancellationToken token)
     {
         var allowed = McpSession.Actions.FirstOrDefault(a => a.Id == action) ?? throw new McpToolError("Unknown action.");
+        if (allowed.Subtitle)
+            return SubtitleConvert.Run(path, SubtitleFormats.ForId(action) ?? throw new McpToolError("Unknown action."), token, expected);
         if (allowed.Document)
         {
             using var file = DocumentTextFile.Open(path, token, expected);
