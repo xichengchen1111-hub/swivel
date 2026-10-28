@@ -29,6 +29,8 @@ internal static class VideoTrimChecks
         check(VideoTrim.Plan(0, 10_000, 10_000, false) == new VideoTrimPlan(0, 10_000, false), "Removing only the sound is allowed");
         check(VideoTrim.Plan(0, 100, 10_000, true).Length == 100 && VideoTrim.Plan(9_900, 10_000, 10_000, true).Length == 100, "A trim may keep exactly 0.1 seconds at either end");
         reject(() => VideoTrim.Plan(0, 10_000, 10_000, true), "A trim that keeps everything with sound is refused");
+        reject(() => VideoTrim.Plan(0, 10_000, 10_000, false, hasSound: false), "A silent video kept whole is refused: there is no sound to remove");
+        check(VideoTrim.Plan(0, 5_000, 10_000, true, hasSound: false) == new VideoTrimPlan(0, 5_000, false), "A silent video's trim never claims to keep sound");
         reject(() => VideoTrim.Plan(0, 99, 10_000, true), "A trim shorter than 0.1 seconds is refused");
         reject(() => VideoTrim.Plan(5_000, 5_000, 10_000, true), "A trim whose start is its end is refused");
         reject(() => VideoTrim.Plan(6_000, 5_000, 10_000, true), "A trim whose start is after its end is refused");

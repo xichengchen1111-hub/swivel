@@ -38,6 +38,7 @@ internal sealed class TrimVideoDialog : Window
         var startFrame = Picture(app.L("Frame at the start")); var endFrame = Picture(app.L("Last frame kept"));
         var sound = new CheckBox { Content = app.L("Keep the sound"), IsChecked = video.HasSound, IsEnabled = video.HasSound, Margin = new Thickness(0, 8, 0, 4) };
         var status = UI.Text("");
+        var frameNote = UI.Text("", 12);
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
 
         var buttons = new WrapPanel();
@@ -54,7 +55,7 @@ internal sealed class TrimVideoDialog : Window
             try
             {
                 if (start is null || end is null) throw new UserError(VideoTrim.BadTime);
-                var plan = VideoTrim.Plan(start.Value, end.Value, video.Duration, sound.IsChecked == true);
+                var plan = VideoTrim.Plan(start.Value, end.Value, video.Duration, sound.IsChecked == true, video.HasSound);
                 status.Text = string.Format(app.L("Keeps {0}, from {1} to {2}."), Time(plan.Length), Time(plan.Start), Time(plan.End))
                     + (plan.KeepSound || !video.HasSound ? "" : " " + app.L("The sound is removed."));
                 trim.IsEnabled = true;
@@ -78,21 +79,24 @@ internal sealed class TrimVideoDialog : Window
                     await Task.Delay(250, token);
                     if (dirty) continue;
                     long? start = VideoTrim.Parse(startText.Text), end = VideoTrim.Parse(endText.Text);
+                    frameNote.Text = "";
+                    // A time that isn't valid shows no frame rather than an old one.
                     if (start is { } s && s < video.Duration)
                     {
                         var picture = await Task.Run(() => video.FrameAsync(s, 360, token), token);
                         if (closed) return; startFrame.Source = picture;
                     }
+                    else startFrame.Source = null;
                     if (end is { } e && e > 0 && e <= video.Duration)
                     {
-                        long at = video.LastFrameBefore(e, Math.Min(start ?? 0, e));
-                        var picture = await Task.Run(() => video.FrameAsync(at, 360, token), token);
+                        var picture = await Task.Run(() => video.FrameAsync(e - 1, 360, token), token);
                         if (closed) return; endFrame.Source = picture;
                     }
+                    else endFrame.Source = null;
                 }
             }
             catch (OperationCanceledException) { }
-            catch (Exception) { if (!closed) status.Text = app.L("Windows could not show a frame from this video. You can still trim it."); }
+            catch (Exception) { if (!closed) frameNote.Text = app.L("Windows could not show a frame from this video. You can still trim it."); }
         }
 
         var body = new StackPanel();
@@ -107,9 +111,10 @@ internal sealed class TrimVideoDialog : Window
         }
         Column(app.L("Start time"), startText, startFrame, 0); Column(app.L("End time"), endText, endFrame, 2);
         body.Children.Add(times);
+        body.Children.Add(frameNote);
         body.Children.Add(sound);
         if (!video.HasSound) body.Children.Add(UI.Text(app.L("This video has no sound track that Windows can decode."), 12));
-        body.Children.Add(UI.Text(app.L("Type times as seconds, minutes:seconds or hours:minutes:seconds, with up to three decimals (for example 1:05.5). The frames shown are the first and the last kept frame.")));
+        body.Children.Add(UI.Text(app.L("Type times as seconds, minutes:seconds or hours:minutes:seconds, with up to three decimals (for example 1:05.5). The frames shown are about the first and the last kept frame (exact for videos with a steady frame rate).")));
         body.Children.Add(UI.Text(app.L("Windows encodes the kept part as a new H.264/AAC MP4 at the original size and frame rate, cut at the exact times. It is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 (either way round) and two hours.")));
         body.Children.Add(UI.Text(app.L("The new file is saved beside the original as “name trimmed.mp4” without replacing existing files. The original stays unchanged. Cancelling saves no video.")));
         root.Children.Add(UI.Scroll(body)); Content = root;

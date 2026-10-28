@@ -17,6 +17,7 @@ public static class VideoTrim
     public const string BadTime = "Type a time such as 12, 1:05 or 1:02:03.5 (hours, minutes, seconds; up to three decimals).";
     public const string OutOfRange = "The start must come before the end, both within the video, keeping at least 0.1 seconds.";
     public const string Unchanged = "This keeps the whole video with its sound. Move the start or end, or remove the sound.";
+    public const string UnchangedSilent = "This keeps the whole video, which has no sound. Move the start or end.";
 
     /// Seconds, minutes:seconds or hours:minutes:seconds, with up to three decimals on the
     /// seconds; minutes and seconds after a colon are below 60. Western digits only. null when
@@ -66,12 +67,13 @@ public static class VideoTrim
 
     /// The video's length in whole milliseconds, as shown and as the end of the last frame.
     public static long Duration(double seconds) =>
-        double.IsFinite(seconds) && seconds > 0 ? (long)Math.Floor(seconds * 1000) : throw new UserError(OutOfRange);
+        double.IsFinite(seconds) && seconds > 0 ? (long)Math.Floor(seconds * 1000) : throw new UserError(SubtitleBurn.Unsupported);
 
-    public static VideoTrimPlan Plan(long start, long end, long duration, bool keepSound)
+    /// A video without sound has nothing to remove, so keeping all of it changes nothing.
+    public static VideoTrimPlan Plan(long start, long end, long duration, bool keepSound, bool hasSound = true)
     {
         if (start < 0 || end > duration || end - start < MinLength) throw new UserError(OutOfRange);
-        if (start == 0 && end == duration && keepSound) throw new UserError(Unchanged);
-        return new VideoTrimPlan(start, end, keepSound);
+        if (start == 0 && end == duration && (keepSound || !hasSound)) throw new UserError(hasSound ? Unchanged : UnchangedSilent);
+        return new VideoTrimPlan(start, end, keepSound && hasSound);
     }
 }

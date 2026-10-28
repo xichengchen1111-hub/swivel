@@ -29,7 +29,9 @@ internal static class VideoTrimNativeChecks
                 $"Trim Video opens the test video: {video.Width}×{video.Height}, {video.Duration} ms, sound {video.HasSound}");
             var frame = video.FrameAsync(1500, 160, default).GetAwaiter().GetResult();
             check(frame.PixelWidth == 160 && frame.PixelHeight == 120 && frame.IsFrozen && Colour(frame) == 'G', $"Trim Video shows a frozen, scaled frame from the middle: {frame.PixelWidth}×{frame.PixelHeight} {Colour(frame)}");
-            check(Colour(video.FrameAsync(video.LastFrameBefore(video.Duration, 0), 160, default).GetAwaiter().GetResult()) == 'B', "Trim Video shows the last frame before the end");
+            check(Colour(video.FrameAsync(video.Duration - 1, 160, default).GetAwaiter().GetResult()) == 'B', "Trim Video shows the last frame before the end");
+            check(Colour(video.FrameAsync(999, 160, default).GetAwaiter().GetResult()) == 'R' && Colour(video.FrameAsync(1000, 160, default).GetAwaiter().GetResult()) == 'G',
+                "Trim Video shows the frame showing at a time, not the nearest one, at a colour change");
             check(Colour(video.FrameAsync(999_999, 160, default).GetAwaiter().GetResult()) == 'B', "A frame asked past the end shows the last one");
 
             string middle = video.TrimAsync(new VideoTrimPlan(1000, 2000, true), null, default).GetAwaiter().GetResult();
@@ -46,15 +48,19 @@ internal static class VideoTrimNativeChecks
             check(Colours(wide, seconds) == "RB", "The kept part runs from red to blue: " + Colours(wide, seconds));
             check(progress is > 0 and <= 1.0001, $"Trim Video reports progress up to 1: {progress}");
 
-            string silent = video.TrimAsync(VideoTrim.Plan(0, video.Duration, video.Duration, false), null, default).GetAwaiter().GetResult();
+            string silent = video.TrimAsync(VideoTrim.Plan(0, video.Duration, video.Duration, false, video.HasSound), null, default).GetAwaiter().GetResult();
             (seconds, sound) = Probe(silent);
             check(Math.Abs(seconds - 3) < 0.1 && !sound && Colours(silent, seconds) == "RB", $"Removing only the sound keeps the whole picture: {seconds:0.000} s, sound {sound}");
 
-            using var cancel = new CancellationTokenSource(); cancel.Cancel();
             var before = Directory.GetFiles(root).Length;
-            bool cancelled = false;
-            try { video.TrimAsync(new VideoTrimPlan(0, 1000, true), null, cancel.Token).GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
-            check(cancelled && Directory.GetFiles(root).Length == before, "A cancelled trim saves nothing");
+            foreach (bool midway in new[] { false, true })
+            {
+                // Cancelled before starting, and once encoding has reported progress.
+                using var cancel = new CancellationTokenSource(); if (!midway) cancel.Cancel();
+                bool cancelled = false;
+                try { video.TrimAsync(new VideoTrimPlan(0, 2900, true), done => { if (done > 0) cancel.Cancel(); }, cancel.Token).GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
+                check(cancelled && Directory.GetFiles(root).Length == before, $"A trim cancelled {(midway ? "while encoding" : "before starting")} saves nothing");
+            }
         }
         check(SHA256.HashData(File.ReadAllBytes(source)).SequenceEqual(original), "Trimming leaves the original byte for byte the same");
 

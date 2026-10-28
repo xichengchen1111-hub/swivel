@@ -74,37 +74,44 @@ public sealed class VideoTrimmer : IDisposable
         }
     }
 
-    /// The frame Windows shows at a time (clamped into the video), at most `box` pixels on its
-    /// longer side, frozen for the UI thread. One frame is made at a time.
+    private double Fps => frameNumerator > 0 && frameDenominator > 0 ? (double)frameNumerator / frameDenominator : 30;
+
+    /// The frame showing at a time (clamped into the video), at most `box` pixels on its longer
+    /// side, frozen for the UI thread. Windows is asked for the middle of that frame (assuming a
+    /// constant frame rate), since it returns the frame nearest the time asked. Near the end,
+    /// where Windows may have no frame for the last instant, earlier frames are tried. One frame
+    /// is made at a time.
     public async Task<BitmapSource> FrameAsync(long milliseconds, int box, CancellationToken token)
     {
         double scale = Math.Min(1, box / (double)Math.Max(Width, Height));
         int w = Math.Max(2, (int)Math.Round(Width * scale)), h = Math.Max(2, (int)Math.Round(Height * scale));
-        long at = Math.Clamp(milliseconds, 0, Math.Max(0, Duration - 1));
+        double step = 1000 / Math.Max(1, Fps);
+        long index = (long)Math.Floor(Math.Clamp(milliseconds, 0, Math.Max(0, Duration - 1)) / step);
         await frameLock.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            using var image = await NativeAsync.Join(frames.GetThumbnailAsync(TimeSpan.FromMilliseconds(at), w, h, VideoFramePrecision.NearestFrame), token).ConfigureAwait(false);
-            using var stream = image.AsStreamForRead();
-            var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
-            frame.Freeze();
-            return frame;
+            for (int back = 0; ; back++)
+            {
+                double at = Math.Max(0, Math.Min((index - back + 0.5) * step, Duration - 1));
+                global::Windows.Graphics.Imaging.ImageStream image;
+                try { image = await NativeAsync.Join(frames.GetThumbnailAsync(TimeSpan.FromMilliseconds(at), w, h, VideoFramePrecision.NearestFrame), token).ConfigureAwait(false); }
+                catch (ArgumentException) when (back < 15 && index - back > 0) { continue; }
+                using (image)
+                {
+                    using var stream = image.AsStreamForRead();
+                    var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+                    frame.Freeze();
+                    return frame;
+                }
+            }
         }
         finally { frameLock.Release(); }
-    }
-
-    /// The last frame inside the kept part: just before its end (or its start when very short).
-    public long LastFrameBefore(long end, long start)
-    {
-        double fps = frameNumerator > 0 && frameDenominator > 0 ? (double)frameNumerator / frameDenominator : 30;
-        long step = Math.Max(1, (long)Math.Ceiling(1000 / Math.Max(1, fps)));
-        return Math.Max(start, end - step);
     }
 
     /// Encodes the kept part and publishes `name trimmed.mp4`. Progress runs from 0 to 1.
     internal async Task<string> TrimAsync(VideoTrimPlan plan, Action<double>? progress, CancellationToken token)
     {
-        if (plan.End > Duration) throw new UserError(VideoTrim.OutOfRange);
+        plan = VideoTrim.Plan(plan.Start, plan.End, Duration, plan.KeepSound, HasSound);
         string rendered = System.IO.Path.Combine(workspace, "trimmed.mp4");
         try
         {
