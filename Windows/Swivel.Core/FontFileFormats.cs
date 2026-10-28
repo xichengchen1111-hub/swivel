@@ -89,6 +89,13 @@ public static class FontFileFormats
 
     private const uint HeadTag = 0x68656164, GlyfTag = 0x676C7966, LocaTag = 0x6C6F6361, HmtxTag = 0x686D7478, HheaTag = 0x68686561, MaxpTag = 0x6D617870;
 
+    /// A web font must say its outlines are TrueType or PostScript ('true' counts as TrueType).
+    private static uint Flavor(uint flavor) => flavor switch
+    {
+        0x00010000 or 0x4F54544F => flavor, 0x74727565 => 0x00010000,
+        0x74746366 => throw new UserError(Collection), _ => throw new UserError(NotFont),
+    };
+
     private static Font Validated(Font font)
     {
         var tags = font.Tables.Select(t => t.Tag).ToList();
@@ -169,18 +176,18 @@ public static class FontFileFormats
         int count = U16(data, 12);
         if (count == 0 || count > MaxTables || data.Length < 44 + 20 * count) throw new UserError(Damaged);
         // Every table's unpacked size is declared up front: refuse a decompression bomb before inflating anything.
-        long declared = Enumerable.Range(0, count).Sum(i => (long)((U32(data, 44 + 20 * i + 12) + 3) & ~3u));
+        long declared = Enumerable.Range(0, count).Sum(i => ((long)U32(data, 44 + 20 * i + 12) + 3) & ~3L);
         if (declared > MaxBytes) throw new UserError(Damaged);
         var tables = new List<Table>();
         for (int i = 0; i < count; i++)
         {
             int at = 44 + 20 * i;
             long offset = U32(data, at + 4), stored = U32(data, at + 8), length = U32(data, at + 12);
-            if (offset > data.Length || stored > data.Length - offset || stored > length) throw new UserError(Damaged);
+            if (offset > data.Length || stored > data.Length - offset || stored > length || length > MaxBytes) throw new UserError(Damaged);
             var chunk = data.AsSpan((int)offset, (int)stored).ToArray();
             tables.Add(new Table(U32(data, at), stored == length ? chunk : Unzlib(chunk, (int)length)));
         }
-        return Validated(new Font(U32(data, 4), tables));
+        return Validated(new Font(Flavor(U32(data, 4)), tables));
     }
 
     private static byte[] Zlib(byte[] data)
@@ -260,8 +267,8 @@ public static class FontFileFormats
     public static Font DecodeWoff2(byte[] data, CancellationToken token = default)
     {
         if (data.Length < 48) throw new UserError(Damaged);
-        uint flavor = U32(data, 4);
-        if (flavor == 0x74746366) throw new UserError(Collection);
+        if (U32(data, 4) == 0x74746366) throw new UserError(Collection);
+        uint flavor = Flavor(U32(data, 4));
         int count = U16(data, 12);
         long totalSfnt = U32(data, 16), compressedLength = U32(data, 20);
         // The unpacked size is declared in the header: refuse a bomb before inflating anything.
@@ -302,7 +309,7 @@ public static class FontFileFormats
             if (!tables.TryGetValue(HeadTag, out var head) || head.Length < 54) throw new UserError(Damaged);
             var (glyfTable, locaTable, mins) = GlyfTransform.Reconstruct(slices[GlyfTag], BinaryPrimitives.ReadInt16BigEndian(head.AsSpan(50)), token);
             tables[GlyfTag] = glyfTable; tables[LocaTag] = locaTable; xMins = mins;
-            // The rebuilt glyf may differ in size from the original (flags are written uncompressed); loca may not.
+            // The rebuilt glyf may differ slightly in size from the original; loca may not.
             if (locaTable.Length != loca!.Original) throw new UserError(Damaged);
         }
         if (entries.FirstOrDefault(e => e.Tag == HmtxTag) is { Transform: 1 } hmtx)
@@ -361,8 +368,8 @@ public static class FontFileFormats
 }
 
 /// The WOFF2 glyf/loca transform undone (W3C WOFF2 §5.1–5.3): glyphs rebuilt from the separated
-/// contour, point, flag, coordinate, composite, bounding-box and instruction streams. Simple
-/// glyphs are written with uncompressed flags and 16-bit coordinates; outlines are the same.
+/// contour, point, flag, coordinate, composite, bounding-box and instruction streams, with flags
+/// and coordinates packed as the reference decoder packs them.
 internal static class GlyfTransform
 {
     private const string Damaged = FontFileFormats.Damaged;
@@ -471,13 +478,32 @@ internal static class GlyfTransform
                 W16(count); W16(xMin); W16(yMin); W16(xMax); W16(yMax);
                 foreach (int e in ends) W16(e);
                 W16(instructionLength); glyph.Write(instructions.Bytes(instructionLength));
-                // Uncompressed flags: on-curve bit only, so both coordinates follow as 16-bit deltas.
+                // Packed as the reference decoder packs them: a delta of 0 takes no bytes, one under 256
+                // takes one, others two; equal flags in a row are written once with a repeat count. The
+                // glyph then stays as small as the original, so a short loca still fits.
                 bool overlapping = overlap is not null && (overlap[g >> 3] & (0x80 >> (g & 7))) != 0;
-                for (int p = 0; p < total; p++) glyph.WriteByte((byte)((on[p] ? 1 : 0) | (p == 0 && overlapping ? 0x40 : 0)));
-                int previous = 0;
-                for (int p = 0; p < total; p++) { W16(xs[p] - previous); previous = xs[p]; }
-                previous = 0;
-                for (int p = 0; p < total; p++) { W16(ys[p] - previous); previous = ys[p]; }
+                var pointFlags = new byte[total]; var xBytes = new MemoryStream(); var yBytes = new MemoryStream();
+                int px = 0, py = 0;
+                for (int p = 0; p < total; p++)
+                {
+                    int f = (on[p] ? 1 : 0) | (p == 0 && overlapping ? 0x40 : 0), dx = xs[p] - px, dy = ys[p] - py; px = xs[p]; py = ys[p];
+                    if (dx == 0) f |= 0x10;
+                    else if (dx is > -256 and < 256) { f |= 0x02 | (dx > 0 ? 0x10 : 0); xBytes.WriteByte((byte)Math.Abs(dx)); }
+                    else { xBytes.WriteByte((byte)(dx >> 8)); xBytes.WriteByte((byte)dx); }
+                    if (dy == 0) f |= 0x20;
+                    else if (dy is > -256 and < 256) { f |= 0x04 | (dy > 0 ? 0x20 : 0); yBytes.WriteByte((byte)Math.Abs(dy)); }
+                    else { yBytes.WriteByte((byte)(dy >> 8)); yBytes.WriteByte((byte)dy); }
+                    pointFlags[p] = (byte)f;
+                }
+                for (int p = 0; p < total;)
+                {
+                    int run = 1;
+                    while (p + run < total && pointFlags[p + run] == pointFlags[p] && run < 256) run++;
+                    if (run > 1) { glyph.WriteByte((byte)(pointFlags[p] | 0x08)); glyph.WriteByte((byte)(run - 1)); }
+                    else glyph.WriteByte(pointFlags[p]);
+                    p += run;
+                }
+                xBytes.WriteTo(glyph); yBytes.WriteTo(glyph);
             }
             else throw new UserError(Damaged);
             glyph.WriteTo(glyf);

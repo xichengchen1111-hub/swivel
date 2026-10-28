@@ -70,6 +70,8 @@ internal static class FontFileFormatsChecks
         return Enumerable.Range(0, count).Select(g => Glyph(glyf, Offset(g), Offset(g + 1))).ToList();
     }
 
+    private static Exception? Assert(Action action) { try { action(); return null; } catch (Exception error) { return error; } }
+
     internal static void Run(Action<bool, string> check, Action<Action, string> reject)
     {
         var ttf = FontFileFormats.Read(B(Ttf)); var otf = FontFileFormats.Read(B(Otf));
@@ -114,6 +116,10 @@ internal static class FontFileFormatsChecks
         reject(() => FontFileFormats.Read(bomb), "A WOFF table declaring a huge unpacked size is refused before inflating");
         var wrongLength = (byte[])woff.Clone(); int first = 44; uint stored = BinaryPrimitives.ReadUInt32BigEndian(wrongLength.AsSpan(first + 8)), orig = BinaryPrimitives.ReadUInt32BigEndian(wrongLength.AsSpan(first + 12));
         if (stored < orig) { BinaryPrimitives.WriteUInt32BigEndian(wrongLength.AsSpan(first + 12), orig + 1); reject(() => FontFileFormats.Read(wrongLength), "A WOFF table that inflates to another length is refused"); }
+        var wrap = (byte[])woff.Clone(); BinaryPrimitives.WriteUInt32BigEndian(wrap.AsSpan(44 + 12), 0xFFFFFFFE);
+        check(Assert(() => FontFileFormats.Read(wrap)) is UserError { Message: FontFileFormats.Damaged }, "A WOFF table declaring a length near 4 GB is refused as damaged, not with an overflow");
+        var flavorless = (byte[])woff.Clone(); BinaryPrimitives.WriteUInt32BigEndian(flavorless.AsSpan(4), 0x41424344);
+        reject(() => FontFileFormats.Read(flavorless), "A web font with an unknown flavor is refused");
         var big2 = B(TransformedWoff2); BinaryPrimitives.WriteUInt32BigEndian(big2.AsSpan(16), FontFileFormats.MaxBytes + 1u);
         reject(() => FontFileFormats.Read(big2), "A WOFF2 declaring more than 64 MB unpacked is refused");
         var cut = B(TransformedWoff2)[..200];

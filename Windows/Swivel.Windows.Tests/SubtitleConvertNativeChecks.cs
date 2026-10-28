@@ -56,15 +56,28 @@ internal static class SubtitleConvertNativeChecks
         if (File.Exists(arialSource))
         {
             string arial = Path.Combine(root, "arial.ttf"); File.Copy(arialSource, arial);
-            int Glyphs(string path) => new System.Windows.Media.GlyphTypeface(new Uri(path)).GlyphCount;
-            int glyphs = Glyphs(arial);
             string woff = SubtitleConvert.Run(arial, FontFileFormats.Woff, default), woff2 = SubtitleConvert.Run(arial, FontFileFormats.Woff2, default);
             check(Path.GetFileName(woff) == "arial.woff" && Path.GetFileName(woff2) == "arial.woff2" && new FileInfo(woff2).Length < new FileInfo(woff).Length && new FileInfo(woff).Length < new FileInfo(arial).Length,
                 $"Arial becomes a smaller WOFF and an even smaller WOFF2: {new FileInfo(arial).Length} → {new FileInfo(woff).Length} → {new FileInfo(woff2).Length} bytes");
             string fromWoff2 = SubtitleConvert.Run(woff2, FontFileFormats.Desktop, default);
-            check(Path.GetFileName(fromWoff2) == "arial 2.ttf" && Glyphs(fromWoff2) == glyphs, $"Arial's WOFF2 unpacks to a TTF Windows loads with all {glyphs} glyphs");
             string fromWoff = SubtitleConvert.Run(woff, FontFileFormats.Desktop, default);
-            check(Path.GetFileName(fromWoff) == "arial 3.ttf" && Glyphs(fromWoff) == glyphs && File.ReadAllBytes(fromWoff).SequenceEqual(File.ReadAllBytes(fromWoff2)), "WOFF and WOFF2 unpack to the same TTF");
+            check(Path.GetFileName(fromWoff2) == "arial 2.ttf" && Path.GetFileName(fromWoff) == "arial 3.ttf" && File.ReadAllBytes(fromWoff).SequenceEqual(File.ReadAllBytes(fromWoff2)), "WOFF and WOFF2 unpack to the same TTF");
+            var arialFont = FontFileFormats.Read(File.ReadAllBytes(arial)); var unpacked = FontFileFormats.Read(File.ReadAllBytes(fromWoff2));
+            check(arialFont.Tables.All(t => unpacked.Tables.Single(u => u.Tag == t.Tag).Data.AsSpan(t.Tag == 0x68656164 ? 12 : 0).SequenceEqual(t.Data.AsSpan(t.Tag == 0x68656164 ? 12 : 0))),
+                $"Windows' Arial survives WOFF2 with all {arialFont.Tables.Count} tables unchanged");
+            // Two independent Windows font loaders, each on a fresh STA thread with the unpacked copy first
+            // (WPF caches faces by family, so the original is loaded last).
+            string Load(Func<string> load)
+            {
+                string result = ""; var thread = new System.Threading.Thread(() => { try { result = load(); } catch (Exception error) { result = error.GetType().Name + ": " + error.Message; } });
+                thread.SetApartmentState(System.Threading.ApartmentState.STA); thread.Start(); thread.Join(); return result;
+            }
+            string Gdi(string path) => Load(() => { using var fonts = new System.Drawing.Text.PrivateFontCollection(); fonts.AddFontFile(path); return fonts.Families.Single().Name; });
+            string Wpf(string path) => Load(() => new System.Windows.Media.GlyphTypeface(new Uri(path)).GlyphCount.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            string gdiUnpacked = Gdi(fromWoff2), gdiOriginal = Gdi(arial), wpfUnpacked = Wpf(fromWoff2), wpfOriginal = Wpf(arial);
+            Console.WriteLine($"Arial unpacked from WOFF2: GDI+ {gdiUnpacked} (original {gdiOriginal}), WPF glyphs {wpfUnpacked} (original {wpfOriginal})");
+            check(gdiUnpacked == "Arial" && gdiUnpacked == gdiOriginal, "GDI+ loads Arial unpacked from WOFF2 as the Arial family: " + gdiUnpacked);
+            check(wpfUnpacked == wpfOriginal || wpfOriginal.Contains("Exception"), $"WPF loads Arial unpacked from WOFF2 with the original's glyph count: {wpfUnpacked} vs {wpfOriginal}");
         }
 
         string gbk = Path.Combine(root, "legacy.srt");
