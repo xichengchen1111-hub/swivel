@@ -224,6 +224,12 @@ public static class Catalog
         new("subtitle.lrc", "Convert Subtitles to LRC", Core.Feature.SubtitleFiles, Extensions: SubtitleFormats.InputExtensions),
         new("subtitle.sbv", "Convert Subtitles to SBV", Core.Feature.SubtitleFiles, Extensions: SubtitleFormats.InputExtensions),
         new("subtitle.txt", "Convert Subtitles to TXT", Core.Feature.SubtitleFiles, Extensions: SubtitleFormats.InputExtensions),
+        new("data.json", "Convert Data to JSON", Extensions: DataFileFormats.InputExtensions),
+        new("data.jsonl", "Convert Data to JSONL", Extensions: DataFileFormats.InputExtensions),
+        new("data.plist", "Convert Data to PLIST", Extensions: DataFileFormats.InputExtensions),
+        new("data.csv", "Convert Data to CSV", Extensions: DataFileFormats.InputExtensions),
+        new("data.tsv", "Convert Data to TSV", Extensions: DataFileFormats.InputExtensions),
+        new("data.yaml", "Convert Data to YAML", Extensions: DataFileFormats.InputExtensions),
         new("document.text", "Inspect Document Text…", SingleFile: true, Extensions: DocumentText.Extensions),
         new("file.preview", "Preview File", SingleFile: true, Extensions: DocumentText.Extensions.Append("wav").ToArray()),
         new("rename.files", "Batch Rename…", Core.Feature.BatchRename),
@@ -271,7 +277,7 @@ public static class Catalog
     public static IEnumerable<ToolAction> All(Prefs prefs) => Actions.Concat(prefs.Presets.Select(x => new ToolAction("preset." + x.Id, x.Name, Feature.ImagePresets, true))).Concat(prefs.Apps.Select(x => new ToolAction("app." + x.Id, x.Name, Feature.AppRouting, Extensions: x.IsWebPage && !x.CopyToClipboard ? null : x.Types, RequiresFiles: !x.IsWebPage || x.CopyToClipboard, WebPage: x.IsWebPage)));
     public static IEnumerable<ToolAction> Offered(Prefs prefs) => All(prefs).Where(x => x.Feature is null || prefs.IsOn(x.Feature.Value));
     public static IEnumerable<ToolAction> Available(Prefs prefs, IReadOnlyCollection<string> files) =>
-        Offered(prefs).Where(x => (x.Id != "audio.join" || files.Count is >= 2 and <= WaveJoin.MaxInputs) && (SubtitleFormats.ForId(x.Id) is not { } subtitle || !files.All(f => System.IO.Path.GetExtension(f).TrimStart('.').Equals(subtitle.Extension, StringComparison.OrdinalIgnoreCase))) && (!x.RequiresFiles || files.Count > 0) && (!x.SingleFile || files.Count == 1) && (!x.ImageOnly || files.All(IsImage)) && (!x.SrtOnly || files.All(f => System.IO.Path.GetExtension(f).Equals(".srt", StringComparison.OrdinalIgnoreCase))) && (x.Extensions is null || x.Extensions.Length == 0 || files.All(f => x.Extensions.Contains(System.IO.Path.GetExtension(f).TrimStart('.').ToLowerInvariant()))));
+        Offered(prefs).Where(x => (x.Id != "audio.join" || files.Count is >= 2 and <= WaveJoin.MaxInputs) && (SubtitleFormats.ForId(x.Id) is not { } subtitle || !files.All(f => System.IO.Path.GetExtension(f).TrimStart('.').Equals(subtitle.Extension, StringComparison.OrdinalIgnoreCase))) && (DataFileFormats.ForId(x.Id) is not { } data || !files.All(f => DataFileFormats.IsSame(f, data))) && (!x.RequiresFiles || files.Count > 0) && (!x.SingleFile || files.Count == 1) && (!x.ImageOnly || files.All(IsImage)) && (!x.SrtOnly || files.All(f => System.IO.Path.GetExtension(f).Equals(".srt", StringComparison.OrdinalIgnoreCase))) && (x.Extensions is null || x.Extensions.Length == 0 || files.All(f => x.Extensions.Contains(System.IO.Path.GetExtension(f).TrimStart('.').ToLowerInvariant()))));
     public static IEnumerable<ToolAction> ForCustomWheel(Prefs prefs, IReadOnlyCollection<string> files)
     {
         if (!prefs.IsOn(Feature.MyWheel)) return Array.Empty<ToolAction>();
@@ -302,7 +308,14 @@ public static class ImageRules
 
 public sealed class UserError : Exception
 {
-    public UserError(string message) : base(message) { }
+    public UserError(string message) : base(message) { Template = message; }
+    /// A message with {0}-style values: Template is what is translated, Message the English text.
+    public UserError(string template, params object[] values) : base(string.Format(System.Globalization.CultureInfo.InvariantCulture, template, values)) { Template = template; Values = values; }
+    public string Template { get; }
+    public object[] Values { get; } = Array.Empty<object>();
+    /// The message in the user's language, given the app's translation function.
+    public string Localized(Func<string, string> translate) =>
+        Values.Length == 0 ? translate(Message) : string.Format(System.Globalization.CultureInfo.CurrentCulture, translate(Template), Values);
 }
 
 public sealed record CompatibilityItem(string Title, string Status, string Detail);

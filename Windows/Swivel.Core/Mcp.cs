@@ -76,13 +76,14 @@ public sealed class McpToolError(string message) : Exception(message)
     public static bool Expected(Exception error) => error is not (OutOfMemoryException or StackOverflowException or AccessViolationException);
 }
 
-public sealed record McpAction(string Id, string Title, string Suffix, bool Document = false, bool Subtitle = false)
+public sealed record McpAction(string Id, string Title, string Suffix, bool Document = false, bool Subtitle = false, bool Data = false)
 {
     /// The new file's extension.
-    public string Extension => Subtitle ? Id["subtitle.".Length..] : Document ? Id["document.".Length..] : ImageOutputInfo.Format(Id);
-    /// A subtitle file is offered every other subtitle format, not its own.
+    public string Extension => Subtitle ? Id["subtitle.".Length..] : Data ? Id["data.".Length..] : Document ? Id["document.".Length..] : ImageOutputInfo.Format(Id);
+    /// A subtitle or data file is offered every other format of its kind, not its own.
     public bool Accepts(string path) => Subtitle
         ? SubtitleFormats.IsInput(path) && !System.IO.Path.GetExtension(path).TrimStart('.').Equals(Extension, StringComparison.OrdinalIgnoreCase)
+        : Data ? DataFileFormats.IsInput(path) && !DataFileFormats.IsSame(path, DataFileFormats.ForId(Id)!)
         : Document ? McpSession.IsDocument(path) : Catalog.IsImage(path);
 }
 
@@ -116,9 +117,14 @@ public sealed class McpSession
         new("subtitle.srt", "Convert Subtitles to SRT", "", Subtitle: true), new("subtitle.vtt", "Convert Subtitles to VTT", "", Subtitle: true),
         new("subtitle.ass", "Convert Subtitles to ASS", "", Subtitle: true), new("subtitle.lrc", "Convert Subtitles to LRC", "", Subtitle: true),
         new("subtitle.sbv", "Convert Subtitles to SBV", "", Subtitle: true), new("subtitle.txt", "Convert Subtitles to TXT", "", Subtitle: true),
+        // Data files ↔ each other, plus YAML out; CSV cells stay text.
+        new("data.json", "Convert Data to JSON", "", Data: true), new("data.jsonl", "Convert Data to JSONL", "", Data: true),
+        new("data.plist", "Convert Data to PLIST", "", Data: true), new("data.csv", "Convert Data to CSV", "", Data: true),
+        new("data.tsv", "Convert Data to TSV", "", Data: true), new("data.yaml", "Convert Data to YAML", "", Data: true),
     };
     public const string Changed = "The file changed since planning. No file was made for it; plan again.";
     private const string SubtitleInputs = "SRT, WebVTT (VTT), ASS/SSA, LRC or SBV subtitle files in another format than the output, in UTF-8 or UTF-16 with a byte order mark; up to 8 MB";
+    private const string DataInputs = "JSON, JSON Lines (JSONL/NDJSON), XML or binary property lists (PLIST), CSV or TSV in another format than the output; text in UTF-8 or UTF-16 with a byte order mark; up to 32 MB";
     private const string DocumentInputs = "Plain text (TXT, TEXT, MD, MARKDOWN, CSV, TSV, LOG, SRT) in strict UTF-8 or UTF-16 with a byte order mark, DOCX, ODT, RTF, or static HTML/HTM without scripts; up to 8 MiB and 2,000,000 characters of text";
     /// plan_compress's work, logged like an action; not offered through plan_action.
     private static readonly McpAction Compression = new("compress", "Compress to a size", " compressed");
@@ -263,8 +269,10 @@ public sealed class McpSession
     {
         ["actions"] = new JsonArray(Actions.Select(a => (JsonNode)new JsonObject
         {
-            ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = a.Subtitle ? SubtitleInputs : a.Document ? DocumentInputs : "PNG, JPEG, BMP, TIFF or static GIF images",
-            ["writes"] = "A new " + a.Extension.ToUpperInvariant() + " file" + (a.Subtitle ? (a.Extension == "txt" ? " holding only the subtitle text, one cue per line" : " with each cue's text and timing (styling, colours and positions are dropped)") : a.Document ? " holding only the document's text (no formatting, images, table layout or objects)" : "") + " beside each original, named '<name>" + a.Suffix + "." + a.Extension + "' or the next free numbered name.",
+            ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = a.Subtitle ? SubtitleInputs : a.Data ? DataInputs : a.Document ? DocumentInputs : "PNG, JPEG, BMP, TIFF or static GIF images",
+            ["writes"] = "A new " + a.Extension.ToUpperInvariant() + " file" + (a.Subtitle ? (a.Extension == "txt" ? " holding only the subtitle text, one cue per line" : " with each cue's text and timing (styling, colours and positions are dropped)")
+                : a.Data ? (a.Extension is "csv" or "tsv" ? " with a header row and one row per record (nested values as JSON text, UTF-8 with a byte order mark)" : " with the same values (keys sorted; CSV/TSV cells become text; plist dates and data become ISO 8601 and Base64 text where the format has no such type)")
+                : a.Document ? " holding only the document's text (no formatting, images, table layout or objects)" : "") + " beside each original, named '<name>" + a.Suffix + "." + a.Extension + "' or the next free numbered name.",
         }).ToArray()),
     };
 
@@ -374,12 +382,13 @@ public sealed class McpSession
         foreach (string path in paths)
         {
             token.ThrowIfCancellationRequested();
-            if (!action.Accepts(path)) throw new McpToolError(path + (action.Subtitle ? ": this action needs a subtitle file (SRT, VTT, ASS, SSA, LRC or SBV) in another format." : action.Document ? ": this action needs a plain-text, DOCX, ODT, RTF or HTML document." : ": this action needs a PNG, JPEG, BMP, TIFF or GIF image."));
+            if (!action.Accepts(path)) throw new McpToolError(path + (action.Data ? ": this action needs a data file (JSON, JSONL, NDJSON, PLIST, CSV or TSV) in another format." : action.Subtitle ? ": this action needs a subtitle file (SRT, VTT, ASS, SSA, LRC or SBV) in another format." : action.Document ? ": this action needs a plain-text, DOCX, ODT, RTF or HTML document." : ": this action needs a PNG, JPEG, BMP, TIFF or GIF image."));
             FileStamp stamp;
             try { stamp = host.Inspect(path); }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }
             if (action.Document && stamp.Size > DocumentText.MaxInputBytes) throw new McpToolError(path + ": documents are limited to 8 MiB (8,388,608 bytes).");
             if (action.Subtitle && stamp.Size > SubtitleFormats.MaxBytes) throw new McpToolError(path + ": subtitle files are limited to 8 MiB (8,388,608 bytes).");
+            if (action.Data && stamp.Size > DataFileFormats.MaxBytes) throw new McpToolError(path + ": data files are limited to 32 MiB (33,554,432 bytes).");
             inputs.Add((path, stamp));
         }
         var plan = Store(action, null, inputs);
@@ -393,6 +402,7 @@ public sealed class McpSession
             }).ToArray()),
         };
         // The document is read only at apply: one it can't read (too large, an unsupported encoding) fails there.
+        if (action.Data) body["note"] = "Values are never guessed: CSV/TSV cells stay text, a value the output can't hold (null in a plist, NaN in JSON, a tab inside a TSV cell) stops the conversion. Files are read at apply_plan; one Swivel can't read fails there and stops the rest.";
         if (action.Subtitle) body["note"] = "Each cue's text and timing are kept; styling, colours and positions are dropped. Files are read at apply_plan; one Swivel can't read (another text encoding, no timed cues) fails there and stops the rest.";
         if (action.Document) body["note"] = "Only the text is kept: formatting, images, table layout, headers, notes and objects are dropped. Documents are read at apply_plan; one Swivel can't read (another text encoding, HTML with scripts, more than 2,000,000 characters) fails there and stops the rest.";
         return body;

@@ -37,8 +37,8 @@ internal static class McpChecks
             if (!Files[path].SameObjectAndContent(expected)) throw new UserError(McpSession.Changed);
             Ran.Add((action, path));
             var allowed = McpSession.Actions.First(a => a.Id == action);
-            string output = System.IO.Path.ChangeExtension(path, null) + (allowed.Subtitle ? "." : allowed.Document ? " text." : " converted.") + allowed.Extension;
-            while (Files.ContainsKey(output)) output = allowed.Subtitle ? System.IO.Path.ChangeExtension(output, null) + " 2." + allowed.Extension : output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
+            string output = System.IO.Path.ChangeExtension(path, null) + (allowed.Subtitle || allowed.Data ? "." : allowed.Document ? " text." : " converted.") + allowed.Extension;
+            while (Files.ContainsKey(output)) output = allowed.Subtitle || allowed.Data ? System.IO.Path.ChangeExtension(output, null) + " 2." + allowed.Extension : output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
             Add(output); return output;
         }
         public readonly Dictionary<string, VideoProbe> Videos = new(StringComparer.OrdinalIgnoreCase);
@@ -221,7 +221,7 @@ internal static class McpChecks
         string photo = @"C:\Users\me\Pictures\photo.jpg", doc = @"C:\Users\me\notes.txt";
         host.Add(photo); host.Add(doc);
         var inspected = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\missing.png") }))["files"]!;
-        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document && !a.Subtitle).Select(a => a.Id))
+        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document && !a.Subtitle && !a.Data).Select(a => a.Id))
             && ((JsonArray)inspected[1]!["actions"]!).Select(a => (string)a!).SequenceEqual(new[] { "document.txt", "document.rtf", "document.docx", "document.html", "document.odt" }) && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path with the actions for its kind");
         check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes", "plan_compress", "plan_rename", "plan_move" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }),
             "MCP inspect_files names the read-only tools for images and documents");
@@ -272,6 +272,24 @@ internal static class McpChecks
         var subtitleApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)subtitlePlan["plan_id"]! }));
         check((string?)subtitleApplied["outputs"]![0] == @"C:\Users\me\talk.srt" && paper.Ran[^1] == ("subtitle.srt", captions), "MCP apply runs the subtitle conversion");
         check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\talk.srt") && paper.Files.ContainsKey(captions), "MCP undo recycles a subtitle conversion");
+        // Data conversions: every other format, named like the original; .ndjson counts as JSONL.
+        string table = @"C:\Users\me\sales.ndjson"; paper.Add(table);
+        var dataInspect = (JsonArray)Body(Call(papers, "inspect_files", new JsonObject { ["paths"] = Paths(table) }))["files"]!;
+        check(((JsonArray)dataInspect[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(new[] { "data.json", "data.plist", "data.csv", "data.tsv", "data.yaml" }), "MCP inspect_files offers an NDJSON file every format but JSONL");
+        var csvListed = listedActions.Single(a => (string?)a!["id"] == "data.csv")!;
+        check(((string)csvListed["inputs"]!).StartsWith("JSON, JSON Lines (JSONL/NDJSON)") && ((string)csvListed["writes"]!).Contains("with a header row and one row per record") && ((string)csvListed["writes"]!).Contains("'<name>.csv'"),
+            "MCP list_actions describes the data conversions");
+        check(((string)Body(Call(papers, "plan_action", new JsonObject { ["action"] = "data.jsonl", ["paths"] = Paths(table) }))["error"]!).EndsWith("in another format.", StringComparison.Ordinal)
+            && ((string)Body(Call(papers, "plan_action", new JsonObject { ["action"] = "data.csv", ["paths"] = Paths(captions) }))["error"]!).StartsWith(captions + ": this action needs a data file", StringComparison.Ordinal),
+            "MCP plan_action refuses a data file's own format and a non-data file");
+        string bigData = @"C:\Users\me\big.json"; paper.Files[bigData] = new FileStamp(1, 997, 32 * 1024 * 1024 + 1, 1000, 2000);
+        check(((string)Body(Call(papers, "plan_action", new JsonObject { ["action"] = "data.yaml", ["paths"] = Paths(bigData) }))["error"]!).Contains("limited to 32 MiB"), "MCP plan_action refuses a data file over 32 MiB");
+        paper.Files.Remove(bigData);
+        var dataPlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "data.csv", ["paths"] = Paths(table) }));
+        check((string?)dataPlan["inputs"]![0]!["output"] == @"C:\Users\me\sales.csv (or the next free numbered name)" && ((string)dataPlan["note"]!).StartsWith("Values are never guessed"), "MCP plan_action plans a data conversion beside the original");
+        var dataApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)dataPlan["plan_id"]! }));
+        check((string?)dataApplied["outputs"]![0] == @"C:\Users\me\sales.csv" && paper.Ran[^1] == ("data.csv", table), "MCP apply runs the data conversion");
+        check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\sales.csv"), "MCP undo recycles a data conversion");
         string grayFirst = @"C:\Users\me\a1.png", grayLater = @"C:\Users\me\a2.png"; paper.Add(grayFirst); paper.Add(grayLater);
         var heldPlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "image.gray", ["paths"] = Paths(grayFirst, grayLater) }));
         bool touched = false;

@@ -13693,5 +13693,130 @@
     "这个 ASS/SSA 文件的事件部分没有有效的 Format 行。",
     "這個 ASS/SSA 檔案的事件部分沒有有效的 Format 行。",
     "この ASS/SSA ファイルのイベントには有効な Format 行がありません。"
+  ],
+  "Convert Data to JSON": [
+    "将数据转换为 JSON",
+    "將資料轉換為 JSON",
+    "データを JSON に変換"
+  ],
+  "Convert Data to JSONL": [
+    "将数据转换为 JSONL",
+    "將資料轉換為 JSONL",
+    "データを JSONL に変換"
+  ],
+  "Convert Data to PLIST": [
+    "将数据转换为 PLIST",
+    "將資料轉換為 PLIST",
+    "データを PLIST に変換"
+  ],
+  "Convert Data to CSV": [
+    "将数据转换为 CSV",
+    "將資料轉換為 CSV",
+    "データを CSV に変換"
+  ],
+  "Convert Data to TSV": [
+    "将数据转换为 TSV",
+    "將資料轉換為 TSV",
+    "データを TSV に変換"
+  ],
+  "Convert Data to YAML": [
+    "将数据转换为 YAML",
+    "將資料轉換為 YAML",
+    "データを YAML に変換"
+  ],
+  "Data files are limited to 32 MB.": [
+    "数据文件最大 32 MB。",
+    "資料檔案最大 32 MB。",
+    "データファイルは 32 MB までです。"
+  ],
+  "Swivel reads data files in UTF-8 or UTF-16 (with a byte order mark). Save this file as UTF-8 and try again.": [
+    "Swivel 读取 UTF-8 或带字节顺序标记的 UTF-16 数据文件。请把这个文件另存为 UTF-8 再试。",
+    "Swivel 讀取 UTF-8 或帶位元組順序標記的 UTF-16 資料檔案。請把這個檔案另存為 UTF-8 再試。",
+    "Swivel が読み込めるデータファイルは UTF-8 または BOM 付き UTF-16 です。UTF-8 で保存し直してからもう一度お試しください。"
+  ],
+  "This file is not a valid property list.": [
+    "这个文件不是有效的属性列表（plist）。",
+    "這個檔案不是有效的屬性列表（plist）。",
+    "このファイルは有効なプロパティリスト（plist）ではありません。"
+  ],
+  "This file is not valid JSON.": [
+    "这个文件不是有效的 JSON。",
+    "這個檔案不是有效的 JSON。",
+    "このファイルは有効な JSON ではありません。"
+  ],
+  "Line {0} is not valid JSON.": [
+    "第 {0} 行不是有效的 JSON。",
+    "第 {0} 行不是有效的 JSON。",
+    "{0} 行目は有効な JSON ではありません。"
+  ],
+  "The key \"{0}\" appears twice in one object.": [
+    "键“{0}”在同一个对象里出现了两次。",
+    "鍵「{0}」在同一個物件裡出現了兩次。",
+    "キー「{0}」が 1 つのオブジェクト内に 2 回出てきます。"
+  ],
+  "This file has too many rows.": [
+    "这个文件的行数太多。",
+    "這個檔案的列數太多。",
+    "このファイルは行が多すぎます。"
+  ],
+  "This file has too many columns.": [
+    "这个文件的列数或单元格太多。",
+    "這個檔案的欄數或儲存格太多。",
+    "このファイルは列またはセルが多すぎます。"
+  ],
+  "This file expands to too many values to convert.": [
+    "这个文件展开后的值太多，无法转换。",
+    "這個檔案展開後的值太多，無法轉換。",
+    "このファイルは展開すると値が多すぎて変換できません。"
+  ],
+  "This file contains NaN or infinite numbers, which this format can't hold.": [
+    "这个文件含有 NaN 或无穷大的数值，目标格式无法保存。",
+    "這個檔案含有 NaN 或無窮大的數值，目標格式無法儲存。",
+    "このファイルには NaN または無限大の数値があり、この形式では保存できません。"
+  ],
+  "TSV can't hold tabs or line breaks inside a cell. Choose CSV instead.": [
+    "TSV 的单元格里不能有制表符或换行。请改选 CSV。",
+    "TSV 的儲存格裡不能有定位字元或換行。請改選 CSV。",
+    "TSV のセルにはタブや改行を入れられません。CSV を選んでください。"
+  ],
+  "A quoted field in this file is never closed.": [
+    "这个文件里有一个带引号的字段没有结束引号。",
+    "這個檔案裡有一個帶引號的欄位沒有結束引號。",
+    "このファイルには閉じられていない引用符付きのフィールドがあります。"
+  ],
+  "This file has no rows.": [
+    "这个文件没有任何行。",
+    "這個檔案沒有任何列。",
+    "このファイルには行がありません。"
+  ],
+  "Column \"{0}\" appears twice in the header.": [
+    "表头里“{0}”这一列出现了两次。",
+    "表頭裡「{0}」這一欄出現了兩次。",
+    "見出し行に列「{0}」が 2 回あります。"
+  ],
+  "Row {0} has more cells than the header.": [
+    "第 {0} 行的单元格比表头多。",
+    "第 {0} 列的儲存格比表頭多。",
+    "{0} 行目のセルが見出し行より多くあります。"
+  ],
+  "Only a list of records can become a table.": [
+    "只有记录列表才能转成表格。",
+    "只有記錄列表才能轉成表格。",
+    "表にできるのはレコードのリストだけです。"
+  ],
+  "Property lists can't hold empty (null) values. Remove them or choose another format.": [
+    "属性列表不能保存空值（null）。请删除这些值或改选其他格式。",
+    "屬性列表不能儲存空值（null）。請刪除這些值或改選其他格式。",
+    "プロパティリストには空の値（null）を保存できません。削除するか別の形式を選んでください。"
+  ],
+  "A number in this file is too large or precise for a property list.": [
+    "这个文件里有数值太大或太精确，属性列表无法准确保存。",
+    "這個檔案裡有數值太大或太精確，屬性列表無法準確儲存。",
+    "このファイルの数値はプロパティリストには大きすぎるか精度が高すぎます。"
+  ],
+  "Couldn't write this data. It may contain text the chosen format can't hold.": [
+    "无法写出这些数据，其中可能有所选格式无法保存的文字。",
+    "無法寫出這些資料，其中可能有所選格式無法儲存的文字。",
+    "このデータを書き出せませんでした。選んだ形式で保存できない文字が含まれている可能性があります。"
   ]
 }

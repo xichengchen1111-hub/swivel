@@ -166,7 +166,7 @@ public sealed partial class App : Application
     }
     public void ShowError(Exception error)
     {
-        string text = error is UserError ? L(error.Message) : L("The operation could not finish. Check the file format, permissions, free space and whether another app is using the file.");
+        string text = error is UserError user ? user.Localized(L) : L("The operation could not finish. Check the file format, permissions, free space and whether another app is using the file.");
         MessageBox.Show(text, "Swivel", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
     public string[] Validate(IEnumerable<string> files)
@@ -1164,14 +1164,15 @@ public sealed partial class App : Application
                 report(L("Processing…"));result = new BatchResult();
                 result.Outputs.Add(await Task.Run(() => document.Save(format,token),token));
             }
-            else if (SubtitleFormats.ForId(action.Id) is { } subtitleFormat)
+            else if (SubtitleFormats.ForId(action.Id) is { } || DataFileFormats.ForId(action.Id) is { })
             {
                 // Like the Mac's Convert menu: no options, one file at a time, stop at the first error.
+                var subtitleFormat = SubtitleFormats.ForId(action.Id); var dataFormat = DataFileFormats.ForId(action.Id);
                 result = new BatchResult();
                 for (int i = 0; i < files.Length; i++)
                 {
                     report(string.Format(L("Processing file {0} of {1}…"), i + 1, files.Length));
-                    try { string file = files[i]; result.Outputs.Add(await Task.Run(() => SubtitleConvert.Run(file, subtitleFormat, token), token)); }
+                    try { string file = files[i]; result.Outputs.Add(await Task.Run(() => subtitleFormat is not null ? SubtitleConvert.Run(file, subtitleFormat, token) : SubtitleConvert.Run(file, dataFormat!, token), token)); }
                     catch (OperationCanceledException) { result.Cancelled = true; break; }
                     catch (Exception error) { result.Error = error; break; }
                 }

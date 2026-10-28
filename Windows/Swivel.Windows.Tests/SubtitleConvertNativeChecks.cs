@@ -35,6 +35,21 @@ internal static class SubtitleConvertNativeChecks
         try { SubtitleConvert.Run(vtt, F("sbv"), default, stamp); } catch (McpToolError error) { changed = error.Message == McpSession.Changed; }
         check(changed && !File.Exists(Path.Combine(root, "talk.sbv")), "The agent path refuses a file changed since planning and writes nothing");
 
+        // Data files the same way: CSV → JSON beside it, then back to CSV under the next free name.
+        string csv = Path.Combine(root, "sales.csv");
+        File.WriteAllBytes(csv, new byte[] { 0xEF, 0xBB, 0xBF }.Concat(Encoding.UTF8.GetBytes("item,price\r\n茶,\"1,5\"\r\n")).ToArray());
+        DataFileFormats.Format D(string ext) => DataFileFormats.Formats.Single(f => f.Extension == ext);
+        string json = SubtitleConvert.Run(csv, D("json"), default);
+        check(Path.GetFileName(json) == "sales.json" && File.ReadAllText(json) == "[\n  {\n    \"item\": \"茶\",\n    \"price\": \"1,5\"\n  }\n]\n", "A CSV file becomes sales.json beside it: " + Path.GetFileName(json));
+        string back = SubtitleConvert.Run(json, D("csv"), default);
+        check(Path.GetFileName(back) == "sales 2.csv" && File.ReadAllBytes(back).SequenceEqual(File.ReadAllBytes(csv)), "JSON back to CSV takes the next free name and matches the original bytes");
+        string plist = SubtitleConvert.Run(json, D("plist"), default);
+        check(Path.GetFileName(plist) == "sales.plist" && SubtitleConvert.Run(plist, D("yaml"), default) is var yaml && File.ReadAllText(yaml) == "---\n-\n  \"item\": \"茶\"\n  \"price\": \"1,5\"\n", "JSON → plist → YAML keeps the values");
+        string huge = Path.Combine(root, "huge.json"); File.WriteAllBytes(huge, new byte[DataFileFormats.MaxBytes + 1]);
+        string? tooBig = null;
+        try { SubtitleConvert.Run(huge, D("yaml"), default); } catch (UserError error) { tooBig = error.Message; }
+        check(tooBig == DataFileFormats.TooLarge && !File.Exists(Path.Combine(root, "huge.yaml")), "A data file over 32 MB is refused before reading and nothing is written");
+
         string gbk = Path.Combine(root, "legacy.srt");
         File.WriteAllBytes(gbk, Encoding.ASCII.GetBytes("1\r\n00:00:01,000 --> 00:00:02,000\r\n").Concat(new byte[] { 0xC4, 0xE3, 0xBA, 0xC3 }).ToArray());
         string? message = null;
