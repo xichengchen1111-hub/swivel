@@ -742,6 +742,25 @@ public sealed partial class App : Application
                 workFeature = Feature.FileMoves;
                 await RunMoveAsync(files, owner, report, token, true); return;
             }
+            if (action.Id == "clothesline.stitch")
+            {
+                // files[0] is the print above, files[1] the one dropped below it.
+                if (!Prefs.IsOn(Feature.Clothesline)) throw new UserError("Enable Clothesline in Settings first.");
+                workFeature = Feature.Clothesline;
+                if (files.Length != 2) throw new UserError(ImageStitch.ChooseTwo);
+                foreach (string path in files) WindowsPathPolicy.Validate(path);
+                report(L("Stitching images…"));
+                var (made, thumbnail) = await OnSta(() => {
+                    string output = ImageStitcher.Save(files[0], files[1], token);
+                    using var tile = ImageTools.OpenTile(output, 248, 206, false, CancellationToken.None);
+                    return (output, tile.Bitmap);
+                });
+                // The new image takes the upper print's place; both originals stay on disk, off the line.
+                int place = Prints.ToList().FindIndex(p => string.Equals(p.Path, files[0], StringComparison.OrdinalIgnoreCase));
+                foreach (var used in Prints.Where(p => files.Contains(p.Path, StringComparer.OrdinalIgnoreCase)).ToArray()) Prints.Remove(used);
+                Prints.Insert(place < 0 ? Prints.Count : Math.Min(place, Prints.Count), new HungPrint(made, thumbnail));
+                report(string.Format(L("Saved {0} beside the upper image. The originals were not changed; hang them again to see them on the line."), System.IO.Path.GetFileName(made))); return;
+            }
             if (action.Id == "rename.undo")
             {
                 if (!Prefs.IsOn(Feature.BatchRename)) throw new UserError("Enable Batch Rename in Settings first.");
