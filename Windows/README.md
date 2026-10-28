@@ -10,6 +10,14 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.113 新增：字幕格式互转，识别 16 位图片（跟进 Mac 1.14.4–1.14.6）
+
+打开 **Subtitles**（原 SRT Subtitles）开关后，SRT、WebVTT（.vtt）、ASS、SSA、LRC、SBV 字幕文件的工具里有 **Convert Subtitles to SRT／VTT／ASS／LRC／SBV／TXT**（不提供文件本身的格式），也可放进 Wheel／My Wheel，可一次选多个。每条字幕的文字和时间都保留；斜体、颜色、位置等样式不保留（ASS 输出用一个默认样式）。新文件存在原文件旁，名字相同、扩展名换成新格式（如 `talk.vtt` → `talk.srt`），已存在则为 `talk 2.srt`…，不覆盖，原文件不变；输出是 UTF-8、Windows 换行。读入要求 UTF-8 或带字节顺序标记的 UTF-16、最大 8 MB、10 万条；GBK、Big5 等旧编码会被拒绝并提示先用记事本另存为 UTF-8（Mac 版会自动识别这些编码，Windows 暂未做）。LRC 歌词每行持续到下一行，最后一行 4 秒，`[offset:]` 生效。Agent 工具的 `plan_action` 也提供这 6 个转换。
+
+文字识别（Recognize Text…、Agent 工具 extract_text）和扫码（读取二维码、read_codes）现在接受 16 位、浮点和 CMYK 的 PNG／TIFF，按 8 位颜色识别；会另存图片的工具仍拒绝这些图片，避免丢失精度。
+
+Mac 1.14.4–1.14.6 其余新功能（数据文件、字体、拼接、ICO 等）的 Windows 状态见 [PROGRESS](PROGRESS.md#mac-新增功能差距与本次同步)。
+
 ## 0.112 新增：剪辑视频
 
 视频（MP4、MOV、M4V、WMV）的工具里新增 **Trim Video…**，也可放进 Wheel／My Wheel。窗口里输入开始时间和结束时间（秒、分:秒或时:分:秒，最多三位小数，例如 `1:05.5`），停止输入约 0.25 秒后，两侧各显示 Windows 在该处的画面：大致是开始处一帧和保留部分的最后一帧（可能相差一帧）。可取消 **Keep the sound** 去掉声音；只去声音、不改时间也可以。保留不到 0.1 秒、开始不早于结束、超出视频，或者保留全部且有声音时，下方说明原因，Trim 按钮不可用。

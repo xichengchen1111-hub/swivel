@@ -1047,6 +1047,20 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.113 跟进 Mac 1.14.4–1.14.6：字幕格式互转、只读工具接受 16 位图片（D05/C09/E05）
+
+批次开始 `git fetch`：origin/main 为 `60a3487`（Mac 1.14.6）。Windows 分支合并基线仍是 `4166d5d`（Mac 1.12.9）；按 `git diff 4166d5d origin/main -- Sources` 逐项对照 1.14.4–1.14.6 的新功能，状态表见 [PROGRESS](PROGRESS.md#mac-新增功能差距与本次同步)。本批移植其中两项，Mac 源码只读不改。
+
+**字幕格式互转**（Mac `SubtitleFormats.swift`）：核心 `SubtitleFormats` 按 Mac 规则读 SRT/VTT/ASS/SSA/LRC/SBV、写 SRT/VTT/ASS/LRC/SBV/TXT，时间改用毫秒整数（Mac 用秒的 Double，换算后各格式精度相同）：`[h:]mm:ss[.,]f` 1–3 位小数、小时最多 6 位；WebVTT 跳过头部/NOTE/STYLE/REGION、去掉 cue 设置与 `<v>`/`<c>` 等标签并解码常见实体；缺空行时时间行开始新条目；ASS/SSA 按 Format 行确定字段、正文为最后一个字段可含逗号，去掉 `{\…}` 覆盖标签，`\N`/`\n`/`\h` 转换；LRC 一行多时间戳、`[offset:]`（正数提前）、每行持续到下一戳、末行 4 秒、元数据跳过。写出时把条目内空行折叠，VTT 转义 `& < >`，ASS 把 `{}` 改为圆括号、反斜杠改为全角，LRC 以 `[` 开头的歌词前加零宽空格，并在空档超过 50 ms 时补结束戳；时间限制在 0 到 9999:59:59.999。与 Mac 的差异：只读 UTF-8（可带 BOM）和带 BOM 的 UTF-16，GBK/Big5 等旧编码明确拒绝（Mac 用系统检测器识别这些编码；Windows 没有可靠的同等检测，误判比拒绝更糟）；输出 CR LF。上限：8 MB、10 万条（只算保留的条目）、全部文字 32 MB、ASS Format 最多 64 个字段。目录里 `subtitle.srt/vtt/ass/lrc/sbv/txt` 六个动作归入原有 Subtitles 开关（原名 SRT Subtitles，默认关闭），不提供文件本身的格式；App 逐个处理、首错即停，已完成的保留。原生 `SubtitleConvert` 持有原件读一次，写到原文件旁 `名称.新扩展名`（占用时编号），不覆盖。Agent 工具：`plan_action` 新增这 6 个动作（后缀为空，与 Mac 相同），plan 时拒绝自身格式、非字幕文件和超过 8 MiB 的文件，apply 时持有文件并核对 plan 时的身份。
+
+**只读工具接受 16 位图片**（Mac 1.14.6 `Images.load(readOnly:)`）：`ImageTools.OpenForReading` 跳过 SDR 格式检查，16 位/浮点/CMYK 的 PNG/TIFF 经 WPF 转为 8 位 BGRA；文字识别（含 MCP extract_text）与二维码读取（含恢复与 MCP read_codes）改用它。大小与像素上限照旧；转换、编辑等会另存图片的工具仍拒绝。
+
+独立 agent 审查（只读，含 /private/tmp 下的计时探针）：无 P1。已修 P2：一行很多时间标签的 LRC 每读一个标签就复制剩余整行，8 MB 文件约需 5 分钟以上（现按位置读取、每个标签检查条数上限，实测 16 ms 拒绝）；ASS 每个 Dialogue 行都在 Format 字段里重新查找，极宽 Format 行 + 大量对话要几分钟（现在读 Format 时一次算好，超过 64 个字段拒绝）。已修 P3：只含 U+3000/U+00A0 的行不算空行（现按 Unicode 空白判断，与 Mac 一致）；条数上限计入了会被丢弃的条目；解析无法取消（现每 4096 行/标签检查取消）。
+
+复查：字幕修复与 16 位读取均无 P1/P2；其 P3（带色彩配置文件的 16 位/CMYK/浮点图片可能让 Windows 色彩转换抛出原始错误）已修：只读解码时色彩转换失败就不按配置文件转换，并补 CMYK TIFF、带 Windows sRGB 配置文件的 16 位 PNG/TIFF 夹具。
+
+核心 4,520,660；Windows CI 40638689100（首次提交）通过：核心 4,520,652、原生 5,433；修 P2 后 40639764787 通过（核心 4,520,661、原生 5,433，8 MB LRC 标签行 72 ms 拒绝）；色彩回退与新夹具后 40640717318 通过（核心 4,520,661、原生 5,444）。未验证：真实带样式的字幕文件在各播放器中的显示、旧编码字幕（目前拒绝）、真实 OCR（需 MSIX）读取 16 位图片。固定 52 项仍 27／23／0／2。
+
 ## 0.112 剪辑视频 Trim Video…（D04 部分）
 
 批次开始 `git fetch`：origin/main 为 `60a3487`（Mac 1.14.6），不含 `Windows/` 改动；0.111 已推送，Windows CI 40616348475 通过。
