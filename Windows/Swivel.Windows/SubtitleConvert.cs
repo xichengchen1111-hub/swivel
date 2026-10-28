@@ -17,7 +17,7 @@ internal static class SubtitleConvert
         if (input.Stream.Length > SubtitleFormats.MaxBytes) throw new UserError(SubtitleFormats.TooLarge);
         var bytes = new byte[input.Stream.Length];
         input.Stream.ReadExactly(bytes);
-        var output = SubtitleFormats.Convert(bytes, Path.GetExtension(path), format);
+        var output = SubtitleFormats.Convert(bytes, Path.GetExtension(path), format, token);
         token.ThrowIfCancellationRequested();
         return NativeFiles.WriteBeside(input, Path.GetFileNameWithoutExtension(path), format.Extension, stream => stream.Write(output), token);
     }

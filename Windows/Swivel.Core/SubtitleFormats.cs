@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace Swivel.Core;
 
@@ -40,9 +41,9 @@ public static class SubtitleFormats
     public static Format? ForId(string id) => Formats.FirstOrDefault(f => f.Id == id);
 
     /// The converted file's bytes: UTF-8 without a byte order mark, CR LF line ends.
-    public static byte[] Convert(byte[] source, string sourceExtension, Format target)
+    public static byte[] Convert(byte[] source, string sourceExtension, Format target, CancellationToken token = default)
     {
-        var cues = Parse(Decode(source), sourceExtension.TrimStart('.').ToLowerInvariant());
+        var cues = Parse(Decode(source), sourceExtension.TrimStart('.').ToLowerInvariant(), token);
         return new UTF8Encoding(false).GetBytes(Write(cues, target.Extension).Replace("\n", "\r\n"));
     }
 
@@ -67,17 +68,17 @@ public static class SubtitleFormats
         return text.Replace("\r\n", "\n").Replace('\r', '\n');
     }
 
-    public static IReadOnlyList<SubtitleCue> Parse(string text, string extension)
+    public static IReadOnlyList<SubtitleCue> Parse(string text, string extension, CancellationToken token = default)
     {
         List<SubtitleCue> cues = extension switch
         {
-            "ass" or "ssa" => ParseAss(text),
-            "lrc" => ParseLrc(text),
+            "ass" or "ssa" => ParseAss(text, token),
+            "lrc" => ParseLrc(text, token),
             "sbv" => ParseBlocks(text, line =>
             {
                 var parts = line.Split(',');
                 return parts.Length == 2 && Time(parts[0]) is { } a && Time(parts[1]) is { } b ? (a, b) : null;
-            }, false),
+            }, false, token),
             _ => ParseBlocks(text, line =>
             {
                 int arrow = line.IndexOf("-->", StringComparison.Ordinal);
@@ -85,7 +86,7 @@ public static class SubtitleFormats
                 // WebVTT cue settings (position, align…) follow the end time.
                 string end = line[(arrow + 3)..].Trim().Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
                 return Time(line[..arrow]) is { } a && Time(end) is { } b ? (a, b) : null;
-            }, true),
+            }, true, token),
         };
         cues = cues.Where(c => c.End > c.Start && !string.IsNullOrWhiteSpace(c.Text)).ToList();
         if (cues.Count == 0) throw new UserError(NoCues);
@@ -97,7 +98,7 @@ public static class SubtitleFormats
     /// below 60 when hours are given, seconds always below 60. In milliseconds, or null.
     public static long? Time(string raw)
     {
-        var fields = raw.Trim(' ', '\t').Split(':');
+        var fields = raw.Trim().Split(':');
         if (fields.Length is < 2 or > 3) return null;
         var tail = fields[^1].Split(',', '.');
         if (tail.Length is < 1 or > 2) return null;
@@ -121,7 +122,7 @@ public static class SubtitleFormats
     }
 
     /// SRT, WebVTT and SBV: blocks separated by blank lines, each with a timing line and text.
-    private static List<SubtitleCue> ParseBlocks(string text, Func<string, (long, long)?> timing, bool stripTags)
+    private static List<SubtitleCue> ParseBlocks(string text, Func<string, (long, long)?> timing, bool stripTags, CancellationToken token)
     {
         var cues = new List<SubtitleCue>();
         (long Start, long End)? current = null; var lines = new List<string>();
@@ -131,15 +132,19 @@ public static class SubtitleFormats
             {
                 string body = string.Join("\n", lines);
                 if (stripTags) body = Plain(body);
-                cues.Add(new SubtitleCue(c.Start, c.End, body.Trim()));
+                body = body.Trim();
+                // Only cues that will be kept count towards the limit.
+                if (c.End > c.Start && body.Length > 0) cues.Add(new SubtitleCue(c.Start, c.End, body));
                 if (cues.Count > MaxCues) throw new UserError(TooMany);
             }
             current = null; lines.Clear();
         }
-        bool skipping = false;
+        bool skipping = false; int count = 0;
         foreach (string line in text.Split('\n'))
         {
-            string trimmed = line.Trim(' ', '\t');
+            if (++count % 4096 == 0) token.ThrowIfCancellationRequested();
+            // Any Unicode space, such as U+3000 or U+00A0, counts as blank.
+            string trimmed = line.Trim();
             if (trimmed.Length == 0) { Flush(); skipping = false; continue; }
             if (skipping) continue;
             if (current is null)
@@ -168,27 +173,38 @@ public static class SubtitleFormats
         return result;
     }
 
-    private static List<SubtitleCue> ParseAss(string text)
+    /// Real ASS/SSA files have about ten event fields.
+    public const int MaxAssFields = 64;
+
+    private static List<SubtitleCue> ParseAss(string text, CancellationToken token)
     {
-        bool events = false; string[] fields = Array.Empty<string>();
-        var cues = new List<SubtitleCue>();
+        bool events = false; int fieldCount = 0, start = -1, end = -1, body = -1;
+        var cues = new List<SubtitleCue>(); int lines = 0;
         foreach (string raw in text.Split('\n'))
         {
-            string line = raw.Trim(' ', '\t');
+            if (++lines % 4096 == 0) token.ThrowIfCancellationRequested();
+            string line = raw.Trim();
             if (line.StartsWith('[')) { events = line.Equals("[events]", StringComparison.OrdinalIgnoreCase); continue; }
             int colon = line.IndexOf(':');
             if (!events || colon < 0) continue;
             string key = line[..colon].ToLowerInvariant(), value = line[(colon + 1)..];
-            if (key == "format") fields = value.Split(',').Select(f => f.Trim(' ', '\t').ToLowerInvariant()).Where(f => f.Length > 0).ToArray();
+            if (key == "format")
+            {
+                // Where start, end and text are is worked out once, here, not for every dialogue line.
+                var fields = value.Split(',', MaxAssFields + 1).Select(f => f.Trim().ToLowerInvariant()).ToArray();
+                if (fields.Length > MaxAssFields) throw new UserError(NoAssFormat);
+                fields = fields.Where(f => f.Length > 0).ToArray();
+                fieldCount = fields.Length; start = Array.IndexOf(fields, "start"); end = Array.IndexOf(fields, "end"); body = Array.IndexOf(fields, "text");
+            }
             else if (key == "dialogue")
             {
-                int start = Array.IndexOf(fields, "start"), end = Array.IndexOf(fields, "end"), body = Array.IndexOf(fields, "text");
-                if (start < 0 || end < 0 || body != fields.Length - 1) throw new UserError(NoAssFormat);
+                if (start < 0 || end < 0 || body != fieldCount - 1) throw new UserError(NoAssFormat);
                 // The text is the last field and may itself contain commas.
-                var parts = value.Split(',', fields.Length);
-                if (parts.Length != fields.Length || Time(parts[start]) is not { } a || Time(parts[end]) is not { } b) continue;
-                string words = Plain(parts[body]).Replace("\\N", "\n").Replace("\\n", "\n").Replace("\\h", " ");
-                cues.Add(new SubtitleCue(a, b, words.Trim()));
+                var parts = value.Split(',', fieldCount);
+                if (parts.Length != fieldCount || Time(parts[start]) is not { } a || Time(parts[end]) is not { } b) continue;
+                string words = Plain(parts[body]).Replace("\\N", "\n").Replace("\\n", "\n").Replace("\\h", " ").Trim();
+                if (b <= a || words.Length == 0) continue;
+                cues.Add(new SubtitleCue(a, b, words));
                 if (cues.Count > MaxCues) throw new UserError(TooMany);
             }
         }
@@ -197,26 +213,31 @@ public static class SubtitleFormats
 
     /// Each lyric runs until the next timestamp; the last one gets four seconds. [offset:+500]
     /// moves every lyric 0.5 s earlier.
-    private static List<SubtitleCue> ParseLrc(string text)
+    private static List<SubtitleCue> ParseLrc(string text, CancellationToken token)
     {
-        var stamps = new List<(long Time, string Lyric)>(); long bytes = 0, offset = 0;
+        var stamps = new List<(long Time, string Lyric)>(); long bytes = 0, offset = 0; int lines = 0;
         foreach (string raw in text.Split('\n'))
         {
-            string line = raw.Trim(' ', '\t'); var times = new List<long>();
-            while (line.StartsWith('[') && line.IndexOf(']') is var close and > 0)
+            if (++lines % 4096 == 0) token.ThrowIfCancellationRequested();
+            string line = raw.Trim(); var times = new List<long>();
+            // Read tags by position: re-slicing the line for each tag would be quadratic on a long line.
+            int at = 0;
+            while (at < line.Length && line[at] == '[' && line.IndexOf(']', at) is var close and > 0)
             {
-                string tag = line[1..close];
+                string tag = line[(at + 1)..close];
                 if (tag.StartsWith("offset:", StringComparison.OrdinalIgnoreCase)
                     && double.TryParse(tag[7..].Trim(), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out double ms)
                     && Math.Abs(ms) <= MaxTime)
                     offset = (long)Math.Round(ms);
                 if (Time(tag) is not { } t) break; // [ar:…], [ti:…] and other metadata.
-                times.Add(t); line = line[(close + 1)..];
+                times.Add(t); at = close + 1;
+                if (stamps.Count + times.Count > MaxCues) throw new UserError(TooMany);
+                if (times.Count % 4096 == 0) token.ThrowIfCancellationRequested();
             }
             if (times.Count == 0) continue;
-            string lyric = Plain(line).Trim(' ', '\t');
+            string lyric = Plain(line[at..]).Trim();
             bytes += (long)System.Text.Encoding.UTF8.GetByteCount(lyric) * times.Count;
-            if (stamps.Count + times.Count > MaxCues || bytes > MaxTextBytes) throw new UserError(TooMany);
+            if (bytes > MaxTextBytes) throw new UserError(TooMany);
             foreach (long t in times) stamps.Add((t, lyric));
         }
         var ordered = stamps.Select(s => (Time: Math.Max(0, s.Time - offset), s.Lyric)).OrderBy(s => s.Time).ToList();

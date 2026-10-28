@@ -89,6 +89,39 @@ internal static class SubtitleFormatsChecks
         many.Append("x\n");
         reject(() => SubtitleFormats.Parse(many.ToString(), "lrc"), "LRC with more than 100,000 stamps is refused");
 
+        // Crafted files stay fast: one 8 MB line of LRC tags, and an ASS Format line with very many fields.
+        var tags = new StringBuilder();
+        while (tags.Length < SubtitleFormats.MaxBytes - 20) tags.Append("[00:01.00]");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        reject(() => SubtitleFormats.Parse(tags.ToString(), "lrc"), "An 8 MB line of LRC tags is refused");
+        Console.WriteLine($"Subtitle parse of an 8 MB LRC tag line: {clock.ElapsedMilliseconds} ms");
+        check(clock.ElapsedMilliseconds < 5000, "An 8 MB line of LRC tags is refused within seconds");
+        var wide = new StringBuilder("[Events]\nFormat: ");
+        for (int i = 0; i < 100_000; i++) wide.Append("f").Append(i).Append(", ");
+        wide.Append("Start, End, Text\n");
+        for (int i = 0; i < 1000; i++) wide.Append("Dialogue: 0:00:01.00,0:00:02.00,x\n");
+        clock.Restart();
+        reject(() => SubtitleFormats.Parse(wide.ToString(), "ass"), "An ASS Format line with more than 64 fields is refused");
+        check(clock.ElapsedMilliseconds < 5000, "An ASS file with a huge Format line is refused within seconds");
+        check(SubtitleFormats.Parse("[Events]\nFormat: " + string.Concat(Enumerable.Range(0, 61).Select(i => "f" + i + ", ")) + "Start, End, Text\nDialogue: " + string.Concat(Enumerable.Repeat(",", 61)) + "0:00:01.00,0:00:02.00,ok\n", "ass").Single().Text == "ok",
+            "An ASS Format line with exactly 64 fields is read");
+        using (var cancel = new System.Threading.CancellationTokenSource())
+        {
+            cancel.Cancel();
+            reject(() => SubtitleFormats.Parse(string.Concat(Enumerable.Repeat("[00:01.00]x\n", 5000)), "lrc", cancel.Token), "Parsing stops when cancelled");
+        }
+
+        // Any Unicode space counts as blank, as on the Mac (U+3000 ideographic, U+00A0 no-break).
+        var spaced = SubtitleFormats.Parse("1\n00:00:01,000 --> 00:00:02,000\nhello\n\u3000\n2\n00:00:03,000 --> 00:00:04,000\nworld\n\u00A0\n", "srt");
+        check(spaced.Select(c => c.Text).SequenceEqual(new[] { "hello", "world" }), "A line of only ideographic or no-break spaces separates cues");
+        check(SubtitleFormats.Time("\u300000:01.000") == 1000, "Times may be surrounded by any Unicode space");
+
+        // Only cues that will be kept count towards the limit.
+        var mostlyEmpty = new StringBuilder();
+        for (int i = 0; i < SubtitleFormats.MaxCues + 10; i++) mostlyEmpty.Append("00:00:01.000 --> 00:00:01.000\nzero length\n\n");
+        mostlyEmpty.Append("00:00:01.000 --> 00:00:02.000\nkept\n");
+        check(SubtitleFormats.Parse(mostlyEmpty.ToString(), "vtt").Single().Text == "kept", "Dropped cues don't count towards the 100,000-cue limit");
+
         // Catalog: offered for subtitle files, never a file's own format; behind the Subtitles switch.
         var prefs = new Prefs(); prefs.Set(Feature.SubtitleFiles, true);
         var ids = Catalog.Available(prefs, new[] { @"C:\a\talk.srt" }).Select(a => a.Id).Where(id => id.StartsWith("subtitle.")).ToArray();
