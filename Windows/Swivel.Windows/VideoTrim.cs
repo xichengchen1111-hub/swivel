@@ -74,7 +74,8 @@ public sealed class VideoTrimmer : IDisposable
         }
     }
 
-    private double Fps => frameNumerator > 0 && frameDenominator > 0 ? (double)frameNumerator / frameDenominator : 30;
+    /// The frame rate Windows reports (30 when it reports none), used to find frames.
+    public double Fps => frameNumerator > 0 && frameDenominator > 0 ? (double)frameNumerator / frameDenominator : 30;
 
     /// The frame showing at a time (clamped into the video), at most `box` pixels on its longer
     /// side, frozen for the UI thread. Windows is asked for the middle of that frame (assuming a

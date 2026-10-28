@@ -71,6 +71,7 @@ internal sealed class TrimVideoDialog : Window
         async Task Load()
         {
             var token = frames.Token;
+            Image? loading = null;
             try
             {
                 while (dirty && !closed)
@@ -83,12 +84,14 @@ internal sealed class TrimVideoDialog : Window
                     // A time that isn't valid shows no frame rather than an old one.
                     if (start is { } s && s < video.Duration)
                     {
+                        loading = startFrame;
                         var picture = await Task.Run(() => video.FrameAsync(s, 360, token), token);
                         if (closed) return; startFrame.Source = picture;
                     }
                     else startFrame.Source = null;
                     if (end is { } e && e > 0 && e <= video.Duration)
                     {
+                        loading = endFrame;
                         var picture = await Task.Run(() => video.FrameAsync(e - 1, 360, token), token);
                         if (closed) return; endFrame.Source = picture;
                     }
@@ -96,7 +99,7 @@ internal sealed class TrimVideoDialog : Window
                 }
             }
             catch (OperationCanceledException) { }
-            catch (Exception) { if (!closed) frameNote.Text = app.L("Windows could not show a frame from this video. You can still trim it."); }
+            catch (Exception) { if (!closed && loading is not null) loading.Source = null; if (!closed) frameNote.Text = app.L("Windows could not show a frame from this video. You can still trim it."); }
         }
 
         var body = new StackPanel();

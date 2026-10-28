@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Swivel.Core;
@@ -31,7 +32,7 @@ internal static class VideoTrimNativeChecks
             check(frame.PixelWidth == 160 && frame.PixelHeight == 120 && frame.IsFrozen && Colour(frame) == 'G', $"Trim Video shows a frozen, scaled frame from the middle: {frame.PixelWidth}×{frame.PixelHeight} {Colour(frame)}");
             check(Colour(video.FrameAsync(video.Duration - 1, 160, default).GetAwaiter().GetResult()) == 'B', "Trim Video shows the last frame before the end");
             check(Colour(video.FrameAsync(999, 160, default).GetAwaiter().GetResult()) == 'R' && Colour(video.FrameAsync(1000, 160, default).GetAwaiter().GetResult()) == 'G',
-                "Trim Video shows the frame showing at a time, not the nearest one, at a colour change");
+                $"Trim Video shows the frame showing at a time, not the nearest one, at a colour change ({video.Fps:0.###} fps)");
             check(Colour(video.FrameAsync(999_999, 160, default).GetAwaiter().GetResult()) == 'B', "A frame asked past the end shows the last one");
 
             string middle = video.TrimAsync(new VideoTrimPlan(1000, 2000, true), null, default).GetAwaiter().GetResult();
@@ -57,9 +58,15 @@ internal static class VideoTrimNativeChecks
             {
                 // Cancelled before starting, and once encoding has reported progress.
                 using var cancel = new CancellationTokenSource(); if (!midway) cancel.Cancel();
-                bool cancelled = false;
-                try { video.TrimAsync(new VideoTrimPlan(0, 2900, true), done => { if (done > 0) cancel.Cancel(); }, cancel.Token).GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
-                check(cancelled && Directory.GetFiles(root).Length == before, $"A trim cancelled {(midway ? "while encoding" : "before starting")} saves nothing");
+                // The cancel comes from another thread, as the window's Cancel does, never from inside
+                // Windows' progress callback. A trim that doesn't end within two minutes fails here
+                // rather than hanging the suite.
+                bool cancelled = false; double at = -1;
+                var trim = Task.Run(() => video.TrimAsync(new VideoTrimPlan(0, 2900, true), done => { if (done > 0 && at < 0) { at = done; Task.Run(cancel.Cancel); } }, cancel.Token));
+                bool ended = Task.WhenAny(trim, Task.Delay(TimeSpan.FromMinutes(2))).GetAwaiter().GetResult() == trim;
+                if (!ended) { check(false, "A trim cancelled while encoding ends within two minutes"); return; }
+                try { trim.GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
+                check(cancelled && Directory.GetFiles(root).Length == before, $"A trim cancelled {(midway ? $"once encoding reports progress (at {at:0.###})" : "before starting")} saves nothing");
             }
         }
         check(SHA256.HashData(File.ReadAllBytes(source)).SequenceEqual(original), "Trimming leaves the original byte for byte the same");
