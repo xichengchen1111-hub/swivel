@@ -6,9 +6,10 @@ internal static class SubtitleBurnChecks
 {
     internal static void Run(Action<bool, string> check, Action<Action, string> reject)
     {
-        SubtitleBurn.CheckVideo(64, 64, 1); SubtitleBurn.CheckVideo(3840, 2160, 7200);
+        SubtitleBurn.CheckVideo(64, 64, 1); SubtitleBurn.CheckVideo(3840, 2160, 7200); SubtitleBurn.CheckVideo(2160, 3840, 7200);
         reject(() => SubtitleBurn.CheckVideo(3841, 2160, 10), "Subtitle burning refuses more than 3840 pixels wide");
-        reject(() => SubtitleBurn.CheckVideo(1920, 2161, 10), "Subtitle burning refuses more than 2160 pixels high");
+        reject(() => SubtitleBurn.CheckVideo(2400, 2400, 10), "Subtitle burning refuses more than 2160 pixels on the short side");
+        reject(() => SubtitleBurn.CheckVideo(2160, 3841, 10), "Subtitle burning refuses more than 3840 pixels high in portrait");
         reject(() => SubtitleBurn.CheckVideo(63, 100, 10), "Subtitle burning refuses tiny videos");
         reject(() => SubtitleBurn.CheckVideo(640, 360, 7200.5), "Subtitle burning refuses more than two hours");
         reject(() => SubtitleBurn.CheckVideo(640, 360, double.NaN), "Subtitle burning refuses an unknown length");

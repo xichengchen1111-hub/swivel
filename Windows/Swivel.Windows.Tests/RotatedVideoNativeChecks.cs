@@ -22,7 +22,7 @@ internal static class RotatedVideoNativeChecks
     {
         string root = Path.Combine(directory, "turned"); Directory.CreateDirectory(root);
         string plain = Path.Combine(root, "plain.mp4");
-        MakeMarkerVideo(root, plain);
+        MakeMarkerVideo(root, plain, 640, 360, 3);
         check(Quarters(plain, 640, 360) == "RBBG", "Rotated video fixture: the plain video has the marker quarters: " + Quarters(plain, 640, 360));
         foreach (var (degrees, upright) in new[] { (90, "BRGB"), (180, "GBBR"), (270, "BGRB") })
         {
@@ -42,34 +42,62 @@ internal static class RotatedVideoNativeChecks
         }
 
         string sideways = Path.Combine(root, "turned 90.mp4");
-        using var video = VideoSubtitles.OpenAsync(sideways, default).GetAwaiter().GetResult();
-        check(video.Width == 360 && video.Height == 640, $"Burn In Subtitles reads a 90° video at its upright size: {video.Width}×{video.Height}");
-        var images = video.Draw(new[] { new SubtitleCue(500, 1500, "Upright") }, 1, default);
-        check(images.All(i => i.X + i.Width <= 360 && i.Y + i.Height <= 640), "Burn In Subtitles fits the cue inside the upright picture");
-        string burned = video.BurnAsync(images, null, default).GetAwaiter().GetResult();
-        check(Straight(burned) && Quarters(burned, 360, 640, 2500) == "BRGB", "The subtitled 90° video is stored upright with no turn: " + Quarters(burned, 360, 640, 2500));
-        using var again = VideoSubtitles.OpenAsync(burned, default).GetAwaiter().GetResult();
-        check(again.Width == 360 && again.Height == 640, $"The subtitled 90° video keeps the upright size: {again.Width}×{again.Height}");
+        using (var video = VideoSubtitles.OpenAsync(sideways, default).GetAwaiter().GetResult())
+        {
+            check(video.Width == 360 && video.Height == 640, $"Burn In Subtitles reads a 90° video at its upright size: {video.Width}×{video.Height}");
+            var images = video.Draw(new[] { new SubtitleCue(500, 1500, "Upright") }, 1, default);
+            check(images.All(i => i.X + i.Width <= 360 && i.Y + i.Height <= 640), "Burn In Subtitles fits the cue inside the upright picture");
+            string burned = video.BurnAsync(images, null, default).GetAwaiter().GetResult();
+            check(Straight(burned) && Quarters(burned, 360, 640, 2500) == "BRGB", "The subtitled 90° video is stored upright with no turn: " + Quarters(burned, 360, 640, 2500));
+            double during = WhiteNearBottom(burned, 360, 640, 1000), after = WhiteNearBottom(burned, 360, 640, 2500);
+            Console.WriteLine($"Turned video subtitles: white share near the bottom {during:0.000} during the cue, {after:0.000} after");
+            check(during > 0.003 && after < 0.001, "The subtitle on the turned video is drawn near the bottom of the upright picture, only while its cue is on");
+            using (var again = VideoSubtitles.OpenAsync(burned, default).GetAwaiter().GetResult())
+                check(again.Width == 360 && again.Height == 640, $"The subtitled 90° video keeps the upright size: {again.Width}×{again.Height}");
+        }
+
+        // A 4K phone video stored 3840 × 2160 with a turn is 2160 × 3840 upright: within the limit
+        // either way round, and Windows encodes it in portrait.
+        string large = Path.Combine(root, "large.mp4"), portrait = Path.Combine(root, "portrait 4k.mp4");
+        MakeMarkerVideo(root, large, 3840, 2160, 2);
+        var stored = File.ReadAllBytes(large); Turn(stored, 90, 3840, 2160); File.WriteAllBytes(portrait, stored);
+        using var tall = VideoSubtitles.OpenAsync(portrait, default).GetAwaiter().GetResult();
+        check(tall.Width == 2160 && tall.Height == 3840, $"Burn In Subtitles accepts a turned 4K phone video at 2160×3840: {tall.Width}×{tall.Height}");
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        string tallOut = tall.BurnAsync(tall.Draw(new[] { new SubtitleCue(200, 800, "Portrait 4K") }, 1, default), null, default).GetAwaiter().GetResult();
+        Console.WriteLine($"Burn In Subtitles 2 s 2160×3840: {clock.ElapsedMilliseconds} ms, {new FileInfo(tallOut).Length} bytes");
+        using (var tallAgain = VideoSubtitles.OpenAsync(tallOut, default).GetAwaiter().GetResult())
+            check(Straight(tallOut) && tallAgain.Width == 2160 && tallAgain.Height == 3840 && Quarters(tallOut, 540, 960, 1500) == "BRGB",
+                $"The subtitled 4K portrait video is stored upright at 2160×3840: {tallAgain.Width}×{tallAgain.Height} {Quarters(tallOut, 540, 960, 1500)}");
     }
 
-    private static void MakeMarkerVideo(string root, string path)
+    // The share of near-white pixels in the bottom third of the frame Windows shows at a time (ms).
+    private static double WhiteNearBottom(string path, int width, int height, long ms)
     {
-        string png = Path.Combine(root, "marker.png");
-        var pixels = new byte[640 * 360 * 4];
-        for (int y = 0; y < 360; y++)
-            for (int x = 0; x < 640; x++)
+        var (w, h, data) = Frame(path, width, height, ms);
+        int top = h * 2 / 3, white = 0;
+        for (int y = top; y < h; y++) for (int x = 0; x < w; x++) { int i = (y * w + x) * 4; if (data[i] > 200 && data[i + 1] > 200 && data[i + 2] > 200) white++; }
+        return white / (double)(w * (h - top));
+    }
+
+    private static void MakeMarkerVideo(string root, string path, int width, int height, int seconds)
+    {
+        string png = Path.Combine(root, Path.GetFileNameWithoutExtension(path) + " marker.png");
+        var pixels = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
             {
-                int i = (y * 640 + x) * 4; pixels[i + 3] = 255;
-                if (x < 320 && y < 180) pixels[i + 2] = 255; else if (x >= 320 && y >= 180) pixels[i + 1] = 255; else pixels[i] = 255;
+                int i = (y * width + x) * 4; pixels[i + 3] = 255;
+                if (x < width / 2 && y < height / 2) pixels[i + 2] = 255; else if (x >= width / 2 && y >= height / 2) pixels[i + 1] = 255; else pixels[i] = 255;
             }
         var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(640, 360, 96, 96, PixelFormats.Bgra32, null, pixels, 640 * 4)));
+        encoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4)));
         using (var stream = File.Create(png)) encoder.Save(stream);
         var composition = new MediaComposition();
         var image = StorageFile.GetFileFromPathAsync(png).AsTask().GetAwaiter().GetResult();
-        composition.Clips.Add(MediaClip.CreateFromImageFileAsync(image, TimeSpan.FromSeconds(3)).AsTask().GetAwaiter().GetResult());
-        var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.Vga);
-        profile.Video.Width = 640; profile.Video.Height = 360; profile.Audio = null;
+        composition.Clips.Add(MediaClip.CreateFromImageFileAsync(image, TimeSpan.FromSeconds(seconds)).AsTask().GetAwaiter().GetResult());
+        var profile = MediaEncodingProfile.CreateMp4(width > 1920 ? VideoEncodingQuality.Uhd2160p : VideoEncodingQuality.Vga);
+        profile.Video.Width = (uint)width; profile.Video.Height = (uint)height; profile.Audio = null;
         var folder = StorageFolder.GetFolderFromPathAsync(root).AsTask().GetAwaiter().GetResult();
         var target = folder.CreateFileAsync(Path.GetFileName(path), CreationCollisionOption.FailIfExists).AsTask().GetAwaiter().GetResult();
         var reason = composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, profile).AsTask().GetAwaiter().GetResult();
@@ -79,6 +107,18 @@ internal static class RotatedVideoNativeChecks
     // Colour of each quarter (top-left, top-right, bottom-left, bottom-right) of the frame Windows shows.
     private static string Quarters(string path, int width, int height, long ms = 1000)
     {
+        var (w, h, data) = Frame(path, width, height, ms);
+        char At(int x, int y)
+        {
+            int i = (y * w + x) * 4;
+            return data[i + 2] > 150 && data[i + 1] < 100 && data[i] < 100 ? 'R' : data[i + 1] > 150 && data[i + 2] < 100 && data[i] < 100 ? 'G' : data[i] > 150 && data[i + 1] < 100 && data[i + 2] < 100 ? 'B' : '?';
+        }
+        return new string(new[] { At(w / 4, h / 4), At(3 * w / 4, h / 4), At(w / 4, 3 * h / 4), At(3 * w / 4, 3 * h / 4) });
+    }
+
+    // The BGRA frame Windows shows at a time (ms), scaled to the given size.
+    private static (int Width, int Height, byte[] Pixels) Frame(string path, int width, int height, long ms)
+    {
         var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
         var composition = new MediaComposition();
         composition.Clips.Add(MediaClip.CreateFromFileAsync(file).AsTask().GetAwaiter().GetResult());
@@ -86,12 +126,7 @@ internal static class RotatedVideoNativeChecks
         using var stream = image.AsStreamForRead();
         var frame = new FormatConvertedBitmap(BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0], PixelFormats.Bgra32, null, 0);
         int w = frame.PixelWidth, h = frame.PixelHeight; var data = new byte[w * h * 4]; frame.CopyPixels(data, w * 4, 0);
-        char At(int x, int y)
-        {
-            int i = (y * w + x) * 4;
-            return data[i + 2] > 150 && data[i + 1] < 100 && data[i] < 100 ? 'R' : data[i + 1] > 150 && data[i + 2] < 100 && data[i] < 100 ? 'G' : data[i] > 150 && data[i + 1] < 100 && data[i + 2] < 100 ? 'B' : '?';
-        }
-        return new string(new[] { At(w / 4, h / 4), At(3 * w / 4, h / 4), At(w / 4, 3 * h / 4), At(3 * w / 4, 3 * h / 4) });
+        return (w, h, data);
     }
 
     // The identity matrix in the video track's header: stored upright.

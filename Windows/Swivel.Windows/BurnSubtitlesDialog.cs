@@ -80,7 +80,7 @@ internal sealed class BurnSubtitlesDialog : Window
         body.Children.Add(size);
         body.Children.Add(UI.Text(app.L("Subtitles are drawn into the picture (white text on a dark band near the bottom, at most three lines) and cannot be turned off afterwards. Overlapping subtitles are shortened so only one shows at a time.")));
         body.Children.Add(UI.Text(app.L("Transcription uses the Whisper base model on this PC (no upload, no download); check the text afterwards, or save it as SRT, correct it, and burn that file in instead.")));
-        body.Children.Add(UI.Text(app.L("Windows encodes a new H.264/AAC MP4 at the original size and frame rate. The whole video is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 and two hours; phone videos stored sideways come out upright.")));
+        body.Children.Add(UI.Text(app.L("Windows encodes a new H.264/AAC MP4 at the original size and frame rate. The whole video is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 (either way round) and two hours; phone videos saved with a rotation flag come out upright.")));
         body.Children.Add(UI.Text(app.L("The new file is saved beside the original as “name subtitled.mp4” without replacing existing files. The original stays unchanged. Cancelling saves no video.")));
         root.Children.Add(UI.Scroll(body)); Content = root;
         Loaded += (_, _) => { Update(); (speech ? (Control)language : browse).Focus(); };

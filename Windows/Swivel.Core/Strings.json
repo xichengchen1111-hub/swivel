@@ -12444,11 +12444,6 @@
     "燒錄字幕…",
     "字幕を焼き込む…"
   ],
-  "Choose a video from 64 × 64 to 3840 × 2160 pixels (even width and height) and at most two hours long.": [
-    "请选择 64 × 64 到 3840 × 2160 像素（宽高均为偶数）、不超过两小时的视频。",
-    "請選擇 64 × 64 到 3840 × 2160 像素（寬高皆為偶數）、不超過兩小時的影片。",
-    "64 × 64 ～ 3840 × 2160 ピクセル（幅・高さとも偶数）、2 時間以内の動画を選んでください。"
-  ],
   "Choose…": [
     "选择…",
     "選擇…",
@@ -12528,11 +12523,6 @@
     "这个视频没有音轨，只能使用 SRT 文件。",
     "這個影片沒有音軌，只能使用 SRT 檔案。",
     "この動画には音声トラックがないため、SRT ファイルのみ使えます。"
-  ],
-  "This video is stored turned (as phones often record). Turned videos are not supported yet.": [
-    "这个视频是以旋转方式保存的（手机拍摄常见），暂不支持旋转的视频。",
-    "這個影片是以旋轉方式儲存的（手機拍攝常見），暫不支援旋轉的影片。",
-    "この動画は回転した状態で保存されています（スマートフォンでよくあります）。回転した動画にはまだ対応していません。"
   ],
   "Transcribe the video's speech on this PC": [
     "在这台电脑上转写视频里的说话",
@@ -13539,9 +13529,19 @@
     "Windows 無法開啟 Claude Desktop 延伸模組。",
     "Windows で Claude Desktop 拡張機能を開けませんでした。"
   ],
-  "Windows encodes a new H.264/AAC MP4 at the original size and frame rate. The whole video is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 and two hours; phone videos stored sideways come out upright.": [
-    "Windows 会按原尺寸和帧率编码一个新的 H.264/AAC MP4。整个视频都要重新编码，需要一些时间，画质会略有损失；HDR 会变成 SDR，额外音轨、章节和元数据不保留。最大 3840 × 2160、两小时；手机横着存储的视频会输出为正向。",
-    "Windows 會按原尺寸和影格速率編碼一個新的 H.264/AAC MP4。整個影片都要重新編碼，需要一些時間，畫質會略有損失；HDR 會變成 SDR，額外音軌、章節和中繼資料不保留。最大 3840 × 2160、兩小時；手機橫著儲存的影片會輸出為正向。",
-    "Windows は元のサイズとフレームレートで新しい H.264/AAC MP4 をエンコードします。動画全体を再エンコードするため時間がかかり、画質がわずかに落ちます。HDR は SDR になり、追加の音声トラック・チャプター・メタデータは保持しません。最大 3840 × 2160、2 時間まで。横向きに保存されたスマートフォン動画は正しい向きで出力されます。"
+  "Choose a video from 64 × 64 to 3840 × 2160 pixels, upright or portrait (even width and height), and at most two hours long.": [
+    "请选择 64 × 64 到 3840 × 2160 像素（横竖均可，宽高均为偶数）、不超过两小时的视频。",
+    "請選擇 64 × 64 到 3840 × 2160 像素（橫豎皆可，寬高皆為偶數）、不超過兩小時的影片。",
+    "64 × 64 ～ 3840 × 2160 ピクセル（縦横どちらの向きでも可、幅・高さとも偶数）、2 時間以内の動画を選んでください。"
+  ],
+  "Windows encodes a new H.264/AAC MP4 at the original size and frame rate. The whole video is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 (either way round) and two hours; phone videos saved with a rotation flag come out upright.": [
+    "Windows 会按原尺寸和帧率编码一个新的 H.264/AAC MP4。整个视频都要重新编码，需要一些时间，画质会略有损失；HDR 会变成 SDR，额外音轨、章节和元数据不保留。最大 3840 × 2160（横竖均可）、两小时；带旋转标记的手机视频会自动转正。",
+    "Windows 會按原尺寸和影格速率編碼一個新的 H.264/AAC MP4。整個影片都要重新編碼，需要一些時間，畫質會略有損失；HDR 會變成 SDR，額外音軌、章節和中繼資料不保留。最大 3840 × 2160（橫豎皆可）、兩小時；帶旋轉標記的手機影片會自動轉正。",
+    "Windows は元のサイズとフレームレートで新しい H.264/AAC MP4 をエンコードします。動画全体を再エンコードするため時間がかかり、画質がわずかに落ちます。HDR は SDR になり、追加の音声トラック・チャプター・メタデータは保持しません。最大 3840 × 2160（縦横どちらの向きでも可）、2 時間まで。回転情報付きで保存されたスマートフォン動画は正しい向きに直して出力されます。"
+  ],
+  "Windows reports this video as turned but does not turn its picture, so Swivel can't keep it upright.": [
+    "Windows 报告这个视频带旋转，但没有把画面转正，因此 Swivel 无法保证输出方向正确。",
+    "Windows 回報這個影片帶旋轉，但沒有把畫面轉正，因此 Swivel 無法保證輸出方向正確。",
+    "Windows はこの動画を回転付きと報告していますが映像を回転しないため、Swivel は正しい向きを保てません。"
   ]
 }

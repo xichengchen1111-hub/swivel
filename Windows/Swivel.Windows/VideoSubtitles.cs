@@ -27,7 +27,7 @@ public sealed class VideoSubtitles : IDisposable
 {
     public const string NoSound = "This video has no sound track that Windows can decode, so there is nothing to transcribe. Use an SRT file instead.";
     public const string Unreadable = "Windows could not open this video. Choose an MP4, MOV, M4V or WMV file that plays in the Windows Media Player or Films & TV app.";
-    public const string Rotated = "This video is stored turned (as phones often record). Turned videos are not supported yet.";
+    public const string Rotated = "Windows reports this video as turned but does not turn its picture, so Swivel can't keep it upright.";
     public const string Failed = "Windows could not encode the subtitled video. No file was saved.";
     public const string TooLong = "A subtitle is too long to fit in three lines at this text size. Choose a smaller text size or shorten it.";
     private static readonly Guid RotationKey = new("C380465D-2271-428C-9B83-ECEA3B4A85C1"); // MF_MT_VIDEO_ROTATION
