@@ -10,6 +10,14 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.115 新增：字体格式转换（跟进 Mac 1.14.4）
+
+TTF、OTF、WOFF、WOFF2 字体的工具里有 **Convert Font to WOFF／WOFF2**（不提供文件本身的格式），网页字体（WOFF、WOFF2）还有 **Unpack Web Font to TTF/OTF**：按轮廓类型还原为 TTF（TrueType）或 OTF（PostScript/CFF）。也可放进 Wheel／My Wheel、一次选多个，Agent 工具的 `plan_action` 也有。新文件存在原文件旁，同名换扩展名，重名时编号，不覆盖。
+
+与 Mac 相同：字体里的表原样复制，轮廓不变；重新排版时重算校验和；WOFF 每张表用 zlib 压缩（变小才用），WOFF2 用 Brotli 且不做字形变换。转换结果会再读一遍确认。字体集合（TTC）、超过 64 MB 的文件和损坏的文件会被拒绝。
+
+Windows 的差异：Mac 读取 WOFF2 交给系统的 CoreText；Windows 没有对应接口，Swivel 按 W3C WOFF2 规范自己还原 glyf/loca 与 hmtx 变换（大多数网页字体都用了这些变换），字形按参考解码器的方式紧凑写回。用 fontTools 对 242 个 macOS 自带字体做了对照：转成带变换的 WOFF2 后由 Swivel 还原、以及 Swivel 写的 WOFF/WOFF2 由 fontTools 读回，241 个逐字形、逐度量一致，另 1 个是 fontTools 自己读不了的位图字体。原字体里的数字签名（DSIG）原样保留，但文件重新排版后不再对应（Mac 相同）。
+
 ## 0.114 新增：数据文件互转（跟进 Mac 1.14.4）
 
 JSON、JSON Lines（.jsonl／.ndjson）、属性列表（.plist，XML 或二进制）、CSV、TSV 文件的工具里有 **Convert Data to JSON／JSONL／PLIST／CSV／TSV／YAML**（不提供文件本身的格式），也可放进 Wheel／My Wheel，可一次选多个，Agent 工具的 `plan_action` 也有。新文件存在原文件旁，同名换扩展名，重名时编号，不覆盖。

@@ -487,6 +487,8 @@ internal static class GlyfTransform
                 for (int p = 0; p < total; p++)
                 {
                     int f = (on[p] ? 1 : 0) | (p == 0 && overlapping ? 0x40 : 0), dx = xs[p] - px, dy = ys[p] - py; px = xs[p]; py = ys[p];
+                    // glyf deltas are 16-bit: a wider jump between two points can't be written (no real font has one).
+                    if (dx is < short.MinValue or > short.MaxValue || dy is < short.MinValue or > short.MaxValue) throw new UserError(Damaged);
                     if (dx == 0) f |= 0x10;
                     else if (dx is > -256 and < 256) { f |= 0x02 | (dx > 0 ? 0x10 : 0); xBytes.WriteByte((byte)Math.Abs(dx)); }
                     else { xBytes.WriteByte((byte)(dx >> 8)); xBytes.WriteByte((byte)dx); }

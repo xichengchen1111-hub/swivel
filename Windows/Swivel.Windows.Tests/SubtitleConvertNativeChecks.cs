@@ -77,7 +77,7 @@ internal static class SubtitleConvertNativeChecks
             string gdiUnpacked = Gdi(fromWoff2), gdiOriginal = Gdi(arial), wpfUnpacked = Wpf(fromWoff2), wpfOriginal = Wpf(arial);
             Console.WriteLine($"Arial unpacked from WOFF2: GDI+ {gdiUnpacked} (original {gdiOriginal}), WPF glyphs {wpfUnpacked} (original {wpfOriginal})");
             check(gdiUnpacked == "Arial" && gdiUnpacked == gdiOriginal, "GDI+ loads Arial unpacked from WOFF2 as the Arial family: " + gdiUnpacked);
-            check(wpfUnpacked == wpfOriginal || wpfOriginal.Contains("Exception"), $"WPF loads Arial unpacked from WOFF2 with the original's glyph count: {wpfUnpacked} vs {wpfOriginal}");
+            check(wpfUnpacked == wpfOriginal && int.TryParse(wpfUnpacked, out _), $"WPF loads Arial unpacked from WOFF2 with the original's glyph count: {wpfUnpacked} vs {wpfOriginal}");
         }
 
         string gbk = Path.Combine(root, "legacy.srt");

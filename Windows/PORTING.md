@@ -1047,6 +1047,18 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.115 跟进 Mac 1.14.4：字体格式转换（E03 增强）
+
+批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.114 已推送，Windows CI 40648212711 通过。
+
+按 Mac `FontFormats.swift` 移植为 `Swivel.Core/FontFileFormats.cs`：sfnt 解析（≤1024 表、表重复/缺 head/越界拒绝、总大小 ≤64 MB）、按标签排序 4 字节对齐重排并重算每表校验和与 head.checkSumAdjustment（整文件和为 0xB1B0AFBA）；WOFF 1.0 每表 ZLibStream 压缩（变小才用）、读取时先按声明总长度防解压炸弹再逐表解压并核对长度；WOFF2 写出与 Mac 相同（glyf/loca 用空变换 3、loca 紧跟 glyf、Brotli 11/22）。读取 WOFF2：Mac 用 CoreText，Windows 原创实现——表目录（63 个已知标签、UIntBase128 拒绝前导零与超 32 位）、只允许 glyf/loca 版本 0 与 hmtx 版本 1 变换、Brotli 解压长度必须与声明一致；glyf 变换（W3C §5.1）：七个流、bbox 位图、overlap 位图、255UInt16、三元组坐标表、组合字形大小与指令；head.indexToLocFormat 必须与变换头一致，loca 必须与声明长度一致；hmtx 变换（§5.4）用 glyf 的 xMin 补左侧距。还原的简单字形按参考解码器的方式紧凑写回（0/1/2 字节差值、重复标志），否则比原字形大、短 loca 会溢出。转换结果再读一遍确认表数一致（Mac 用 CoreText 读回）。目录：font.desktop（仅网页字体）、font.woff、font.woff2，不设开关，与字幕/数据共用原生“持有原件读一次、写到旁边”；Agent 工具 plan_action 同有，unpack 预计输出写作 “name.ttf 或 .otf”。
+
+验证：用 fontTools（临时目录的 venv，不进仓库、不随应用发布）对 242 个 macOS 系统 TTF/OTF 各做四项对照（fontTools 的 glyf/loca 变换 WOFF2 及另加 hmtx 变换由 Swivel 还原，Swivel 的 WOFF/WOFF2 由 fontTools 读回；比较每个字形的点、轮廓终点、在线标志、指令、组合部件，hmtx 和其余表），首轮 13 个因短 loca 溢出被误拒，改紧凑写回后 241 个全部一致，1 个（NISC18030，无 head 的位图字体）fontTools 自身读不了。核心检查内嵌 fontTools FontBuilder 合成的小字体（空字形、带二次曲线与指令的两轮廓字形、大坐标三角形、缩放组合字形、空格；CFF 字体）及其带变换 WOFF2。Windows CI 原生检查：系统 Arial → WOFF/WOFF2 → TTF，表逐字节不变，GDI+ 识别为 Arial、WPF 读到与原文件相同的 4,551 个字形（首轮 WPF 在同一线程先加载原 Arial 后再加载还原文件时抛 NullReferenceException；还原文件与原文件表一致、复查确认布局合规，改为各在新 STA 线程、先加载还原文件后两者都正常，判断为 WPF 同名字体缓存问题，未在真实电脑复现）。
+
+独立 agent 审查（只读，含 2000 个变异样本模糊测试并与 fontTools 逐字形比较）：无 P1。已修 P2：WOFF 声明长度接近 4 GB 时 uint 求和回绕绕过防炸弹检查，最终抛溢出异常而非“已损坏”。已修 P3：WOFF/WOFF2 未知 flavor 未拒绝；两点间跳动超出 16 位时写入被截断（现拒绝）。未改：近 64 MB 的字体编码 WOFF2 可能较慢且不可中途取消（与 Mac 相同设置）；选中 .woff 与 .woff2 时两个转换都提供，与 Mac 规则相同。复查无 P1/P2，2000 个变异样本：1475 个转换、525 个以用户消息拒绝、无其他异常，fontTools 能读的 1409 个逐字形一致。
+
+CI_PLACEHOLDER
+
 ## 0.114 跟进 Mac 1.14.4：数据文件互转（E03 增强）
 
 批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.113 已推送，Windows CI 40641688433 通过。
