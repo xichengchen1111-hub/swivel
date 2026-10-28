@@ -104,7 +104,7 @@ internal static class DataFileFormatsChecks
         for (int r = 0; r < 2400; r++) wideHeader.Append(new string(',', 1999)).Append("x\n");
         clock.Restart();
         reject(() => Out(wideHeader.ToString(), "csv", "jsonl"), "A CSV whose header names repeat into gigabytes of JSON is refused");
-        check(clock.ElapsedMilliseconds < 15_000, $"The repeating header is refused without building the output ({clock.ElapsedMilliseconds} ms)");
+        check(clock.ElapsedMilliseconds < 3_000, $"The repeating header is refused before records are built ({clock.ElapsedMilliseconds} ms)");
         check(Assert(() => Out("[\"\\ud800\"]", "json", "yaml")) is UserError { Message: DataFileFormats.BadJson } && Assert(() => Out("{}\n{\"\\udc00\":1}\n", "jsonl", "yaml")) is UserError { Message: "Line 2 is not valid JSON." },
             "A lone surrogate escape is reported as invalid JSON");
         string huge = "[1e400, " + "1" + new string('0', 400) + "]";
@@ -125,6 +125,7 @@ internal static class DataFileFormatsChecks
         reject(() => Out("[12345678901234567890123]", "json", "plist"), "A plist refuses an integer beyond 64 bits that a double would round");
         reject(() => Out("[0.1000000000000000000001]", "json", "plist"), "A plist refuses a number more precise than a double");
         check(Out("[1e20, 1.5, -0, 18446744073709551615]", "json", "plist").Contains("<real>1E+20</real>\n\t<real>1.5</real>\n\t<integer>-0</integer>\n\t<integer>18446744073709551615</integer>"), "Exact numbers become plist reals and integers");
+        reject(() => Out("[1000000000000000000000000000000]", "json", "plist"), "A plist refuses an integer beyond 64 bits even when a double is close");
         string nan = "<plist><array><real>nan</real><real>-infinity</real></array></plist>";
         reject(() => Out(nan, "plist", "json"), "JSON refuses NaN and infinity");
         reject(() => Out(nan, "plist", "csv"), "CSV refuses NaN and infinity");

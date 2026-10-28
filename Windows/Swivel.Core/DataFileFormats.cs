@@ -323,7 +323,7 @@ public static class DataFileFormats
     }
 
     /// The first row names the columns; each later row becomes an object with text values.
-    private static object? TreeOf(Content content)
+    private static object? TreeOf(Content content, CancellationToken token = default)
     {
         if (content.Table is not { } rows) return content.Tree;
         var names = new List<string>(); var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -335,9 +335,13 @@ public static class DataFileFormats
         }
         // Short rows are padded to the header's width, so a wide header times many rows is the real size.
         if ((long)(rows.Count - 1) * names.Count > MaxCells) throw new UserError(TooManyColumns);
+        // Every record repeats the header names: refused here, before millions of records are built.
+        long nameBytes = names.Sum(n => (long)Encoding.UTF8.GetByteCount(n));
+        if (nameBytes * (rows.Count - 1) > MaxOutputBytes) throw new UserError(TooManyValues);
         var records = new List<object?>(rows.Count - 1);
         for (int r = 1; r < rows.Count; r++)
         {
+            if (r % 4096 == 0) token.ThrowIfCancellationRequested();
             if (rows[r].Count > names.Count) throw new UserError(LongRow, r + 1);
             var record = new Dictionary<string, object?>(names.Count, StringComparer.Ordinal);
             for (int i = 0; i < names.Count; i++) record[names[i]] = i < rows[r].Count ? rows[r][i] : "";
@@ -387,7 +391,7 @@ public static class DataFileFormats
     {
         // A table becomes records that repeat every header name, so its tree is checked as well.
         if (content.Table is null) Check(content.Tree, extension is "json" or "jsonl" or "csv" or "tsv", token);
-        else if (extension is not ("csv" or "tsv")) { content = new Content(TreeOf(content), null); Check(content.Tree, false, token); }
+        else if (extension is not ("csv" or "tsv")) { content = new Content(TreeOf(content, token), null); Check(content.Tree, false, token); }
         var text = new StringBuilder();
         switch (extension)
         {
@@ -528,6 +532,8 @@ public static class DataFileFormats
                 // JSON numbers beyond 64-bit integers or double precision would be silently rounded.
                 if (number.Integer && (long.TryParse(number.Text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _) || ulong.TryParse(number.Text, NumberStyles.None, CultureInfo.InvariantCulture, out _)))
                     out_.Append("<integer>").Append(number.Text).Append("</integer>");
+                // An integer beyond 64 bits would come back rounded, as the Mac refuses too.
+                else if (number.Integer) throw new UserError(PlistNumber);
                 else if (number.NotFinite) out_.Append("<real>").Append(number.Text).Append("</real>");
                 else if (double.IsFinite(number.Value) && SameDecimal(number.Text, number.Value.ToString("R", CultureInfo.InvariantCulture)))
                     out_.Append("<real>").Append(number.Value.ToString("R", CultureInfo.InvariantCulture)).Append("</real>");
