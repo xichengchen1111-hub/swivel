@@ -61,12 +61,19 @@ internal static class IcoNativeChecks
         var greys = Enumerable.Range(0, 256).Select(i => (int)small[40 + i * 4]).ToArray();
         Console.WriteLine($"512-pixel checkerboard at 16: grey {greys.Min()}–{greys.Max()}");
         check(greys.All(g => g is > 80 and < 175), $"A 1-pixel checkerboard averages to grey at 16 pixels: {greys.Min()}–{greys.Max()}");
-        string dot = Png(Path.Combine(folder, "dot.png"), 64, 64, (x, y) => x is >= 16 and < 48 && y is >= 16 and < 48 ? ((byte)255, (byte)255, (byte)255, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0));
+        // Edges that don't line up with the reduction, so the smaller sizes have partly transparent pixels.
+        string dot = Png(Path.Combine(folder, "dot.png"), 100, 100, (x, y) => x is >= 17 and < 83 && y is >= 17 and < 83 ? ((byte)255, (byte)255, (byte)255, (byte)255) : ((byte)0, (byte)0, (byte)0, (byte)0));
         var dotIcon = IcoFile.Read(File.ReadAllBytes(ImageTools.Run(dot, "convert.ico", 1920, default)));
-        check(dotIcon.Select(e => e.Size).SequenceEqual(new[] { 16, 32, 48, 64 }), "A 64-pixel picture stops at 64");
-        var edge = dotIcon.Single(e => e.Size == 16).Data; int darkest = 255;
-        for (int i = 0; i < 256; i++) if (edge[40 + i * 4 + 3] > 0) darkest = Math.Min(darkest, Math.Min(edge[40 + i * 4], Math.Min(edge[40 + i * 4 + 1], edge[40 + i * 4 + 2])));
-        check(darkest >= 250, "A white square on transparency keeps white edges when scaled down: darkest visible channel " + darkest);
+        check(dotIcon.Select(e => e.Size).SequenceEqual(new[] { 16, 32, 48, 64 }), "A 100-pixel picture stops at 64");
+        int darkest = 255, partial = 0;
+        foreach (var entry in dotIcon)
+            for (int i = 0; i < entry.Size * entry.Size; i++)
+            {
+                byte alpha = entry.Data[40 + i * 4 + 3];
+                if (alpha is > 0 and < 255) partial++;
+                if (alpha > 0) darkest = Math.Min(darkest, Math.Min(entry.Data[40 + i * 4], Math.Min(entry.Data[40 + i * 4 + 1], entry.Data[40 + i * 4 + 2])));
+            }
+        check(partial > 0 && darkest >= 250, $"A white square on transparency keeps white edges when scaled down: {partial} partly transparent pixels, darkest visible channel {darkest}");
 
         // A tiny JPEG still gets 16 pixels; cancelling first writes nothing.
         string tiny = Path.Combine(folder, "tiny.jpg");
@@ -75,8 +82,8 @@ internal static class IcoNativeChecks
         var tinyIcon = IcoFile.Read(File.ReadAllBytes(ImageTools.Run(tiny, "convert.ico", 1920, default)));
         check(tinyIcon.Count == 1 && tinyIcon[0].Size == 16 && tinyIcon[0].Data[40 + 8 * 16 * 4 + 8 * 4 + 3] == 255, "A 10×6 JPEG becomes a single, opaque-centred 16-pixel icon");
         int before = Directory.GetFiles(folder).Length;
-        reject(() => ImageTools.Run(bar, "convert.ico", 1920, new CancellationToken(true)), "Convert to ICO stops when cancelled first");
-        check(Directory.GetFiles(folder).Length == before && !Directory.GetFiles(folder, ".swivel-*.tmp").Any(), "A cancelled icon conversion leaves no file or staging copy");
+        reject(() => ImageTools.Run(bar, "convert.ico", 1920, new CancellationToken(true)), "Convert to ICO cancelled before it starts");
+        check(Directory.GetFiles(folder).Length == before && !Directory.GetFiles(folder, ".swivel-*.tmp").Any(), "Cancelling before the conversion starts writes no file or staging copy (the writer's own cancellation is a core check)");
         check(Path.GetFileName(ImageTools.Run(bar, "convert.ico", 1920, default)) == "徽标 bar converted 2.ico", "A second conversion takes the next numbered name");
     }
 }

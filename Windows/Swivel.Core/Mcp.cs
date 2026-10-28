@@ -278,7 +278,8 @@ public sealed class McpSession
             ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = a.Font ? (a.Id == "font.desktop" ? "Web fonts (WOFF, WOFF2) up to 64 MB" : FontInputs) : a.Subtitle ? SubtitleInputs : a.Data ? DataInputs : a.Document ? DocumentInputs : "PNG, JPEG, BMP, TIFF or static GIF images",
             ["writes"] = a.Id == "font.desktop" ? "A new TTF file (TrueType outlines) or OTF file (PostScript outlines) with the same tables beside each original, named '<name>.ttf' or '<name>.otf' or the next free numbered name." : "A new " + a.Extension.ToUpperInvariant() + " file" + (a.Font ? " with the font's tables copied as they are (outlines unchanged)" : a.Subtitle ? (a.Extension == "txt" ? " holding only the subtitle text, one cue per line" : " with each cue's text and timing (styling, colours and positions are dropped)")
                 : a.Data ? (a.Extension is "csv" or "tsv" ? " with a header row and one row per record (nested values as JSON text, UTF-8 with a byte order mark)" : " with the same values (keys sorted; CSV/TSV cells become text; plist dates and data become ISO 8601 and Base64 text where the format has no such type)")
-                : a.Document ? " holding only the document's text (no formatting, images, table layout or objects)" : "") + " beside each original, named '<name>" + a.Suffix + "." + a.Extension + "' or the next free numbered name.",
+                : a.Document ? " holding only the document's text (no formatting, images, table layout or objects)"
+                : a.Id == "convert.ico" ? " holding the picture at 16, 32, 48, 64, 128 and 256 pixels up to its longer side (one enlarged 16-pixel image for smaller pictures), each centred on a transparent square" : "") + " beside each original, named '<name>" + a.Suffix + "." + a.Extension + "' or the next free numbered name.",
         }).ToArray()),
     };
 

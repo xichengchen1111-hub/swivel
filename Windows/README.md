@@ -10,6 +10,12 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.116 新增：转换为 ICO 图标（跟进 Mac 1.14.4）
+
+图片的转换菜单里有 **Convert to ICO**（也可放进 Wheel／My Wheel、一次选多个，Agent 工具 `plan_action` 的 `convert.ico` 同有）。与 Mac 相同：按 16、32、48、64、128、256 像素保存，只保存不超过图片长边的尺寸（太小的图片至少放大成 16），每个尺寸都把整张图片按长边缩放、居中放在透明方块上，不拉伸也不裁切。新文件 “名称 converted.ico” 存在原文件旁，重名时编号，不覆盖。
+
+Windows 的差异：Mac 交给 ImageIO（ICO 最多 6 个尺寸），Windows 是原创写出：128 及以下存为带透明度的 32 位位图（附 AND 掩码，旧版 Windows 也能读），256 存为 PNG（Windows Vista 起支持）。与其他输出一样为 8 位 SDR，不保存元数据和色彩配置。不提供 ICNS（Mac 图标格式）。
+
 ## 0.115 新增：字体格式转换（跟进 Mac 1.14.4）
 
 TTF、OTF、WOFF、WOFF2 字体的工具里有 **Convert Font to WOFF／WOFF2**（不提供文件本身的格式），网页字体（WOFF、WOFF2）还有 **Unpack Web Font to TTF/OTF**：按轮廓类型还原为 TTF（TrueType）或 OTF（PostScript/CFF）。也可放进 Wheel／My Wheel、一次选多个，Agent 工具的 `plan_action` 也有。新文件存在原文件旁，同名换扩展名，重名时编号，不覆盖。

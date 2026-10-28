@@ -1327,6 +1327,15 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.116 — Convert to ICO, from Mac 1.14.4 (C01, 2026-10-28)
+
+- Core 4,520,838 on Mac; native compiled 0 warnings/errors there. Windows CI run 40681758853 passed before the review fixes (core 4,520,839, native 5,467).
+- `IcoFileChecks` (core): sizes up to the longer side (all six for large, 16–64 for 100×60, only 16 for 5×3, 256 only from 256); Fit keeps proportions and rounds 1.5 up; a 4×2 picture centred on a 6×6 transparent square, wider input clipped evenly; the bitmap header doubles the height and counts colour plus mask, rows bottom-up, the AND mask marks only the fully transparent pixel (alpha 1 stays); 256 refused as a bitmap; write → read keeps sizes, bytes, 256 as width 0 and PNG entries, the first image right after the directory; empty, cut-off and size-mismatched files refused; cancellation; catalog images only, agent extension .ico, translations present.
+- Oracle (Pillow 13 in a scratch venv, not shipped): random BGRA squares 16–128 including partial alpha written by IcoFile read back with 0 mismatches; macOS sips identifies the file as ICO. The reviewer separately parsed every directory entry, header field and mask bit with Python.
+- Native, `IcoNativeChecks`: a 300×150 red PNG becomes "徽标 bar converted.ico" (original unchanged) with six sizes, 256 as PNG; WPF IconBitmapDecoder reads six squares, at 32 and 256 the bar fills the width between transparent bands; GDI+ Icon loads 48 (red centre, transparent top); a 512 1-pixel checkerboard averages to grey 128–128 at 16; a white square at 17..82 of 100 keeps white edges with partly transparent pixels at every size; a 10×6 JPEG becomes one 16-pixel icon; cancelling before the start writes nothing; a second conversion is numbered.
+- Independent agent review: no P1/P2; four P3s (test strength and wording, agent description) fixed.
+- Not tested: icons as shown by Explorer/taskbar, time for a 16 MP picture.
+
 ## Windows0.115 — Font conversion, from Mac 1.14.4 (E03, 2026-10-28)
 
 - Core 4,520,814 on Mac; native compiled 0 warnings/errors there. Windows CI run 40657735049 on GitHub's Windows runner passed: core 4,520,816, native 5,454. Earlier: 40655171337 (WPF threw NullReferenceException loading the unpacked Arial right after the original on one thread; native 5,449 others passed) and 40656443734 (core 4,520,815, native 5,454, loaders on fresh STA threads).

@@ -16,7 +16,7 @@ internal static class IcoFileChecks
 
         // The longer side fills the square; the other keeps the proportion, at least one pixel.
         check(IcoFile.Fit(400, 200, 32) == (32, 16) && IcoFile.Fit(200, 400, 32) == (16, 32) && IcoFile.Fit(300, 300, 48) == (48, 48), "Fit keeps the proportion");
-        check(IcoFile.Fit(1000, 1, 16) == (16, 1) && IcoFile.Fit(30, 10, 16) == (16, 5) && IcoFile.Fit(5, 3, 16) == (16, 10), "Fit rounds half up and never makes a side zero");
+        check(IcoFile.Fit(1000, 1, 16) == (16, 1) && IcoFile.Fit(30, 10, 16) == (16, 5) && IcoFile.Fit(5, 3, 16) == (16, 10) && IcoFile.Fit(64, 6, 16) == (16, 2), "Fit rounds half up and never makes a side zero");
 
         // Centred on a transparent square.
         var red = new PixelImage(4, 2, Enumerable.Repeat(new byte[] { 0, 0, 255, 255 }, 8).SelectMany(p => p).ToArray());

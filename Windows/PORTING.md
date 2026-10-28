@@ -1047,6 +1047,16 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.116 跟进 Mac 1.14.4：转换为 ICO（C01 增强）
+
+批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.115 已推送，CI 40657735049 通过。
+
+按 Mac `Images.makeIcon` 移植：尺寸 16/32/48/64/128/256 取不超过长边者，至少 16；每个尺寸由整张图按长边缩放（较短边四舍五入、至少 1 像素）后居中放在透明方块上。Mac 由 ImageIO 写 ICO，Windows 为原创 `Swivel.Core/IcoFile.cs`：ICONDIR/ICONDIRENTRY（256 记为 0、1 平面、32 位、偏移用 checked）、小于 256 为 BITMAPINFOHEADER 32 位自下而上 BGRA（直通 alpha）加 1 位 AND 掩码（完全透明处置位、行按 4 字节补齐），256 为 WPF PngBitmapEncoder 的 PNG。原生 `ImageTools.IconImages` 先转 Pbgra32 再用 TransformedBitmap 缩放，避免透明边变暗；所有尺寸生成后才经 `NativeFiles.WriteBeside` 独占写出 “名称 converted.ico”。目录 convert.ico（仅图片），转换说明窗口加 ICO 说明，Agent 工具 convert.ico 的 writes 说明各尺寸与放大规则。ICNS 不移植（Mac 专用）。
+
+验证：核心 `IcoFileChecks`（尺寸选择、比例与半数进位、居中与裁切、位图头/行序/AND 掩码、写入读回、损坏拒绝、取消、目录与 Agent）。独立读取：Pillow 读回 16–128 各尺寸随机像素（含半透明）0 差异，macOS sips 识别为 ICO。Windows CI 原生 `IcoNativeChecks`：WPF IconBitmapDecoder 读出全部 6 个方形尺寸、32 与 256 像素横条居中、GDI+ Icon 读 48 像素，512 像素 1 像素棋盘格在 16 像素平均为 128 灰，白色方块缩小后边缘无变暗，10×6 JPEG 得单个 16 像素图标，重名编号。
+
+独立 agent 审查：无 P1/P2（自行用 Pillow 与 Python 逐字段核对目录、位图头和掩码）。已修 P3：透明边检查原为整数倍缩小无法失败（改为不对齐的 100 像素图并要求出现半透明像素）；预先取消检查措辞夸大（改为“开始前取消不写文件”，写入器自身取消由核心检查覆盖）；半数进位缺用例；Agent 说明未写尺寸规则。未验证：真实资源管理器/任务栏显示效果、16 MP 图片的耗时。固定 52 项仍 27／23／0／2。
+
 ## 0.115 跟进 Mac 1.14.4：字体格式转换（E03 增强）
 
 批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.114 已推送，Windows CI 40648212711 通过。
