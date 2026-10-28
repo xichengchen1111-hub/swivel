@@ -21,7 +21,7 @@ public sealed class TextCaptureDocument:IDisposable
     private TextCaptureDocument(ImageTools.Document input,PixelImage pixels,string[] languages){this.input=input;this.pixels=pixels;Languages=languages;}
     public static TextCaptureDocument Open(string path,CancellationToken token)
     {
-        token.ThrowIfCancellationRequested();NativeIdentity.Require();var input=ImageTools.Open(path,token);
+        token.ThrowIfCancellationRequested();NativeIdentity.Require();var input=ImageTools.OpenForReading(path,token);
         try
         {
             var pixels=ImageTools.ReadPixels(input.Bitmap,0,token);if(pixels.Width>OcrEngine.MaxImageDimension||pixels.Height>OcrEngine.MaxImageDimension)throw new UserError(TooLarge);

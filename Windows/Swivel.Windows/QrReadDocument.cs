@@ -15,7 +15,7 @@ internal sealed class QrReadDocument:IDisposable
     internal static QrReadDocument Open(string path,CancellationToken token)
     {
         token.ThrowIfCancellationRequested();if(!Catalog.IsImage(path))throw new UserError("Choose one supported local image.");
-        var source=ImageTools.Open(path,token);
+        var source=ImageTools.OpenForReading(path,token);
         try
         {
             var result=QrFlatRead.Read(ImageTools.ReadPixels(source.Bitmap,0,token),token);
@@ -26,7 +26,7 @@ internal sealed class QrReadDocument:IDisposable
     internal static QrReadDocument OpenForRecovery(string path,CancellationToken token)
     {
         token.ThrowIfCancellationRequested();if(!Catalog.IsImage(path))throw new UserError("Choose one supported local image.");
-        var source=ImageTools.Open(path,token);
+        var source=ImageTools.OpenForReading(path,token);
         try
         {
             var recovery=QrFlatRead.ReadWithDataRecovery(ImageTools.ReadPixels(source.Bitmap,0,token),token);

@@ -26,13 +26,20 @@ public static class ImageTools
     }
     /// With `expected` (an agent's plan), a file that is no longer the planned one is refused
     /// before it is decoded.
-    public static Document Open(string path, CancellationToken cancellation, FileStamp? expected = null)
+    public static Document Open(string path, CancellationToken cancellation, FileStamp? expected = null) => Open(path, cancellation, expected, false);
+
+    /// For tools that only look at the picture (text and code recognition), as on the Mac since
+    /// 1.14.6: 16-bit, floating-point and CMYK images are accepted and shown as 8-bit colour,
+    /// since nothing is saved from them. The size and pixel limits still apply.
+    public static Document OpenForReading(string path, CancellationToken cancellation, FileStamp? expected = null) => Open(path, cancellation, expected, true);
+
+    private static Document Open(string path, CancellationToken cancellation, FileStamp? expected, bool readOnly)
     {
         var input = NativeFiles.OpenRead(path);
         try
         {
             if (expected is FileStamp planned && !input.Stamp.SameObjectAndContent(planned)) throw new McpToolError(McpSession.Changed);
-            return new Document(input, Decode(input, cancellation));
+            return new Document(input, Decode(input.Stream, input.Path, cancellation, readOnly));
         }
         catch { input.Dispose(); throw; }
     }
@@ -63,7 +70,7 @@ public static class ImageTools
         using var stream = new MemoryStream(bytes, false);
         return Decode(stream, path, cancellation);
     }
-    private static BitmapSource Decode(Stream stream, string path, CancellationToken cancellation)
+    private static BitmapSource Decode(Stream stream, string path, CancellationToken cancellation, bool readOnly = false)
     {
         if (stream.Length > ImageRules.MaxInputBytes) throw new UserError("Image files are limited to 128 MB.");
         cancellation.ThrowIfCancellationRequested();
@@ -78,7 +85,7 @@ public static class ImageTools
         if (decoder.Frames.Count != 1) throw new UserError("Multi-frame images are not supported yet.");
         var frame = decoder.Frames[0];
         ImageRules.Validate(frame.PixelWidth, frame.PixelHeight);
-        if (!IsSdrFormat(frame.Format))
+        if (!readOnly && !IsSdrFormat(frame.Format))
             throw new UserError("HDR, high-bit-depth and CMYK images are not supported yet.");
         cancellation.ThrowIfCancellationRequested();
         BitmapSource source = frame;
