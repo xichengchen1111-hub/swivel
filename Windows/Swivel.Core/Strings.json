@@ -12564,11 +12564,6 @@
     "Windows 無法開啟這個影片。請選擇能在 Windows 媒體播放器或「電影與電視」應用程式中播放的 MP4、MOV、M4V 或 WMV 檔案。",
     "Windows はこの動画を開けませんでした。Windows メディア プレーヤーまたは「映画 & テレビ」アプリで再生できる MP4・MOV・M4V・WMV ファイルを選んでください。"
   ],
-  "Windows encodes a new H.264/AAC MP4 at the original size and frame rate. The whole video is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 and two hours; turned phone videos are not supported yet.": [
-    "Windows 会按原尺寸和帧率编码一个新的 H.264/AAC MP4。整个视频都要重新编码，需要一些时间，画质会略有损失；HDR 会变成 SDR，额外音轨、章节和元数据不保留。最大 3840 × 2160、两小时；暂不支持旋转的手机视频。",
-    "Windows 會按原尺寸和影格速率編碼一個新的 H.264/AAC MP4。整個影片都要重新編碼，需要一些時間，畫質會略有損失；HDR 會變成 SDR，額外音軌、章節和中繼資料不保留。最大 3840 × 2160、兩小時；暫不支援旋轉的手機影片。",
-    "Windows は元のサイズとフレームレートで新しい H.264/AAC MP4 をエンコードします。動画全体を再エンコードするため時間がかかり、画質がわずかに落ちます。HDR は SDR になり、追加の音声トラック・チャプター・メタデータは保持しません。最大 3840 × 2160、2 時間まで。回転したスマートフォン動画にはまだ対応していません。"
-  ],
   "{0} × {1} pixels, {2}": [
     "{0} × {1} 像素，{2}",
     "{0} × {1} 像素，{2}",
@@ -13543,5 +13538,10 @@
     "Windows 无法打开 Claude Desktop 扩展。",
     "Windows 無法開啟 Claude Desktop 延伸模組。",
     "Windows で Claude Desktop 拡張機能を開けませんでした。"
+  ],
+  "Windows encodes a new H.264/AAC MP4 at the original size and frame rate. The whole video is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 and two hours; phone videos stored sideways come out upright.": [
+    "Windows 会按原尺寸和帧率编码一个新的 H.264/AAC MP4。整个视频都要重新编码，需要一些时间，画质会略有损失；HDR 会变成 SDR，额外音轨、章节和元数据不保留。最大 3840 × 2160、两小时；手机横着存储的视频会输出为正向。",
+    "Windows 會按原尺寸和影格速率編碼一個新的 H.264/AAC MP4。整個影片都要重新編碼，需要一些時間，畫質會略有損失；HDR 會變成 SDR，額外音軌、章節和中繼資料不保留。最大 3840 × 2160、兩小時；手機橫著儲存的影片會輸出為正向。",
+    "Windows は元のサイズとフレームレートで新しい H.264/AAC MP4 をエンコードします。動画全体を再エンコードするため時間がかかり、画質がわずかに落ちます。HDR は SDR になり、追加の音声トラック・チャプター・メタデータは保持しません。最大 3840 × 2160、2 時間まで。横向きに保存されたスマートフォン動画は正しい向きで出力されます。"
   ]
 }

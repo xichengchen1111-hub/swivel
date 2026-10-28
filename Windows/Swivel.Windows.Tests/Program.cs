@@ -123,6 +123,7 @@ internal static class Program
             Group("UpscaleNativeChecks", () => UpscaleNativeChecks.Run(directory,Check,Reject));
             Group("TranscribeNativeChecks", () => TranscribeNativeChecks.Run(directory,Check,Reject));
             Group("SubtitleBurnNativeChecks", () => SubtitleBurnNativeChecks.Run(directory,Check,Reject));
+            Group("RotatedVideoNativeChecks", () => RotatedVideoNativeChecks.Run(directory,Check));
             Group("CopyFilesNativeChecks", () => CopyFilesNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalNativeChecks", () => ImageArrivalNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalWindowNativeChecks", () => ImageArrivalWindowNativeChecks.Run(Check,Reject));

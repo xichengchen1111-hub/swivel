@@ -1,7 +1,7 @@
 param([ValidateSet('win-x64','win-arm64')][string]$Runtime='win-x64')
 $ErrorActionPreference='Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Build this optional MSIX on Windows with the Windows SDK installed. No package is signed or installed by this script.' }
-$version='0.110.0'
+$version='0.111.0'
 $source=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../build/windows/$version/$Runtime"))
 if (-not (Test-Path (Join-Path $source 'Swivel.exe') -PathType Leaf)) { throw 'Build the corresponding portable application first.' }
 $kits=Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
