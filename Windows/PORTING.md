@@ -1047,6 +1047,20 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.112 剪辑视频 Trim Video…（D04 部分）
+
+批次开始 `git fetch`：origin/main 为 `60a3487`（Mac 1.14.6），不含 `Windows/` 改动；0.111 已推送，Windows CI 40616348475 通过。
+
+新增动作 `video.trim`（Trim Video…，单文件，MP4/MOV/M4V/WMV，可放 Wheel／My Wheel；Mac 的 Trim 编辑器的“剪辑”部分）。核心 `VideoTrim`：起止时间解析（秒、分:秒、时:分:秒，冒号后的分秒须小于 60，最多三位小数，只认西文数字，每段最多 7 位）与显示（m:ss 或一小时以上 h:mm:ss，省略末尾零），长度按整毫秒向下取整；`Plan` 要求 0 ≤ 开始、结束 ≤ 长度、至少 100 ms，保留全部且有声音（或视频本无声音）时拒绝为“没有改变”，无声音视频不声称保留声音。
+
+原生 `VideoTrimmer`：与烧录字幕相同地以只读句柄持有原件（拒绝写入与删除），按 Windows 报告的转正尺寸检查上限（`SubtitleBurn.CheckVideo`）；报告非零旋转同样拒绝。画面预览用一个 `MediaComposition.GetThumbnailAsync`，一次一张（SemaphoreSlim），按 Windows 报告的帧率求出“该时间正在显示的帧”并请求其中点（Windows 返回最近的帧）；但报告的是平均帧率（CI 上 30 fps 测试视频报 30.659），所以预览仍可能差一帧，窗口说明写“大致”；CI 显示在片尾最后一毫秒请求会抛 ArgumentException，所以失败时最多向前退 15 帧。剪辑：新建 MediaClip 设 `TrimTimeFromStart`／`TrimTimeFromEnd`，`RenderToFileAsync(Precise)`，配置与烧录字幕相同（原尺寸与帧率、码率不低于原视频且至少约 0.1 bit/像素/帧，1–100 Mbit/s）；去声音时配置不含音频流。私有临时文件夹里 `FailIfExists` 生成，再经 `NativeFiles.WriteBeside` 发布为 `名称 trimmed.mp4`（占用时下一个编号），临时文件结束即删，文件夹在窗口关闭时删。
+
+窗口 `TrimVideoDialog`：两个时间框、各自的画面（停止输入 0.25 秒后单飞加载，无效或超出的时间清空画面，取帧失败另起一行提示，不覆盖校验说明）、Keep the sound（无音轨时禁用并说明）、状态行说明保留多长从哪到哪、无效时 Trim 不可用；关闭时取消取帧，App 等 `FinishAsync` 完成后才释放视频。编码中进度沿用“正在编码视频：已完成 N%”，可取消，取消不保存。
+
+独立 agent 审查（只读）：无 P1/P2。已修 P3：无声音视频保留全部时仍可“剪辑”出一份无意义的重编码（现拒绝）；预览请求最近帧而非正在显示的帧，可能差一帧（现按帧求中点；因报告的是平均帧率，说明写“大致、可能差一帧”）；无效时间仍显示旧画面、取帧失败覆盖校验说明（现清空画面并单独提示）；`Duration` 的错误文字（现用尺寸／时长上限说明）；测试补无声音整段、颜色交界前后 1 ms、编码中途取消。未改：取帧在取消恰好落在完成后时图像流交给 GC（与其他代码相同）。
+
+Windows CI：第一次（40631037311）原生 5,402 项通过、剪辑检查在片尾最后一毫秒取帧时抛 ArgumentException（已加向前退帧）；第二次（40631898187）在新加的“编码中途取消”检查卡住超过 30 分钟后手动取消——该检查在 Windows 的进度回调里同步取消渲染，应用本身从界面线程取消、不会这样做，检查改为从另一线程取消并加 2 分钟上限；第三次（40634936392）中途取消通过，但颜色交界处取样差一帧（报告帧率 30.659）；取样点挪离交界后第四次（40635735160）通过：核心 4,520,580、原生 5,417。复查 agent 确认 P3 已修且无 P1/P2。未验证：真实电脑上的硬件编码器、长视频与 4K 的耗时、可变帧率手机视频的预览帧、窗口在真实 Windows 上的操作。D04 仍为部分实现，固定 52 项仍 27／23／0／2。
+
 ## 0.111 带旋转标记的视频：压缩与烧录字幕（G02/D06 部分）
 
 批次开始 `git fetch`：origin/main 为 `60a3487`（Mac 1.14.6），不含 `Windows/` 改动；0.110 已推送，Windows CI 40600961106 通过。
