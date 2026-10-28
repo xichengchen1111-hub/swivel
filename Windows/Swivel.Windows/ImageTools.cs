@@ -88,14 +88,22 @@ public static class ImageTools
         if (!readOnly && !IsSdrFormat(frame.Format))
             throw new UserError("HDR, high-bit-depth and CMYK images are not supported yet.");
         cancellation.ThrowIfCancellationRequested();
-        BitmapSource source = frame;
-        if (frame.ColorContexts is { Count: > 0 })
-            source = new ColorConvertedBitmap(frame, frame.ColorContexts[0], new ColorContext(PixelFormats.Bgra32), PixelFormats.Bgra32);
-        source = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
-        source = Orient(source, Orientation(frame));
-        var clean = CopyPixels(source, cancellation);
-        clean.Freeze();
-        return clean;
+        BitmapSource Convert(bool profile)
+        {
+            BitmapSource source = frame;
+            if (profile && frame.ColorContexts is { Count: > 0 })
+                source = new ColorConvertedBitmap(frame, frame.ColorContexts[0], new ColorContext(PixelFormats.Bgra32), PixelFormats.Bgra32);
+            source = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            source = Orient(source, Orientation(frame));
+            var clean = CopyPixels(source, cancellation);
+            clean.Freeze();
+            return clean;
+        }
+        // Windows' colour transform may not take every 16-bit, CMYK or floating-point format with a
+        // profile; a reading-only tool then reads the colours without it rather than failing.
+        if (!readOnly) return Convert(true);
+        try { return Convert(true); }
+        catch (Exception error) when (error is System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException) { return Convert(false); }
     }
     private static BitmapDecoder CreateDecoder(NativeFiles.Input input) => CreateDecoder(input.Stream, input.Path);
     private static BitmapDecoder CreateDecoder(Stream stream, string path)
