@@ -78,8 +78,9 @@ public sealed class VideoTrimmer : IDisposable
     public double Fps => frameNumerator > 0 && frameDenominator > 0 ? (double)frameNumerator / frameDenominator : 30;
 
     /// The frame showing at a time (clamped into the video), at most `box` pixels on its longer
-    /// side, frozen for the UI thread. Windows is asked for the middle of that frame (assuming a
-    /// constant frame rate), since it returns the frame nearest the time asked. Near the end,
+    /// side, frozen for the UI thread. Windows is asked for the middle of that frame, since it
+    /// returns the frame nearest the time asked; the frame rate it reports is an average (30.659
+    /// for a 30 fps test video), so this can still be a frame off. Near the end,
     /// where Windows may have no frame for the last instant, earlier frames are tried. One frame
     /// is made at a time.
     public async Task<BitmapSource> FrameAsync(long milliseconds, int box, CancellationToken token)

@@ -13629,14 +13629,14 @@
     "Windows 無法編碼剪輯後的影片。沒有儲存任何檔案。",
     "Windows はトリミングした動画をエンコードできませんでした。ファイルは保存されていません。"
   ],
-  "Type times as seconds, minutes:seconds or hours:minutes:seconds, with up to three decimals (for example 1:05.5). The frames shown are about the first and the last kept frame (exact for videos with a steady frame rate).": [
-    "时间可写成秒、分:秒或时:分:秒，最多三位小数（例如 1:05.5）。显示的大致是保留部分的第一帧和最后一帧（帧率固定的视频是准确的）。",
-    "時間可寫成秒、分:秒或時:分:秒，最多三位小數（例如 1:05.5）。顯示的大致是保留部分的第一格和最後一格（影格速率固定的影片是準確的）。",
-    "時間は秒、分:秒、または時:分:秒で入力します。小数は 3 桁まで（例：1:05.5）。表示されるのは残す部分のおおよその最初と最後のフレームです（フレームレートが一定の動画では正確です）。"
-  ],
   "This keeps the whole video, which has no sound. Move the start or end.": [
     "这样会原样保留整个视频（它没有声音）。请调整开始或结束。",
     "這樣會原樣保留整部影片（它沒有聲音）。請調整開始或結束。",
     "これでは動画全体がそのまま残ります（この動画には音声がありません）。開始か終了を動かしてください。"
+  ],
+  "Type times as seconds, minutes:seconds or hours:minutes:seconds, with up to three decimals (for example 1:05.5). The frames shown are about the first and the last kept frame; they can be a frame off.": [
+    "时间可写成秒、分:秒或时:分:秒，最多三位小数（例如 1:05.5）。显示的大致是保留部分的第一帧和最后一帧，可能相差一帧。",
+    "時間可寫成秒、分:秒或時:分:秒，最多三位小數（例如 1:05.5）。顯示的大致是保留部分的第一格和最後一格，可能相差一格。",
+    "時間は秒、分:秒、または時:分:秒で入力します。小数は 3 桁まで（例：1:05.5）。表示されるのは残す部分のおおよその最初と最後のフレームで、1 フレームずれることがあります。"
   ]
 }

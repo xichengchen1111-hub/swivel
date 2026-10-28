@@ -117,7 +117,7 @@ internal sealed class TrimVideoDialog : Window
         body.Children.Add(frameNote);
         body.Children.Add(sound);
         if (!video.HasSound) body.Children.Add(UI.Text(app.L("This video has no sound track that Windows can decode."), 12));
-        body.Children.Add(UI.Text(app.L("Type times as seconds, minutes:seconds or hours:minutes:seconds, with up to three decimals (for example 1:05.5). The frames shown are about the first and the last kept frame (exact for videos with a steady frame rate).")));
+        body.Children.Add(UI.Text(app.L("Type times as seconds, minutes:seconds or hours:minutes:seconds, with up to three decimals (for example 1:05.5). The frames shown are about the first and the last kept frame; they can be a frame off.")));
         body.Children.Add(UI.Text(app.L("Windows encodes the kept part as a new H.264/AAC MP4 at the original size and frame rate, cut at the exact times. It is re-encoded, so it takes time and loses a little quality; HDR becomes SDR, and extra sound tracks, chapters and metadata are not kept. Up to 3840 × 2160 (either way round) and two hours.")));
         body.Children.Add(UI.Text(app.L("The new file is saved beside the original as “name trimmed.mp4” without replacing existing files. The original stays unchanged. Cancelling saves no video.")));
         root.Children.Add(UI.Scroll(body)); Content = root;
