@@ -185,7 +185,7 @@ internal static class McpNativeChecks
             File.WriteAllText(Path.Combine(zipping, "one.txt"), "1"); File.WriteAllText(Path.Combine(zipping, "inner", "two.txt"), "22");
             var zipPlan = Call("plan_zip_folder", new JsonObject { ["path"] = zipping })["structuredContent"]!;
             check(zipPlan["files"]?.GetValue<int>() == 2 && (string?)zipPlan["will_create"] == Path.Combine(root, "zip me.zip") + " (or the next free numbered name)", "Native MCP plan_zip_folder plans a real folder: " + zipPlan.ToJsonString());
-            var zipDone = Call("apply_plan", new JsonObject { ["plan_id"] = (string)(zipPlan["plan_id"] ?? "") })["structuredContent"]!;
+            var zipDone = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)zipPlan["plan_id"] ?? "" })["structuredContent"]!;
             string zipFile = Path.Combine(root, "zip me.zip");
             Console.WriteLine("plan_zip_folder: " + zipPlan.ToJsonString() + " apply: " + zipDone.ToJsonString());
             check(File.Exists(zipFile) && (string?)zipDone["outputs"]?[0] == zipFile, "Native MCP apply writes the folder's ZIP: " + zipDone.ToJsonString());
@@ -194,7 +194,7 @@ internal static class McpNativeChecks
                     check(archive.Entries.Select(e => e.FullName).SequenceEqual(new[] { "zip me/", "zip me/inner/", "zip me/inner/two.txt", "zip me/one.txt" }), "The agent's ZIP holds the folder's entries");
             var stalePlan = Call("plan_zip_folder", new JsonObject { ["path"] = zipping })["structuredContent"]!;
             File.AppendAllText(Path.Combine(zipping, "one.txt"), "+");
-            var staleApply = Call("apply_plan", new JsonObject { ["plan_id"] = (string)(stalePlan["plan_id"] ?? "") });
+            var staleApply = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)stalePlan["plan_id"] ?? "" });
             var other = Call("plan_zip_folder", new JsonObject { ["path"] = zipping.ToUpperInvariant() });
             var rootDrive = Call("plan_zip_folder", new JsonObject { ["path"] = Path.GetPathRoot(root)! });
             var trailing = Call("plan_zip_folder", new JsonObject { ["path"] = zipping + "\\" });
