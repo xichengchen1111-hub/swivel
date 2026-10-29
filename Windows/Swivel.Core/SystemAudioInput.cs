@@ -7,12 +7,14 @@ namespace Swivel.Core;
 
 public static class SystemAudioInput
 {
-    public const string Unsupported="Choose a self-contained RIFF WAV, FLAC, MP3 Layer III or ADTS AAC file. Playlists, URLs, reference movies, M4A/MP4 and other containers are not accepted by this decoder.";
+    public const string Unsupported="Choose a self-contained RIFF WAV, FLAC, MP3 Layer III, ADTS AAC or audio-only M4A (AAC-LC or ALAC) file. Playlists, URLs, reference movies, video and other containers are not accepted by this decoder.";
     public static string Identify(Stream input,CancellationToken token)
     {
         token.ThrowIfCancellationRequested();if(!input.CanRead||!input.CanSeek||input.Length<4)throw new UserError(Unsupported);input.Position=0;Span<byte> bytes=stackalloc byte[12];int n=(int)Math.Min(12,input.Length);input.ReadExactly(bytes[..n]);
         if(n>=12&&bytes[..4].SequenceEqual("RIFF"u8)&&bytes[8..12].SequenceEqual("WAVE"u8))
         {if(BinaryPrimitives.ReadUInt32LittleEndian(bytes[4..])+8L!=input.Length)throw new UserError(Unsupported);input.Position=0;token.ThrowIfCancellationRequested();return "WAV";}
+        // ISO base media: only the bounded audio-only M4A box gate decides; nothing else with an ftyp passes.
+        if(n>=8&&bytes[4..8].SequenceEqual("ftyp"u8)){var m4a=M4aAudio.Inspect(input,token);return "M4A "+m4a.Codec;}
         long at=0;if(n>=10&&bytes[..3].SequenceEqual("ID3"u8))
         {
             if(bytes[3] is <2 or >4||bytes[4]==255||(bytes[6]|bytes[7]|bytes[8]|bytes[9])>=128)throw new UserError(Unsupported);

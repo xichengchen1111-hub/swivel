@@ -95,7 +95,7 @@ internal static class SpeechModel
 public sealed class TranscribeDocument : IDisposable
 {
     public const long MaxBytes = 128L * 1024 * 1024;
-    public const string Unsupported = "Choose an integer PCM WAV up to 512 MB, or a WAV, FLAC, MP3 or ADTS AAC file up to 128 MB that Windows can decode, up to one hour long.";
+    public const string Unsupported = "Choose an integer PCM WAV up to 512 MB, or a WAV, FLAC, MP3, ADTS AAC or audio-only M4A file up to 128 MB that Windows can decode, up to one hour long.";
     private readonly NativeFiles.Input input;
     private readonly byte[] wave; private readonly WaveInfo info;
     public string Path => input.Path;

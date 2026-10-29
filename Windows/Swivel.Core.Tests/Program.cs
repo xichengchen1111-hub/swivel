@@ -165,6 +165,7 @@ WaveFormatChecks.Run(Check, Reject);
 WaveSpeedChecks.Run(Check, Reject);
 WaveStretchChecks.Run(Check, Reject);
 WinRtBoundaryChecks.Run(Check, Reject);
+M4aChecks.Run(Check, Reject);
 G711Checks.Run(Check, Reject);
 FloatWaveChecks.Run(Check, Reject);
 AiffChecks.Run(Check, Reject);

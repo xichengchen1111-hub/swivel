@@ -1314,11 +1314,6 @@
     "請選擇已儲存的網頁動作。",
     "保存済みのWebページアクションを選択してください。"
   ],
-  "Choose a self-contained RIFF WAV, FLAC, MP3 Layer III or ADTS AAC file. Playlists, URLs, reference movies, M4A/MP4 and other containers are not accepted by this decoder.": [
-    "请选择自包含的 RIFF WAV、FLAC、MP3 Layer III 或 ADTS AAC 文件。此解码器不接受播放列表、网址、引用影片、M4A/MP4 或其他容器。",
-    "請選擇自包含的 RIFF WAV、FLAC、MP3 Layer III 或 ADTS AAC 檔案。此解碼器不接受播放清單、網址、參照影片、M4A/MP4 或其他容器。",
-    "自己完結した RIFF WAV、FLAC、MP3 Layer III、ADTS AAC ファイルを選んでください。プレイリスト、URL、参照ムービー、M4A/MP4、その他のコンテナーは対象外です。"
-  ],
   "Choose a supported QR garden template and season.": [
     "请选择受支持的二维码花园模板和季节。",
     "請選擇支援的 QR 花園範本和季節。",
@@ -12219,11 +12214,6 @@
     "中文",
     "中国語"
   ],
-  "Choose an integer PCM WAV up to 512 MB, or a WAV, FLAC, MP3 or ADTS AAC file up to 128 MB that Windows can decode, up to one hour long.": [
-    "请选择不超过 512 MB 的整数 PCM WAV，或 Windows 能解码、不超过 128 MB 的 WAV、FLAC、MP3、ADTS AAC 文件，时长不超过一小时。",
-    "請選擇不超過 512 MB 的整數 PCM WAV，或 Windows 能解碼、不超過 128 MB 的 WAV、FLAC、MP3、ADTS AAC 檔案，長度不超過一小時。",
-    "512 MB 以内の整数 PCM WAV、または Windows がデコードできる 128 MB 以内の WAV・FLAC・MP3・ADTS AAC ファイル（1 時間以内）を選んでください。"
-  ],
   "Choose audio up to one hour long. Longer recordings can be split first.": [
     "请选择不超过一小时的音频。更长的录音可以先拆分。",
     "請選擇不超過一小時的音訊。更長的錄音可以先拆分。",
@@ -12323,11 +12313,6 @@
     "正在转写：已完成 {0}%…",
     "正在轉寫：已完成 {0}%…",
     "文字起こし中：{0}% 完了…"
-  ],
-  "Up to one hour of audio. Integer PCM WAV up to 512 MB is converted by Swivel; other WAV, FLAC, MP3 and ADTS AAC files are decoded by Windows (up to 128 MB). Video files and M4A are not accepted yet.": [
-    "最长一小时的音频。不超过 512 MB 的整数 PCM WAV 由 Swivel 转换；其他 WAV、FLAC、MP3、ADTS AAC 文件由 Windows 解码（不超过 128 MB）。暂不支持视频文件和 M4A。",
-    "最長一小時的音訊。不超過 512 MB 的整數 PCM WAV 由 Swivel 轉換；其他 WAV、FLAC、MP3、ADTS AAC 檔案由 Windows 解碼（不超過 128 MB）。暫不支援影片檔案和 M4A。",
-    "最大 1 時間の音声。512 MB 以内の整数 PCM WAV は Swivel が変換し、その他の WAV・FLAC・MP3・ADTS AAC ファイルは Windows がデコードします（128 MB まで）。動画ファイルと M4A にはまだ対応していません。"
   ],
   "Uses the Whisper base model on this PC (no upload, no download). It can mishear names, numbers and quiet or overlapping speech, and may invent words during music or noise, so check the text before using it.": [
     "在这台电脑上使用 Whisper base 模型（不上传、不下载）。它可能听错人名、数字以及小声或重叠的说话，遇到音乐或噪声时还可能编造词句，使用前请检查文字。",
@@ -14394,11 +14379,6 @@
     "預覽以 16 位元 PCM 播放輸出的前 10 秒，處理方式和目標量化與儲存相同。輸出上限為 512 MB 和兩小時；較長的處理可以取消。",
     "プレビューは出力の最初の 10 秒を 16 ビット PCM で再生し、処理と目標量子化は保存時と同じです。出力は 512 MB と 2 時間までです。長い処理はキャンセルできます。"
   ],
-  "Existing integer PCM, float/G.711 and AIFF tools remain separate. An additional bounded Windows codec decoder prepares PCM16 from local WAV, FLAC, MP3 Layer III or ADTS AAC, with complete prepared-audio preview and exclusive save. Change WAV Speed can keep pitch (25–400%, original time-stretch; clicks and chords can show artefacts). Codec availability and runtime quality are unverified; other containers, video and speech classification remain pending.": [
-    "既有整数 PCM、浮点/G.711 和 AIFF 工具保持独立。另有受限 Windows 编解码器入口，将本地 WAV、FLAC、MP3 Layer III 或 ADTS AAC 准备为 PCM16，随后对同一准备音频试听、独占另存。“更改 WAV 速度”可保持音调（25–400%，自研时间伸缩；咔嗒声和和弦可能出现瑕疵）。编解码器可用性和实际质量未验收；其他容器、视频与人声分类仍待做。",
-    "既有整數 PCM、浮點/G.711 和 AIFF 工具保持獨立。另有受限 Windows 編解碼器入口，將本機 WAV、FLAC、MP3 Layer III 或 ADTS AAC 準備為 PCM16，隨後對同一準備音訊試聽、獨占另存。「變更 WAV 速度」可保持音調（25–400%，自行開發的時間伸縮；喀噠聲和和弦可能出現瑕疵）。編解碼器可用性和實際品質未驗收；其他容器、影片與人聲分類仍待做。",
-    "既存の整数 PCM、浮動小数点/G.711、AIFF 機能は独立したままです。別の制限付き Windows コーデック機能がローカル WAV、FLAC、MP3 Layer III、ADTS AAC を PCM16 に準備し、同じ準備済み音声のプレビューと排他的保存を提供します。「WAV の速度を変更」は音程を保持できます（25–400%、独自のタイムストレッチ。クリック音や和音に乱れが出ることがあります）。コーデック可用性と実品質は未検証で、他コンテナー、動画、音声分類は未実装です。"
-  ],
   "Choose a whole-number speed from 25–400%.": [
     "请选择 25–400% 的整数速度。",
     "請選擇 25–400% 的整數速度。",
@@ -15338,5 +15318,30 @@
     "此元数据工具不支持 BigTIFF 文件。未保存副本。",
     "此中繼資料工具不支援 BigTIFF 檔案。未儲存副本。",
     "このメタデータツールは BigTIFF ファイルに対応していません。コピーは保存されていません。"
+  ],
+  "Up to one hour of audio. Integer PCM WAV up to 512 MB is converted by Swivel; other WAV, FLAC, MP3, ADTS AAC and audio-only M4A (AAC-LC or ALAC) files are decoded by Windows (up to 128 MB). Video files are not accepted here.": [
+    "最长一小时的音频。不超过 512 MB 的整数 PCM WAV 由 Swivel 转换；其他 WAV、FLAC、MP3、ADTS AAC 和纯音频 M4A（AAC-LC 或 ALAC）文件由 Windows 解码（不超过 128 MB）。此处不接受视频文件。",
+    "最長一小時的音訊。不超過 512 MB 的整數 PCM WAV 由 Swivel 轉換；其他 WAV、FLAC、MP3、ADTS AAC 和純音訊 M4A（AAC-LC 或 ALAC）檔案由 Windows 解碼（不超過 128 MB）。此處不接受影片檔案。",
+    "最大 1 時間の音声。512 MB 以内の整数 PCM WAV は Swivel が変換し、その他の WAV・FLAC・MP3・ADTS AAC・音声のみの M4A（AAC-LC または ALAC）ファイルは Windows がデコードします（128 MB まで）。ここでは動画ファイルは扱いません。"
+  ],
+  "Choose an audio-only M4A file with exactly one AAC-LC or ALAC track (mono or stereo, 8–192 kHz, at most two hours). Video, several audio tracks, protected (DRM), fragmented, QuickTime reference and other MP4 files are not accepted.": [
+    "请选择只含一条 AAC-LC 或 ALAC 音轨的纯音频 M4A 文件（单声道或立体声，8–192 kHz，不超过两小时）。不接受视频、多条音轨、受保护（DRM）、分片、QuickTime 引用及其他 MP4 文件。",
+    "請選擇只含一條 AAC-LC 或 ALAC 音軌的純音訊 M4A 檔案（單聲道或立體聲，8–192 kHz，不超過兩小時）。不接受影片、多條音軌、受保護（DRM）、分段、QuickTime 參照及其他 MP4 檔案。",
+    "AAC-LC または ALAC のトラックを 1 本だけ含む音声のみの M4A ファイル（モノラルまたはステレオ、8–192 kHz、2 時間以内）を選んでください。動画、複数の音声トラック、保護（DRM）付き、フラグメント化、QuickTime 参照、その他の MP4 ファイルは対象外です。"
+  ],
+  "Choose an integer PCM WAV up to 512 MB, or a WAV, FLAC, MP3, ADTS AAC or audio-only M4A file up to 128 MB that Windows can decode, up to one hour long.": [
+    "请选择不超过 512 MB 的整数 PCM WAV，或 Windows 能解码、不超过 128 MB 的 WAV、FLAC、MP3、ADTS AAC 或纯音频 M4A 文件，时长不超过一小时。",
+    "請選擇不超過 512 MB 的整數 PCM WAV，或 Windows 能解碼、不超過 128 MB 的 WAV、FLAC、MP3、ADTS AAC 或純音訊 M4A 檔案，長度不超過一小時。",
+    "512 MB 以内の整数 PCM WAV、または Windows がデコードできる 128 MB 以内の WAV・FLAC・MP3・ADTS AAC・音声のみの M4A ファイル（1 時間以内）を選んでください。"
+  ],
+  "Existing integer PCM, float/G.711 and AIFF tools remain separate. An additional bounded Windows codec decoder prepares PCM16 from local WAV, FLAC, MP3 Layer III, ADTS AAC or audio-only M4A (AAC-LC/ALAC, bounded box check first), with complete prepared-audio preview and exclusive save. Change WAV Speed can keep pitch (25–400%, original time-stretch; clicks and chords can show artefacts). Codec availability and runtime quality are unverified; other containers, video and speech classification remain pending.": [
+    "既有整数 PCM、浮点/G.711 和 AIFF 工具保持独立。另有受限 Windows 编解码器入口，将本地 WAV、FLAC、MP3 Layer III、ADTS AAC 或纯音频 M4A（AAC-LC/ALAC，先做受限盒结构检查）准备为 PCM16，随后对同一准备音频试听、独占另存。“更改 WAV 速度”可保持音调（25–400%，自研时间伸缩；咔嗒声和和弦可能出现瑕疵）。编解码器可用性和实际质量未验收；其他容器、视频与人声分类仍待做。",
+    "既有整數 PCM、浮點/G.711 和 AIFF 工具保持獨立。另有受限 Windows 編解碼器入口，將本機 WAV、FLAC、MP3 Layer III、ADTS AAC 或純音訊 M4A（AAC-LC/ALAC，先做受限盒結構檢查）準備為 PCM16，隨後對同一準備音訊試聽、獨占另存。「變更 WAV 速度」可保持音調（25–400%，自行開發的時間伸縮；喀噠聲和和弦可能出現瑕疵）。編解碼器可用性和實際品質未驗收；其他容器、影片與人聲分類仍待做。",
+    "既存の整数 PCM、浮動小数点/G.711、AIFF 機能は独立したままです。別の制限付き Windows コーデック機能がローカル WAV、FLAC、MP3 Layer III、ADTS AAC、音声のみの M4A（AAC-LC/ALAC、先に制限付きボックス検査）を PCM16 に準備し、同じ準備済み音声のプレビューと排他的保存を提供します。「WAV の速度を変更」は音程を保持できます（25–400%、独自のタイムストレッチ。クリック音や和音に乱れが出ることがあります）。コーデック可用性と実品質は未検証で、他コンテナー、動画、音声分類は未実装です。"
+  ],
+  "Choose a self-contained RIFF WAV, FLAC, MP3 Layer III, ADTS AAC or audio-only M4A (AAC-LC or ALAC) file. Playlists, URLs, reference movies, video and other containers are not accepted by this decoder.": [
+    "请选择自包含的 RIFF WAV、FLAC、MP3 Layer III、ADTS AAC 或纯音频 M4A（AAC-LC 或 ALAC）文件。此解码器不接受播放列表、网址、引用影片、视频或其他容器。",
+    "請選擇自包含的 RIFF WAV、FLAC、MP3 Layer III、ADTS AAC 或純音訊 M4A（AAC-LC 或 ALAC）檔案。此解碼器不接受播放清單、網址、參照影片、影片或其他容器。",
+    "自己完結した RIFF WAV、FLAC、MP3 Layer III、ADTS AAC、または音声のみの M4A（AAC-LC または ALAC）ファイルを選んでください。プレイリスト、URL、参照ムービー、動画、その他のコンテナーは対象外です。"
   ]
 }

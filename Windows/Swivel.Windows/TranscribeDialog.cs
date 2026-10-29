@@ -51,7 +51,7 @@ internal sealed class TranscribeDialog : Window
         body.Children.Add(UI.Text(app.L(graphics
             ? "Windows ML runs the model on this PC's graphics card."
             : "Windows ML found no graphics card it can use, so the processor does the work. This can take about as long as the recording or longer. The time left is shown after the first 30 seconds.")));
-        body.Children.Add(UI.Text(app.L("Up to one hour of audio. Integer PCM WAV up to 512 MB is converted by Swivel; other WAV, FLAC, MP3 and ADTS AAC files are decoded by Windows (up to 128 MB). Video files and M4A are not accepted yet.")));
+        body.Children.Add(UI.Text(app.L("Up to one hour of audio. Integer PCM WAV up to 512 MB is converted by Swivel; other WAV, FLAC, MP3, ADTS AAC and audio-only M4A (AAC-LC or ALAC) files are decoded by Windows (up to 128 MB). Video files are not accepted here.")));
         body.Children.Add(UI.Text(app.L("New files are saved beside the original without replacing existing files. The original stays unchanged. Cancelling before the transcript is finished saves nothing.")));
         root.Children.Add(UI.Scroll(body)); Content = root;
         Loaded += (_, _) => language.Focus();
