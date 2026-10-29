@@ -142,7 +142,7 @@ internal static class VideoEditChecks
     }
 
     // A minimal MP4 movie: mvhd, one track with tkhd, an edit list, mdhd, hdlr and stts/ctts.
-    private static byte[] Movie(uint movieScale, uint mediaScale, uint frames, uint delta, string handler = "vide", bool wide = false, bool ctts = true, bool edit = true, bool stts = true, bool cslg = false)
+    private static byte[] Movie(uint movieScale, uint mediaScale, uint frames, uint delta, string handler = "vide", bool wide = false, bool ctts = true, bool edit = true, bool stts = true, bool cslg = false, int matrix = 0)
     {
         byte[] Box(string type, params byte[][] parts) { var body = parts.SelectMany(x => x).ToArray(); return U32((uint)(8 + body.Length)).Concat(type.Select(c => (byte)c)).Concat(body).ToArray(); }
         byte[] Full(int version) => new byte[] { (byte)version, 0, 0, 0 };
@@ -150,7 +150,10 @@ internal static class VideoEditChecks
         byte[] Dur(ulong value) => wide ? U64(value) : U32((uint)value);
         int v = wide ? 1 : 0;
         var mvhd = Box("mvhd", Full(v), Dur(1), Dur(2), U32(movieScale), Dur(movieDuration), new byte[80]);
-        var tkhd = Box("tkhd", Full(v), Dur(1), Dur(2), U32(1), U32(0), Dur(movieDuration), new byte[60]);
+        var tail = new byte[60];
+        int[][] matrices = { new[] { 0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x40000000 }, new[] { -0x10000, 0, 0, 0, -0x10000, 0, 0, 0, 0x40000000 }, new[] { 0, 0x10000, 0, -0x10000, 0, 0, 0, 0, 0x40000000 } };
+        if (matrix < matrices.Length) for (int i = 0; i < 9; i++) U32((uint)matrices[matrix][i]).CopyTo(tail, 16 + i * 4);
+        var tkhd = Box("tkhd", Full(v), Dur(1), Dur(2), U32(1), U32(0), Dur(movieDuration), tail);
         var elst = Box("edts", Box("elst", Full(v), U32(2), Dur(movieDuration / 4), wide ? U64(ulong.MaxValue) : U32(uint.MaxValue), U32(0x00010000), Dur(movieDuration), wide ? U64(delta) : U32(delta), U32(0x00010000)));
         var mdhd = Box("mdhd", Full(v), Dur(1), Dur(2), U32(mediaScale), Dur(mediaDuration), new byte[4]);
         var hdlr = Box("hdlr", Full(0), U32(0), handler.Select(c => (byte)c).ToArray(), new byte[13]);
@@ -220,6 +223,15 @@ internal static class VideoEditChecks
         var noEdits = Movie(1000, 30000, 300, 1000, ctts: false, edit: false); Mp4Retime.Patch(noEdits, 400);
         check(R32(noEdits, Find(noEdits, "mdhd") + 12) == 120000, "Retiming works without an edit list or reordering");
         reject(() => Mp4Retime.Patch(Movie(1000, 30000, 300, 1000), 110), "Retiming refuses an unoffered speed");
+
+        bool? Straight(params byte[][] boxes) { using var stream = new MemoryStream(boxes.SelectMany(x => x).ToArray()); return Mp4Retime.StraightVideo(stream); }
+        byte[] Head(string type, int length) { var b = new byte[length]; U32((uint)length).CopyTo(b, 0); for (int i = 0; i < 4; i++) b[4 + i] = (byte)type[i]; return b; }
+        check(Straight(Head("ftyp", 24), Movie(1000, 30000, 300, 1000)) == true && Straight(Head("ftyp", 24), Movie(1000, 30000, 300, 1000, wide: true)) == true, "A video track stored upright is straight (32- and 64-bit headers)");
+        check(Straight(Head("ftyp", 24), Movie(1000, 30000, 300, 1000, matrix: 1)) == false && Straight(Head("ftyp", 24), Movie(1000, 30000, 300, 1000, matrix: 2, wide: true)) == false && Straight(Head("ftyp", 24), Movie(1000, 30000, 300, 1000, matrix: 9)) == false,
+            "A video track turned 180° or 90° (or with no matrix) is not straight");
+        check(Straight(Head("ftyp", 24), Movie(1000, 44100, 300, 1024, "soun")) == false, "A movie without a video track is not called straight");
+        check(Straight(new byte[] { 0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0, 0xAA, 0, 0x62, 0xCE, 0x6C }) is null && Straight(Head("ftyp", 24), Head("mdat", 40)) is null,
+            "A file that isn't an ISO movie (WMV, or no movie box) is unknown");
 
         // A whole file: only the movie box changes, wherever it is.
         byte[] File(params byte[][] boxes) => boxes.SelectMany(x => x).ToArray();

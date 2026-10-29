@@ -79,6 +79,12 @@ internal static class VideoEditNativeChecks
         }
         check(SHA256.HashData(File.ReadAllBytes(source)).SequenceEqual(original), "Editing leaves the original byte for byte the same");
 
+        // Upside down keeps its size, but the track header gives it away.
+        string upside = Path.Combine(root, "upside.mp4");
+        var flipped = File.ReadAllBytes(source); RotatedVideoNativeChecks.Turn(flipped, 180, 320, 240); File.WriteAllBytes(upside, flipped);
+        using (var video = VideoTrimmer.OpenAsync(upside, default).GetAwaiter().GetResult())
+            check(video.Width == 320 && video.Height == 240 && !video.PictureChanges, $"A 180° phone video offers no picture changes either ({video.Width}×{video.Height}, {video.PictureChanges})");
+
         // A phone video stored sideways: Windows' transcoder doesn't turn it upright, so picture
         // changes are refused (with the reason); a speed change alone still works, upright.
         string turned = Path.Combine(root, "sideways.mp4");

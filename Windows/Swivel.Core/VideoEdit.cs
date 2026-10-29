@@ -30,7 +30,8 @@ public static class VideoEdit
     public static readonly int[] Speeds = { 25, 50, 75, 100, 125, 150, 200, 300, 400 };
     public const int MinSide = 16;
     public const string TooSmall = "This crop would leave a picture smaller than 16 pixels on a side. Choose another shape.";
-    /// Pixels a second after a speed-up, at most 3840 × 2160 at 60 fps (H.264 level 5.2).
+    /// Pixels a second after a speed-up, at most 3840 × 2160 at 60 fps (H.264 level 5.2), with 3%
+    /// to spare since Windows reports average frame rates (30.659 for a 30 fps test video).
     public const double MaxPixelRate = 3840.0 * 2160 * 60;
     public const string TooFast = "At this speed the new video would show more than 3840 × 2160 pixels 60 times a second, which many players can't decode. Choose a lower speed or a smaller crop.";
     public const string CannotRetime = "Windows wrote a video whose timing Swivel can't change for this speed. No file was saved.";
@@ -109,7 +110,7 @@ public static class VideoEdit
     public static void CheckRate(int width, int height, double fps, int percent)
     {
         ValidateSpeed(percent);
-        if (width * (double)height * fps * percent / 100 > MaxPixelRate * 1.001) throw new UserError(TooFast);
+        if (width * (double)height * fps * percent / 100 > MaxPixelRate * 1.03) throw new UserError(TooFast);
     }
 
     /// Bits a second to ask the encoder for, so the retimed video stays within `cap` when played.
@@ -136,6 +137,47 @@ public static class Mp4Retime
     {
         VideoEdit.ValidateSpeed(percent);
         if (percent == 100) return;
+        var (moov, movie) = Movie(stream);
+        Patch(movie, percent);
+        stream.Position = moov; stream.Write(movie); stream.Flush();
+    }
+
+    /// Whether every video track's header matrix is the identity (stored upright, unmirrored).
+    /// null when the stream isn't a readable ISO media file with one movie box (e.g. WMV).
+    public static bool? StraightVideo(Stream stream)
+    {
+        byte[] movie;
+        try { (_, movie) = Movie(stream); } catch (UserError) { return null; }
+        try
+        {
+            var (start, end) = Body(movie, 0, movie.Length, "moov");
+            int video = 0;
+            foreach (var (type, s, e) in Children(movie, start, end))
+            {
+                if (type != "trak") continue;
+                int? tkhd = null; bool isVideo = false;
+                foreach (var (t, s2, e2) in Children(movie, s, e))
+                {
+                    if (t == "tkhd") tkhd = s2;
+                    else if (t == "mdia") foreach (var (t3, s3, _) in Children(movie, s2, e2)) if (t3 == "hdlr") { Need(movie, s3, 12); isVideo = Type(movie, s3 + 8) == "vide"; }
+                }
+                if (!isVideo) continue;
+                if (tkhd is not { } th) return false;
+                Need(movie, th, 1); if (movie[th] > 1) return false;
+                int matrix = th + (movie[th] == 1 ? 52 : 40);
+                Need(movie, matrix, 36);
+                uint[] identity = { 0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x40000000 };
+                for (int i = 0; i < 9; i++) if (Be32(movie, matrix + i * 4) != identity[i]) return false;
+                video++;
+            }
+            return video > 0;
+        }
+        catch (UserError) { return false; }
+    }
+
+    // The single movie box: where it starts and its bytes, header included.
+    private static (long At, byte[] Bytes) Movie(Stream stream)
+    {
         long length = stream.Length, at = 0, moov = -1, moovSize = 0;
         var header = new byte[16];
         while (at < length)
@@ -153,8 +195,7 @@ public static class Mp4Retime
         if (moov < 0 || moovSize > MaxMovie) Fail();
         var movie = new byte[moovSize];
         stream.Position = moov; stream.ReadExactly(movie);
-        Patch(movie, percent);
-        stream.Position = moov; stream.Write(movie); stream.Flush();
+        return (moov, movie);
     }
 
     /// `movie` is one whole moov box, header included.

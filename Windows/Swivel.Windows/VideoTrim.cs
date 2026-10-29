@@ -36,9 +36,9 @@ public sealed class VideoTrimmer : IDisposable
     /// Whole milliseconds.
     public long Duration { get; }
     public bool HasSound { get; }
-    /// Windows' transcoder (which applies picture changes) reads the stored frames; a phone video
-    /// stored sideways reports an upright size here but a different stored size, and isn't turned
-    /// upright by the transcoder, so picture changes are refused for it.
+    /// Windows' transcoder (which applies picture changes) reads the stored frames and doesn't turn
+    /// a phone video stored with a rotation flag upright, so picture changes are refused when the
+    /// stored size differs from the upright one or an MP4/MOV video track's matrix isn't identity.
     public bool PictureChanges { get; private init; }
     public bool Hours => Duration >= 3_600_000;
     private readonly uint frameNumerator, frameDenominator, bitrate;
@@ -70,6 +70,10 @@ public sealed class VideoTrimmer : IDisposable
                 {
                     var profile = await NativeAsync.Join(MediaEncodingProfile.CreateFromFileAsync(file), token).ConfigureAwait(false);
                     stored = profile.Video is { } v && v.Width == video.Width && v.Height == video.Height;
+                    // A 180° or mirrored phone video keeps its size; its track header says so.
+                    input.Stream.Position = 0;
+                    stored &= Mp4Retime.StraightVideo(input.Stream) != false;
+                    input.Stream.Position = 0;
                 }
                 catch (Exception error) when (error is not OperationCanceledException) { stored = false; }
             }
