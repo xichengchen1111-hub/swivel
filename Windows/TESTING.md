@@ -1330,7 +1330,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 ## Windows0.130 — merged E02 content-preserving PDF pages, B06 folder move and copy undo (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: E02 40890188077 (core 4,552,310, native 5,728; five P2s fixed and rechecked, none left), B06 40889306979 (core 4,552,294, native 5,742; no P1/P2 left after fixes).
-- After merging both: core 4,552,408 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- After merging both: core 4,552,408 on Mac, native compiled 0 warnings/errors there. Windows CI 40893858628 on the merged branch passed (core 4,552,408, native 5,758).
 - The D04 video picture-edit branch is not merged yet.
 - Not tested: PDFs from real producers (Office, scanners, browsers) opened afterwards in Acrobat/Edge, folder moves on a real user's disk.
 
