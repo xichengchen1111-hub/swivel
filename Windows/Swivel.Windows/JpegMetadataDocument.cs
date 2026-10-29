@@ -13,6 +13,7 @@ internal sealed class JpegMetadataDocument : IDisposable
     private bool disposed;
     internal JpegMetadata.Plan Plan { get; }
     internal string Path => input.Path;
+    internal bool CanKeepOrientation => kept is not null;
     private JpegMetadataDocument(NativeFiles.Input input,JpegMetadata.Plan plan,byte[] cleaned,byte[]? kept)
     {this.input=input;Plan=plan;this.cleaned=cleaned;this.kept=kept;}
     internal static JpegMetadataDocument Open(string path,CancellationToken token)
@@ -34,8 +35,16 @@ internal sealed class JpegMetadataDocument : IDisposable
                 // The orientation-keeping variant differs only by the new minimal EXIF;
                 // it is validated the same way before it can be offered for saving.
                 using var keeping=new MemoryStream(checked((int)plan.OutputBytesKeeping(true)));plan.Write(keeping,true,token);kept=keeping.ToArray();
-                var check=ImageTools.DecodeSnapshot(kept,path,token);
-                if(check.PixelWidth!=plan.Width||check.PixelHeight!=plan.Height)throw new UserError(JpegMetadata.Invalid);
+                // The shared decoder applies EXIF orientation when the codec exposes it, so 5–8
+                // may come back with width and height swapped. A failure here only withdraws the option; the plain
+                // cleaned copy stays available.
+                try
+                {
+                    var check=ImageTools.DecodeSnapshot(kept,path,token);bool swap=plan.Orientation.Value>=5;
+                    bool stored=check.PixelWidth==plan.Width&&check.PixelHeight==plan.Height,oriented=swap&&check.PixelWidth==plan.Height&&check.PixelHeight==plan.Width;
+                    if(!stored&&!oriented)kept=null;
+                }
+                catch(UserError){kept=null;}
             }
             if(bitmap.PixelWidth!=plan.Width||bitmap.PixelHeight!=plan.Height)throw new UserError(JpegMetadata.Invalid);
             token.ThrowIfCancellationRequested();return new(input,plan,cleaned,kept);

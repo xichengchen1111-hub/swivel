@@ -14523,5 +14523,20 @@
     "顺时针旋转 270°",
     "順時針旋轉 270°",
     "時計回りに 270° 回転"
+  ],
+  "Orientation 1 shows the image as stored, so there is nothing to keep.": [
+    "方向 1 表示按原样显示图像，因此无需保留。",
+    "方向 1 表示依原樣顯示影像，因此無需保留。",
+    "向き 1 は保存されたとおりに表示する意味なので、保持する必要はありません。"
+  ],
+  "Keep orientation is available.": [
+    "可以保留方向。",
+    "可以保留方向。",
+    "向きを保持できます。"
+  ],
+  "The copy with orientation kept could not be validated, so only the plain copy is offered.": [
+    "保留方向的副本未能通过验证，因此只提供普通副本。",
+    "保留方向的副本未能通過驗證，因此只提供一般副本。",
+    "向きを保持したコピーを検証できなかったため、通常のコピーだけを提供します。"
   ]
 }

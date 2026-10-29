@@ -52,7 +52,7 @@ internal static class JpegMetadataNativeChecks
             string kept=document.Save(true,default);string dropped=document.Save(false,default);
             check(File.ReadAllBytes(kept).SequenceEqual(want)&&File.ReadAllBytes(rotated).SequenceEqual(source),"Kept copy is the source with only a minimal orientation EXIF in place of the original; source unchanged");
             check(JpegMetadata.Read(new MemoryStream(File.ReadAllBytes(dropped)),default).Orientation==ExifOrientationInfo.None&&JpegMetadata.Read(new MemoryStream(File.ReadAllBytes(kept)),default).Orientation.Value==6,"Unchecked copy has no orientation, kept copy re-reads as 6");
-            var decoded=ImageTools.DecodeSnapshot(File.ReadAllBytes(kept),kept,default);check(decoded.PixelWidth==7&&decoded.PixelHeight==3,"Kept copy decodes natively with unrotated stored dimensions");
+            var decoded=ImageTools.DecodeSnapshot(File.ReadAllBytes(kept),kept,default);check(document.CanKeepOrientation&&decoded.PixelWidth==3&&decoded.PixelHeight==7,"Orientation 6 kept copy passes validation and the shared decoder applies it (7×3 stored → 3×7 shown)");
         }
         using(var noMatch=JpegMetadataDocument.Open(first,default))
         {
