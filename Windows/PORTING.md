@@ -1047,6 +1047,16 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.118 跟进 Mac 1.14.5：Windows 医生“清理文件”（F06 增强）
+
+批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.117 已推送，CI 40695146443 通过。
+
+Mac `DoctorSweep.swift` 把多个检查合成一次“查找可清理的项目”。Windows 只合并已有、各自已审查过的工具：`Swivel.Core/CleanupFiles.cs` 把 AppCacheResult、TempCleanupPlan（带当次截止时间）、LargeFiles 中 ≥5 MB 的安装包提示、ProjectFolderResult（带搜索根）转成条目，按组、大小排序，同路径或位于另一已列文件夹内的只保留外层；只预选能列出运行程序且未在运行、已测大小的应用缓存；组复选框三态。`CleanupReader.Find`（OnSta，下载文件夹经 shell 读取）依次运行 AppCacheReader、CacheLocationReader+TempCleanup、CommonFolderReader 下载 + DoctorLargeFiles、DoctorProjects（文档、桌面、%USERPROFILE%\source），某一部分失败只记该部分问题。`CleanupFilesDialog`：每组 Expander（折叠）、三态组复选框、行复选框（虚拟化 GridView 绑定，空格在 PreviewKeyDown 勾选所选行）、缓存行的状态列与“重新检查正在运行的应用”、`RecycleBinSession<CleanupEntry>` 按来源类型调用原工具的 RecycleAppCache/RecycleTempItem/RecycleFile/RecycleProjectFolder 与相应恢复；撤销后的项目取消勾选，恢复的临时项目离开列表（与旧临时文件窗口相同）。Doctor 区域 uninstall 改名为 Clean Up Files，动作 doctor.cleanup 在前、安装记录在后（与 Mac 1.14.5 同名改动）。未包含：很久没打开的应用（Windows 无可靠的桌面程序上次打开时间）、孤立残留（需卸载前记录）、重复/相似文件和非安装包大文件，说明文字列出。
+
+验证：核心 `CleanupFilesChecks`（预选规则、部分大小、运行列表不可得时不预选、临时/安装包/构建条目与来源、5 MB 边界、合并排序与去重/嵌套、组状态与点击、目录与区域、翻译）。Windows CI 原生 `CleanupNativeChecks`：真实读取器在测试文件夹找到旧临时文件、6 MB 安装包和构建文件夹且无其他；窗口三组折叠、无预选时移动按钮关闭，整组勾选/取消；预选缓存时移动按钮开启、摘要 1 项；三类各自移到回收站并恢复；项目文件被删后构建文件夹拒绝移动；在 CI 机器上真实查找四部分（缓存 4 个、旧临时项目 11 个）。
+
+独立 agent 审查：P1（有预选缓存时窗口构造即空引用，CI 首轮也因同一处失败）已修。P2：空格不能勾选、整组勾选二次方复杂度，已修。P3：撤销后仍勾选、缓存无状态列、项目部分内层异常类型、问题文字、嵌套条目、限制说明、测试措辞，已修；复查无 P1/P2，又修两个 P3（只在刚撤销时取消勾选、状态列通知刷新）。未验证：真实电脑上大量临时项目时的窗口响应、触屏/讲述人操作复选框。固定 52 项仍 27／23／0／2。
+
 ## 0.117 跟进 Mac 1.13–1.14.4：晾衣绳图片拼接（A05 增强）
 
 批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.116 已推送，CI 40682974347 通过。

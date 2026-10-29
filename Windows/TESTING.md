@@ -1327,6 +1327,14 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.118 — Doctor Clean Up Files, from Mac 1.14.5 (F06, 2026-10-29)
+
+- Core 4,520,967 on Mac; native compiled 0 warnings/errors there. Windows CI: 40794541003 failed (CleanupNativeChecks: NullReferenceException building the window, the review's P1), 40800062113 passed after the fixes (core 4,520,971, native 5,488).
+- `CleanupFilesChecks` (core): only a closed app's cache with a size is preselected (running, unmeasurable, unmeasured not; none when running apps cannot be listed); partial sizes marked; temporary items keep the plan cutoff; installers ≥5,000,000 bytes only (4,999,999 and non-installers out); builds keep their root; grouped, largest first; same path once and an item inside a listed folder once (a sibling "… copy" kept); totals; group state/click; doctor.cleanup off with Doctor off, first in the renamed area; translations with placeholders.
+- Native, `CleanupNativeChecks`: real readers find exactly the old temp file, the 6 MB installer and the build folder; three folded groups, Move off; group click ticks and clears; a preselected closed-app cache opens with Move on and "selected: 1"; temp item, installer and build folder recycled and restored; a build folder whose project file is gone is refused; the real search on the CI machine reported all four parts (AppCaches 4 · 14,323,490; OldTemporary 11 · 370,583,771 partial; Installers 0; ProjectBuilds 0).
+- Independent agent review: P1 (constructor crash with a preselected cache), P2s (Space, quadratic ticking) and P3s fixed; recheck no P1/P2; two further P3s fixed after.
+- Not tested: responsiveness with thousands of temporary items on a real PC, Narrator/touch with the tick boxes.
+
 ## Windows0.117 — Clothesline stitching, from Mac 1.13–1.14.4 (A05, 2026-10-28)
 
 - Core 4,520,886 on Mac; native compiled 0 warnings/errors there. Windows CI: 40692481495 (first version, core 4,520,885, native 5,477) and 40693994867 after the review fixes (core 4,520,887, native 5,478) and 40695146443 after the last fix, docs and version (core 4,520,888, native 5,478) passed.

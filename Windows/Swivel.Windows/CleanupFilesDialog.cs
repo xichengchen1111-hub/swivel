@@ -23,6 +23,7 @@ internal sealed class CleanupFilesDialog : Window
     private readonly Dictionary<CleanupEntry, Row> rows = new(ReferenceEqualityComparer.Instance);
     // Moved in this window at any time (also when Undo brought them back).
     private readonly HashSet<CleanupEntry> moved = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<CleanupEntry> away = new(ReferenceEqualityComparer.Instance);
     private IReadOnlySet<string>? processes;
     private bool bulk;
     private readonly List<(CleanupGroup Group, CheckBox Box, TextBlock Header, ListView List)> groups = new();
@@ -151,10 +152,11 @@ internal sealed class CleanupFilesDialog : Window
     private void Refresh()
     {
         if (bin.Idle) processes = AppCacheReader.RunningNames();
-        // Items Undo brought back return unticked.
+        // Items Undo has just brought back return unticked (once; the user may tick them again).
         foreach (var entry in result.Entries)
-            if (bin.Gone.Contains(entry)) moved.Add(entry);
-            else if (moved.Contains(entry)) rows[entry].Untick();
+            if (bin.Gone.Contains(entry)) { moved.Add(entry); away.Add(entry); }
+            else if (away.Remove(entry)) rows[entry].Untick();
+        foreach (var row in rows.Values) row.StatusChanged();
         foreach (var (group, _, _, list) in groups)
         {
             list.ItemsSource = Listed().Where(e => e.Group == group).Select(e => rows[e]).ToArray();
@@ -201,6 +203,7 @@ internal sealed class CleanupFilesDialog : Window
             get => ticked;
             set { if (ticked == value) return; ticked = value; PropertyChanged?.Invoke(this, new(nameof(Checked))); owner.Ticked(); }
         }
+        public void StatusChanged() { if (entry.Source is AppCacheItem) PropertyChanged?.Invoke(this, new(nameof(Status))); }
         public void Untick() { if (!ticked) return; ticked = false; PropertyChanged?.Invoke(this, new(nameof(Checked))); }
         public string Path => Visible(entry.Path);
         public string Status => entry.Source is AppCacheItem cache
