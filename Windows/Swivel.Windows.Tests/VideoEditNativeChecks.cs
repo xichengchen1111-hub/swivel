@@ -122,10 +122,12 @@ internal static class VideoEditNativeChecks
         int n = 0;
         foreach (var (name, effect, w, h, hd, par) in new (string, Windows.Media.Effects.VideoTransformEffectDefinition?, int, int, bool, bool)[]
         {
-            ("rotate vga", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240, 320) }, 240, 320, false, false),
-            ("rotate hd1080p", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240, 320) }, 240, 320, true, false),
-            ("rotate hd1080p par", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240, 320) }, 240, 320, true, true),
-            ("none hd1080p", null, 320, 240, true, false),
+            ("full none", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,320,240), Rotation = MediaRotation.Clockwise90Degrees }, 240, 320, true, false),
+            ("full pre", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,320,240), Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(320,240) }, 240, 320, true, false),
+            ("full post", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,320,240), Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240,320) }, 240, 320, true, false),
+            ("tall none", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,134,240), Rotation = MediaRotation.Clockwise90Degrees }, 240, 134, true, false),
+            ("tall pre", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,134,240), Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(134,240) }, 240, 134, true, false),
+            ("tall post", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,134,240), Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240,134) }, 240, 134, true, false),
         })
         {
             try
