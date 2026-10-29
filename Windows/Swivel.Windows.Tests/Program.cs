@@ -168,6 +168,7 @@ internal static class Program
             Group("PngMetadataNativeChecks", () => PngMetadataNativeChecks.Run(directory,Check,Reject));
             Group("JpegMetadataNativeChecks", () => JpegMetadataNativeChecks.Run(directory,Check,Reject));
             Group("TiffMetadataNativeChecks", () => TiffMetadataNativeChecks.Run(directory,Check,Reject));
+            Group("PdfPagesNativeChecks", () => PdfPagesNativeChecks.Run(directory,Check,Reject));
             Group("ProjectFolderNativeChecks", () => ProjectFolderNativeChecks.Run(directory,Check,Reject));
             Group("LargeFileNativeChecks", () => LargeFileNativeChecks.Run(directory,Check,Reject));
             Group("LargeFilesChecks", () => LargeFilesChecks.Run(Check));

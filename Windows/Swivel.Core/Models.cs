@@ -200,6 +200,7 @@ public static class Catalog
         new("audio.exportaiff", "Export WAV as AIFF…", SingleFile: true, Extensions: new[] { "wav" }),
         new("audio.aiff", "Convert AIFF to WAV…", SingleFile: true, Extensions: new[] { "aif", "aiff", "aifc" }),
         new("text.ocr", "Recognize Text…", Feature.TextCapture, ImageOnly:true, SingleFile:true),
+        new("pdf.pages", "Select PDF Pages…", Feature.PdfPages, Extensions:new[]{"pdf"}),
         new("pdf.raster", "Render PDF Pages…", Feature.PdfPages, Extensions:new[]{"pdf"}),
         new("audio.systemdecode", "Decode Audio with Windows…", SingleFile:true, Extensions:new[]{"wav","mp3","aac","flac","m4a"}),
         new("audio.transcribe", "Transcribe Speech…", SingleFile: true, Extensions: new[] { "wav", "mp3", "aac", "flac", "m4a" }),

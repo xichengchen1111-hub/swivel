@@ -144,6 +144,7 @@ AssistantDraftChecks.Run(Check, Reject);
 PngMetadataChecks.Run(Check, Reject);
 JpegMetadataChecks.Run(Check, Reject);
 TiffMetadataChecks.Run(Check, Reject);
+PdfStructureChecks.Run(Check, Reject);
 ExifOrientationChecks.Run(Check, Reject);
 MenuChecks.Run(Check, Reject);
 ClotheslineChecks.Run(Check, Reject);
