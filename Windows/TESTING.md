@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.128 — merged F09 Startup Apps, C02 WebP, E03 DOC (2026-10-29)
+
+- Each branch passed its own Windows CI and independent review before merging: F09 40856844750 (core 4,542,520, native 5,642; review P2 fixed and rechecked), C02 40859204170 (review P3 fixed), E03 40858601547 (review findings fixed with fixtures).
+- After merging all three: core 4,542,682 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- Not tested: Startup Apps compared item by item with Task Manager on a real PC, WebP files from real cameras/browsers beyond the fixtures, .doc files saved by real Word versions.
+
 ## Windows0.127 — merged B08 7z, F08 Store/MSIX list, C06 keep orientation (2026-10-29)
 
 - Each branch passed its own Windows CI and independent review before merging: B08 40849161556 (core 4,522,042, native 5,606; review P2 fixed), F08 40846559778 (review no P1; P2/P3 fixed), C06 40846684301 (core 4,542,074, native 5,606; no remaining P1/P2). Details are in each branch's commits and session report.

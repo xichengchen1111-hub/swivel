@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.128 合并第三轮并行分支：F09 启动应用、C02 WebP、E03 DOC
+
+分支 `claude/win-f09-startup-87ed4d`（26bac1c、c835289）、`claude/win-c02-webp-52401e`（3f82a21、bb23090）、`claude/win-e03-doc-3aff11`（c632c8f、959195a）。Strings.json 三方 JSON 合并无同键冲突；Mcp.cs 的输入提示同时保留 DOC 与 WebP 两处改动。
+
+- F09：`doctor.startupapps` 组合既有有界 Run/RunOnce、StartupApproved 和（显式选择的）启动文件夹快照；每项按名称（不区分大小写）匹配其所属键（HKCU Run、HKLM Run、HKLM Run32、HKCU/HKLM StartupFolder），两种注册表视图都查。只解释 12 字节 REG_BINARY（02/06 启用、03/07 禁用、FILETIME 尾部），其余、冲突或不完整为未知。审查修正：文件夹读取器跳过的项（desktop.ini、链接、云端、不可读）列为未匹配；只经 32 位视图看到的机器值、不完整键中的匹配、重复/畸形值为未知并给出原因；原生 HKCU 检查只删除自己创建的键。
+- C02：原创有界 WebP 解码（RIFF/VP8X/ALPH，VP8L 四种变换、颜色缓存、元前缀码与 LZ77；VP8 关键帧布尔解码、分段、帧内预测、反 WHT/DCT、简单/普通环路滤波；双线性色度上采样、BT.601）。不使用 WIC 编解码器；动画拒绝。前缀码表预算 1600 万项、未用组不保留、每个像素循环可取消。审查修正（P3）：单符号码也计入预算；相似照片说明不再把 WebP 列为待做。
+- E03：按 [MS-CFB]/[MS-DOC] 原创读取：复合文件头、DIFAT/FAT/MiniFAT 链（环与边界检查）、根目录树（16,384 项）、WordDocument FIB 与 0Table/1Table 片段表（ccpText 主文档范围）；CP1252 压缩与 UTF-16 片段；域代码跳过保留结果；段落/单元格/行标记经段落属性页；直接隐藏与修订删除经字符属性页跳过。8 MiB 输入、2M UTF-16 输出、128 层域。审查修正：sprmPHugePapx 跟进 Data 流（有界、按偏移缓存）、PChgTabs cb=255、仅 fObfuscated 不算加密、接受 nFib 0x00C0、ZIP 签名的 .doc 走 DOCX、省略符号字符、孤立代理显示为 U+FFFD。
+
 ## 0.127 合并第二轮并行分支：B08 7z、F08 Store/MSIX、C06 保留方向
 
 分支 `claude/win-b08-7z-376500`（1edb235、6afe198）、`claude/win-f08-msix-7c35ce`（d7bf057、0d659e1）、`claude/win-c06-orientation-d4f1eb`（df1bfd2、5754c41、c59c0c5），Strings.json 三方 JSON 合并无同键冲突。
