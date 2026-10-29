@@ -49,6 +49,7 @@ internal sealed class TrimVideoDialog : Window
         AutomationProperties.SetName(turn, app.L("Turn")); AutomationProperties.SetName(shape, app.L("Crop to shape"));
         AutomationProperties.SetName(position, app.L("Crop position")); AutomationProperties.SetName(speed, app.L("Speed"));
         var soundNote = UI.Text("", 12);
+        bool soundChoice = video.HasSound;
         // The frames as Windows returned them; shown through the chosen picture change.
         System.Windows.Media.Imaging.BitmapSource? startRaw = null, endRaw = null;
         var status = UI.Text("");
@@ -69,13 +70,16 @@ internal sealed class TrimVideoDialog : Window
         {
             long? start = VideoTrim.Parse(startText.Text), end = VideoTrim.Parse(endText.Text);
             bool normal = Speed() == 100;
-            sound.IsEnabled = video.HasSound && normal;
+            // Shown unticked while another speed removes the sound; the choice returns at 1×.
+            if (sound.IsEnabled && !normal) { soundChoice = sound.IsChecked == true; sound.IsEnabled = false; sound.IsChecked = false; }
+            else if (!sound.IsEnabled && normal && video.HasSound) { sound.IsEnabled = true; sound.IsChecked = soundChoice; }
             soundNote.Text = video.HasSound && !normal ? app.L("At any speed but 1× the sound is removed: Windows' editing API used here can't change its speed.") : "";
             try
             {
+                position.IsEnabled = shape.SelectedIndex > 0;
                 var geometry = VideoEdit.Geometry(video.Width, video.Height, Chosen());
-                var seen = VideoEdit.Crop(geometry.SeenWidth, geometry.SeenHeight, VideoAspect.Original, 0);
-                position.IsEnabled = geometry.Seen != seen;
+                position.IsEnabled = geometry.Seen != VideoEdit.Crop(geometry.SeenWidth, geometry.SeenHeight, VideoAspect.Original, 0);
+                if (!normal) VideoEdit.CheckRate(geometry.Width, geometry.Height, video.Fps, Speed());
                 if (start is null || end is null) throw new UserError(VideoTrim.BadTime);
                 var plan = VideoTrim.Plan(start.Value, end.Value, video.Duration, sound.IsChecked == true, video.HasSound, Chosen(), Speed());
                 status.Text = string.Format(app.L("Keeps {0}, from {1} to {2}."), Time(plan.Length), Time(plan.Start), Time(plan.End))

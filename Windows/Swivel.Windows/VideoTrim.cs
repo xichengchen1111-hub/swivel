@@ -105,7 +105,10 @@ public sealed class VideoTrimmer : IDisposable
                 using (image)
                 {
                     using var stream = image.AsStreamForRead();
-                    var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+                    // Copied out of the decoder, so the frame belongs to no thread and can be turned and cropped anywhere.
+                    var decoded = new FormatConvertedBitmap(BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0], PixelFormats.Bgra32, null, 0);
+                    var pixels = new byte[decoded.PixelWidth * decoded.PixelHeight * 4]; decoded.CopyPixels(pixels, decoded.PixelWidth * 4, 0);
+                    var frame = BitmapSource.Create(decoded.PixelWidth, decoded.PixelHeight, 96, 96, PixelFormats.Bgra32, null, pixels, decoded.PixelWidth * 4);
                     frame.Freeze();
                     return frame;
                 }
@@ -155,6 +158,7 @@ public sealed class VideoTrimmer : IDisposable
         plan = VideoTrim.Plan(plan.Start, plan.End, Duration, plan.KeepSound, HasSound, plan.Picture, plan.Speed);
         var geometry = plan.Picture is null ? null : VideoEdit.Geometry(Width, Height, plan.Picture);
         int width = geometry?.Width ?? Width, height = geometry?.Height ?? Height;
+        if (plan.Speed != 100) VideoEdit.CheckRate(width, height, Fps, plan.Speed);
         string rendered = System.IO.Path.Combine(workspace, "trimmed.mp4");
         try
         {
@@ -172,7 +176,9 @@ public sealed class VideoTrimmer : IDisposable
             if (frameNumerator > 0 && frameDenominator > 0) { profile.Video.FrameRate.Numerator = frameNumerator; profile.Video.FrameRate.Denominator = frameDenominator; }
             double fps = frameNumerator > 0 && frameDenominator > 0 ? (double)frameNumerator / frameDenominator : 30;
             // At least the original's bit rate, so the kept part loses as little as re-encoding allows.
-            profile.Video.Bitrate = (uint)Math.Clamp(Math.Max(bitrate, width * (double)height * fps * 0.1), 1_000_000, 100_000_000);
+            // Faster speeds play more bits a second, so they ask for proportionally fewer (still at least 1 Mbit/s).
+            double wanted = Math.Max(bitrate, width * (double)height * fps * 0.1);
+            profile.Video.Bitrate = (uint)Math.Clamp(plan.Speed == 100 ? wanted : VideoEdit.EncodeBitrate(wanted, plan.Speed), 1_000_000, 100_000_000);
             if (!sound) profile.Audio = null;
             var output = await NativeAsync.Join(StorageFolder.GetFolderFromPathAsync(workspace), token).ConfigureAwait(false);
             var target = await NativeAsync.Join(output.CreateFileAsync("trimmed.mp4", CreationCollisionOption.FailIfExists), token).ConfigureAwait(false);
@@ -183,8 +189,12 @@ public sealed class VideoTrimmer : IDisposable
             token.ThrowIfCancellationRequested();
             // Another speed: the frames stay, each lasting 100/speed times as long.
             if (plan.Speed != 100)
-                using (var retime = new FileStream(rendered, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                try
+                {
+                    using var retime = new FileStream(rendered, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
                     Mp4Retime.Apply(retime, plan.Speed);
+                }
+                catch (IOException) { throw new UserError(Failed); }
             return NativeFiles.WriteBeside(input, System.IO.Path.GetFileNameWithoutExtension(input.Path) + (plan.Edited ? " edited" : " trimmed"), "mp4", stream =>
             {
                 using var source = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);

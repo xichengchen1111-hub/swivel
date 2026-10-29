@@ -30,6 +30,9 @@ public static class VideoEdit
     public static readonly int[] Speeds = { 25, 50, 75, 100, 125, 150, 200, 300, 400 };
     public const int MinSide = 16;
     public const string TooSmall = "This crop would leave a picture smaller than 16 pixels on a side. Choose another shape.";
+    /// Pixels a second after a speed-up, at most 3840 × 2160 at 60 fps (H.264 level 5.2).
+    public const double MaxPixelRate = 3840.0 * 2160 * 60;
+    public const string TooFast = "At this speed the new video would show more than 3840 × 2160 pixels 60 times a second, which many players can't decode. Choose a lower speed or a smaller crop.";
     public const string CannotRetime = "Windows wrote a video whose timing Swivel can't change for this speed. No file was saved.";
 
     public static (int Width, int Height) Ratio(VideoAspect aspect) => aspect switch
@@ -102,6 +105,16 @@ public static class VideoEdit
         return g.Mirror ? (w - u, v) : (u, v);
     }
 
+    /// A speed-up multiplies the frame rate; refuse what common decoders can't keep up with.
+    public static void CheckRate(int width, int height, double fps, int percent)
+    {
+        ValidateSpeed(percent);
+        if (width * (double)height * fps * percent / 100 > MaxPixelRate * 1.001) throw new UserError(TooFast);
+    }
+
+    /// Bits a second to ask the encoder for, so the retimed video stays within `cap` when played.
+    public static double EncodeBitrate(double wanted, int percent, double cap = 100_000_000) => Math.Min(wanted, cap * 100 / Math.Max(100, percent));
+
     /// Milliseconds of output for `length` milliseconds of source at `percent` speed.
     public static long OutputLength(long length, int percent)
     {
@@ -164,11 +177,12 @@ public static class Mp4Retime
 
     private static void Track(byte[] b, int start, int end, int percent, List<Action> writes)
     {
-        int? tkhd = null, elst = null, mdhd = null, hdlr = null, stts = null, ctts = null;
+        int? tkhd = null, elst = null, mdhd = null, hdlr = null, stts = null, ctts = null, cslg = null;
+        int elstEnd = 0, sttsEnd = 0, cttsEnd = 0, cslgEnd = 0;
         foreach (var (type, s, e) in Children(b, start, end))
         {
             if (type == "tkhd") One(ref tkhd, s);
-            else if (type == "edts") foreach (var (t, s2, _) in Children(b, s, e)) { if (t == "elst") One(ref elst, s2); }
+            else if (type == "edts") foreach (var (t, s2, e2) in Children(b, s, e)) { if (t == "elst") { One(ref elst, s2); elstEnd = e2; } }
             else if (type == "mdia")
                 foreach (var (t, s2, e2) in Children(b, s, e))
                 {
@@ -177,10 +191,11 @@ public static class Mp4Retime
                     else if (t == "minf")
                         foreach (var (t3, s3, e3) in Children(b, s2, e2))
                             if (t3 == "stbl")
-                                foreach (var (t4, s4, _) in Children(b, s3, e3))
+                                foreach (var (t4, s4, e4) in Children(b, s3, e3))
                                 {
-                                    if (t4 == "stts") One(ref stts, s4);
-                                    else if (t4 == "ctts") One(ref ctts, s4);
+                                    if (t4 == "stts") { One(ref stts, s4); sttsEnd = e4; }
+                                    else if (t4 == "ctts") { One(ref ctts, s4); cttsEnd = e4; }
+                                    else if (t4 == "cslg") { One(ref cslg, s4); cslgEnd = e4; }
                                 }
                 }
         }
@@ -199,19 +214,25 @@ public static class Mp4Retime
         writes.Add(() => Put32(b, scaleAt, (uint)scaled));
         writes.Add(Times(b, durationAt, v1 ? 8 : 4, k, false));
 
-        Need(b, st, 8); long count = Be32(b, st + 4); if (count > (b.Length - st - 8) / 8) Fail();
+        Need(b, st, 8); long count = Be32(b, st + 4); if (count > (sttsEnd - st - 8) / 8) Fail();
         for (int i = 0; i < count; i++) writes.Add(Times(b, st + 8 + i * 8 + 4, 4, k, false));
         if (ctts is { } ct)
         {
             Need(b, ct, 8); bool signed = b[ct] == 1; if (b[ct] > 1) Fail();
-            long n = Be32(b, ct + 4); if (n > (b.Length - ct - 8) / 8) Fail();
+            long n = Be32(b, ct + 4); if (n > (cttsEnd - ct - 8) / 8) Fail();
             for (int i = 0; i < n; i++) writes.Add(Times(b, ct + 8 + i * 8 + 4, 4, k, signed));
+        }
+        if (cslg is { } cs)
+        {
+            Need(b, cs, 4); bool wide = b[cs] == 1; if (b[cs] > 1) Fail();
+            int field = wide ? 8 : 4; if (cslgEnd - cs - 4 < 5 * field) Fail();
+            for (int i = 0; i < 5; i++) writes.Add(Times(b, cs + 4 + i * field, field, k, true));
         }
         if (elst is { } el)
         {
             Need(b, el, 8); bool wide = b[el] == 1; if (b[el] > 1) Fail();
             int entry = wide ? 20 : 12, field = wide ? 8 : 4;
-            long n = Be32(b, el + 4); if (n > (b.Length - el - 8) / entry) Fail();
+            long n = Be32(b, el + 4); if (n > (elstEnd - el - 8) / entry) Fail();
             for (int i = 0; i < n; i++)
             {
                 int e = el + 8 + i * entry;

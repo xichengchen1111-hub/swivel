@@ -12,7 +12,7 @@ internal static class VideoEditChecks
         Geometry(check, reject);
         Timing(check, reject);
         Retime(check, reject);
-        foreach (var text in new[] { VideoEdit.TooSmall, VideoEdit.CannotRetime, "No turn", "90° clockwise", "180°", "90° counterclockwise", "Flip left to right", "Flip upside down", "Whole picture", "Turn",
+        foreach (var text in new[] { VideoEdit.TooSmall, VideoEdit.CannotRetime, VideoEdit.TooFast, "No turn", "90° clockwise", "180°", "90° counterclockwise", "Flip left to right", "Flip upside down", "Whole picture", "Turn",
             "Crop to shape", "Crop position", "Picture", "Speed", "Crop position (left to right, or top to bottom)", "The new video is {0} × {1} pixels and {2} long.",
             "At any speed but 1× the sound is removed: Windows' editing API used here can't change its speed.", "When the picture or speed changes, it is saved as “name edited.mp4” instead." })
             check(Strings.Table.TryGetValue(text, out var row) && row.Length == 3 && row.All(x => x.Length > 0 && (!text.Contains("{2}") || x.Contains("{0}") && x.Contains("{1}") && x.Contains("{2}"))), "Video edit message translated: " + text);
@@ -123,6 +123,12 @@ internal static class VideoEditChecks
         reject(() => VideoEdit.OutputLength(1000, 110), "Speeds outside the offered steps are refused");
         reject(() => VideoEdit.OutputLength(1000, 0), "Zero speed is refused");
 
+        VideoEdit.CheckRate(1920, 1080, 60, 200); VideoEdit.CheckRate(3840, 2160, 30, 200); VideoEdit.CheckRate(1920, 1080, 29.97, 400); VideoEdit.CheckRate(3840, 2160, 60, 25);
+        check(true, "Speed-ups up to 3840 × 2160 at 60 frames a second are allowed");
+        VideoEdit.CheckRate(1920, 1080, 60, 400); reject(() => VideoEdit.CheckRate(1920, 1080, 120, 300), "1080p120 at 3× (360 frames a second) is refused");
+        reject(() => VideoEdit.CheckRate(3840, 2160, 30, 300), "4K30 at 3× is refused");
+        check(VideoEdit.EncodeBitrate(20e6, 100) == 20e6 && VideoEdit.EncodeBitrate(20e6, 400) == 20e6 && VideoEdit.EncodeBitrate(60e6, 400) == 25e6 && VideoEdit.EncodeBitrate(60e6, 25) == 60e6,
+            "Speed-ups ask for fewer bits only when the played rate would pass 100 Mbit/s");
         var picture = new VideoPicture(QuarterTurns: 1);
         var plan = VideoTrim.Plan(0, 10_000, 10_000, true, true, picture, 200);
         check(plan.Picture == picture && plan.Speed == 200 && !plan.KeepSound && plan.Edited && plan.OutputLength == 5_000, "At 2× the whole video can be edited; its sound is removed");
@@ -136,7 +142,7 @@ internal static class VideoEditChecks
     }
 
     // A minimal MP4 movie: mvhd, one track with tkhd, an edit list, mdhd, hdlr and stts/ctts.
-    private static byte[] Movie(uint movieScale, uint mediaScale, uint frames, uint delta, string handler = "vide", bool wide = false, bool ctts = true, bool edit = true, bool stts = true)
+    private static byte[] Movie(uint movieScale, uint mediaScale, uint frames, uint delta, string handler = "vide", bool wide = false, bool ctts = true, bool edit = true, bool stts = true, bool cslg = false)
     {
         byte[] Box(string type, params byte[][] parts) { var body = parts.SelectMany(x => x).ToArray(); return U32((uint)(8 + body.Length)).Concat(type.Select(c => (byte)c)).Concat(body).ToArray(); }
         byte[] Full(int version) => new byte[] { (byte)version, 0, 0, 0 };
@@ -150,7 +156,8 @@ internal static class VideoEditChecks
         var hdlr = Box("hdlr", Full(0), U32(0), handler.Select(c => (byte)c).ToArray(), new byte[13]);
         var sttsBox = Box("stts", Full(0), U32(1), U32(frames), U32(delta));
         var cttsBox = Box("ctts", Full(1), U32(2), U32(1), U32(2 * delta), U32(1), U32(unchecked((uint)-(int)delta)));
-        var stbl = Box("stbl", (stts ? sttsBox : Array.Empty<byte>()).Concat(ctts ? cttsBox : Array.Empty<byte>()).ToArray(), Box("stsz", Full(0), U32(0), U32(0)));
+        var cslgBox = Box("cslg", Full(0), U32(delta), U32(unchecked((uint)-(int)delta)), U32(2 * delta), U32(0), U32(frames * delta));
+        var stbl = Box("stbl", (stts ? sttsBox : Array.Empty<byte>()).Concat(ctts ? cttsBox : Array.Empty<byte>()).Concat(cslg ? cslgBox : Array.Empty<byte>()).ToArray(), Box("stsz", Full(0), U32(0), U32(0)));
         var mdia = Box("mdia", mdhd, hdlr, Box("minf", Box("vmhd", Full(0), new byte[8]), stbl));
         var trak = Box("trak", tkhd, edit ? elst : Array.Empty<byte>(), mdia);
         return Box("moov", mvhd, trak);
@@ -205,6 +212,11 @@ internal static class VideoEditChecks
         reject(() => Mp4Retime.Patch(Movie(1000, 30000, 300, 1000)[..^5], 200), "Retiming refuses a cut-off movie box");
         reject(() => Mp4Retime.Patch(Movie(1000, 4_000_000_000, 300, 1000), 200), "Retiming refuses a timescale that would overflow");
         reject(() => Mp4Retime.Patch(Movie(1000, 30, 1, 2_200_000_000), 75), "Retiming refuses frame times that would overflow");
+        var corrupt = Movie(1000, 30, 300, 1); corrupt[Find(corrupt, "stts") + 7] = 2;
+        reject(() => Mp4Retime.Patch(corrupt, 75), "Retiming refuses a sample-time count running past its own box, even inside the movie box");
+        var shifts = Movie(1000, 30, 300, 1, cslg: true); Mp4Retime.Patch(shifts, 75);
+        int cs = Find(shifts, "cslg");
+        check(R32(shifts, cs + 4) == 2 && (int)R32(shifts, cs + 8) == -2 && R32(shifts, cs + 12) == 4 && R32(shifts, cs + 20) == 600, "Retiming scales the composition shift box with the sample times");
         var noEdits = Movie(1000, 30000, 300, 1000, ctts: false, edit: false); Mp4Retime.Patch(noEdits, 400);
         check(R32(noEdits, Find(noEdits, "mdhd") + 12) == 120000, "Retiming works without an edit list or reordering");
         reject(() => Mp4Retime.Patch(Movie(1000, 30000, 300, 1000), 110), "Retiming refuses an unoffered speed");

@@ -71,6 +71,7 @@ internal static class VideoEditNativeChecks
                 check(RotatedVideoNativeChecks.Straight(output), "The edited video is stored upright with no turn in its header");
                 if (speed != 100)
                 {
+                    Console.WriteLine("INFO: " + Timescales(output));
                     using var again = VideoTrimmer.OpenAsync(output, default).GetAwaiter().GetResult();
                     check(Math.Abs(again.Duration - plan.OutputLength) <= 100 + plan.OutputLength * 0.03, $"Windows reads the {speed}% video back at its new length: {again.Duration} ms, {again.Fps:0.##} fps reported (source {video.Fps:0.##})");
                 }
@@ -137,6 +138,22 @@ internal static class VideoEditNativeChecks
         var bgra = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
         var data = new byte[bgra.PixelWidth * bgra.PixelHeight * 4]; bgra.CopyPixels(data, bgra.PixelWidth * 4, 0);
         return data;
+    }
+
+    // Versions and timescales of the movie and media headers Windows wrote, for knowing the retime's limits.
+    private static string Timescales(string path)
+    {
+        var b = File.ReadAllBytes(path); var text = new StringBuilder();
+        foreach (var type in new[] { "mvhd", "tkhd", "mdhd", "elst", "ctts", "cslg" })
+            for (int i = 4; i + 24 <= b.Length; i++)
+                if (b[i] == type[0] && b[i + 1] == type[1] && b[i + 2] == type[2] && b[i + 3] == type[3])
+                {
+                    int v = b[i + 4]; uint R(int at) => (uint)(b[at] << 24 | b[at + 1] << 16 | b[at + 2] << 8 | b[at + 3]);
+                    text.Append($"{type} v{v}");
+                    if (type is "mvhd" or "mdhd") text.Append($" timescale {R(i + 4 + (v == 1 ? 20 : 12))}");
+                    text.Append("; ");
+                }
+        return text.ToString();
     }
 
     private static (int Width, int Height) Size(string path)
