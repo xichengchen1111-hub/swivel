@@ -12,12 +12,12 @@ internal static class M4aChecks
 {
     internal sealed record Spec
     {
-        public string Codec{get;init;}="mp4a";public int Channels{get;init;}=2;public int Rate{get;init;}=44100;public int EntryRate{get;init;}=-1;
+        public string Codec{get;init;}="mp4a";public int Channels{get;init;}=2;public int Rate{get;init;}=44100;public int EntryRate{get;init;}=-1;public int EntryChannels{get;init;}=-1;public bool VideoEntry{get;init;}=true;public byte[] AscTail{get;init;}=Array.Empty<byte>();public byte ObjectType{get;init;}=0x40;
         public string Major{get;init;}="M4A ";public string[] Compatible{get;init;}=new[]{"M4A ","isom"};
         public string[] Handlers{get;init;}=new[]{"soun"};public byte Aot{get;init;}=2;public byte EsFlags{get;init;}=0;public uint DrefFlags{get;init;}=1;
         public ulong MovieDuration{get;init;}=1000;public bool Wide{get;init;}=false;public bool MdatToEnd{get;init;}=false;public long OffsetShift{get;init;}=0;
         public byte[][] MoovExtra{get;init;}=Array.Empty<byte[]>();public byte[][] TopExtra{get;init;}=Array.Empty<byte[]>();public byte[][] EntryExtra{get;init;}=Array.Empty<byte[]>();
-        public byte[][] StblExtra{get;init;}=Array.Empty<byte[]>();public byte[][] TrakExtra{get;init;}=Array.Empty<byte[]>();
+        public byte[][] StblExtra{get;init;}=Array.Empty<byte[]>();public byte[][] TrakExtra{get;init;}=Array.Empty<byte[]>();public byte[][] MinfExtra{get;init;}=Array.Empty<byte[]>();
     }
 
     internal static byte[] Box(string type,params byte[][] parts)
@@ -35,7 +35,7 @@ internal static class M4aChecks
     static byte[] Entry(Spec s)
     {
         int entryRate=s.EntryRate>=0?s.EntryRate:s.Rate;
-        var head=Cat(Z(6),U16(1),U16(0),U16(0),U32(0),U16(s.Channels),U16(16),U16(0),U16(0),U32((uint)(entryRate<<16)));
+        var head=Cat(Z(6),U16(1),U16(0),U16(0),U32(0),U16(s.EntryChannels>=0?s.EntryChannels:s.Channels),U16(16),U16(0),U16(0),U32((uint)(entryRate<<16)));
         byte[] config;
         if(s.Codec is "alac")config=Box("alac",Cat(U32(0),U32(4096),new byte[]{0,16,40,10,14,(byte)s.Channels},U16(255),U32(0),U32(0),U32((uint)s.Rate)));
         else
@@ -43,7 +43,7 @@ internal static class M4aChecks
             int[] rates={96000,88200,64000,48000,44100,32000,24000,22050,16000,12000,11025,8000,7350};int index=Array.IndexOf(rates,s.Rate);
             byte[] asc=index>=0?new[]{(byte)((s.Aot<<3)|(index>>1)),(byte)(((index&1)<<7)|(s.Channels<<3))}
                 :new[]{(byte)((s.Aot<<3)|7),(byte)(0x80|(s.Rate>>17)),(byte)(s.Rate>>9),(byte)(s.Rate>>1),(byte)(((s.Rate&1)<<7)|(s.Channels<<3))};
-            var dc=Cat(new byte[]{0x40,0x15},Z(3),U32(128000),U32(128000),Desc(5,asc));
+            var dc=Cat(new byte[]{s.ObjectType,0x15},Z(3),U32(128000),U32(128000),Desc(5,Cat(asc,s.AscTail)));
             var es=Cat(U16(1),new[]{s.EsFlags},(s.EsFlags&0x40)!=0?Cat(new byte[]{4},Ascii("http")):Array.Empty<byte>(),Desc(4,dc),Desc(6,new byte[]{2}));
             config=Box("esds",U32(0),Desc(3,es));
         }
@@ -52,10 +52,10 @@ internal static class M4aChecks
 
     static byte[] Trak(Spec s,string handler,uint offset)
     {
-        var entry=handler=="vide"?Box("avc1",Z(78)):Entry(s);
+        var entry=handler=="vide"&&s.VideoEntry?Box("avc1",Z(78)):Entry(s);
         var stbl=Box("stbl",new[]{Box("stsd",U32(0),U32(1),entry),Box("stts",U32(0),U32(0)),Box("stsc",U32(0),U32(0)),Box("stsz",U32(0),U32(0),U32(0)),
             s.Wide?Box("co64",U32(0),U32(1),U64(offset)):Box("stco",U32(0),U32(1),U32(offset))}.Concat(s.StblExtra).ToArray());
-        var minf=Box("minf",Box("smhd",Z(8)),Box("dinf",Box("dref",U32(0),U32(1),Box("url ",U32(s.DrefFlags)))),stbl);
+        var minf=Box("minf",new[]{Box("smhd",Z(8))}.Concat(s.MinfExtra).Append(Box("dinf",Box("dref",U32(0),U32(1),Box("url ",U32(s.DrefFlags))))).Append(stbl).ToArray());
         var mdia=Box("mdia",Box("mdhd",U32(0),U32(0),U32(0),U32((uint)s.Rate),U32((uint)s.Rate),Z(4)),Box("hdlr",U32(0),U32(0),Ascii(handler),Z(12),Z(1)),minf);
         return Box("trak",new[]{Box("tkhd",Z(84)),mdia}.Concat(s.TrakExtra).ToArray());
     }
@@ -115,7 +115,16 @@ internal static class M4aChecks
         Refuse(Build(new Spec{Channels=3}),"three channels");
         Refuse(Build(new Spec{Rate=7350}),"7350 Hz below 8 kHz");
         Refuse(Build(new Spec{Codec="alac",Rate=384000,EntryRate=0}),"ALAC 384 kHz");
-        Refuse(Build(new Spec{EntryRate=48000}),"sample entry rate disagrees with esds");
+        check(Accept(new Spec{Codec="alac",Rate=22050,EntryRate=44100,Channels=1,EntryChannels=2})==new M4aInfo("ALAC",22050,1,1),"Apple-style mono ALAC: entry says 2 ch/44.1 kHz, config decides");
+        check(Accept(new Spec{Channels=1,EntryChannels=2,Rate=22050,EntryRate=44100}).Channels==1,"Apple-style mono AAC: config decides channels");
+        check(Accept(new Spec{ObjectType=0x67}).Codec=="AAC-LC","MPEG-2 AAC-LC object type accepted");
+        check(Accept(new Spec{MinfExtra=new[]{Box("hdlr",U32(0),Ascii("dhlr"),Ascii("alis"),Z(13))}}).Codec=="AAC-LC","QuickTime-style data handler in minf accepted");
+        Refuse(Build(new Spec{ObjectType=0x6b}),"MP3-in-MP4 object type");
+        Refuse(Build(new Spec{AscTail=new byte[]{0x56,0xE5,0x80}}),"explicit backward-compatible SBR (HE-AAC) signalling");
+        Refuse(Build(new Spec{Handlers=new[]{"vide"},VideoEntry=false}),"vide handler even with an audio sample entry");
+        Refuse(Build(new Spec{Handlers=new[]{"soun","vide"},VideoEntry=false}),"second vide-handler track with an audio sample entry");
+        Refuse(Build(new Spec{TopExtra=Enumerable.Range(0,M4aAudio.MaxMdat).Select(_=>Box("mdat")).ToArray()}),"mdat count limit");
+        check(Accept(new Spec{TopExtra=Enumerable.Range(0,M4aAudio.MaxMdat-1).Select(_=>Box("mdat")).ToArray()}).Codec=="AAC-LC","mdat count at limit accepted");
         Refuse(Build(new Spec{Codec="Opus"}),"other codec sample entry");
         Refuse(Build(new Spec{MovieDuration=7201000}),"movie longer than two hours");
         Refuse(Build(new Spec{MovieDuration=uint.MaxValue}),"unknown duration");
