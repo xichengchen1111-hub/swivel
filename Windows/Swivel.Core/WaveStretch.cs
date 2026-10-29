@@ -11,8 +11,9 @@ namespace Swivel.Core;
 // the channel sum; coarse search on every rate/8000-th sample, then a finer pass). Aligned
 // pieces keep the waveform's periods, so pitch stays; sound is repeated (slower) or skipped
 // (faster). Each output sample is the window-weighted average of the real source samples that
-// cover it, so the start, end and very short files are not faded by silence outside the source.
-// Memory is one sliding source window of about 0.12 s + 0.01 s × speed/100 plus 4096 frames of
+// cover it, so the start and end are not faded by silence outside the source. Files shorter than
+// one piece (40 ms) are not stretched evenly: at slow speeds the remainder can be silent.
+// Memory is one sliding source window of about 0.16 s + 0.02 s × speed/100 plus 4096 frames of
 // read-ahead, never the duration. No transient detection, phase locking, formant or voice model.
 internal static class WaveStretch
 {
@@ -23,7 +24,7 @@ internal static class WaveStretch
         int hop = Math.Max(8, rate / 100), half = hop * 2, window = hop * 4, tolerance = Math.Max(8, rate / 100);
         int coarse = Math.Max(1, rate / 8000), fine = Math.Max(1, coarse / 4);
         long advance = ((long)hop * percent + 99) / 100 + 1;
-        var buffer = new Window(input, source, checked((int)(advance + 2L * tolerance + 2L * half + hop + 8 + 4096)), token);
+        var buffer = new Window(input, source, checked((int)(2 * advance + 2L * tolerance + 2L * half + hop + window + 8 + 4096)), token);
         var shape = new double[window];
         for (int n = 0; n < window; n++) shape[n] = .5 - .5 * Math.Cos(2 * Math.PI * n / window);
         var sum = new double[window * channels]; var weight = new double[window]; var encoded = new byte[hop * block];
@@ -34,8 +35,12 @@ internal static class WaveStretch
         {
             token.ThrowIfCancellationRequested();
             long nominal = (piece * hop * percent + 50) / 100;
-            buffer.Load(nominal - advance - tolerance - half, nominal + tolerance + half + hop);
-            long position = piece == 0 ? 0 : nominal + Search(buffer, previous + hop, nominal, half, -tolerance, tolerance, coarse, fine);
+            buffer.Load(nominal - 2 * advance - tolerance - half - window, nominal + tolerance + half + hop);
+            // When the source holds a whole piece, no piece may end past the source, so the end of
+            // the output never falls into frames covered only by silence (search range may then shift).
+            int high = tolerance, low = -tolerance;
+            if (source.Frames >= window) { high = (int)Math.Clamp(source.Frames - half - nominal, -(tolerance + window + advance), tolerance); low = Math.Min(low, high); }
+            long position = piece == 0 ? 0 : nominal + Search(buffer, previous + hop, nominal, half, low, high, coarse, fine);
             for (int n = 0; n < window; n++)
             {
                 long frame = position - half + n; if (frame < 0 || frame >= source.Frames) continue;

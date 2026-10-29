@@ -2894,11 +2894,6 @@
     "程式路徑無法取得或不受支援",
     "実行ファイルのパスを取得できないか未対応です"
   ],
-  "Existing integer PCM, float/G.711 and AIFF tools remain separate. An additional bounded Windows codec decoder prepares PCM16 from local WAV, FLAC, MP3 Layer III or ADTS AAC, with complete prepared-audio preview and exclusive save. Codec availability and runtime quality are unverified; other containers, video, pitch-preserving speed and speech classification remain pending.": [
-    "既有整数 PCM、浮点/G.711 和 AIFF 工具保持独立。另有受限 Windows 编解码器入口，将本地 WAV、FLAC、MP3 Layer III 或 ADTS AAC 准备为 PCM16，随后对同一准备音频试听、独占另存。编解码器可用性和实际质量未验收；其他容器、视频、保音高速度与人声分类仍待做。",
-    "既有整數 PCM、浮點/G.711 和 AIFF 工具保持獨立。另有受限 Windows 編解碼器入口，將本機 WAV、FLAC、MP3 Layer III 或 ADTS AAC 準備為 PCM16，隨後對同一準備音訊試聽、獨占另存。編解碼器可用性和實際品質未驗收；其他容器、影片、保音高速度與人聲分類仍待做。",
-    "既存の整数 PCM、浮動小数点/G.711、AIFF 機能は独立したままです。別の制限付き Windows コーデック機能がローカル WAV、FLAC、MP3 Layer III、ADTS AAC を PCM16 に準備し、同じ準備済み音声のプレビューと排他的保存を提供します。コーデック可用性と実品質は未検証で、他コンテナー、動画、音高維持の速度変更、音声分類は未実装です。"
-  ],
   "Expand G.711 A-law or mu-law codewords to 16-bit integer PCM WAV. Sample rate, channel order and frame count are preserved. This does not restore detail already lost in the encoded recording, and no gain, normalization, resampling, filtering or dither is applied.": [
     "将 G.711 A-law 或 mu-law 码字展开为 16 位整数 PCM WAV，保留采样率、声道顺序与帧数。无法恢复录音编码时已丢失的细节，不施加增益、归一化、重采样、滤波或抖动。",
     "將 G.711 A-law 或 mu-law 碼字展開為 16 位元整數 PCM WAV，保留取樣率、聲道順序與影格數。無法恢復錄音編碼時已丟失的細節，不施加增益、正規化、重新取樣、濾波或抖動。",
@@ -14314,11 +14309,6 @@
     "保持音調（時間伸縮）",
     "音程を保持（タイムストレッチ）"
   ],
-  "Keep Pitch repeats or skips short overlapping pieces of the sound (40 ms, lined up by similarity; an original WSOLA method). On steady test tones pitch stays within about 0.3%. Clicks and drum hits can repeat as echoes when slower, or soften and drop out when faster; chords, music and noisy recordings can sound rough or wavering; both stereo channels are lined up together. It does not separate voices or instruments.": [
-    "“保持音调”会重复或跳过声音中相互重叠的短片段（40 毫秒，按相似度对齐；自研 WSOLA 方法）。在稳定的测试音上，音调偏差约在 0.3% 以内。减速时咔嗒声和鼓点可能重复成回声，加速时可能变弱或丢失；和弦、音乐和噪声较多的录音可能听起来粗糙或发颤；立体声两个声道一起对齐。不会分离人声或乐器。",
-    "「保持音調」會重複或略過聲音中相互重疊的短片段（40 毫秒，依相似度對齊；自行開發的 WSOLA 方法）。在穩定的測試音上，音調偏差約在 0.3% 以內。減速時喀噠聲和鼓點可能重複成回聲，加速時可能變弱或遺失；和弦、音樂和雜訊較多的錄音可能聽起來粗糙或發顫；立體聲兩個聲道一起對齊。不會分離人聲或樂器。",
-    "「音程を保持」は、音の短い重なり合った断片（40 ミリ秒、類似度で位置合わせ。独自実装の WSOLA 方式）を繰り返したり飛ばしたりします。安定したテスト音では音程のずれは約 0.3% 以内です。遅くするとクリック音やドラムがエコーのように繰り返され、速くすると弱まったり抜けたりすることがあります。和音、音楽、ノイズの多い録音はざらついたり揺れたりして聞こえることがあります。ステレオの両チャンネルはまとめて位置合わせされます。声や楽器の分離は行いません。"
-  ],
   "Without Keep Pitch, speed changes use a finite low-pass filter. Faster playback removes frequencies that would exceed the output Nyquist limit; slower playback cannot restore detail. Either way, peaks may clip and reduction rounds without dither.": [
     "未开启“保持音调”时，速度变化使用有限长度低通滤波器。加速会移除超过输出奈奎斯特极限的频率；减速无法恢复细节。两种方式下峰值都可能削波，降低位深时直接舍入，不加抖动。",
     "未開啟「保持音調」時，速度變化使用有限長度低通濾波器。加速會移除超過輸出奈奎斯特極限的頻率；減速無法恢復細節。兩種方式下峰值都可能削波，降低位元深度時直接捨入，不加抖動。",
@@ -14333,5 +14323,15 @@
     "请选择 25–400% 的整数速度。",
     "請選擇 25–400% 的整數速度。",
     "25–400% の整数の速度を選んでください。"
+  ],
+  "Existing integer PCM, float/G.711 and AIFF tools remain separate. An additional bounded Windows codec decoder prepares PCM16 from local WAV, FLAC, MP3 Layer III or ADTS AAC, with complete prepared-audio preview and exclusive save. Change WAV Speed can keep pitch (25–400%, original time-stretch; clicks and chords can show artefacts). Codec availability and runtime quality are unverified; other containers, video and speech classification remain pending.": [
+    "既有整数 PCM、浮点/G.711 和 AIFF 工具保持独立。另有受限 Windows 编解码器入口，将本地 WAV、FLAC、MP3 Layer III 或 ADTS AAC 准备为 PCM16，随后对同一准备音频试听、独占另存。“更改 WAV 速度”可保持音调（25–400%，自研时间伸缩；咔嗒声和和弦可能出现瑕疵）。编解码器可用性和实际质量未验收；其他容器、视频与人声分类仍待做。",
+    "既有整數 PCM、浮點/G.711 和 AIFF 工具保持獨立。另有受限 Windows 編解碼器入口，將本機 WAV、FLAC、MP3 Layer III 或 ADTS AAC 準備為 PCM16，隨後對同一準備音訊試聽、獨占另存。「變更 WAV 速度」可保持音調（25–400%，自行開發的時間伸縮；喀噠聲和和弦可能出現瑕疵）。編解碼器可用性和實際品質未驗收；其他容器、影片與人聲分類仍待做。",
+    "既存の整数 PCM、浮動小数点/G.711、AIFF 機能は独立したままです。別の制限付き Windows コーデック機能がローカル WAV、FLAC、MP3 Layer III、ADTS AAC を PCM16 に準備し、同じ準備済み音声のプレビューと排他的保存を提供します。「WAV の速度を変更」は音程を保持できます（25–400%、独自のタイムストレッチ。クリック音や和音に乱れが出ることがあります）。コーデック可用性と実品質は未検証で、他コンテナー、動画、音声分類は未実装です。"
+  ],
+  "Keep Pitch repeats or skips short overlapping pieces of the sound (40 ms, lined up by similarity; an original WSOLA method). On steady test tones pitch stays within about 0.3%. Clicks and drum hits can repeat as echoes when slower, or soften and drop out when faster; chords, music and noisy recordings can sound rough or wavering; both stereo channels are lined up together. Sounds shorter than 40 ms are not stretched evenly. It does not separate voices or instruments.": [
+    "“保持音调”会重复或跳过声音中相互重叠的短片段（40 毫秒，按相似度对齐；自研 WSOLA 方法）。在稳定的测试音上，音调偏差约在 0.3% 以内。减速时咔嗒声和鼓点可能重复成回声，加速时可能变弱或丢失；和弦、音乐和噪声较多的录音可能听起来粗糙或发颤；立体声两个声道一起对齐。短于 40 毫秒的声音无法均匀伸缩。不会分离人声或乐器。",
+    "「保持音調」會重複或略過聲音中相互重疊的短片段（40 毫秒，依相似度對齊；自行開發的 WSOLA 方法）。在穩定的測試音上，音調偏差約在 0.3% 以內。減速時喀噠聲和鼓點可能重複成回聲，加速時可能變弱或遺失；和弦、音樂和雜訊較多的錄音可能聽起來粗糙或發顫；立體聲兩個聲道一起對齊。短於 40 毫秒的聲音無法均勻伸縮。不會分離人聲或樂器。",
+    "「音程を保持」は、音の短い重なり合った断片（40 ミリ秒、類似度で位置合わせ。独自実装の WSOLA 方式）を繰り返したり飛ばしたりします。安定したテスト音では音程のずれは約 0.3% 以内です。遅くするとクリック音やドラムがエコーのように繰り返され、速くすると弱まったり抜けたりすることがあります。和音、音楽、ノイズの多い録音はざらついたり揺れたりして聞こえることがあります。ステレオの両チャンネルはまとめて位置合わせされます。40 ミリ秒より短い音は均等には伸縮されません。声や楽器の分離は行いません。"
   ]
 }

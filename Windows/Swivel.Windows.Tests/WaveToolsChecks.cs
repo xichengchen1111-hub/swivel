@@ -208,7 +208,7 @@ internal static class WaveToolsChecks
         }
         using(var document=WaveDocument.Open(large,default,scanPeaks:false))using(var cancellation=new CancellationTokenSource())
         {
-            var saving=Task.Run(()=>document.SaveSpeed(new(29,true),cancellation.Token));
+            var saving=Task.Run(()=>document.SaveSpeed(new(40,true),cancellation.Token));
             bool staging=SpinWait.SpinUntil(()=>Directory.GetFiles(folder,".swivel-*.tmp").Length>0||saving.IsCompleted,TimeSpan.FromSeconds(5))&&!saving.IsCompleted;
             cancellation.Cancel();bool cancelled=false;try{saving.GetAwaiter().GetResult();}catch(OperationCanceledException){cancelled=true;}
             check(staging&&cancelled,"Keep-pitch speed can cancel during exclusive staging export");

@@ -73,9 +73,15 @@ internal static class WaveStretchChecks
         foreach(int percent in new[]{25,61,137,400})
         {
             int[] values=WaveChecks.Decode(Render(Fixture(24,2,20000,48000,(_,c)=>c==0?1234567:-2345678),new(percent,true)));
-            int tail=(int)(48000*.05*100/percent)*2+2000;
-            check(values.Take(Math.Max(2,values.Length-tail)).Select((x,i)=>Math.Abs(x-(i%2==0?1234567:-2345678))).Max()<=2,"Keep-pitch DC level and stereo separation: "+percent);
+            check(values.Select((x,i)=>Math.Abs(x-(i%2==0?1234567:-2345678))).Max()<=2,"Keep-pitch DC level and stereo separation through the last frame: "+percent);
         }
+        // No silent gaps at the end (review finding): every frame of a constant source keeps its level.
+        foreach(var (rate,frames) in new[]{(22050,20000),(48000,48000),(8000,400),(8000,320),(44100,1777),(192000,30000)})
+            foreach(int percent in new[]{25,29,50,80,99,101,150,200,333,400})
+            {
+                int[] values=WaveChecks.Decode(Render(Fixture(16,1,frames,rate,(_,_)=>10000),new(percent,true)));
+                check(values.All(x=>Math.Abs(x-10000)<=1),$"Keep-pitch constant level through the end: {rate} Hz {frames} frames {percent}%");
+            }
 
         // Measurements: pitch by Hann-windowed DFT peak, duration by exact frames, transients by click positions.
         double Peak(int[] samples,int rate,int channels,double lo,double hi)
