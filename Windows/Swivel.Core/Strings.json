@@ -11799,11 +11799,6 @@
     "解壓縮目前需要 NTFS 磁碟，以便解壓縮出的檔案保留下載警告。",
     "展開したファイルにダウンロードの警告を残すため、展開には現在 NTFS ドライブが必要です。"
   ],
-  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP and ZIP64 (Store/Deflate), TAR (POSIX ustar/pax or GNU), .tar.gz/.tgz and single-file .gz archives, up to 2 GB and 10,000 entries, into a new folder on NTFS. TAR links, devices and sparse files are refused; macOS ._ attribute files are left out. 7z/RAR extraction, encryption and archiving folder trees are still planned.": [
-    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP 和 ZIP64（存储/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及单文件 .gz（最多 2 GB、10,000 个条目）解压到新文件夹。TAR 中的链接、设备和稀疏文件会被拒绝；macOS 的 ._ 属性文件不解压。7z/RAR 解压、加密及文件夹树归档仍待实现。",
-    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP 和 ZIP64（儲存/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及單檔 .gz（最多 2 GB、10,000 個項目）解壓縮到新資料夾。TAR 中的連結、裝置和稀疏檔案會被拒絕；macOS 的 ._ 屬性檔案不解壓縮。7z/RAR 解壓縮、加密及資料夾樹封存仍待實作。",
-    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP と ZIP64（格納/Deflate）、TAR（POSIX ustar/pax または GNU）、.tar.gz/.tgz、単一ファイル .gz（2 GB・10,000 項目まで）を新しいフォルダーに展開できます。TAR 内のリンク、デバイス、スパースファイルは拒否し、macOS の ._ 属性ファイルは展開しません。7z/RAR の展開、暗号化、フォルダー構造のアーカイブは実装予定です。"
-  ],
   "Files are extracted into a new folder beside the archive, named after it. Existing files and folders are never overwritten. TAR stores no file checksums, so each file is checked against its size and the CRC-32 Swivel recorded while reviewing the archive; a compressed archive's own checksum is checked too.": [
     "文件会解压到压缩包旁边以其命名的新文件夹，绝不覆盖已有文件和文件夹。TAR 不保存文件校验值，因此每个文件都会按大小以及 Swivel 审查压缩包时记录的 CRC-32 核对；压缩过的包还会核对其自身校验值。",
     "檔案會解壓縮到壓縮檔旁邊以其命名的新資料夾，絕不覆寫既有檔案和資料夾。TAR 不儲存檔案檢查碼，因此每個檔案都會依大小及 Swivel 審查壓縮檔時記錄的 CRC-32 核對；壓縮過的封存檔還會核對其本身的檢查碼。",
@@ -14078,5 +14073,115 @@
     "这个 PSD 保存时未勾选“最大兼容”，文件中没有合并后的画面。请勾选“最大兼容”重新保存，或另存为 PNG。",
     "這個 PSD 儲存時未勾選「最大相容性」，檔案中沒有合併後的畫面。請勾選「最大相容性」重新儲存，或另存為 PNG。",
     "この PSD は「互換性を優先」をオフにして保存されているため、統合画像がありません。「互換性を優先」をオンにして保存し直すか、PNG で保存してください。"
+  ],
+  "Compress Folder to ZIP…": [
+    "将文件夹压缩为 ZIP…",
+    "將資料夾壓縮為 ZIP…",
+    "フォルダーを ZIP に圧縮…"
+  ],
+  "The ZIP holds the folder itself and everything inside it, with each file's last modified time. Links, junctions, cloud-only files and system files are skipped and listed. File attributes, permissions and alternate data streams are not kept.": [
+    "ZIP 包含文件夹本身及其中所有内容，并保留每个文件的修改时间。链接、联接点、仅在云端的文件和系统文件会跳过并列出。不保留文件属性、权限和备用数据流。",
+    "ZIP 包含資料夾本身及其中所有內容，並保留每個檔案的修改時間。連結、連接點、僅在雲端的檔案和系統檔案會略過並列出。不保留檔案屬性、權限和替代資料流。",
+    "ZIP にはフォルダー自体とその中身すべてが入り、各ファイルの最終更新日時も保持されます。リンク、ジャンクション、クラウドのみのファイル、システムファイルはスキップして一覧に示します。ファイル属性、アクセス許可、代替データストリームは保持されません。"
+  ],
+  "A folder ZIP is limited to 10,000 files and folders.": [
+    "文件夹 ZIP 最多包含 10,000 个文件和文件夹。",
+    "資料夾 ZIP 最多包含 10,000 個檔案和資料夾。",
+    "フォルダー ZIP に含められるファイルとフォルダーは 10,000 個までです。"
+  ],
+  "A folder ZIP is limited to 2 GB of files.": [
+    "文件夹 ZIP 中的文件总大小上限为 2 GB。",
+    "資料夾 ZIP 中的檔案總大小上限為 2 GB。",
+    "フォルダー ZIP に含められるファイルは合計 2 GB までです。"
+  ],
+  "A folder ZIP is limited to 32 levels of folders.": [
+    "文件夹 ZIP 最多包含 32 层文件夹。",
+    "資料夾 ZIP 最多包含 32 層資料夾。",
+    "フォルダー ZIP に含められるフォルダーの階層は 32 までです。"
+  ],
+  "A file changed while it was being compressed. Nothing was saved.": [
+    "压缩过程中有文件发生了变化，未保存任何内容。",
+    "壓縮過程中有檔案發生了變化，未儲存任何內容。",
+    "圧縮中にファイルが変更されました。何も保存されていません。"
+  ],
+  "Link or junction (not followed)": [
+    "链接或联接点（不跟随）",
+    "連結或連接點（不跟隨）",
+    "リンクまたはジャンクション（たどりません）"
+  ],
+  "Cloud-only or offline file (not downloaded)": [
+    "仅在云端或脱机的文件（不下载）",
+    "僅在雲端或離線的檔案（不下載）",
+    "クラウドのみまたはオフラインのファイル（ダウンロードしません）"
+  ],
+  "System file": [
+    "系统文件",
+    "系統檔案",
+    "システムファイル"
+  ],
+  "Not a regular file or folder": [
+    "不是普通文件或文件夹",
+    "不是一般檔案或資料夾",
+    "通常のファイルまたはフォルダーではありません"
+  ],
+  "{0} file(s) in {1} folder(s), {2} MB": [
+    "{1} 个文件夹中的 {0} 个文件，{2} MB",
+    "{1} 個資料夾中的 {0} 個檔案，{2} MB",
+    "{1} 個のフォルダー内の {0} 個のファイル、{2} MB"
+  ],
+  "The ZIP is saved beside the folder under the folder's name, or the next free numbered name. The folder stays unchanged.": [
+    "ZIP 以文件夹的名称保存在文件夹旁边，名称已占用时使用下一个可用编号。文件夹本身不变。",
+    "ZIP 以資料夾的名稱儲存在資料夾旁邊，名稱已被使用時使用下一個可用編號。資料夾本身不變。",
+    "ZIP はフォルダーと同じ名前でフォルダーの隣に保存されます（使用中なら次の空き番号）。フォルダー自体は変更されません。"
+  ],
+  "Skipped ({0}):": [
+    "已跳过（{0}）：",
+    "已略過（{0}）：",
+    "スキップ（{0}）："
+  ],
+  "Create ZIP": [
+    "创建 ZIP",
+    "建立 ZIP",
+    "ZIP を作成"
+  ],
+  "Skipped items": [
+    "已跳过的项目",
+    "已略過的項目",
+    "スキップした項目"
+  ],
+  "Enable Archives in Settings first.": [
+    "请先在设置中启用归档。",
+    "請先在設定中啟用封存。",
+    "先に設定でアーカイブを有効にしてください。"
+  ],
+  "Choose a Folder to Compress…": [
+    "选择要压缩的文件夹…",
+    "選擇要壓縮的資料夾…",
+    "圧縮するフォルダーを選択…"
+  ],
+  "Reading folder…": [
+    "正在读取文件夹…",
+    "正在讀取資料夾…",
+    "フォルダーを読み込み中…"
+  ],
+  "Compressing file {0} of {1}…": [
+    "正在压缩第 {0} 个文件，共 {1} 个…",
+    "正在壓縮第 {0} 個檔案，共 {1} 個…",
+    "{1} 個中 {0} 個目のファイルを圧縮中…"
+  ],
+  "Compressed {0} file(s) into a ZIP beside the folder.": [
+    "已将 {0} 个文件压缩为文件夹旁边的 ZIP。",
+    "已將 {0} 個檔案壓縮為資料夾旁邊的 ZIP。",
+    "{0} 個のファイルをフォルダーの隣の ZIP に圧縮しました。"
+  ],
+  "{0} item(s) were skipped.": [
+    "跳过了 {0} 个项目。",
+    "略過了 {0} 個項目。",
+    "{0} 個の項目をスキップしました。"
+  ],
+  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP and ZIP64 (Store/Deflate), TAR (POSIX ustar/pax or GNU), .tar.gz/.tgz and single-file .gz archives, up to 2 GB and 10,000 entries, into a new folder on NTFS. TAR links, devices and sparse files are refused; macOS ._ attribute files are left out. Compress Folder to ZIP archives one folder tree (up to 10,000 items, 32 levels, 2 GB), skipping links, cloud-only and system files. 7z/RAR extraction and encryption are still planned.": [
+    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP 和 ZIP64（存储/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及单文件 .gz（最多 2 GB、10,000 个条目）解压到新文件夹。TAR 中的链接、设备和稀疏文件会被拒绝；macOS 的 ._ 属性文件不解压。“将文件夹压缩为 ZIP”可归档一个文件夹树（最多 10,000 项、32 层、2 GB），跳过链接、仅云端文件和系统文件。7z/RAR 解压和加密仍待实现。",
+    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP 和 ZIP64（儲存/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及單檔 .gz（最多 2 GB、10,000 個項目）解壓縮到新資料夾。TAR 中的連結、裝置和稀疏檔案會被拒絕；macOS 的 ._ 屬性檔案不解壓縮。「將資料夾壓縮為 ZIP」可封存一個資料夾樹（最多 10,000 項、32 層、2 GB），略過連結、僅雲端檔案和系統檔案。7z/RAR 解壓縮和加密仍待實作。",
+    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP と ZIP64（格納/Deflate）、TAR（POSIX ustar/pax または GNU）、.tar.gz/.tgz、単一ファイル .gz（2 GB・10,000 項目まで）を新しいフォルダーに展開できます。TAR 内のリンク、デバイス、スパースファイルは拒否し、macOS の ._ 属性ファイルは展開しません。「フォルダーを ZIP に圧縮」で 1 つのフォルダー構造をアーカイブできます（10,000 項目・32 階層・2 GB まで、リンク・クラウドのみ・システムファイルは除外）。7z/RAR の展開と暗号化は実装予定です。"
   ]
 }

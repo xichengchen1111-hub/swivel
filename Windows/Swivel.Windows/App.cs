@@ -725,6 +725,26 @@ public sealed partial class App : Application
                 if (failures.Count > 0 && !exiting) ShowError(new UserError(string.Join("\n", failures)));
                 return;
             }
+            if (action.Id == "archive.zipfolder")
+            {
+                if (!Prefs.IsOn(Feature.Archives)) throw new UserError("Enable Archives in Settings first.");
+                workFeature = Feature.Archives; token.ThrowIfCancellationRequested();
+                var picker = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose a Folder to Compress…") };
+                if (picker.ShowDialog(owner) != true) return;
+                token.ThrowIfCancellationRequested();
+                string folder = picker.FolderName;
+                report(L("Reading folder…"));
+                using var work = await Task.Run(() => FolderZipWork.Open(folder, token), token);
+                token.ThrowIfCancellationRequested();
+                if (!ShowOperationDialog(new FolderZipDialog(this, work), owner, token)) return;
+                report(L("Processing…"));
+                string zip = await Task.Run(() => work.Save(token, (done, total) =>
+                    Dispatcher.InvokeAsync(() => report(string.Format(L("Compressing file {0} of {1}…"), done, total)))), token);
+                string summary = string.Format(L("Compressed {0} file(s) into a ZIP beside the folder."), work.Plan.Files);
+                if (work.Plan.Skipped.Count > 0) summary += " " + string.Format(L("{0} item(s) were skipped."), work.Plan.Skipped.Count);
+                report(summary); Home.ShowResults(new[] { zip }, summary);
+                return;
+            }
             if (action.Id == "file.move")
             {
                 if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");

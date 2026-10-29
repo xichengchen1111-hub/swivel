@@ -33,6 +33,31 @@ public sealed class ArchiveWork : IDisposable
     public void Dispose() { foreach (var input in inputs) input.Dispose(); inputs.Clear(); }
 }
 
+/// One chosen folder for Compress Folder to ZIP: the folder and its ancestors stay held from
+/// reading the tree through writing, and every file is reopened through held, rechecked folders.
+public sealed class FolderZipWork : IDisposable
+{
+    private readonly NativeFiles.MetadataDirectory root;
+    public string Folder { get; }
+    public FolderZipPlan Plan { get; }
+    private FolderZipWork(string folder, NativeFiles.MetadataDirectory root, FolderZipPlan plan) { Folder = folder; this.root = root; Plan = plan; }
+    public static FolderZipWork Open(string folder, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (Path.GetDirectoryName(folder) is null) throw new UserError("Choose a folder, not a whole drive.");
+        var root = NativeFiles.MetadataDirectory.Open(folder);
+        try { return new(folder, root, FolderZip.Plan(root, token)); }
+        catch { root.Dispose(); throw; }
+    }
+    public string Save(CancellationToken token, Action<int, int>? progress) =>
+        NativeFiles.WriteInDirectory(Path.GetDirectoryName(Folder)!, Plan.Name, "zip", output => FolderZip.Write(Plan, item =>
+        {
+            try { return root.OpenDuplicate(new DuplicateCandidate(item.RelativePath, item.Length)); }
+            catch (IOException) { throw new UserError(FolderZip.Changed); }
+        }, output, token, progress), token);
+    public void Dispose() => root.Dispose();
+}
+
 /// One held .zip: its handle (and folder ancestors) stay open from planning through
 /// extraction, so the members reviewed are the members written.
 public sealed class ZipExtractWork : IDisposable

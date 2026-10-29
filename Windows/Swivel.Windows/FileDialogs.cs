@@ -21,6 +21,33 @@ internal sealed class ArchiveDialog : Window
     }
 }
 
+internal sealed class FolderZipDialog : Window
+{
+    public FolderZipDialog(App app, FolderZipWork work)
+    {
+        var plan = work.Plan;
+        Title = app.L("Compress Folder to ZIP…"); Width = 680; Height = 560; MinWidth = 460; MinHeight = 340; WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        var root = new DockPanel { Margin = new Thickness(22) };
+        var top = new StackPanel();
+        top.Children.Add(UI.Text(plan.Name + ".zip", 20));
+        top.Children.Add(UI.Text(work.Folder));
+        top.Children.Add(UI.Text(string.Format(app.L("{0} file(s) in {1} folder(s), {2} MB"), plan.Files, plan.Folders + 1, (plan.Bytes / 1048576.0).ToString("0.##", CultureInfo.CurrentCulture))));
+        top.Children.Add(UI.Text(app.L(FolderZip.Notice), 12));
+        top.Children.Add(UI.Text(app.L("The ZIP is saved beside the folder under the folder's name, or the next free numbered name. The folder stays unchanged."), 12));
+        if (plan.Skipped.Count > 0) top.Children.Add(UI.Text(string.Format(app.L("Skipped ({0}):"), plan.Skipped.Count)));
+        var buttons = new WrapPanel();
+        buttons.Children.Add(UI.Button(app.L("Create ZIP"), () => DialogResult = true));
+        var cancel = UI.Button(app.L("Cancel"), () => DialogResult = false); cancel.IsCancel = true; buttons.Children.Add(cancel);
+        DockPanel.SetDock(top, Dock.Top); root.Children.Add(top); DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
+        var skipped = new ListBox { Margin = new Thickness(0, 6, 0, 10) };
+        VirtualizingPanel.SetIsVirtualizing(skipped, true);
+        AutomationProperties.SetName(skipped, app.L("Skipped items"));
+        skipped.ItemsSource = System.Linq.Enumerable.Select(plan.Skipped, s => DoctorFacts.VisibleBounded(s.RelativePath, 1024) + " — " + app.L(s.Reason));
+        if (plan.Skipped.Count > 0) root.Children.Add(skipped);
+        Content = root;
+    }
+}
+
 internal sealed class SubtitleDialog : Window
 {
     public string EditedText { get; private set; } = "";
