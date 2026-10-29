@@ -135,34 +135,45 @@ public static class AppMemory
         if(rows.Count>MaxProcesses||excluded.Count>MaxExcludedDirectories)throw new ArgumentException("Helper grouping exceeded its budget.");
         var byPid=new Dictionary<uint,AppMemoryProcess>();foreach(var row in rows)if(!byPid.TryAdd(row.Pid,row))throw new ArgumentException("Repeated process identifier.",nameof(rows));
         var excludedFolders=excluded.Select(x=>x.TrimEnd('\\')).ToArray();
+        var folders=new Dictionary<uint,string?>();foreach(var row in rows)folders[row.Pid]=row.Path is null?null:Folder(row.Path);
         uint? Link(AppMemoryProcess child)
         {
             if(child.Parent is not uint pid||pid==0||pid==child.Pid||!byPid.TryGetValue(pid,out var parent))return null;
             if(child.Path is null||parent.Path is null||child.Created is not ulong born||parent.Created is not ulong parentBorn||born<parentBorn)return null;
-            string? childFolder=Folder(child.Path),parentFolder=Folder(parent.Path);
+            string? childFolder=folders[child.Pid],parentFolder=folders[pid];
             if(childFolder is null||parentFolder is null||IsRoot(parentFolder))return null;
             // Exclusion folds case (excludes more); containment does not (attaches less).
             if(excludedFolders.Any(x=>Inside(parentFolder,x,StringComparison.OrdinalIgnoreCase)))return null;
             return Inside(childFolder,parentFolder,StringComparison.Ordinal)?pid:null;
         }
-        var root=new Dictionary<uint,AppMemoryProcess>();var links=new Dictionary<uint,uint>();
+        // Each chain is walked once: resolved roots are remembered, and a chain
+        // that meets a cycle (or reaches one already found) stays separate.
+        var root=new Dictionary<uint,AppMemoryProcess>();var links=new Dictionary<uint,uint>();var separate=new HashSet<uint>();
+        var stack=new List<AppMemoryProcess>();var onStack=new HashSet<uint>();
         foreach(var row in rows)
         {
-            token.ThrowIfCancellationRequested();var current=row;var visited=new HashSet<uint>{row.Pid};
-            while(Link(current) is uint parent)
+            token.ThrowIfCancellationRequested();if(root.ContainsKey(row.Pid))continue;
+            stack.Clear();onStack.Clear();var current=row;AppMemoryProcess? top;bool cycle=false;
+            while(true)
             {
                 token.ThrowIfCancellationRequested();
-                if(!visited.Add(parent)){current=row;break;} // A cycle, or a chain into one: stay separate.
+                if(root.TryGetValue(current.Pid,out var known)){cycle=separate.Contains(current.Pid);top=known;break;}
+                stack.Add(current);onStack.Add(current.Pid);
+                if(Link(current) is not uint parent){top=current;break;}
+                if(onStack.Contains(parent)){cycle=true;top=null;break;}
                 current=byPid[parent];
             }
-            root[row.Pid]=current;
-            if(!ReferenceEquals(current,row))links[row.Pid]=row.Parent!.Value;
+            foreach(var member in stack)
+            {
+                if(cycle||top is null){root[member.Pid]=member;separate.Add(member.Pid);}
+                else{root[member.Pid]=top;if(!ReferenceEquals(top,member))links[member.Pid]=member.Parent!.Value;}
+            }
         }
         var groups=new List<AppMemoryGroup>();
         foreach(var group in rows.GroupBy(x=>root[x.Pid] is var r&&r.Path is not null?"path:"+r.Path:"pid:"+r.Pid.ToString(CultureInfo.InvariantCulture),StringComparer.Ordinal))
         {
-            token.ThrowIfCancellationRequested();var members=group.OrderBy(x=>x.Pid).ToArray();
-            var lead=members.FirstOrDefault(x=>!links.ContainsKey(x.Pid))??members[0];
+            // The app (an unattached member) comes first, so names follow it rather than the lowest PID.
+            token.ThrowIfCancellationRequested();var members=group.OrderBy(x=>links.ContainsKey(x.Pid)?1:0).ThenBy(x=>x.Pid).ToArray();var lead=members[0];
             var attached=members.Where(x=>links.ContainsKey(x.Pid)).Select(x=>new AppMemoryHelper(x.Pid,links[x.Pid])).ToArray();
             groups.Add(new(root[lead.Pid].Path,Array.AsReadOnly(members),members.Sum(x=>x.WorkingSet.HasValue?(decimal)x.WorkingSet.Value:0),members.Count(x=>!x.WorkingSet.HasValue),Array.AsReadOnly(attached)));
         }
@@ -245,7 +256,7 @@ public static class AppMemory
             Name(group.Processes.First(x=>x.Pid==h.Pid),localize),h.Pid.ToString(CultureInfo.InvariantCulture),h.Parent.ToString(CultureInfo.InvariantCulture)))):""));
     public static string Header(AppMemorySnapshot snapshot,bool paths,Func<string,string> localize,bool helpers=false)=>string.Join(Environment.NewLine,
         localize("App Memory Snapshot"),snapshot.RecordedUtc.ToString("O",CultureInfo.InvariantCulture),Status(snapshot,localize),
-        string.Format(localize("Recorded processes: {0} · groups: {1} · unavailable working sets: {2}"),snapshot.Processes.Count,snapshot.Groups.Count,snapshot.Unmeasured),
+        string.Format(localize("Recorded processes: {0} · groups: {1} · unavailable working sets: {2}"),snapshot.Processes.Count,GroupsFor(snapshot,helpers).Count,snapshot.Unmeasured),
         localize("Known Working Set Subtotal (Bytes)")+": "+(snapshot.Unmeasured==snapshot.Processes.Count?localize("Unknown"):snapshot.KnownBytes.ToString("N0",CultureInfo.CurrentCulture)),
         localize(Scope),localize(Grouping),localize(Measurement),localize(Privacy),localize(paths?"Full executable paths are included.":"Full executable paths are hidden."))
         +(helpers&&snapshot.HelperGroups is not null?Environment.NewLine+string.Join(Environment.NewLine,localize("Helper grouping is on."),localize(HelperGrouping),ParentStatus(snapshot,localize)):"");

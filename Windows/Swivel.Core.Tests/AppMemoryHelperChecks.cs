@@ -107,6 +107,12 @@ internal static class AppMemoryHelperChecks
             check(cancelling.ParentReads==1,"No further parent read after cancellation");
         }
         reject(()=>AppMemory.HelperGroups(snapshot.Processes,Array.Empty<string>(),new CancellationToken(true)),"Helper grouping honours cancellation");
+        var lower=AppMemory.Scan(new Source(new[]{new Row(5000,4,@"C:\Chrome\chrome.exe",T,10),new Row(1200,5000,@"C:\Chrome\crashpad_handler.exe",T+1,1)}),default);
+        var lowerGroup=lower.HelperGroups!.Single();
+        check(lowerGroup.Processes[0].Pid==5000&&AppMemory.Name(lowerGroup,L)=="chrome.exe"&&AppMemory.Describe(lowerGroup,false,L).StartsWith("chrome.exe",StringComparison.Ordinal),"Helper group is named after the app even when a helper has a lower PID");
+        check(AppMemory.Header(snapshot,false,L,true).Contains("groups: "+snapshot.HelperGroups!.Count)&&AppMemory.Header(snapshot,false,L).Contains("groups: "+snapshot.Groups.Count),"Header group count follows the chosen grouping");
+        var tail=AppMemory.Scan(new Source(new[]{new Row(1,2,@"C:\A\a.exe",T),new Row(2,1,@"C:\A\b.exe",T),new Row(3,1,@"C:\A\c.exe",T+1),new Row(4,3,@"C:\A\d.exe",T+2)}),default);
+        check(tail.HelperGroups!.Count==4,"Chains reaching an already-found cycle stay separate");
         var many=Enumerable.Range(1,4096).Select(x=>new Row((uint)x,x==1?0u:(uint)x-1,@"C:\A"+string.Concat(Enumerable.Repeat(@"\d",Math.Min(x,200)))+@"\p.exe",T+(ulong)x)).ToArray();
         var deep=AppMemory.Scan(new Source(many),default);
         check(deep.HelperGroups!.Count==1&&deep.HelperGroups[0].Count==4096&&deep.HelperGroups[0].Helpers!.Count==4095,"A 4096-deep helper chain is grouped within budget");

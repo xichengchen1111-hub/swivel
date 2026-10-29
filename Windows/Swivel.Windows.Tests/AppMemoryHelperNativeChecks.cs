@@ -56,7 +56,7 @@ internal static class AppMemoryHelperNativeChecks
             check(child?.Parent==self&&outsider?.Parent==self,"Live children report this test process as parent");
             var group=snapshot.HelperGroups?.SingleOrDefault(g=>g.Processes.Any(p=>p.Pid==self));
             check(group is not null&&group.Processes.Any(p=>p.Pid==(uint)helper.Id)&&group.Helpers!.Contains(new AppMemoryHelper((uint)helper.Id,self)),"A child started from a subfolder of the test's folder joins the test's helper group");
-            check(group is not null&&group.Processes.All(p=>p.Pid!=(uint)outside.Id),"A child in the Windows folder stays separate");
+            check(group is not null&&group.Processes.All(p=>p.Pid!=(uint)outside.Id),"A child outside the test's folder stays separate");
             check(snapshot.Groups.Single(g=>g.Processes.Any(p=>p.Pid==self)).Processes.All(p=>p.Pid!=(uint)helper.Id),"Exact-path groups still keep the helper separate");
         }
         finally
