@@ -223,7 +223,7 @@ public sealed class McpSession
                 new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
             Tool("plan_action", "Plan action", "Prepares one action for 1–100 files without writing anything. Returns a plan_id that apply_plan uses within one hour, once.",
                 new JsonObject { ["action"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(Actions.Select(a => (JsonNode)a.Id).ToArray()) }, ["paths"] = Paths() }, new[] { "action", "paths" }, true, false),
-            Tool("plan_compress", "Plan compressing to a size", "Plans compressing 1–100 images or videos so each new file is at most target_bytes (e.g. 500000 for under 500 KB). Images (PNG, JPEG, BMP, TIFF, static GIF, TGA, PSD; up to 16 megapixels and 16384 pixels per side) become JPEG without their metadata, transparent areas on white: quality is lowered only as far as needed, and if even the lowest quality is too big the long edge shrinks in 15% steps down to 320 pixels. Videos (MP4, MOV, M4V, WMV, up to 2 hours) become H.264/AAC MP4 at a bit rate worked out from their length, never above the original's, at most 1920 pixels on the long edge and smaller at low rates; videos saved with a rotation flag (as phones often record) come out upright, and encoding can take minutes. Originals are kept; new files go beside them. Nothing changes until apply_plan.",
+            Tool("plan_compress", "Plan compressing to a size", "Plans compressing 1–100 images or videos so each new file is at most target_bytes (e.g. 500000 for under 500 KB). Images (PNG, JPEG, BMP, TIFF, static GIF, TGA, PSD, still WebP; up to 16 megapixels and 16384 pixels per side) become JPEG without their metadata, transparent areas on white: quality is lowered only as far as needed, and if even the lowest quality is too big the long edge shrinks in 15% steps down to 320 pixels. Videos (MP4, MOV, M4V, WMV, up to 2 hours) become H.264/AAC MP4 at a bit rate worked out from their length, never above the original's, at most 1920 pixels on the long edge and smaller at low rates; videos saved with a rotation flag (as phones often record) come out upright, and encoding can take minutes. Originals are kept; new files go beside them. Nothing changes until apply_plan.",
                 new JsonObject
                 {
                     ["paths"] = Paths(),
@@ -287,7 +287,7 @@ public sealed class McpSession
     {
         ["actions"] = new JsonArray(Actions.Select(a => (JsonNode)new JsonObject
         {
-            ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = a.Font ? (a.Id == "font.desktop" ? "Web fonts (WOFF, WOFF2) up to 64 MB" : FontInputs) : a.Subtitle ? SubtitleInputs : a.Data ? DataInputs : a.Document ? DocumentInputs : "PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture) or static GIF images",
+            ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = a.Font ? (a.Id == "font.desktop" ? "Web fonts (WOFF, WOFF2) up to 64 MB" : FontInputs) : a.Subtitle ? SubtitleInputs : a.Data ? DataInputs : a.Document ? DocumentInputs : "PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture), still WebP or static GIF images",
             ["writes"] = a.Id == "font.desktop" ? "A new TTF file (TrueType outlines) or OTF file (PostScript outlines) with the same tables beside each original, named '<name>.ttf' or '<name>.otf' or the next free numbered name." : "A new " + a.Extension.ToUpperInvariant() + " file" + (a.Font ? " with the font's tables copied as they are (outlines unchanged)" : a.Subtitle ? (a.Extension == "txt" ? " holding only the subtitle text, one cue per line" : " with each cue's text and timing (styling, colours and positions are dropped)")
                 : a.Data ? (a.Extension is "csv" or "tsv" ? " with a header row and one row per record (nested values as JSON text, UTF-8 with a byte order mark)" : " with the same values (keys sorted; CSV/TSV cells become text; plist dates and data become ISO 8601 and Base64 text where the format has no such type)")
                 : a.Document ? " holding only the document's text (no formatting, images, table layout or objects)"
@@ -376,7 +376,7 @@ public sealed class McpSession
     private JsonObject ReadCodes(JsonObject arguments, CancellationToken token)
     {
         var paths = PathsArgument(arguments);
-        if (paths.FirstOrDefault(p => !Catalog.IsImage(p)) is { } other) throw new McpToolError("read_codes takes PNG, JPEG, BMP, TIFF, GIF, TGA or PSD images; " + other + " is not one.");
+        if (paths.FirstOrDefault(p => !Catalog.IsImage(p)) is { } other) throw new McpToolError("read_codes takes PNG, JPEG, BMP, TIFF, GIF, TGA, PSD or WebP images; " + other + " is not one.");
         var codes = new JsonArray(); var unread = new JsonArray();
         foreach (string path in paths)
         {
@@ -403,7 +403,7 @@ public sealed class McpSession
         foreach (string path in paths)
         {
             token.ThrowIfCancellationRequested();
-            if (!action.Accepts(path)) throw new McpToolError(path + (action.Font ? (action.Id == "font.desktop" ? ": this action needs a WOFF or WOFF2 web font." : ": this action needs a font file (TTF, OTF, WOFF or WOFF2) in another format.") : action.Data ? ": this action needs a data file (JSON, JSONL, NDJSON, PLIST, CSV or TSV) in another format." : action.Subtitle ? ": this action needs a subtitle file (SRT, VTT, ASS, SSA, LRC or SBV) in another format." : action.Document ? ": this action needs a plain-text, DOCX, ODT, RTF, HTML or EPUB document." : ": this action needs a PNG, JPEG, BMP, TIFF, GIF, TGA or PSD image."));
+            if (!action.Accepts(path)) throw new McpToolError(path + (action.Font ? (action.Id == "font.desktop" ? ": this action needs a WOFF or WOFF2 web font." : ": this action needs a font file (TTF, OTF, WOFF or WOFF2) in another format.") : action.Data ? ": this action needs a data file (JSON, JSONL, NDJSON, PLIST, CSV or TSV) in another format." : action.Subtitle ? ": this action needs a subtitle file (SRT, VTT, ASS, SSA, LRC or SBV) in another format." : action.Document ? ": this action needs a plain-text, DOCX, ODT, RTF, HTML or EPUB document." : ": this action needs a PNG, JPEG, BMP, TIFF, GIF, TGA, PSD or WebP image."));
             FileStamp stamp;
             try { stamp = host.Inspect(path); }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }
@@ -453,7 +453,7 @@ public sealed class McpSession
         {
             token.ThrowIfCancellationRequested();
             bool image = Catalog.IsImage(path);
-            if (!image && !VideoBudget.IsVideo(path)) throw new McpToolError(path + ": plan_compress takes PNG, JPEG, BMP, TIFF, GIF, TGA or PSD images and MP4, MOV, M4V or WMV videos.");
+            if (!image && !VideoBudget.IsVideo(path)) throw new McpToolError(path + ": plan_compress takes PNG, JPEG, BMP, TIFF, GIF, TGA, PSD or WebP images and MP4, MOV, M4V or WMV videos.");
             if (format == "same" && System.IO.Path.GetExtension(path).ToLowerInvariant() is not (".jpg" or ".jpeg" or ".mp4"))
                 throw new McpToolError(path + ": format same keeps only JPEG images and MP4 videos in their format; Swivel for Windows compresses other images to JPEG and other videos to MP4. Leave format out.");
             var row = new JsonObject { ["path"] = path, ["kind"] = image ? "image" : "video" };

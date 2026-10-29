@@ -105,9 +105,9 @@ public static class ImageTools
         try { return Convert(true); }
         catch (Exception error) when (error is System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException) { return Convert(false); }
     }
-    /// GIF, TGA and PSD are read by Swivel's own bounded readers, never by an installed codec.
+    /// GIF, TGA, PSD and WebP are read by Swivel's own bounded readers, never by an installed codec.
     private static Func<Stream, CancellationToken, PixelImage>? OwnReader(string path) => Path.GetExtension(path).ToLowerInvariant() switch {
-        ".gif" => GifImage.Read, ".tga" => TgaImage.Read, ".psd" => PsdImage.Read, _ => null
+        ".gif" => GifImage.Read, ".tga" => TgaImage.Read, ".psd" => PsdImage.Read, ".webp" => WebPImage.Read, _ => null
     };
     private static BitmapDecoder CreateDecoder(NativeFiles.Input input) => CreateDecoder(input.Stream, input.Path);
     private static BitmapDecoder CreateDecoder(Stream stream, string path)

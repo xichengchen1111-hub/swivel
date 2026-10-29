@@ -179,7 +179,7 @@ public sealed class MainWindow : Window
         foreach (var action in Catalog.Offered(app.Prefs))
             tools.Children.Add(UI.Button(Catalog.DisplayTitle(action, app.Prefs.Language), async () => await app.RunActionAsync(action, Chosen(), this, SetStatus)));
         page.Children.Add(tools);
-        page.Children.Add(UI.Text(app.L("Images: single-frame PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture) or supported full-canvas static GIF, up to 16 MP / 128 MB. Outputs are SDR and metadata-free. Animated and partial-canvas GIFs are refused. Enlargement requires an explicit choice."), 12));
+        page.Children.Add(UI.Text(app.L("Images: single-frame PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture), still WebP or supported full-canvas static GIF, up to 16 MP / 128 MB. Outputs are SDR and metadata-free. Animated GIF and WebP and partial-canvas GIFs are refused. Enlargement requires an explicit choice."), 12));
         var launch = new WrapPanel();
         if (app.Prefs.IsOn(Feature.Wheel)) launch.Children.Add(UI.Button(app.L("Open Wheel") + " · " + app.Prefs.Shortcuts.Wheel.Label, () => app.OpenPanel(true, Chosen())));
         if (app.Prefs.IsOn(Feature.QuickActions)) launch.Children.Add(UI.Button(app.L("Quick Actions") + " · " + app.Prefs.Shortcuts.Quick.Label, () => app.OpenPanel(false, Chosen())));

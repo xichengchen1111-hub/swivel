@@ -26,7 +26,7 @@ public sealed record PhotoSimilarityLimits(int MaxFiles = 200, int MaxFileBytes 
 public static class PhotoSimilarity
 {
     private static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase)
-        { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".gif", ".tga", ".psd" };
+        { ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".gif", ".tga", ".psd", ".webp" };
 
     // Deterministic integer box averages, not a learned model or semantic score.
     // Each source pixel belongs to exactly one of 9 x 8 integer-partitioned cells.

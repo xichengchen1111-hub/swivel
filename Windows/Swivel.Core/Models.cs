@@ -283,7 +283,7 @@ public static class Catalog
         ,new("doctor.monitor", "Monitor CPU and Memory…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.cleanup", "Clean Up Files…", Core.Feature.Doctor, RequiresFiles: false)
     };
-    public static bool IsImage(string path) => System.IO.Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".tif" or ".tiff" or ".gif" or ".tga" or ".psd";
+    public static bool IsImage(string path) => System.IO.Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".tif" or ".tiff" or ".gif" or ".tga" or ".psd" or ".webp";
     public static IEnumerable<ToolAction> All(Prefs prefs) => Actions.Concat(prefs.Presets.Select(x => new ToolAction("preset." + x.Id, x.Name, Feature.ImagePresets, true))).Concat(prefs.Apps.Select(x => new ToolAction("app." + x.Id, x.Name, Feature.AppRouting, Extensions: x.IsWebPage && !x.CopyToClipboard ? null : x.Types, RequiresFiles: !x.IsWebPage || x.CopyToClipboard, WebPage: x.IsWebPage)));
     public static IEnumerable<ToolAction> Offered(Prefs prefs) => All(prefs).Where(x => x.Feature is null || prefs.IsOn(x.Feature.Value));
     public static IEnumerable<ToolAction> Available(Prefs prefs, IReadOnlyCollection<string> files) =>
