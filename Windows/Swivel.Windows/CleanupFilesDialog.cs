@@ -44,7 +44,7 @@ internal sealed class CleanupFilesDialog : Window
         this.app = app; this.result = result;
         Title = app.L("Clean Up Files"); Width = 1040; Height = 820; MinWidth = 560; MinHeight = 460;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        foreach (var entry in result.Entries) rows[entry] = new Row(this, entry) { Checked = entry.Preselected };
+        foreach (var entry in result.Entries) rows[entry] = new Row(this, entry, entry.Preselected);
         bin = new RecycleBinSession<CleanupEntry>(app, this, new(
             entry => Visible(entry.Path),
             entry => app.L(CleanupFiles.Name(entry.Group)) + " · " + Visible(entry.Path) + " · " + Size(entry),
@@ -105,7 +105,8 @@ internal sealed class CleanupFilesDialog : Window
         SourceInitialized += (_, _) => WebRouteLayout.Fit(this, Owner ?? this); DpiChanged += (_, _) => WebRouteLayout.Fit(this, this);
     }
 
-    private IEnumerable<CleanupEntry> Listed() => result.Entries.Where(entry => !bin.Gone.Contains(entry));
+    // The Recycle Bin session asks for the ticked items while it is being built, before `bin` is set.
+    private IEnumerable<CleanupEntry> Listed() => result.Entries.Where(entry => bin?.Gone.Contains(entry) != true);
 
     private string Summary()
     {
@@ -172,9 +173,9 @@ internal sealed class CleanupFilesDialog : Window
     }
     private static string Visible(string value) => DoctorFacts.VisibleBounded(value, 512);
 
-    private sealed class Row(CleanupFilesDialog owner, CleanupEntry entry) : INotifyPropertyChanged
+    private sealed class Row(CleanupFilesDialog owner, CleanupEntry entry, bool preselected) : INotifyPropertyChanged
     {
-        private bool ticked;
+        private bool ticked = preselected;
         public event PropertyChangedEventHandler? PropertyChanged;
         public bool Checked
         {
