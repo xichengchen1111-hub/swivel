@@ -1330,7 +1330,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 ## Windows0.126 — merged F07 helper grouping, E03 EPUB, D04 Keep Pitch (2026-10-29)
 
 - Each branch passed its own Windows CI and independent review before merging: F07 40835053646 (core 4,521,231, native 5,560; review P2 fixed), E03 40835350658 (core 4,521,259, native 5,570; review no P1/P2, P3s fixed), D04 40836292295 (core 4,521,783, native 5,552; review no P1, two P2s fixed and rechecked). Details of each branch's checks are in its commits and session report.
-- After merging all three: core 4,521,923 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch — result below.
+- After merging all three: core 4,521,923 on Mac, native compiled 0 warnings/errors there. Windows CI 40845267149 on the merged branch passed (core 4,521,923, native 5,592).
 - Not tested: helper grouping on a real PC with many apps, EPUB books from real stores, Keep Pitch listening on real speech and music, the WPF windows on real Windows.
 
 ## Windows0.125 — Reduce Audio Noise for MP3/AAC/FLAC (D03, 2026-10-29)
