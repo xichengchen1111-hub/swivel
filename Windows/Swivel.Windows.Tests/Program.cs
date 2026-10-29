@@ -115,6 +115,7 @@ internal static class Program
             Group("MoveFilesNativeChecks", () => MoveFilesNativeChecks.Run(directory,Check,Reject));
             Group("ZipExtractNativeChecks", () => ZipExtractNativeChecks.Run(directory,Check,Reject));
             Group("TarExtractNativeChecks", () => TarExtractNativeChecks.Run(directory,Check,Reject));
+            Group("SevenZipExtractNativeChecks", () => SevenZipExtractNativeChecks.Run(directory,Check,Reject));
             Group("FolderStyleNativeChecks", () => FolderStyleNativeChecks.Run(directory,Check,Reject));
             Group("McpNativeChecks", () => McpNativeChecks.Run(directory,Check,Reject));
             Group("McpBundleNativeChecks", () => McpBundleNativeChecks.Run(directory,Check));
