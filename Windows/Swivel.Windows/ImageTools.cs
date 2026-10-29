@@ -74,9 +74,9 @@ public static class ImageTools
     {
         if (stream.Length > ImageRules.MaxInputBytes) throw new UserError("Image files are limited to 128 MB.");
         cancellation.ThrowIfCancellationRequested();
-        if (Path.GetExtension(path).Equals(".gif", StringComparison.OrdinalIgnoreCase))
+        if (OwnReader(path) is { } read)
         {
-            var pixels = GifImage.Read(stream, cancellation);
+            var pixels = read(stream, cancellation);
             var bitmap = BitmapSource.Create(pixels.Width, pixels.Height, 96, 96, PixelFormats.Bgra32, null, pixels.Bgra, pixels.Width * 4);
             cancellation.ThrowIfCancellationRequested(); bitmap.Freeze(); return bitmap;
         }
@@ -105,6 +105,10 @@ public static class ImageTools
         try { return Convert(true); }
         catch (Exception error) when (error is System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException) { return Convert(false); }
     }
+    /// GIF, TGA and PSD are read by Swivel's own bounded readers, never by an installed codec.
+    private static Func<Stream, CancellationToken, PixelImage>? OwnReader(string path) => Path.GetExtension(path).ToLowerInvariant() switch {
+        ".gif" => GifImage.Read, ".tga" => TgaImage.Read, ".psd" => PsdImage.Read, _ => null
+    };
     private static BitmapDecoder CreateDecoder(NativeFiles.Input input) => CreateDecoder(input.Stream, input.Path);
     private static BitmapDecoder CreateDecoder(Stream stream, string path)
     {
@@ -125,7 +129,7 @@ public static class ImageTools
     public static IReadOnlyList<(string Label, string Value)> Metadata(Document document, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (Path.GetExtension(document.Input.Path).Equals(".gif", StringComparison.OrdinalIgnoreCase))
+        if (OwnReader(document.Input.Path) is not null)
             return new[] { ("Pixel dimensions", $"{document.Bitmap.PixelWidth} × {document.Bitmap.PixelHeight}"), ("File size", $"{document.Input.Stream.Length:N0} B") };
         var frame = CreateDecoder(document.Input).Frames[0];
         var fields = new List<(string, string)> { ("Pixel dimensions", $"{frame.PixelWidth} × {frame.PixelHeight}"), ("File size", $"{document.Input.Stream.Length:N0} B") };
@@ -239,7 +243,7 @@ public static class ImageTools
             // User-supplied preset names are display-only and never become file paths.
             suffix = " preset";
         }
-        else if (action is not "convert.png" and not "convert.jpg" and not "convert.bmp" and not "convert.tiff" and not "convert.gif" and not "convert.ico")
+        else if (action is not "convert.png" and not "convert.jpg" and not "convert.bmp" and not "convert.tiff" and not "convert.gif" and not "convert.ico" and not "convert.tga" and not "convert.psd")
             throw new ArgumentException("Unknown image action.");
         cancellation.ThrowIfCancellationRequested();
         if (extension is "jpg" or "bmp") source = OnWhite(source);
@@ -263,6 +267,12 @@ public static class ImageTools
             var images = IconImages(clean, cancellation);
             return NativeFiles.WriteBeside(document.Input, Path.GetFileNameWithoutExtension(path) + suffix, "ico",
                 output => IcoFile.Write(output, images, cancellation), cancellation);
+        }
+        if (extension is "tga" or "psd")
+        {
+            var pixels = ReadPixels(clean, 0, cancellation);
+            return NativeFiles.WriteBeside(document.Input, Path.GetFileNameWithoutExtension(path) + suffix, extension,
+                output => { if (extension == "tga") TgaImage.Write(pixels, output, cancellation); else PsdImage.Write(pixels, output, cancellation); }, cancellation);
         }
         BitmapEncoder encoder = extension switch {
             "jpg" => new JpegBitmapEncoder { QualityLevel = quality },

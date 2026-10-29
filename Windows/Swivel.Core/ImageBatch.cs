@@ -48,7 +48,8 @@ public static class ImageOutputInfo
         }
         return action switch {
             "convert.jpg" or "image.compress" => "jpg", "convert.bmp" => "bmp",
-            "convert.tiff" => "tiff", "convert.gif" => "gif", "convert.ico" => "ico", _ => "png"
+            "convert.tiff" => "tiff", "convert.gif" => "gif", "convert.ico" => "ico",
+            "convert.tga" => "tga", "convert.psd" => "psd", _ => "png"
         };
     }
 }

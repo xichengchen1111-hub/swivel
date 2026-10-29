@@ -10,7 +10,7 @@ namespace Swivel.Core;
 public static class GifImage
 {
     public const int MaxExtensions=1024,MaxExtensionBytes=65536,MaxSubblocks=1_048_576;
-    public const string InputHint="Use a PNG, JPEG, BMP, TIFF or supported static GIF image.";
+    public const string InputHint="Use a PNG, JPEG, BMP, TIFF, TGA, PSD or supported static GIF image.";
     public const string Invalid="The GIF structure or LZW data is invalid or incomplete.";
     public const string Layout="Use a single-frame GIF that covers its whole canvas with square pixels. Animated, offset and partial-canvas GIFs are not supported yet.";
     public const string Extensions="This GIF uses unsupported text, user-input, color-profile or application extensions. Save a standard static GIF or PNG.";

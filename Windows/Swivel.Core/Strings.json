@@ -3939,11 +3939,6 @@
     "圖片：單幀 PNG、JPEG、BMP 或 TIFF，最多 1600 萬像素／128 MB。輸出為 SDR，移除中繼資料；調整尺寸不會放大。",
     "画像：単一フレームの PNG、JPEG、BMP、TIFF、1600 万画素／128 MB まで。SDR で出力し、メタデータを除去します。リサイズでは拡大しません。"
   ],
-  "Images: single-frame PNG, JPEG, BMP, TIFF or supported full-canvas static GIF, up to 16 MP / 128 MB. Outputs are SDR and metadata-free. Animated and partial-canvas GIFs are refused. Enlargement requires an explicit choice.": [
-    "图片：单帧 PNG、JPEG、BMP、TIFF 或受支持的完整画布静态 GIF，最多 16 MP / 128 MB。输出为移除元数据的 SDR。动画和局部画布 GIF 会拒绝。放大需明确选择。",
-    "圖片：單幀 PNG、JPEG、BMP、TIFF 或支援的完整畫布靜態 GIF，最多 16 MP / 128 MB。輸出為移除中繼資料的 SDR。動畫和局部畫布 GIF 會拒絕。放大需明確選擇。",
-    "画像：単一フレームの PNG、JPEG、BMP、TIFF、対応する全画面の静止 GIF。最大 16 MP / 128 MB。出力はメタデータを除いた SDR です。アニメーションと部分キャンバス GIF は拒否します。拡大には明示的な選択が必要です。"
-  ],
   "Import Compatible Presets": [
     "导入兼容预设",
     "匯入相容預設",
@@ -5623,11 +5618,6 @@
     "仅读取报告的显示名称、版本和发布者文字。不展开环境变量。不检查卸载命令、安装位置、程序文件、文件夹、签名、磁盘大小、其他用户、商店/MSIX 清单或便携应用。注册表视图可能共享条目或经注册表链接解析；不验证底层子项身份或链接目标。不合并记录，也不证明实际安装、架构、发布者身份、应用归属或安全清理。ARM32 专属记录可能缺失。",
     "僅讀取回報的顯示名稱、版本和發行者文字。不展開環境變數。不檢查解除安裝命令、安裝位置、程式檔案、資料夾、簽章、磁碟大小、其他使用者、商店/MSIX 清單或可攜應用程式。登錄視圖可能共享項目或經登錄連結解析；不驗證底層子機碼身分或連結目標。不合併記錄，也不證明實際安裝、架構、發行者身分、應用程式歸屬或安全清理。ARM32 專屬記錄可能缺少。",
     "報告された表示名、バージョン、発行元のテキストだけを読みます。環境変数は展開しません。アンインストール命令、インストール先、実行ファイル、フォルダー、署名、ディスク容量、他のユーザー、Store/MSIX の一覧、ポータブルアプリは調べません。ビューはエントリを共有したりレジストリリンク経由で解決されたりします。実際のキーの同一性やリンク先は検証しません。記録を統合せず、インストール、アーキテクチャ、発行元の身元、アプリの所有関係、安全な削除を証明しません。ARM32 固有の記録が含まれない場合があります。"
-  ],
-  "Only single-frame SDR PNG, JPEG, BMP, TIFF and supported static GIF are decoded. Alpha is composited onto white, then integer brightness averages are calculated in a 9-by-8 grid. The 64 horizontal comparisons produce a signature. At most 6 differing bits qualify (at least 90.625% agreement). Different image formats may be compared. Displayed percentages are truncated to two decimals. This is not an object, face or semantic recognition score.": [
-    "只解码单帧 SDR PNG、JPEG、BMP、TIFF 和支持的静态 GIF。透明度先合成到白底，再计算 9×8 网格的整数亮度均值。64 次横向比较构成签名，最多相差 6 位即匹配（一致率至少 90.625%）。可以跨图片格式比较。显示百分比截断到小数点后两位。这不是物体、人脸或语义识别分数。",
-    "僅解碼單幀 SDR PNG、JPEG、BMP、TIFF 和支援的靜態 GIF。透明度先合成到白底，再計算 9×8 網格的整數亮度平均值。64 次橫向比較構成簽章，最多相差 6 位即相符（一致率至少 90.625%）。可跨圖片格式比較。顯示百分比截斷至小數點後兩位。這不是物件、人臉或語意辨識分數。",
-    "単一フレームのSDR PNG、JPEG、BMP、TIFFと対応する静止GIFのみデコードします。透明度を白背景に合成し、9×8グリッドの整数輝度平均を計算します。64回の横方向比較でシグネチャを作り、異なるビットが6個以下なら対象です（一致率90.625%以上）。画像形式をまたいで比較できます。表示の割合は小数点以下2桁で切り捨てます。物体、顔、意味を認識するスコアではありません。"
   ],
   "Only the labels you explicitly select are added to the numeric report. Reported labels are untrusted metadata and may themselves contain names, paths, addresses or other private text. Review every selected label and the complete JSON before sending. They do not identify anonymous metrics or grant permission to execute anything. Your question is sent verbatim; the explanation never applies fixes.": [
     "只将您明确选定的名称加入数值报告。报告名称是不可信的元数据，本身可能含人名、路径、地址或其他私人文字。发送前请审阅每个所选名称和完整 JSON。名称不用于识别匿名样本，也不授予任何执行权限。您的提问原样发送，解释从不执行修复。",
@@ -10179,11 +10169,6 @@
     "請使用 PNG、JPEG、BMP 或 TIFF 圖片。",
     "PNG、JPEG、BMP、TIFF 画像を使用してください。"
   ],
-  "Use a PNG, JPEG, BMP, TIFF or supported static GIF image.": [
-    "请使用 PNG、JPEG、BMP、TIFF 或受支持的静态 GIF 图片。",
-    "請使用 PNG、JPEG、BMP、TIFF 或支援的靜態 GIF 圖片。",
-    "PNG、JPEG、BMP、TIFF、または対応する静止 GIF 画像を使用してください。"
-  ],
   "Use a QR group of up to 32 characters without control characters, or leave it empty.": [
     "二维码分组最多 32 个字符，不含控制字符；也可留空。",
     "QR 分組最多 32 個字元，不含控制字元；也可留空。",
@@ -14028,5 +14013,65 @@
     "无法读取“文档”或“桌面”；那里的构建文件夹没有列出。",
     "無法讀取「文件」或「桌面」；那裡的建置資料夾沒有列出。",
     "「ドキュメント」または「デスクトップ」を読み取れませんでした。そこにあるビルドフォルダーは一覧にありません。"
+  ],
+  "Images: single-frame PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture) or supported full-canvas static GIF, up to 16 MP / 128 MB. Outputs are SDR and metadata-free. Animated and partial-canvas GIFs are refused. Enlargement requires an explicit choice.": [
+    "图片：单帧 PNG、JPEG、BMP、TIFF、TGA、PSD（合并后的画面）或受支持的完整画布静态 GIF，最多 16 MP / 128 MB。输出为移除元数据的 SDR。动画和局部画布 GIF 会拒绝。放大需明确选择。",
+    "圖片：單幀 PNG、JPEG、BMP、TIFF、TGA、PSD（合併後的畫面）或支援的完整畫布靜態 GIF，最多 16 MP / 128 MB。輸出為移除中繼資料的 SDR。動畫和局部畫布 GIF 會拒絕。放大需明確選擇。",
+    "画像：単一フレームの PNG、JPEG、BMP、TIFF、TGA、PSD（統合画像）、対応する全画面の静止 GIF。最大 16 MP / 128 MB。出力はメタデータを除いた SDR です。アニメーションと部分キャンバス GIF は拒否します。拡大には明示的な選択が必要です。"
+  ],
+  "Only single-frame SDR PNG, JPEG, BMP, TIFF, TGA, PSD and supported static GIF are decoded. Alpha is composited onto white, then integer brightness averages are calculated in a 9-by-8 grid. The 64 horizontal comparisons produce a signature. At most 6 differing bits qualify (at least 90.625% agreement). Different image formats may be compared. Displayed percentages are truncated to two decimals. This is not an object, face or semantic recognition score.": [
+    "只解码单帧 SDR PNG、JPEG、BMP、TIFF、TGA、PSD 和支持的静态 GIF。透明度先合成到白底，再计算 9×8 网格的整数亮度均值。64 次横向比较构成签名，最多相差 6 位即匹配（一致率至少 90.625%）。可以跨图片格式比较。显示百分比截断到小数点后两位。这不是物体、人脸或语义识别分数。",
+    "僅解碼單幀 SDR PNG、JPEG、BMP、TIFF、TGA、PSD 和支援的靜態 GIF。透明度先合成到白底，再計算 9×8 網格的整數亮度平均值。64 次橫向比較構成簽章，最多相差 6 位即相符（一致率至少 90.625%）。可跨圖片格式比較。顯示百分比截斷至小數點後兩位。這不是物件、人臉或語意辨識分數。",
+    "単一フレームのSDR PNG、JPEG、BMP、TIFF、TGA、PSDと対応する静止GIFのみデコードします。透明度を白背景に合成し、9×8グリッドの整数輝度平均を計算します。64回の横方向比較でシグネチャを作り、異なるビットが6個以下なら対象です（一致率90.625%以上）。画像形式をまたいで比較できます。表示の割合は小数点以下2桁で切り捨てます。物体、顔、意味を認識するスコアではありません。"
+  ],
+  "Use a PNG, JPEG, BMP, TIFF, TGA, PSD or supported static GIF image.": [
+    "请使用 PNG、JPEG、BMP、TIFF、TGA、PSD 或受支持的静态 GIF 图片。",
+    "請使用 PNG、JPEG、BMP、TIFF、TGA、PSD 或支援的靜態 GIF 圖片。",
+    "PNG、JPEG、BMP、TIFF、TGA、PSD、または対応する静止 GIF 画像を使用してください。"
+  ],
+  "Convert to TGA": [
+    "转换为 TGA",
+    "轉換為 TGA",
+    "TGA に変換"
+  ],
+  "Convert to PSD": [
+    "转换为 PSD",
+    "轉換為 PSD",
+    "PSD に変換"
+  ],
+  "TGA saves uncompressed 24-bit colour, or 32-bit colour when the picture has transparency, without a colour profile or other metadata.": [
+    "TGA 以不压缩的 24 位颜色保存；图片有透明部分时用 32 位颜色。不含颜色描述文件或其他元数据。",
+    "TGA 以不壓縮的 24 位元色彩儲存；圖片有透明部分時用 32 位元色彩。不含色彩描述檔或其他中繼資料。",
+    "TGA は非圧縮の 24 ビットカラーで保存し、透明部分がある画像は 32 ビットカラーで保存します。カラープロファイルやその他のメタデータは含みません。"
+  ],
+  "The TGA data is invalid or incomplete.": [
+    "TGA 数据无效或不完整。",
+    "TGA 資料無效或不完整。",
+    "TGA データが無効か不完全です。"
+  ],
+  "This TGA uses an unsupported pixel layout. Use a colour-mapped, true-colour or greyscale TGA, or save a PNG.": [
+    "这个 TGA 的像素格式不受支持。请使用调色板、真彩色或灰度 TGA，或另存为 PNG。",
+    "這個 TGA 的像素格式不受支援。請使用調色盤、全彩或灰階 TGA，或另存為 PNG。",
+    "この TGA のピクセル形式には対応していません。カラーマップ、トゥルーカラー、グレースケールの TGA を使うか、PNG で保存してください。"
+  ],
+  "PSD saves one flattened 8-bit RGB picture (with a single layer when it has transparency), without a colour profile. Photoshop and other editors open it; nothing else of the original is kept.": [
+    "PSD 保存一张合并后的 8 位 RGB 画面（有透明部分时另带一个图层），不含颜色描述文件。Photoshop 和其他编辑器可以打开；原文件的其他内容都不会保留。",
+    "PSD 儲存一張合併後的 8 位元 RGB 畫面（有透明部分時另帶一個圖層），不含色彩描述檔。Photoshop 和其他編輯器可以開啟；原檔的其他內容都不會保留。",
+    "PSD は統合された 8 ビット RGB 画像を 1 枚保存します（透明部分がある場合はレイヤーを 1 つ追加）。カラープロファイルは含みません。Photoshop などのエディタで開けます。元のファイルのほかの内容は保持されません。"
+  ],
+  "Swivel reads a PSD's flattened picture, the one Photoshop saves with Maximize Compatibility; layers, text and effects are not rendered separately, and an embedded colour profile is not applied.": [
+    "Swivel 读取 PSD 中合并后的画面，即 Photoshop 勾选“最大兼容”时保存的那一张；不单独渲染图层、文字和效果，也不应用内嵌的颜色描述文件。",
+    "Swivel 讀取 PSD 中合併後的畫面，即 Photoshop 勾選「最大相容性」時儲存的那一張；不單獨轉譯圖層、文字和效果，也不套用內嵌的色彩描述檔。",
+    "Swivel は PSD の統合画像（Photoshop で「互換性を優先」をオンにして保存したもの）を読み込みます。レイヤー、テキスト、効果は個別に描画せず、埋め込みカラープロファイルも適用しません。"
+  ],
+  "The PSD data is invalid or incomplete.": [
+    "PSD 数据无效或不完整。",
+    "PSD 資料無效或不完整。",
+    "PSD データが無効か不完全です。"
+  ],
+  "This PSD is not supported. Swivel reads 8-bit RGB and greyscale PSD files stored raw or with PackBits; save a copy in that form, or as PNG.": [
+    "不支持这个 PSD。Swivel 读取不压缩或 PackBits 压缩的 8 位 RGB 和灰度 PSD；请按这种方式另存一份，或另存为 PNG。",
+    "不支援這個 PSD。Swivel 讀取不壓縮或 PackBits 壓縮的 8 位元 RGB 和灰階 PSD；請依這種方式另存一份，或另存為 PNG。",
+    "この PSD には対応していません。Swivel が読み込めるのは非圧縮または PackBits 圧縮の 8 ビット RGB／グレースケール PSD です。その形式か PNG で保存し直してください。"
   ]
 }

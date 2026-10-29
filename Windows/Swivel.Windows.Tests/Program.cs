@@ -179,6 +179,7 @@ internal static class Program
             Group("GifNativeChecks", () => GifNativeChecks.Run(directory,Check,Reject));
             Group("GifExportNativeChecks", () => GifExportNativeChecks.Run(directory,Check,Reject));
             Group("IcoNativeChecks", () => IcoNativeChecks.Run(directory,Check,Reject));
+            Group("TgaPsdNativeChecks", () => TgaPsdNativeChecks.Run(directory,Check,Reject));
             Group("ImageStitchNativeChecks", () => ImageStitchNativeChecks.Run(directory,Check,Reject));
             Group("GifPaletteNativeChecks", () => GifPaletteNativeChecks.Run(directory,Check,Reject));
             Group("QrGardenNativeChecks", () => QrGardenNativeChecks.Run(Check,Reject));
