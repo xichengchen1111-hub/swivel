@@ -15,19 +15,22 @@ internal sealed class AppMemoryDialog : Window
 {
     private readonly App app;
     private readonly AppMemorySnapshot snapshot;
-    private readonly CheckBox paths=new(){Margin=new Thickness(0,8,0,12)};
+    private readonly CheckBox paths=new(){Margin=new Thickness(0,8,0,12)},helpers=new(){Margin=new Thickness(0,4,0,4)};
+    private readonly TabItem groupTab=new();
     private readonly TabControl tabs=new();
     private readonly ListView groups=NativeList(),processes=NativeList();
     private readonly TextBox groupDetails=Details(),processDetails=Details();
     private readonly Button copySelected;
     internal bool IncludePaths=>paths.IsChecked==true;
-    internal string CurrentReport=>AppMemory.Report(snapshot,IncludePaths,app.L,default);
+    internal bool GroupHelpers=>helpers.IsChecked==true&&snapshot.HelperGroups is not null;
+    private System.Collections.Generic.IReadOnlyList<AppMemoryGroup> CurrentGroups=>AppMemory.GroupsFor(snapshot,GroupHelpers);
+    internal string CurrentReport=>AppMemory.Report(snapshot,IncludePaths,app.L,default,GroupHelpers);
     internal string? SelectedReport
     {
         get
         {
             string? details=tabs.SelectedIndex==0?SelectedGroup():SelectedProcess();
-            return details is null?null:AppMemory.Header(snapshot,IncludePaths,app.L)+Environment.NewLine+details;
+            return details is null?null:AppMemory.Header(snapshot,IncludePaths,app.L,GroupHelpers)+Environment.NewLine+details;
         }
     }
     internal AppMemoryDialog(App app,AppMemorySnapshot snapshot)
@@ -47,19 +50,30 @@ internal sealed class AppMemoryDialog : Window
         paths.Content=app.L("Show Full Executable Paths");AutomationProperties.SetName(paths,app.L("Show Full Executable Paths"));body.Children.Add(paths);
         body.Children.Add(UI.Text(app.L("Names in the lists may be shortened. Select a row for its complete visible name and recorded details. Full paths appear only in selected details when enabled."),12));
         groups.View=Columns(("Executable Name","Name",260),("Processes","Count",90),("Known Working Set Subtotal (MB)","Bytes",230),("Unavailable Working Sets","Missing",160));
-        groups.ItemsSource=snapshot.Groups.Select((g,i)=>new GroupRow(i,ListName(g.Processes[0]),g.Count.ToString(CultureInfo.CurrentCulture),Megabytes(g.KnownBytes,g.Unmeasured==g.Count),g.Unmeasured.ToString(CultureInfo.CurrentCulture))).ToArray();
+        helpers.Content=app.L("Group Helper Processes With the App That Started Them");AutomationProperties.SetName(helpers,app.L("Group Helper Processes With the App That Started Them"));
+        helpers.IsEnabled=snapshot.HelperGroups is not null;body.Children.Add(helpers);
+        body.Children.Add(UI.Text(AppMemory.ParentStatus(snapshot,app.L),12));body.Children.Add(UI.Text(app.L(AppMemory.HelperGrouping),12));
+        FillGroups();
         processes.View=Columns(("Executable Name","Name",230),("Process Identifiers","Pid",110),("Working Set (MB)","Bytes",160),("Query Issues","Issues",400));
         processes.ItemsSource=snapshot.Processes.Select((p,i)=>new ProcessRow(i,ListName(p),p.Pid.ToString(CultureInfo.CurrentCulture),Megabytes(p.WorkingSet.HasValue?(decimal)p.WorkingSet.Value:0,!p.WorkingSet.HasValue),AppMemory.Issues(p.Issues,app.L))).ToArray();
-        AutomationProperties.SetName(groups,app.L("Executable Path Groups"));AutomationProperties.SetName(processes,app.L("Recorded Processes"));
+        AutomationProperties.SetName(processes,app.L("Recorded Processes"));
         AutomationProperties.SetName(groupDetails,app.L("Selected Group Details"));AutomationProperties.SetName(processDetails,app.L("Selected Process Details"));
         var groupBody=new StackPanel();groupBody.Children.Add(groups);groupBody.Children.Add(UI.Text(app.L("Selected Group Details"),13));groupBody.Children.Add(groupDetails);
         var processBody=new StackPanel();processBody.Children.Add(processes);processBody.Children.Add(UI.Text(app.L("Selected Process Details"),13));processBody.Children.Add(processDetails);
-        tabs.Items.Add(new TabItem{Header=app.L("Executable Path Groups"),Content=groupBody});tabs.Items.Add(new TabItem{Header=app.L("Recorded Processes"),Content=processBody});tabs.SelectedIndex=0;body.Children.Add(tabs);
+        groupTab.Content=groupBody;tabs.Items.Add(groupTab);tabs.Items.Add(new TabItem{Header=app.L("Recorded Processes"),Content=processBody});tabs.SelectedIndex=0;body.Children.Add(tabs);
         groups.SelectionChanged+=(_,_)=>RefreshDetails();processes.SelectionChanged+=(_,_)=>RefreshDetails();tabs.SelectionChanged+=(_,e)=>{if(ReferenceEquals(e.Source,tabs))RefreshDetails();};
-        paths.Checked+=(_,_)=>RefreshDetails();paths.Unchecked+=(_,_)=>RefreshDetails();RefreshDetails();
+        paths.Checked+=(_,_)=>RefreshDetails();paths.Unchecked+=(_,_)=>RefreshDetails();
+        helpers.Checked+=(_,_)=>{FillGroups();RefreshDetails();};helpers.Unchecked+=(_,_)=>{FillGroups();RefreshDetails();};RefreshDetails();
         SourceInitialized+=(_,_)=>FitWorkArea(Owner??this);DpiChanged+=(_,_)=>FitWorkArea(this);
     }
-    private string? SelectedGroup()=>groups.SelectedItem is GroupRow row?AppMemory.Describe(snapshot.Groups[row.Index],IncludePaths,app.L):null;
+    private void FillGroups()
+    {
+        // A new grouping replaces the rows, so no selection from the other grouping survives.
+        string title=app.L(GroupHelpers?"Helper Process Groups":"Executable Path Groups");groupTab.Header=title;AutomationProperties.SetName(groups,title);
+        groups.SelectedItem=null;var current=CurrentGroups;
+        groups.ItemsSource=current.Select((g,i)=>new GroupRow(i,current,ListName(g.Processes[0]),g.Count.ToString(CultureInfo.CurrentCulture),Megabytes(g.KnownBytes,g.Unmeasured==g.Count),g.Unmeasured.ToString(CultureInfo.CurrentCulture))).ToArray();
+    }
+    private string? SelectedGroup()=>groups.SelectedItem is GroupRow row&&ReferenceEquals(row.Source,CurrentGroups)?AppMemory.Describe(row.Source[row.Index],IncludePaths,app.L):null;
     private string? SelectedProcess()=>processes.SelectedItem is ProcessRow row?AppMemory.Describe(snapshot.Processes[row.Index],IncludePaths,app.L):null;
     private void RefreshDetails()
     {
@@ -87,7 +101,7 @@ internal sealed class AppMemoryDialog : Window
     private static TextBox Details()=>new(){IsReadOnly=true,AcceptsReturn=true,TextWrapping=TextWrapping.NoWrap,Height=150,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto};
     // UI Automation/text search must never fall back to a raw model record's
     // synthesized ToString, which would expose the hidden executable path.
-    private sealed record GroupRow(int Index,string Name,string Count,string Bytes,string Missing)
+    private sealed record GroupRow(int Index,System.Collections.Generic.IReadOnlyList<AppMemoryGroup> Source,string Name,string Count,string Bytes,string Missing)
     {public override string ToString()=>Name+" · "+Count+" · "+Bytes+" · "+Missing;}
     private sealed record ProcessRow(int Index,string Name,string Pid,string Bytes,string Issues)
     {public override string ToString()=>Name+" · "+Pid+" · "+Bytes+" · "+Issues;}
