@@ -1319,18 +1319,22 @@ public sealed partial class App : Application
                 report(L("Inspecting JPEG segments…"));
                 using var document = await OnSta(() => JpegMetadataDocument.Open(files[0], token));
                 token.ThrowIfCancellationRequested();
-                if (!ShowOperationDialog(new JpegMetadataDialog(this, document), owner, token)) return;
+                var dialog = new JpegMetadataDialog(this, document);
+                if (!ShowOperationDialog(dialog, owner, token)) return;
+                bool keepOrientation = dialog.KeepOrientation;
                 report(L("Processing…")); result = new BatchResult();
-                result.Outputs.Add(await Task.Run(() => document.Save(token), token));
+                result.Outputs.Add(await Task.Run(() => document.Save(keepOrientation, token), token));
             }
             else if (action.Id == "image.pngmetadata")
             {
                 report(L("Inspecting PNG chunks…"));
                 using var document = await OnSta(() => PngMetadataDocument.Open(files[0], token));
                 token.ThrowIfCancellationRequested();
-                if (!ShowOperationDialog(new PngMetadataDialog(this, document), owner, token)) return;
+                var dialog = new PngMetadataDialog(this, document);
+                if (!ShowOperationDialog(dialog, owner, token)) return;
+                bool keepOrientation = dialog.KeepOrientation;
                 report(L("Processing…")); result = new BatchResult();
-                result.Outputs.Add(await Task.Run(() => document.Save(token), token));
+                result.Outputs.Add(await Task.Run(() => document.Save(keepOrientation, token), token));
             }
             else if (action.Id == "image.metadata")
             {

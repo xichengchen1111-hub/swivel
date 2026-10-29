@@ -14753,5 +14753,100 @@
     "此进程中无法使用包管理器；未读取任何包",
     "此處理程序中無法使用套件管理員；未讀取任何套件",
     "このプロセスではパッケージ マネージャーを使用できません。パッケージは読み取っていません"
+  ],
+  "Mirrored vertically": [
+    "垂直镜像",
+    "垂直鏡像",
+    "上下反転"
+  ],
+  "Mirrored horizontally, rotated 90° clockwise": [
+    "水平镜像后顺时针旋转 90°",
+    "水平鏡像後順時針旋轉 90°",
+    "左右反転して時計回りに 90° 回転"
+  ],
+  "Mirrored horizontally, rotated 270° clockwise": [
+    "水平镜像后顺时针旋转 270°",
+    "水平鏡像後順時針旋轉 270°",
+    "左右反転して時計回りに 270° 回転"
+  ],
+  "Mirrored horizontally": [
+    "水平镜像",
+    "水平鏡像",
+    "左右反転"
+  ],
+  "Rotated 270° clockwise": [
+    "顺时针旋转 270°",
+    "順時針旋轉 270°",
+    "時計回りに 270° 回転"
+  ],
+  "Remove {0:N0} segment(s), {1:N0} bytes; add a {2:N0}-byte orientation-only EXIF segment; new JPEG: {3:N0} bytes.": [
+    "移除 {0:N0} 个段，共 {1:N0} 字节；添加一个 {2:N0} 字节、仅含方向的 EXIF 段；新 JPEG：{3:N0} 字节。",
+    "移除 {0:N0} 個區段，共 {1:N0} 位元組；加入一個 {2:N0} 位元組、僅含方向的 EXIF 區段；新 JPEG：{3:N0} 位元組。",
+    "{0:N0} 個のセグメント（{1:N0} バイト）を削除し、向きだけの EXIF セグメント（{2:N0} バイト）を追加します。新しい JPEG：{3:N0} バイト。"
+  ],
+  "Keep orientation is available.": [
+    "可以保留方向。",
+    "可以保留方向。",
+    "向きを保持できます。"
+  ],
+  "The source has more than one EXIF block, so no single orientation can be kept; all of them are removed.": [
+    "源文件含有多个 EXIF 块，无法确定唯一的方向，因此不保留，全部移除。",
+    "來源含有多個 EXIF 區塊，無法確定唯一的方向，因此不保留，全部移除。",
+    "元ファイルに EXIF ブロックが複数あるため、向きを一つに決められず保持できません。すべて削除されます。"
+  ],
+  "No EXIF orientation was found in the source.": [
+    "源文件中没有 EXIF 方向信息。",
+    "來源中沒有 EXIF 方向資訊。",
+    "元ファイルに EXIF の向き情報はありません。"
+  ],
+  "Keep orientation": [
+    "保留方向",
+    "保留方向",
+    "向きを保持"
+  ],
+  "Normal": [
+    "正常",
+    "正常",
+    "標準"
+  ],
+  "Rotated 90° clockwise": [
+    "顺时针旋转 90°",
+    "順時針旋轉 90°",
+    "時計回りに 90° 回転"
+  ],
+  "The copy with orientation kept could not be validated, so only the plain copy is offered.": [
+    "保留方向的副本未能通过验证，因此只提供普通副本。",
+    "保留方向的副本未能通過驗證，因此只提供一般副本。",
+    "向きを保持したコピーを検証できなかったため、通常のコピーだけを提供します。"
+  ],
+  "Remove {0:N0} chunk(s), {1:N0} bytes; add a {2:N0}-byte orientation-only eXIf chunk; new PNG: {3:N0} bytes.": [
+    "移除 {0:N0} 个块，共 {1:N0} 字节；添加一个 {2:N0} 字节、仅含方向的 eXIf 块；新 PNG：{3:N0} 字节。",
+    "移除 {0:N0} 個區塊，共 {1:N0} 位元組；加入一個 {2:N0} 位元組、僅含方向的 eXIf 區塊；新 PNG：{3:N0} 位元組。",
+    "{0:N0} 個のチャンク（{1:N0} バイト）を削除し、向きだけの eXIf チャンク（{2:N0} バイト）を追加します。新しい PNG：{3:N0} バイト。"
+  ],
+  "Orientation 1 shows the image as stored, so there is nothing to keep.": [
+    "方向 1 表示按原样显示图像，因此无需保留。",
+    "方向 1 表示依原樣顯示影像，因此無需保留。",
+    "向き 1 は保存されたとおりに表示する意味なので、保持する必要はありません。"
+  ],
+  "The source EXIF orientation could not be read (damaged or nonstandard EXIF), so it cannot be kept and is removed with the rest.": [
+    "无法读取源文件的 EXIF 方向（EXIF 损坏或不符合标准），因此不能保留，会与其他数据一起移除。",
+    "無法讀取來源的 EXIF 方向（EXIF 損壞或不符合標準），因此無法保留，會與其他資料一起移除。",
+    "元の EXIF の向きを読み取れません（EXIF が破損しているか標準外です）。そのため保持できず、他のデータと一緒に削除されます。"
+  ],
+  "Source EXIF orientation: {0} ({1}).": [
+    "源文件 EXIF 方向：{0}（{1}）。",
+    "來源 EXIF 方向：{0}（{1}）。",
+    "元の EXIF の向き：{0}（{1}）。"
+  ],
+  "Rotated 180°": [
+    "旋转 180°",
+    "旋轉 180°",
+    "180° 回転"
+  ],
+  "Keep orientation writes a new minimal EXIF containing only the orientation tag (no camera, time, GPS, thumbnail or maker data) in place of the original EXIF. Every other retained byte is unchanged and the image is not recompressed. The orientation is read only from the source EXIF, never from XMP or text.": [
+    "“保留方向”会在原 EXIF 的位置写入一段新的最小 EXIF，其中只有方向标签（不含相机、时间、GPS、缩略图或厂商数据）。其他保留的字节一律不变，图像不会重新压缩。方向只从源文件的 EXIF 读取，绝不从 XMP 或文本读取。",
+    "「保留方向」會在原 EXIF 的位置寫入一段新的最小 EXIF，其中只有方向標籤（不含相機、時間、GPS、縮圖或廠商資料）。其他保留的位元組一律不變，影像不會重新壓縮。方向只從來源檔案的 EXIF 讀取，絕不從 XMP 或文字讀取。",
+    "「向きを保持」は、元の EXIF の位置に向きタグだけを含む新しい最小限の EXIF を書き込みます（カメラ、日時、GPS、サムネイル、メーカー情報は含みません）。その他の保持されるバイトはすべてそのままで、画像は再圧縮されません。向きは元ファイルの EXIF からのみ読み取り、XMP やテキストからは読み取りません。"
   ]
 }

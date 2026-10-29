@@ -33,11 +33,26 @@ internal static class JpegMetadataNativeChecks
             var app=Application.Current as App??new App();var dialog=new JpegMetadataDialog(app,document);var children=Children(dialog).ToArray();
             check(dialog.Content is DockPanel&&children.OfType<ListView>().Single().Items.Count==document.Plan.Segments.Count&&children.OfType<Button>().Single(b=>Equals(b.Content,app.L("Save JPEG Copy"))).IsEnabled,"Native Fluent chunk summary is complete and Save explicitly available");
             check(children.OfType<TextBox>().All(t=>t.IsReadOnly)&&children.OfType<TextBlock>().All(t=>!t.Text.Contains("PRIVATE_AUTHOR")),"Preview does not display raw private payloads and source path is readonly JSON");dialog.Close();
+            check(!document.Plan.Orientation.CanKeep&&!dialog.KeepOrientation&&!children.OfType<CheckBox>().Single().IsEnabled,"Without a keepable source orientation the Keep orientation option is off and disabled");
             first=document.Save(default);string second=document.Save(default);
             check(first!=second&&File.ReadAllBytes(first).SequenceEqual(expected)&&File.ReadAllBytes(second).SequenceEqual(expected)&&File.ReadAllBytes(path).SequenceEqual(decorated),"Exclusive JPEG copies preserve every retained byte and never replace source/previous copy");
             var clean=ImageTools.DecodeSnapshot(File.ReadAllBytes(first),first,default);var actual=new byte[pixels.Length];clean.CopyPixels(actual,28,0);
             check(clean.PixelWidth==7&&clean.PixelHeight==3&&actual.SequenceEqual(baselinePixels),"Native JPEG/WIC decoding of saved copy preserves the base JPEG decoded samples without further recompression");
             int before=Directory.GetFiles(folder).Length;reject(()=>document.Save(new CancellationToken(true)),"Canceled cleanup does not publish output");check(Directory.GetFiles(folder).Length==before,"Canceled save creates no file");
+        }
+        {
+            var tiff=new byte[]{73,73,42,0,8,0,0,0,2,0,0x0f,1,2,0,6,0,0,0,38,0,0,0,0x12,1,3,0,1,0,0,0,6,0,0,0,0,0,0,0,80,82,73,86,65,84};
+            byte[] source=original[..2].Concat(Segment(0xe1,Encoding.ASCII.GetBytes("Exif\0\0").Concat(tiff).ToArray())).Concat(strip[2]).Concat(original[2..]).ToArray();
+            byte[] want=original[..2].Concat(JpegMetadata.OrientationSegment(6)).Concat(original[2..]).ToArray();
+            string rotated=Path.Combine(folder,"rotated.jpg");File.WriteAllBytes(rotated,source);
+            using var document=JpegMetadataDocument.Open(rotated,default);
+            check(document.Plan.Orientation==new ExifOrientationInfo(ExifOrientationStatus.Found,6),"Native reads source EXIF orientation 6 (little-endian IFD0)");
+            var app=Application.Current as App??new App();var dialog=new JpegMetadataDialog(app,document);var box=Children(dialog).OfType<CheckBox>().Single();
+            check(box.IsEnabled&&box.IsChecked==true&&dialog.KeepOrientation,"Keep orientation is on by default for a non-1 source orientation");box.IsChecked=false;check(!dialog.KeepOrientation,"Unchecking turns the option off");dialog.Close();
+            string kept=document.Save(true,default);string dropped=document.Save(false,default);
+            check(File.ReadAllBytes(kept).SequenceEqual(want)&&File.ReadAllBytes(rotated).SequenceEqual(source),"Kept copy is the source with only a minimal orientation EXIF in place of the original; source unchanged");
+            check(JpegMetadata.Read(new MemoryStream(File.ReadAllBytes(dropped)),default).Orientation==ExifOrientationInfo.None&&JpegMetadata.Read(new MemoryStream(File.ReadAllBytes(kept)),default).Orientation.Value==6,"Unchecked copy has no orientation, kept copy re-reads as 6");
+            var decoded=ImageTools.DecodeSnapshot(File.ReadAllBytes(kept),kept,default);check(document.CanKeepOrientation&&decoded.PixelWidth==3&&decoded.PixelHeight==7,"Orientation 6 kept copy passes validation and the shared decoder applies it (7×3 stored → 3×7 shown)");
         }
         using(var noMatch=JpegMetadataDocument.Open(first,default))
         {

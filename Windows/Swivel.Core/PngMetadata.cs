@@ -27,6 +27,7 @@ public static class PngMetadata
     {
         private readonly byte[] source;
         private readonly Chunk[] chunks;
+        private readonly int orientationSlot;
         public int Width { get; }
         public int Height { get; }
         public long SourceBytes => source.Length;
@@ -34,27 +35,36 @@ public static class PngMetadata
         public long OutputBytes => SourceBytes-RemovedBytes;
         public int RemovedCount { get; }
         public IReadOnlyList<PngMetadataChunk> Chunks { get; }
-        private Plan(byte[] source,Chunk[] chunks,int width,int height)
+        // Read strictly from the single eXIf chunk (a TIFF stream); text chunks are never parsed.
+        public ExifOrientationInfo Orientation { get; }
+        public long OutputBytesKeeping(bool keepOrientation)=>OutputBytes+(keepOrientation&&Orientation.CanKeep?OrientationChunkLength:0);
+        private Plan(byte[] source,Chunk[] chunks,int width,int height,ExifOrientationInfo orientation,int orientationSlot)
         {
-            this.source=source;this.chunks=chunks;Width=width;Height=height;
+            this.source=source;this.chunks=chunks;this.orientationSlot=orientationSlot;Orientation=orientation;Width=width;Height=height;
             RemovedBytes=chunks.Where(c=>c.Removed).Sum(c=>(long)c.Length);
             RemovedCount=chunks.Count(c=>c.Removed);
             Chunks=Array.AsReadOnly(chunks.GroupBy(c=>c.Type).Select(g=>new PngMetadataChunk(g.Key,g.Count(),g.Sum(c=>(long)c.Length),g.First().Removed)).ToArray());
         }
-        public void Write(Stream output,CancellationToken token)
+        public void Write(Stream output,CancellationToken token)=>Write(output,false,token);
+        // keepOrientation writes one new eXIf chunk (only IFD0 Orientation) where the source
+        // eXIf stood, or just before the first IDAT if the source placed it later.
+        public void Write(Stream output,bool keepOrientation,CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(output);token.ThrowIfCancellationRequested();
             if(!output.CanWrite)throw new ArgumentException("A writable output stream is required.",nameof(output));
+            if(keepOrientation&&!Orientation.CanKeep)throw new InvalidOperationException("No source orientation to keep.");
             output.Write(Signature);
-            foreach(var chunk in chunks)
+            for(int index=0;index<chunks.Length;index++)
             {
-                token.ThrowIfCancellationRequested();if(chunk.Removed)continue;
+                var chunk=chunks[index];token.ThrowIfCancellationRequested();
+                if(keepOrientation&&index==orientationSlot)output.Write(OrientationChunk(Orientation.Value));
+                if(chunk.Removed)continue;
                 for(int at=0;at<chunk.Length;)
                 {token.ThrowIfCancellationRequested();int count=Math.Min(65536,chunk.Length-at);output.Write(source.AsSpan(chunk.Offset+at,count));at+=count;}
             }
             token.ThrowIfCancellationRequested();
         }
-        internal static Plan Create(byte[] source,Chunk[] chunks,int width,int height)=>new(source,chunks,width,height);
+        internal static Plan Create(byte[] source,Chunk[] chunks,int width,int height,ExifOrientationInfo orientation,int orientationSlot)=>new(source,chunks,width,height,orientation,orientationSlot);
     }
     public static Plan Read(Stream input,CancellationToken token)
     {
@@ -72,6 +82,7 @@ public static class PngMetadata
         if(!bytes.AsSpan(0,8).SequenceEqual(Signature))throw new UserError(Invalid);
         var chunks=new List<Chunk>();int offset=8,width=0,height=0,palette=0,color=-1,depth=0,interlace=0;
         bool data=false,dataEnded=false,end=false;long dataBytes=0;
+        int exifChunks=0,exifIndex=-1,firstData=-1;var orientation=ExifOrientationInfo.None;
         while(offset<bytes.Length)
         {
             token.ThrowIfCancellationRequested();
@@ -108,7 +119,7 @@ public static class PngMetadata
             else if(type=="IDAT")
             {
                 if(dataEnded||(color==3&&palette==0))throw new UserError(Invalid);
-                data=true;dataBytes+=payload;
+                if(!data)firstData=chunks.Count;data=true;dataBytes+=payload;
             }
             else
             {
@@ -121,11 +132,24 @@ public static class PngMetadata
                     if(data||!((color==0&&payload==2)||(color==2&&payload==6)||(color==3&&palette>0&&payload is >0&&payload<=palette)))throw new UserError(Invalid);
                 }
             }
+            if(type=="eXIf"&&++exifChunks==1){exifIndex=chunks.Count;orientation=ExifOrientation.Read(bytes.AsSpan(offset+8,payload));}
             chunks.Add(new(type,offset,total,type is "tEXt" or "zTXt" or "iTXt" or "eXIf" or "tIME"));offset+=total;
         }
         if(!end)throw new UserError(Invalid);
         VerifyImageData(bytes,chunks,width,height,depth,color,interlace,token);
-        token.ThrowIfCancellationRequested();return Plan.Create(bytes,chunks.ToArray(),width,height);
+        // PNG allows at most one eXIf; several leave no single source of truth.
+        if(exifChunks>1)orientation=ExifOrientationInfo.Ambiguous;
+        // The PNG specification requires eXIf before the first IDAT.
+        int slot=exifIndex<0?-1:Math.Min(exifIndex,firstData);
+        token.ThrowIfCancellationRequested();return Plan.Create(bytes,chunks.ToArray(),width,height,orientation,slot);
+    }
+    public const int OrientationChunkLength=12+ExifOrientation.TiffLength;
+    public static byte[] OrientationChunk(int orientation)
+    {
+        var bytes=new byte[OrientationChunkLength];BinaryPrimitives.WriteUInt32BigEndian(bytes,ExifOrientation.TiffLength);
+        "eXIf"u8.CopyTo(bytes.AsSpan(4));ExifOrientation.Tiff(orientation).CopyTo(bytes,8);
+        uint crc=0xffffffff;foreach(byte b in bytes.AsSpan(4,4+ExifOrientation.TiffLength))crc=CrcTable[(crc^b)&255]^(crc>>8);
+        BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(OrientationChunkLength-4),crc^0xffffffff);return bytes;
     }
     // Some system decoders accept damaged image data. Retained IDAT bytes are copied
     // unchanged, so they must at least inflate to exactly the
