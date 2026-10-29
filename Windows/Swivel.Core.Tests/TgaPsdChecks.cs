@@ -99,6 +99,10 @@ internal static class TgaPsdChecks
             "An opaque picture is written as a 3-channel 8-bit RGB PSD");
         check(Hex(ReadPsd(written)) == Hex(noisy), "An opaque PSD with long runs and literal stretches reads back exactly");
         check(written.Length < 26 + 12 + 2 + 3 * 3 * 2 + 3 * 3 * 131, "PackBits keeps the opaque PSD smaller than raw");
+        // The worst case for PackBits: single bytes between pairs, at the widest row allowed.
+        var pairs = Image(16384, 2, (x, y) => ((byte)(x % 3 == 0 ? x / 3 : 7), (byte)(x % 3 == 0 ? 1 : 2), (byte)(y + x / 3), 255));
+        stream = new MemoryStream(); PsdImage.Write(pairs, stream);
+        check(Hex(ReadPsd(stream.ToArray())) == Hex(pairs), "Alternating single bytes and pairs pack and read back at 16,384 pixels wide");
         var one = Image(1, 1, (x, y) => (1, 2, 3, 255));
         stream = new MemoryStream(); PsdImage.Write(one, stream);
         check(Hex(ReadPsd(stream.ToArray())) == "010203FF", "A 1×1 PSD reads back");
@@ -117,13 +121,13 @@ internal static class TgaPsdChecks
         check(written.AsSpan().IndexOf("8BIMnorm"u8) > 0 && written.AsSpan().IndexOf("\u0007Layer 1"u8) > 0, "A transparent PSD carries one normal layer named Layer 1");
 
         // Hand-built PSD files.
-        byte[] Psd(int channels, int width, int height, int depth, int mode, short? layerCount, int compression, byte[] data, int version = 1)
+        byte[] Psd(int channels, int width, int height, int depth, int mode, short? layerCount, int compression, byte[] data, int version = 1, byte[]? resources = null)
         {
             var file = new List<byte>();
             void U16(int v) { file.Add((byte)(v >> 8)); file.Add((byte)v); }
             void U32(long v) { U16((int)(v >> 16)); U16((int)(v & 0xFFFF)); }
             file.AddRange("8BPS"u8.ToArray()); U16(version); file.AddRange(new byte[6]); U16(channels); U32(height); U32(width); U16(depth); U16(mode);
-            U32(0); U32(0);
+            U32(0); U32((resources ?? Array.Empty<byte>()).Length); file.AddRange(resources ?? Array.Empty<byte>());
             if (layerCount is { } count) { U32(10); U32(2); U16((ushort)count); U32(0); } else U32(0);
             U16(compression); file.AddRange(data);
             return file.ToArray();
@@ -134,12 +138,14 @@ internal static class TgaPsdChecks
         // A fourth channel is transparency only when the layer count is negative.
         var four = new byte[] { 255, 255, 255, 191, 191, 191, 127, 127, 127, 0, 128, 255 };
         check(Hex(ReadPsd(Psd(4, 3, 1, 8, 3, 1, 0, four))) == "7FBFFFFF7FBFFFFF7FBFFFFF", "With a positive layer count an extra channel is a saved selection, not transparency");
-        var unmatted = ReadPsd(Psd(4, 3, 1, 8, 3, -1, 0, four));
-        check(Hex(unmatted) == "00000000" + "0080FF80" + "7FBFFFFF", "With a negative layer count the extra channel is transparency and colour is taken off the white background");
-        // Colours below 255 − alpha cannot have been blended over white: premultiplied (as macOS writes) is undone instead,
-        // and colours that fit neither blend are kept as stored.
-        check(Hex(ReadPsd(Psd(4, 2, 1, 8, 3, -1, 0, new byte[] { 64, 0, 32, 0, 0, 0, 128, 0 }))) == "00408080" + "00000000", "A premultiplied flattened picture is unpremultiplied");
-        check(Hex(ReadPsd(Psd(4, 1, 1, 8, 3, -1, 0, new byte[] { 200, 10, 0, 128 }))) == "000AC880", "Colours that fit neither blend are taken as stored");
+        // Photoshop's version information (resource 1057): an empty name, 5 bytes of data (version, "has real merged data").
+        byte[] Version(byte merged) => new byte[] { (byte)'8', (byte)'B', (byte)'I', (byte)'M', 0x04, 0x21, 0, 0, 0, 0, 0, 6, 0, 0, 0, 1, merged, 0 };
+        var unmatted = ReadPsd(Psd(4, 3, 1, 8, 3, -1, 0, four, resources: Version(1)));
+        check(Hex(unmatted) == "00000000" + "0080FF80" + "7FBFFFFF", "In a file Photoshop wrote, a negative layer count makes the extra channel transparency and colour is taken off the white background");
+        check(Hex(ReadPsd(Psd(4, 3, 1, 8, 3, -1, 0, four))) == "00000000" + "7FBFFF80" + "7FBFFFFF", "Without Photoshop's version information the same colours are taken as stored (macOS writes straight colours)");
+        check(Hex(ReadPsd(Psd(4, 2, 1, 8, 3, -1, 0, new byte[] { 200, 255, 10, 255, 0, 0, 128, 255 }, resources: Version(1)))) == "000AC880" + "00FFFFFF", "Colours that cannot have been blended over white are taken as stored even from Photoshop");
+        string? NoComposite(byte[] file) { try { ReadPsd(file); return null; } catch (UserError error) { return error.Message; } }
+        check(NoComposite(Psd(3, 2, 1, 8, 3, null, 0, new byte[6], resources: Version(0))) == PsdImage.NoComposite, "A PSD saved without Maximize Compatibility is refused with its own message");
         // Swivel's own transparent PSD reads back exactly through its single plain layer, even at alpha 1.
         var faint = Image(3, 1, (x, y) => (40, 0, (byte)(x * 100), (byte)(x + 1)));
         stream = new MemoryStream(); PsdImage.Write(faint, stream);
@@ -147,6 +153,13 @@ internal static class TgaPsdChecks
         var hidden = stream.ToArray(); int flags = hidden.AsSpan().IndexOf("8BIMnorm"u8) + 10; hidden[flags] |= 2;
         var fromComposite = ReadPsd(hidden);
         check(fromComposite.Bgra.Where((_, i) => i % 4 == 3).SequenceEqual(faint.Bgra.Where((_, i) => i % 4 == 3)) && Hex(fromComposite) != Hex(faint), "A hidden layer is not used; the flattened picture (blended over white) is read instead");
+        // Damaged layer records fall back to the flattened picture instead of failing.
+        var damaged = stream.ToArray(); int extraLength = damaged.AsSpan().IndexOf("8BIMnorm"u8) + 12;
+        check(BinaryPrimitives.ReadUInt32BigEndian(damaged.AsSpan(extraLength)) == 16, "The layer's extra data is 16 bytes");
+        BinaryPrimitives.WriteUInt32BigEndian(damaged.AsSpan(extraLength), 8);
+        check(ReadPsd(damaged).Width == 3, "A layer whose extra data stops before its name is ignored, not a crash");
+        damaged = stream.ToArray(); BinaryPrimitives.WriteUInt32BigEndian(damaged.AsSpan(extraLength + 8), 0xFFFFFFF0);
+        check(ReadPsd(damaged).Width == 3, "A huge blending-ranges length is ignored, not a crash");
         // PackBits rows: counts first, then data.
         byte[] packed = { 0, 2, 0, 2, 0, 2, 0xFE, 7, 0xFE, 8, 0xFE, 9 };
         check(Hex(ReadPsd(Psd(3, 3, 1, 8, 3, null, 1, packed))) == "090807FF090807FF090807FF", "A PackBits RGB PSD decodes each row");

@@ -14073,5 +14073,10 @@
     "不支持这个 PSD。Swivel 读取不压缩或 PackBits 压缩的 8 位 RGB 和灰度 PSD；请按这种方式另存一份，或另存为 PNG。",
     "不支援這個 PSD。Swivel 讀取不壓縮或 PackBits 壓縮的 8 位元 RGB 和灰階 PSD；請依這種方式另存一份，或另存為 PNG。",
     "この PSD には対応していません。Swivel が読み込めるのは非圧縮または PackBits 圧縮の 8 ビット RGB／グレースケール PSD です。その形式か PNG で保存し直してください。"
+  ],
+  "This PSD was saved without Maximize Compatibility, so it holds no flattened picture. Save it again with Maximize Compatibility on, or as PNG.": [
+    "这个 PSD 保存时未勾选“最大兼容”，文件中没有合并后的画面。请勾选“最大兼容”重新保存，或另存为 PNG。",
+    "這個 PSD 儲存時未勾選「最大相容性」，檔案中沒有合併後的畫面。請勾選「最大相容性」重新儲存，或另存為 PNG。",
+    "この PSD は「互換性を優先」をオフにして保存されているため、統合画像がありません。「互換性を優先」をオンにして保存し直すか、PNG で保存してください。"
   ]
 }

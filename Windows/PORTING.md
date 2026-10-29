@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.119 跟进 Mac 1.14.x：TGA 与 PSD 读写（C02 增强）
+
+批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.118 已推送，CI 40800721291 通过。
+
+Mac 1.14.x 经 ImageIO 新增 JPEG 2000/PSD/TGA/EXR。WPF 不带这些解码器，也不应调用用户安装的 WIC 编解码器，所以 Windows 用原创实现补 TGA 与 PSD（按 Truevision TGA 2.0 规范与 Adobe 公开的 PSD 文件格式说明自写，无第三方代码）。`Swivel.Core/TgaImage.cs`：类型 1/2/3/9/10/11，8 位索引配 15/16/24/32 位色表（首索引偏移、越界拒绝），15/16/24/32 位真彩色、8 位灰度与 16 位灰度+透明；RLE 包可跨行，按流顺序解码后再按起点/左右方向放置；TGA 2.0 扩展区属性 0/1/2 视为无透明、3 直通、4 预乘还原，无扩展区且全零透明按不透明读；扩展区偏移无效时忽略。写出：不压缩、左上起点，全不透明 24 位/否则 32 位，495 字节扩展区（属性 0 或 3）与 26 字节页脚。`Swivel.Core/PsdImage.cs`：仅版本 1、8 位、RGB/灰度、压缩 0/1；跳过色彩模式数据与图像资源；图层数为负时额外第一通道是合并画面透明度。若文件恰好一个可见、normal、不透明度 255、无蒙版、铺满画布、额外信息只含白名单键（luni、lyid 等，无效果/文字/智能对象）的图层，且其透明度与合并画面一致，就用图层的直通颜色；否则只有带图像资源 1057（版本信息，Photoshop 写入）的文件、且所有部分透明颜色都 ≥255−a−1 时才按混白底去白底（Photoshop、ImageMagick 与 psd-tools 的约定），其余（macOS ImageIO 写的是原色）原样读取；1057 的“有真实合并数据”为 0（未勾选最大兼容）时，若单图层不可用则拒绝。图层记录的所有下标先查边界，损坏的图层记录退回读合并画面。PackBits 写出只在连续 3 个相同字节时用重复包，最坏行长不超过宽度+宽度/128+1。PackBits 行严格要求解出恰好一行宽度。写出：PackBits，全不透明 3 通道且图层段为空；有透明时 4 通道合并画面（混白底）加一个“Layer 1”图层（通道 −1/0/1/2，图层数 −1）。
+
+接入：`ImageTools.Decode` 经 `OwnReader` 让 GIF/TGA/PSD 走自写读取器，元数据只显示尺寸和大小；convert.tga/convert.psd 走 `NativeFiles.WriteBeside`；`Catalog.IsImage`、相似图片、助手文件类型都包含 .tga/.psd，因此所有图片工具、晾衣绳、文件架预览、OCR、二维码读取和 Agent 工具（inspect/plan_action/plan_compress/read_codes/extract_text）都接受它们；转换对话框显示写出说明，输入含 PSD 时另显示读取说明。
+
 ## 0.118 跟进 Mac 1.14.5：Windows 医生“清理文件”（F06 增强）
 
 批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.117 已推送，CI 40695146443 通过。

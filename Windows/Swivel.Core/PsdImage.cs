@@ -16,6 +16,7 @@ public static class PsdImage
     public const string Notice = "PSD saves one flattened 8-bit RGB picture (with a single layer when it has transparency), without a colour profile. Photoshop and other editors open it; nothing else of the original is kept.";
     public const string ReadNotice = "Swivel reads a PSD's flattened picture, the one Photoshop saves with Maximize Compatibility; layers, text and effects are not rendered separately, and an embedded colour profile is not applied.";
     public const string Invalid = "The PSD data is invalid or incomplete.";
+    public const string NoComposite = "This PSD was saved without Maximize Compatibility, so it holds no flattened picture. Save it again with Maximize Compatibility on, or as PNG.";
     public const string Unsupported = "This PSD is not supported. Swivel reads 8-bit RGB and greyscale PSD files stored raw or with PackBits; save a copy in that form, or as PNG.";
     private static readonly byte[] Layer = "8BIMnorm"u8.ToArray();
 
@@ -52,7 +53,9 @@ public static class PsdImage
             offset = start + length;
             return start;
         }
-        Section(); Section();
+        Section();
+        long resources = Section();
+        var (photoshop, merged) = VersionInfo(file, resources, offset);
         // A negative layer count means the first extra channel is the flattened picture's transparency.
         long layers = Section(), layersEnd = offset;
         bool mergedAlpha = false;
@@ -94,27 +97,24 @@ public static class PsdImage
             }
         }
         // How a transparent flattened picture is stored differs between programs (Photoshop blends it
-        // over white, others do not), so when the file is one plain full-size layer whose
-        // transparency matches the flattened one, that layer's own straight colours are used.
+        // over white, macOS stores straight colours), so when the file is one plain full-size layer
+        // whose transparency matches the flattened one, that layer's own straight colours are used.
         bool straight = false;
-        if (alpha && SingleLayer(file, layers, layersEnd, w, h, colours, token) is { } layer && layer[colours].AsSpan().SequenceEqual(planes[colours]))
+        if (SingleLayer(file, layers, layersEnd, w, h, colours, token) is { } layer && (!merged || alpha && layer[colours].AsSpan().SequenceEqual(planes[colours])))
         {
-            planes = layer; straight = true;
+            planes = layer; straight = alpha = true;
         }
-        // Otherwise the stored colours say how they were blended: over white (Photoshop) every
-        // channel is at least 255 − alpha, premultiplied (blended over black, as macOS writes)
-        // at most alpha. Colours that fit neither are taken as they are.
-        bool white = true, black = true;
-        if (alpha && !straight)
-            for (int pixel = 0; pixel < w * h && (white || black); pixel++)
+        // Photoshop saved without Maximize Compatibility stores a placeholder, not the picture.
+        else if (!merged) throw new UserError(NoComposite);
+        // Only a file Photoshop wrote (it carries its version information) is taken off white,
+        // and only when every partly transparent colour could have been blended over white.
+        bool white = photoshop;
+        if (alpha && !straight && white)
+            for (int pixel = 0; pixel < w * h && white; pixel++)
             {
                 int a = planes[colours][pixel];
                 if (a is 0 or 255) continue;
-                for (int channel = 0; channel < colours; channel++)
-                {
-                    int value = planes[channel][pixel];
-                    white &= value >= 255 - a - 1; black &= value <= a + 1;
-                }
+                for (int channel = 0; channel < colours; channel++) white &= planes[channel][pixel] >= 255 - a - 1;
             }
         var bgra = new byte[(long)w * h * 4];
         for (int index = 0, pixel = 0; pixel < w * h; pixel++, index += 4)
@@ -124,10 +124,27 @@ public static class PsdImage
             byte a = alpha ? planes[colours][pixel] : (byte)255;
             if (a == 0) r = g = b = 0;
             else if (a < 255 && !straight && white) { r = Unmatte(r, a); g = Unmatte(g, a); b = Unmatte(b, a); }
-            else if (a < 255 && !straight && black) { r = Unpremultiply(r, a); g = Unpremultiply(g, a); b = Unpremultiply(b, a); }
             bgra[index] = b; bgra[index + 1] = g; bgra[index + 2] = r; bgra[index + 3] = a;
         }
         return new PixelImage(w, h, bgra);
+    }
+
+    /// Image resource 1057 (version info), which Photoshop writes: whether it is there, and its
+    /// "has real merged data" flag (true when absent). A damaged resource list is ignored.
+    private static (bool Photoshop, bool Merged) VersionInfo(byte[] file, long start, long end)
+    {
+        long at = start;
+        while (at + 12 <= end)
+        {
+            if (!file.AsSpan((int)at, 4).SequenceEqual("8BIM"u8)) break;
+            int id = BinaryPrimitives.ReadUInt16BigEndian(file.AsSpan((int)at + 4));
+            long name = (1 + file[at + 6] + 1) / 2 * 2, size = at + 6 + name + 4 <= end ? BinaryPrimitives.ReadUInt32BigEndian(file.AsSpan((int)(at + 6 + name))) : -1;
+            long data = at + 6 + name + 4;
+            if (size < 0 || data + size > end) break;
+            if (id == 1057 && size >= 5) return (true, file[data + 4] != 0);
+            at = data + (size + 1) / 2 * 2;
+        }
+        return (false, true);
     }
 
     private static readonly string[] PlainLayerKeys = { "luni", "lyid", "lnsr", "clbl", "infx", "knko", "lspf", "lclr", "shmd", "fxrp", "cust", "tsly" };
@@ -156,13 +173,14 @@ public static class PsdImage
                 ids[index] = BinaryPrimitives.ReadInt16BigEndian(record[at..]); lengths[index] = BinaryPrimitives.ReadUInt32BigEndian(record[(at + 2)..]); at += 6;
                 if (ids[index] < -1 || ids[index] >= colours || Array.IndexOf(ids, ids[index], 0, index) >= 0) return null;
             }
-            if (!record.Slice(at, 8).SequenceEqual(Layer) || record[at + 8] != 255 || record[at + 9] != 0 || (record[at + 10] & 2) != 0) return null;
+            if (at + 16 > record.Length || !record.Slice(at, 8).SequenceEqual(Layer) || record[at + 8] != 255 || record[at + 9] != 0 || (record[at + 10] & 2) != 0) return null;
             at += 12;
             long extra = BinaryPrimitives.ReadUInt32BigEndian(record[at..]); at += 4;
             var extras = record.Slice(at, (int)extra); at += (int)extra;
-            if (BinaryPrimitives.ReadUInt32BigEndian(extras) != 0) return null;
-            int e = 4;
-            e += 4 + (int)BinaryPrimitives.ReadUInt32BigEndian(extras[e..]);
+            if (extras.Length < 9 || BinaryPrimitives.ReadUInt32BigEndian(extras) != 0) return null;
+            long ranges = BinaryPrimitives.ReadUInt32BigEndian(extras[4..]);
+            if (8 + ranges >= extras.Length) return null;
+            int e = 8 + (int)ranges;
             e += (1 + extras[e] + 3) / 4 * 4;
             while (e < extras.Length)
             {
@@ -185,6 +203,7 @@ public static class PsdImage
                     int rows = 2 + 2 * h;
                     for (int row = 0; row < h; row++)
                     {
+                        if ((row & 255) == 0) token.ThrowIfCancellationRequested();
                         int size = BinaryPrimitives.ReadUInt16BigEndian(data[(2 + 2 * row)..]);
                         Unpack(data.Slice(rows, size), plane.AsSpan(row * w, w)); rows += size;
                     }
@@ -195,13 +214,11 @@ public static class PsdImage
             }
             return planes;
         }
-        catch (Exception error) when (error is ArgumentOutOfRangeException or UserError) { return null; }
+        catch (Exception error) when (error is ArgumentOutOfRangeException or IndexOutOfRangeException or OverflowException or UserError) { return null; }
     }
 
     private static byte Unmatte(byte value, byte alpha) =>
         alpha == 0 ? (byte)0 : (byte)Math.Clamp(((value - 255 + alpha) * 255 + alpha / 2) / alpha, 0, 255);
-
-    private static byte Unpremultiply(byte value, byte alpha) => (byte)Math.Min(255, (value * 255 + alpha / 2) / alpha);
 
     private static byte Matte(byte value, byte alpha) => (byte)((value * alpha + 255 * (255 - alpha) + 127) / 255);
 
@@ -229,37 +246,40 @@ public static class PsdImage
         }
     }
 
-    private static void Pack(ReadOnlySpan<byte> row, List<byte> output)
+    /// PackBits one row into `output`; returns the length. Repeats start at three equal bytes, so a
+    /// row never takes more than width + width / 128 + 1 bytes.
+    private static int Pack(ReadOnlySpan<byte> row, byte[] output)
     {
-        int at = 0;
+        int at = 0, length = 0;
         while (at < row.Length)
         {
             int run = 1;
             while (at + run < row.Length && run < 128 && row[at + run] == row[at]) run++;
-            if (run >= 2) { output.Add((byte)(sbyte)(1 - run)); output.Add(row[at]); at += run; continue; }
+            if (run >= 3) { output[length++] = (byte)(sbyte)(1 - run); output[length++] = row[at]; at += run; continue; }
             int start = at;
-            while (at < row.Length && at - start < 128 && !(at + 1 < row.Length && row[at + 1] == row[at])) at++;
-            if (at == start) at++;
-            output.Add((byte)(at - start - 1));
-            for (int index = start; index < at; index++) output.Add(row[index]);
+            while (at < row.Length && at - start < 128 && !(at + 2 < row.Length && row[at + 1] == row[at] && row[at + 2] == row[at])) at++;
+            output[length++] = (byte)(at - start - 1);
+            row[start..at].CopyTo(output.AsSpan(length)); length += at - start;
         }
+        return length;
     }
 
     /// PackBits-compressed channels in order: per-row byte counts, then the rows.
     private static byte[] Channels(IReadOnlyList<byte[]> planes, int width, int height, CancellationToken token)
     {
         var counts = new byte[2 * planes.Count * height];
-        var data = new List<byte>();
+        var data = new MemoryStream();
+        var row = new byte[width + width / 128 + 2];
         for (int channel = 0; channel < planes.Count; channel++)
-            for (int row = 0; row < height; row++)
+            for (int line = 0; line < height; line++)
             {
-                if ((row & 255) == 0) token.ThrowIfCancellationRequested();
-                int before = data.Count;
-                Pack(planes[channel].AsSpan(row * width, width), data);
-                BinaryPrimitives.WriteUInt16BigEndian(counts.AsSpan(2 * (channel * height + row)), checked((ushort)(data.Count - before)));
+                if ((line & 255) == 0) token.ThrowIfCancellationRequested();
+                int length = Pack(planes[channel].AsSpan(line * width, width), row);
+                data.Write(row, 0, length);
+                BinaryPrimitives.WriteUInt16BigEndian(counts.AsSpan(2 * (channel * height + line)), checked((ushort)length));
             }
-        var result = new byte[counts.Length + data.Count];
-        counts.CopyTo(result, 0); data.CopyTo(result, counts.Length);
+        var result = new byte[counts.Length + data.Length];
+        counts.CopyTo(result, 0); data.GetBuffer().AsSpan(0, (int)data.Length).CopyTo(result.AsSpan(counts.Length));
         return result;
     }
 
