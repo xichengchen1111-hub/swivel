@@ -13959,20 +13959,20 @@
     "無法讀取「文件」或「桌面」；那裡的建置資料夾沒有列出。",
     "「ドキュメント」または「デスクトップ」を読み取れませんでした。そこにあるビルドフォルダーは一覧にありません。"
   ],
-  "Images: single-frame PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture) or supported full-canvas static GIF, up to 16 MP / 128 MB. Outputs are SDR and metadata-free. Animated and partial-canvas GIFs are refused. Enlargement requires an explicit choice.": [
-    "图片：单帧 PNG、JPEG、BMP、TIFF、TGA、PSD（合并后的画面）或受支持的完整画布静态 GIF，最多 16 MP / 128 MB。输出为移除元数据的 SDR。动画和局部画布 GIF 会拒绝。放大需明确选择。",
-    "圖片：單幀 PNG、JPEG、BMP、TIFF、TGA、PSD（合併後的畫面）或支援的完整畫布靜態 GIF，最多 16 MP / 128 MB。輸出為移除中繼資料的 SDR。動畫和局部畫布 GIF 會拒絕。放大需明確選擇。",
-    "画像：単一フレームの PNG、JPEG、BMP、TIFF、TGA、PSD（統合画像）、対応する全画面の静止 GIF。最大 16 MP / 128 MB。出力はメタデータを除いた SDR です。アニメーションと部分キャンバス GIF は拒否します。拡大には明示的な選択が必要です。"
+  "Images: single-frame PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture), still WebP or supported full-canvas static GIF, up to 16 MP / 128 MB. Outputs are SDR and metadata-free. Animated GIF and WebP and partial-canvas GIFs are refused. Enlargement requires an explicit choice.": [
+    "图片：单帧 PNG、JPEG、BMP、TIFF、TGA、PSD（合并后的画面）、静态 WebP 或受支持的完整画布静态 GIF，最多 16 MP / 128 MB。输出为移除元数据的 SDR。动画 GIF 和 WebP 以及局部画布 GIF 会拒绝。放大需明确选择。",
+    "圖片：單幀 PNG、JPEG、BMP、TIFF、TGA、PSD（合併後的畫面）、靜態 WebP 或支援的完整畫布靜態 GIF，最多 16 MP / 128 MB。輸出為移除中繼資料的 SDR。動畫 GIF 和 WebP 以及局部畫布 GIF 會拒絕。放大需明確選擇。",
+    "画像：単一フレームの PNG、JPEG、BMP、TIFF、TGA、PSD（統合画像）、静止 WebP、対応する全画面の静止 GIF。最大 16 MP / 128 MB。出力はメタデータを除いた SDR です。アニメーション GIF と WebP、部分キャンバス GIF は拒否します。拡大には明示的な選択が必要です。"
   ],
-  "Only single-frame SDR PNG, JPEG, BMP, TIFF, TGA, PSD and supported static GIF are decoded. Alpha is composited onto white, then integer brightness averages are calculated in a 9-by-8 grid. The 64 horizontal comparisons produce a signature. At most 6 differing bits qualify (at least 90.625% agreement). Different image formats may be compared. Displayed percentages are truncated to two decimals. This is not an object, face or semantic recognition score.": [
-    "只解码单帧 SDR PNG、JPEG、BMP、TIFF、TGA、PSD 和支持的静态 GIF。透明度先合成到白底，再计算 9×8 网格的整数亮度均值。64 次横向比较构成签名，最多相差 6 位即匹配（一致率至少 90.625%）。可以跨图片格式比较。显示百分比截断到小数点后两位。这不是物体、人脸或语义识别分数。",
-    "僅解碼單幀 SDR PNG、JPEG、BMP、TIFF、TGA、PSD 和支援的靜態 GIF。透明度先合成到白底，再計算 9×8 網格的整數亮度平均值。64 次橫向比較構成簽章，最多相差 6 位即相符（一致率至少 90.625%）。可跨圖片格式比較。顯示百分比截斷至小數點後兩位。這不是物件、人臉或語意辨識分數。",
-    "単一フレームのSDR PNG、JPEG、BMP、TIFF、TGA、PSDと対応する静止GIFのみデコードします。透明度を白背景に合成し、9×8グリッドの整数輝度平均を計算します。64回の横方向比較でシグネチャを作り、異なるビットが6個以下なら対象です（一致率90.625%以上）。画像形式をまたいで比較できます。表示の割合は小数点以下2桁で切り捨てます。物体、顔、意味を認識するスコアではありません。"
+  "Only single-frame SDR PNG, JPEG, BMP, TIFF, TGA, PSD, still WebP and supported static GIF are decoded. Alpha is composited onto white, then integer brightness averages are calculated in a 9-by-8 grid. The 64 horizontal comparisons produce a signature. At most 6 differing bits qualify (at least 90.625% agreement). Different image formats may be compared. Displayed percentages are truncated to two decimals. This is not an object, face or semantic recognition score.": [
+    "只解码单帧 SDR PNG、JPEG、BMP、TIFF、TGA、PSD、静态 WebP 和支持的静态 GIF。透明度先合成到白底，再计算 9×8 网格的整数亮度均值。64 次横向比较构成签名，最多相差 6 位即匹配（一致率至少 90.625%）。可以跨图片格式比较。显示百分比截断到小数点后两位。这不是物体、人脸或语义识别分数。",
+    "僅解碼單幀 SDR PNG、JPEG、BMP、TIFF、TGA、PSD、靜態 WebP 和支援的靜態 GIF。透明度先合成到白底，再計算 9×8 網格的整數亮度平均值。64 次橫向比較構成簽章，最多相差 6 位即相符（一致率至少 90.625%）。可跨圖片格式比較。顯示百分比截斷至小數點後兩位。這不是物件、人臉或語意辨識分數。",
+    "単一フレームのSDR PNG、JPEG、BMP、TIFF、TGA、PSD、静止WebPと対応する静止GIFのみデコードします。透明度を白背景に合成し、9×8グリッドの整数輝度平均を計算します。64回の横方向比較でシグネチャを作り、異なるビットが6個以下なら対象です（一致率90.625%以上）。画像形式をまたいで比較できます。表示の割合は小数点以下2桁で切り捨てます。物体、顔、意味を認識するスコアではありません。"
   ],
-  "Use a PNG, JPEG, BMP, TIFF, TGA, PSD or supported static GIF image.": [
-    "请使用 PNG、JPEG、BMP、TIFF、TGA、PSD 或受支持的静态 GIF 图片。",
-    "請使用 PNG、JPEG、BMP、TIFF、TGA、PSD 或支援的靜態 GIF 圖片。",
-    "PNG、JPEG、BMP、TIFF、TGA、PSD、または対応する静止 GIF 画像を使用してください。"
+  "Use a PNG, JPEG, BMP, TIFF, TGA, PSD, still WebP or supported static GIF image.": [
+    "请使用 PNG、JPEG、BMP、TIFF、TGA、PSD、静态 WebP 或受支持的静态 GIF 图片。",
+    "請使用 PNG、JPEG、BMP、TIFF、TGA、PSD、靜態 WebP 或支援的靜態 GIF 圖片。",
+    "PNG、JPEG、BMP、TIFF、TGA、PSD、静止 WebP、または対応する静止 GIF 画像を使用してください。"
   ],
   "Convert to TGA": [
     "转换为 TGA",
@@ -14848,5 +14848,25 @@
     "“保留方向”会在原 EXIF 的位置写入一段新的最小 EXIF，其中只有方向标签（不含相机、时间、GPS、缩略图或厂商数据）。其他保留的字节一律不变，图像不会重新压缩。方向只从源文件的 EXIF 读取，绝不从 XMP 或文本读取。",
     "「保留方向」會在原 EXIF 的位置寫入一段新的最小 EXIF，其中只有方向標籤（不含相機、時間、GPS、縮圖或廠商資料）。其他保留的位元組一律不變，影像不會重新壓縮。方向只從來源檔案的 EXIF 讀取，絕不從 XMP 或文字讀取。",
     "「向きを保持」は、元の EXIF の位置に向きタグだけを含む新しい最小限の EXIF を書き込みます（カメラ、日時、GPS、サムネイル、メーカー情報は含みません）。その他の保持されるバイトはすべてそのままで、画像は再圧縮されません。向きは元ファイルの EXIF からのみ読み取り、XMP やテキストからは読み取りません。"
+  ],
+  "The WebP data is invalid or incomplete.": [
+    "WebP 数据无效或不完整。",
+    "WebP 資料無效或不完整。",
+    "WebP データが無効か不完全です。"
+  ],
+  "Animated WebP images are not supported. Save one frame as PNG, or use a still WebP.": [
+    "不支持动画 WebP 图片。请将其中一帧存为 PNG，或使用静态 WebP。",
+    "不支援動畫 WebP 圖片。請將其中一幀存為 PNG，或使用靜態 WebP。",
+    "アニメーション WebP 画像には対応していません。1 フレームを PNG として保存するか、静止 WebP を使用してください。"
+  ],
+  "This WebP uses more prefix codes than Swivel decodes. Save it again with another encoder, or as PNG.": [
+    "此 WebP 使用的前缀码超出 Swivel 的解码上限。请用其他编码器重新保存，或存为 PNG。",
+    "此 WebP 使用的前綴碼超出 Swivel 的解碼上限。請用其他編碼器重新儲存，或存為 PNG。",
+    "この WebP は Swivel がデコードできる数を超えるプレフィックス符号を使っています。別のエンコーダーで保存し直すか、PNG として保存してください。"
+  ],
+  "Swivel reads still WebP pictures, lossy or lossless, with their transparency; an embedded colour profile, EXIF orientation and other metadata are not applied.": [
+    "Swivel 读取有损或无损的静态 WebP 图片及其透明度；不应用嵌入的颜色描述文件、EXIF 方向和其他元数据。",
+    "Swivel 讀取有損或無損的靜態 WebP 圖片及其透明度；不套用內嵌的色彩描述檔、EXIF 方向和其他中繼資料。",
+    "Swivel は非可逆・可逆の静止 WebP 画像を透明度とともに読み込みます。埋め込みカラープロファイル、EXIF の向き、その他のメタデータは適用しません。"
   ]
 }

@@ -94,6 +94,7 @@ FolderStyleChecks.Run(Check, Reject);
         FontFileFormatsChecks.Run(Check, Reject);
         IcoFileChecks.Run(Check, Reject);
         TgaPsdChecks.Run(Check, Reject);
+        WebPChecks.Run(Check, Reject);
         FolderZipChecks.Run(Check, Reject);
         FolderCopyChecks.Run(Check, Reject);
         ImageStitchChecks.Run(Check, Reject);

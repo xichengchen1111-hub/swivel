@@ -13,3 +13,8 @@ encoded headers; `handmade-*.7z` are assembled by the script's own small writer 
 `lzma` raw streams (x86 BCJ + LZMA2 in both coder orders, LZMA with five lc/lp/pb shapes).
 bsdtar read every archive back except `handmade-bcj-filter-first.7z`, whose coder order
 libarchive does not accept. All contents are generated test data.
+
+webp/ (2026-10-29): `makewebp.py` regenerates these with `python3 -I makewebp.py <dir>` (Pillow 12 with
+libwebp 1.6.0). Each `<name>.rgba` holds Pillow's decoded RGBA rows for `<name>.webp`: lossless files
+must match exactly, lossy files within one level per colour channel (alpha exactly). `animated.webp`
+has two frames and must be refused. All pictures are generated test data.

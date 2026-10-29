@@ -36,7 +36,7 @@ public sealed class AssistantPlan
         foreach(string path in paths)
         {
             string ext=Path.GetExtension(path).ToLowerInvariant();string kind=ext switch{
-                ".png" or ".jpg" or ".jpeg" or ".bmp" or ".tif" or ".tiff" or ".gif" or ".tga" or ".psd"=>"image",
+                ".png" or ".jpg" or ".jpeg" or ".bmp" or ".tif" or ".tiff" or ".gif" or ".tga" or ".psd" or ".webp"=>"image",
                 ".wav" or ".mp3" or ".aac" or ".flac" or ".aif" or ".aiff" or ".aifc"=>"audio",
                 ".pdf"=>"PDF", ".txt" or ".md" or ".rtf" or ".docx" or ".odt" or ".html" or ".htm" or ".srt"=>"document",_=>"other"};
             counts[kind]=counts.GetValueOrDefault(kind)+1;

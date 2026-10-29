@@ -28,6 +28,7 @@ internal sealed class ConversionDialog : Window
         if (format == "tga") body.Children.Add(UI.Text(app.L(TgaImage.Notice)));
         if (format == "psd") body.Children.Add(UI.Text(app.L(PsdImage.Notice)));
         if (files.Any(f => System.IO.Path.GetExtension(f).Equals(".psd", System.StringComparison.OrdinalIgnoreCase))) body.Children.Add(UI.Text(app.L(PsdImage.ReadNotice)));
+        if (files.Any(f => System.IO.Path.GetExtension(f).Equals(".webp", System.StringComparison.OrdinalIgnoreCase))) body.Children.Add(UI.Text(app.L(WebPImage.ReadNotice)));
         if (format == "jpg") body.Children.Add(UI.Text(app.L("JPEG uses lossy compression. Fine detail may change, even at high quality.")));
         if (format is "jpg" or "bmp") body.Children.Add(UI.Text(app.L("Transparent areas become white in this output format.")));
         body.Children.Add(UI.Text(app.L("New files are saved beside each original without replacing existing files. Originals stay unchanged. The batch stops at the first error; completed files are kept.")));

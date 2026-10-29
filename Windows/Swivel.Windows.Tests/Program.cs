@@ -183,6 +183,7 @@ internal static class Program
             Group("GifExportNativeChecks", () => GifExportNativeChecks.Run(directory,Check,Reject));
             Group("IcoNativeChecks", () => IcoNativeChecks.Run(directory,Check,Reject));
             Group("TgaPsdNativeChecks", () => TgaPsdNativeChecks.Run(directory,Check,Reject));
+            Group("WebPNativeChecks", () => WebPNativeChecks.Run(directory,Check,Reject));
             Group("FolderZipNativeChecks", () => FolderZipNativeChecks.Run(directory,Check,Reject));
             Group("FolderCopyNativeChecks", () => FolderCopyNativeChecks.Run(directory,Check,Reject));
             Group("ImageStitchNativeChecks", () => ImageStitchNativeChecks.Run(directory,Check,Reject));
