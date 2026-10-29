@@ -125,7 +125,7 @@ internal static class QrRecoveryDialogNativeChecks
                 {
                     var visible = Find<TextBlock>(dialog).Select(block => block.Text).ToArray();
                     check(dialog.Title == app.L("Read QR Image") &&
-                        visible.Contains(string.Format(app.L("Read from a photo or screenshot: QR version {0} · level {1} · about {2} pixels/module · {3} UTF-16 units"), 8, QrCode.Level(QrCorrection.Medium), 4, 10)) &&
+                        visible.Contains(string.Format(app.L("Sampled read with error correction: QR version {0} · level {1} · about {2} pixels/module · {3} UTF-16 units"), 8, QrCode.Level(QrCorrection.Medium), 4, 10)) &&
                         visible.Contains(string.Format(app.L("Code orientation: about {0}° clockwise from upright."), 133)) &&
                         visible.Contains(string.Format(app.L("Error correction changed {0} encoded bytes in {1} blocks. Zero does not prove the photo was perfect, and beyond the correction capacity another valid message could be accepted."), 6, 2)) &&
                         visible.Contains(app.L(QrPhotoRead.Scope)) && !visible.Contains(string.Format(app.L("Image orientation: {0}° clockwise from upright."), 133)),

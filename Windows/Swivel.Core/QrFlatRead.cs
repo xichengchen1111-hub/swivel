@@ -208,6 +208,9 @@ public sealed partial class QrCode
                 Array.Copy(repaired!,0,data[b],0,data[b].Length);Array.Copy(repaired!,data[b].Length,checks[b],0,parity);
                 // Independent existing encoder remainder validation follows all-syndrome validation.
                 if(changed==0||!Remainder(data[b],parity).SequenceEqual(checks[b]))return null;
+                // Sampled reads keep ISO/IEC 18004's misdecode-protection codewords for 1-L (3), 1-M and 2-L (2).
+                int protection=version==1&&correction==QrCorrection.Low?3:version==1&&correction==QrCorrection.Medium||version==2&&correction==QrCorrection.Low?2:0;
+                if(tolerant&&changed>(parity-protection)/2)return null;
                 correctedWords+=changed;correctedBlocks++;
             }
             data[b].CopyTo(payload,offset);offset+=data[b].Length;

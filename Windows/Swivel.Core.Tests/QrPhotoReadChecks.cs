@@ -192,6 +192,36 @@ internal static class QrPhotoReadChecks
         watch.Restart();
         reject(()=>QrPhotoRead.Read(new(4000,4000,busy),default),"A 16-megapixel grid of finder look-alikes holds no code");
         Console.WriteLine($"QR photo reader, 16 MP grid of finder look-alikes: {watch.Elapsed.TotalSeconds:F2}s (this Mac, core only)");
+        // Reviewer's stripes: every row offers ~500 finder-like runs and long dark columns.
+        for(int y=0;y<4000;y++)for(int x=0;x<4000;x++)
+        {
+            int phase=x%8;bool ink=y==0||y==3999||y!=1&&y!=3998&&(phase==0||phase>=2&&phase<=4||phase==6);
+            int i=(y*4000+x)*4;busy[i]=busy[i+1]=busy[i+2]=ink?(byte)20:(byte)235;
+        }
+        watch.Restart();
+        reject(()=>QrPhotoRead.Read(new(4000,4000,busy),default),"16 megapixels of finder-ratio stripes hold no code");
+        Console.WriteLine($"QR photo reader, 16 MP finder-ratio stripes: {watch.Elapsed.TotalSeconds:F2}s (this Mac, core only)");
+        check(watch.Elapsed.TotalSeconds<3,"Finder cross-checks are bounded on crafted stripes");
+        // Larger versions under perspective rely on the scaled alignment search.
+        foreach(int length in new[]{200,400})
+        {
+            string text=new string('q',length);var code=QrCode.Encode(text,QrCorrection.Low);
+            check(QrPhotoRead.Read(Render(code,new(14,4,Perspective:0.08)),default).Text==text,$"Perspective-warped v{code.Version} decodes with the alignment square");
+        }
+        // Sampled reads stop at the standard's misdecode protection: 1-L corrects at most 2 codewords.
+        {
+            var code=QrCode.Encode("HELLO",QrCorrection.Low);int n=code.Size;var raster=code.Raster(1);
+            check(code.Version==1,"Misdecode fixture is version 1-L");
+            var read=typeof(QrCode).GetMethod("ReadSampledGrid",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!;
+            foreach(int damaged in new[]{2,3})
+            {
+                var grid=new bool[n,n];for(int y=0;y<n;y++)for(int x=0;x<n;x++)grid[x,y]=raster[(y+4)*(n+8)+x+4]==0;
+                // The right-hand column's module 4k rows above the corner is bit 8k: codeword k.
+                for(int k=0;k<damaged;k++)grid[n-1,n-1-4*k]^=true;
+                var result=(QrDataRecoveryResult?)read.Invoke(null,new object[]{grid,1,CancellationToken.None});
+                check(damaged==2?result?.Result.Text=="HELLO"&&result.CorrectedCodewords==2:result is null,$"Sampled 1-L read with {damaged} damaged codewords respects misdecode protection");
+            }
+        }
         using(var cancel=new CancellationTokenSource())
         {
             int polls=0;var image=Render(codes[2].Code,new(40,4,Noise:10));

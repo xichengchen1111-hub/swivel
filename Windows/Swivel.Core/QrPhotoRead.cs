@@ -13,9 +13,9 @@ namespace Swivel.Core;
 /// (else a three-finder affine fit), grid sampling, then the shared format/RS/text decoder.
 public static class QrPhotoRead
 {
-    public const string Scope="Reading first tries exact flat QR images: square, at 0°, 90°, 180° or 270°, with an exact four-module white border and uniform whole-number pixel scaling, read without error correction. If that does not match, a photo reader looks for one dark-on-light Model 2 QR code anywhere in the image (up to 16 megapixels): any rotation, mild perspective, moderate blur, noise, uneven lighting and colored backgrounds. It finds the three corner squares, uses the lower-right alignment square when it can, samples the grid and then uses the code's own error correction. Only one code is read per image; when several codes are present, which one is read is not defined. Mirrored, light-on-dark, curved, very small (under about 2 pixels per module) or heavily damaged codes, codes with covered corner squares, and barcodes are not supported. Numeric, alphanumeric, ASCII bytes and explicit UTF-8 ECI 26 only; other byte encodings, Kanji, FNC1 and structured append are not supported. Error correction can in rare cases accept a different valid message. This does not authenticate the text or its source.";
+    public const string Scope="Reading first tries exact flat QR images: square, at 0°, 90°, 180° or 270°, with an exact four-module white border and uniform whole-number pixel scaling, read without error correction. If that does not match, a photo reader looks for one dark-on-light Model 2 QR code anywhere in the image (up to 16 megapixels): any rotation, mild perspective (larger codes need a more head-on view), moderate blur, noise, uneven lighting and colored backgrounds. Flat images that fail the exact rules, such as smoothly resized or slightly damaged ones, are read this way too. It finds the three corner squares, uses the lower-right alignment square when it can, samples the grid and then uses the code's own error correction. Only one code is read per image; when several codes are present, which one is read is not defined. Mirrored, light-on-dark, curved, very small (under about 2 pixels per module) or heavily damaged codes, codes with covered corner squares, and barcodes are not supported. Numeric, alphanumeric, ASCII bytes and explicit UTF-8 ECI 26 only; other byte encodings, Kanji, FNC1 and structured append are not supported. Error correction can in rare cases accept a different valid message. This does not authenticate the text or its source.";
     public const string NoCode="No supported QR code was found. The image may contain no QR code, or one that is too small, blurred, curved, mirrored, light-on-dark, partly covered or damaged beyond its error correction, or text in an unsupported format.";
-    internal const int MaxCandidates=12,MaxTriples=8,MaxStoredCandidates=512;
+    internal const int MaxCandidates=12,MaxTriples=16,MaxStoredCandidates=512;
 
     public static QrReadResult Read(PixelImage image,CancellationToken token)
     {
@@ -136,9 +136,10 @@ public static class QrPhotoRead
                 for(int k=0;k<5;k++)runs[k]=lengths[i+k];
                 if(!Ratio(runs,out double module))continue;
                 double cx=starts[i+2]+lengths[i+2]/2.0;
-                if(!Cross(dark,width,height,cx,y,false,out double cy,out double vertical)||Math.Abs(vertical-module)>module*0.5)continue;
-                if(!Cross(dark,width,height,cx,cy,true,out double rx,out double horizontal)||Math.Abs(horizontal-module)>module*0.5)continue;
-                if(!Cross(dark,width,height,rx,cy,false,out double ry,out double again))continue;
+                int maxRun=(int)Math.Ceiling(module*14);
+                if(!Cross(dark,width,height,cx,y,false,out double cy,out double vertical,maxRun)||Math.Abs(vertical-module)>module*0.5)continue;
+                if(!Cross(dark,width,height,cx,cy,true,out double rx,out double horizontal,maxRun)||Math.Abs(horizontal-module)>module*0.5)continue;
+                if(!Cross(dark,width,height,rx,cy,false,out double ry,out double again,maxRun))continue;
                 double size=(horizontal+again)/2;Add(found,rx,ry,size,y);
             }
         }
@@ -164,7 +165,8 @@ public static class QrPhotoRead
 
     // Walks out from (x,y) along a row or column, collecting the five finder runs; returns the
     // middle run's center on that axis.
-    private static bool Cross(byte[] dark,int width,int height,double x,double y,bool horizontal,out double center,out double module)
+    // maxRun bounds every walk (a crafted image could otherwise make each check scan a whole column).
+    private static bool Cross(byte[] dark,int width,int height,double x,double y,bool horizontal,out double center,out double module,int maxRun=int.MaxValue)
     {
         center=0;module=0;int px=(int)x,py=(int)y;
         if(px<0||py<0||px>=width||py>=height)return false;
@@ -172,11 +174,11 @@ public static class QrPhotoRead
         bool Dark(int i)=>horizontal?dark[py*width+i]==1:dark[i*width+px]==1;
         if(!Dark(origin))return false;
         Span<int> runs=stackalloc int[5];
-        int i=origin;while(i>=0&&Dark(i)){runs[2]++;i--;}int low=i+1;
-        while(i>=0&&!Dark(i)){runs[1]++;i--;}if(i<0)return false;
+        int i=origin;while(i>=0&&Dark(i)&&runs[2]<=maxRun){runs[2]++;i--;}int low=i+1;
+        while(i>=0&&!Dark(i)&&runs[1]<=maxRun){runs[1]++;i--;}if(i<0||runs[1]>maxRun||runs[2]>maxRun)return false;
         while(i>=0&&Dark(i)&&runs[0]<=runs[2]){runs[0]++;i--;}
-        i=origin+1;while(i<limit&&Dark(i)){runs[2]++;i++;}int high=i;
-        while(i<limit&&!Dark(i)){runs[3]++;i++;}if(i>=limit)return false;
+        i=origin+1;while(i<limit&&Dark(i)&&runs[2]<=maxRun){runs[2]++;i++;}int high=i;
+        while(i<limit&&!Dark(i)&&runs[3]<=maxRun){runs[3]++;i++;}if(i>=limit||runs[2]>maxRun||runs[3]>maxRun)return false;
         while(i<limit&&Dark(i)&&runs[4]<=runs[2]){runs[4]++;i++;}
         if(!Ratio(runs,out module))return false;
         center=(low+high)/2.0;return true;
@@ -203,7 +205,10 @@ public static class QrPhotoRead
             if(aspect>1.6||right>0.35)continue;
             double cross=(p.X-tl.X)*(q.Y-tl.Y)-(p.Y-tl.Y)*(q.X-tl.X);
             var (tr,bl)=cross>0?(p,q):(q,p);
-            ranked.Add((aspect-1+right+maxModule/minModule-1,new(tl.X,tl.Y),new(tr.X,tr.Y),new(bl.X,bl.Y)));
+            // Perspective makes near finders larger, so module mismatch counts half; finders seen in
+            // few rows (often data-area look-alikes) rank lower.
+            int fewest=Math.Min(f[0].Count,Math.Min(f[1].Count,f[2].Count));
+            ranked.Add((aspect-1+right+(maxModule/minModule-1)/2+1.0/fewest,new(tl.X,tl.Y),new(tr.X,tr.Y),new(bl.X,bl.Y)));
         }
         foreach(var t in ranked.OrderBy(t=>t.Score).Take(MaxTriples))yield return (t.A,t.B,t.C);
     }
@@ -213,11 +218,14 @@ public static class QrPhotoRead
         double angle=Math.Atan2(tr.Y-tl.Y,tr.X-tl.X);
         // Finder runs across a turned square are longer by 1/cos of the turn folded into 0–45°.
         double fold=Math.Abs(Math.IEEERemainder(angle,Math.PI/2)),stretch=1/Math.Cos(fold);
-        double module=0;int count=0;
-        foreach(var p in new[]{tl,tr,bl})
-            if(Cross(dark,width,height,p.X,p.Y,true,out _,out double h)&&Cross(dark,width,height,p.X,p.Y,false,out _,out double v)){module+=(h+v)/2;count++;}
-        if(count==0)return null;module=module/count/stretch;
-        double span=(Distance(tl,tr)+Distance(tl,bl))/2/module+7;
+        var sizes=new double[3];double module=0;int count=0;var corners=new[]{tl,tr,bl};
+        for(int k=0;k<3;k++)
+            if(Cross(dark,width,height,corners[k].X,corners[k].Y,true,out _,out double h)&&Cross(dark,width,height,corners[k].X,corners[k].Y,false,out _,out double v))
+            {sizes[k]=(h+v)/2/stretch;module+=sizes[k];count++;}
+        if(count==0)return null;module/=count;
+        for(int k=0;k<3;k++)if(sizes[k]==0)sizes[k]=module;
+        // Each side is measured in the modules of its own two finders, which differ under perspective.
+        double span=(Distance(tl,tr)/((sizes[0]+sizes[1])/2)+Distance(tl,bl)/((sizes[0]+sizes[2])/2))/2+7;
         int nearest=(int)Math.Round((span-17)/4)*4+17;
         var dimensions=new List<int>();
         foreach(int d in new[]{nearest,nearest+4,nearest-4})if(d is >=21 and <=177)dimensions.Add(d);
@@ -266,7 +274,7 @@ public static class QrPhotoRead
         {
             double a=dimension-6.5;var affine=Solve(source.Append(new(far,far)).ToArray(),target.Append(new(tr.X+bl.X-tl.X,tr.Y+bl.Y-tl.Y)).ToArray());
             if(affine is null)return null;var guess=Map(affine,a,a);
-            var found=FindAlignment(dark,width,height,guess,Map(affine,a+1,a),Map(affine,a,a+1),module,stretch,token);
+            var found=FindAlignment(dark,width,height,guess,Map(affine,a+1,a),Map(affine,a,a+1),module,stretch,Math.Max(7,dimension*0.12),token);
             if(found is null)return null;source.Add(new(a,a));target.Add(found.Value);
         }
         else{source.Add(new(far,far));target.Add(new(tr.X+bl.X-tl.X,tr.Y+bl.Y-tl.Y));}
@@ -276,9 +284,10 @@ public static class QrPhotoRead
     // Light-dark-light runs of about one module each, checked across and down; the candidate whose
     // surroundings best match the 5×5 alignment square (sampled along the fitted module axes) wins,
     // then the one nearest the guess.
-    private static Point? FindAlignment(byte[] dark,int width,int height,Point guess,Point right,Point down,double module,double stretch,CancellationToken token)
+    private static Point? FindAlignment(byte[] dark,int width,int height,Point guess,Point right,Point down,double module,double stretch,double modules,CancellationToken token)
     {
-        double expected=module*stretch;int radius=(int)Math.Ceiling(module*7);
+        // The three-finder guess drifts further under perspective as codes get larger.
+        double expected=module*stretch;int radius=(int)Math.Ceiling(module*modules);
         double ux=right.X-guess.X,uy=right.Y-guess.Y,vx=down.X-guess.X,vy=down.Y-guess.Y;
         int Matches(double cx,double cy)
         {

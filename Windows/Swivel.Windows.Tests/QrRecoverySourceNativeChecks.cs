@@ -29,7 +29,11 @@ internal static class QrRecoverySourceNativeChecks
         using(var strict=QrReadDocument.Open(original,default))check(strict.Recovery is null&&strict.Result.Text==text,"Original QR source factory remains strict and has no recovery mode");
         using(var recovered=QrReadDocument.OpenForRecovery(original,default))
             check(recovered.Recovery is {CorrectedCodewords:0,CorrectedBlocks:0}&&recovered.Result.Text==text,"Explicit recovery can read clean source with zero candidate changes");
-        reject(()=>QrReadDocument.Open(damaged,default).Dispose(),"Old source factory does not automatically recover damaged data");
+        // Strict flat reading still refuses damaged data; the read factory's photo fallback then uses
+        // ordinary QR error correction and reports it, without becoming the explicit recovery mode.
+        using(var read=QrReadDocument.Open(damaged,default))
+            check(read.Recovery is null&&read.Result is {Photo:true,CorrectedCodewords:1,CorrectedBlocks:1}&&read.Result.Text==text,
+                "Read QR Image reports error-corrected photo-path results instead of presenting them as exact flat reads");
         using(var recovered=QrReadDocument.OpenForRecovery(damaged,default))
         {
             check(recovered.Recovery is {CorrectedCodewords:1,CorrectedBlocks:1}&&recovered.Result.Text==text,"Explicit source factory retains recovery metadata and full original text");

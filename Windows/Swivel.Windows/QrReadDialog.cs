@@ -30,7 +30,7 @@ internal sealed class QrReadDialog:Window
         if(result.Photo)
         {
             // Photo results are estimates: module size and angle come from the fitted geometry.
-            body.Children.Add(UI.Text(string.Format(app.L("Read from a photo or screenshot: QR version {0} · level {1} · about {2} pixels/module · {3} UTF-16 units"),result.Version,QrCode.Level(result.Correction),result.PixelScale,text.Length),14));
+            body.Children.Add(UI.Text(string.Format(app.L("Sampled read with error correction: QR version {0} · level {1} · about {2} pixels/module · {3} UTF-16 units"),result.Version,QrCode.Level(result.Correction),result.PixelScale,text.Length),14));
             body.Children.Add(UI.Text(string.Format(app.L("Code orientation: about {0}° clockwise from upright."),result.ClockwiseOrientationDegrees),12));
             body.Children.Add(UI.Text(string.Format(app.L("Error correction changed {0} encoded bytes in {1} blocks. Zero does not prove the photo was perfect, and beyond the correction capacity another valid message could be accepted."),result.CorrectedCodewords,result.CorrectedBlocks),12));
         }
