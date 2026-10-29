@@ -37,7 +37,8 @@ public sealed class FolderMoveSession : IDisposable
         try
         {
             parent = NativeFiles.MoveDirectoryLease.Open(MoveRules.Parent(source), token);
-            handle = NativeFiles.OpenFolderToMove(source);
+            try { handle = NativeFiles.OpenFolderToMove(source); }
+            catch (Win32Exception error) when (error.NativeErrorCode is 5 or 32) { throw new UserError(FolderMove.InUse); }
             var identity = NativeFiles.FolderMoveIdentity(handle);
             if (identity.Volume != parent.Snapshot.LeafIdentity.Volume) throw new UserError(FolderMove.NotPlain);
             // Compared again by the paths the file system reports, so another spelling of the same
@@ -48,10 +49,12 @@ public sealed class FolderMoveSession : IDisposable
             if (into.Snapshot.LeafIdentity.Volume != identity.Volume) throw new UserError(FolderMove.OtherVolume);
             if (into.Snapshot.LeafIdentity == parent.Snapshot.LeafIdentity) throw new UserError(FolderMove.AlreadyThere);
             foreach (var entry in into.Snapshot.Ancestors) if (entry.Identity == identity) throw new UserError(FolderMove.Inside);
+            // The folder's name as stored (exact case, long name), not as it was typed or picked.
+            source = MoveRules.Parent(source).TrimEnd('\\') + "\\" + NativeFiles.StoredLeaf(handle);
             string planned = FolderMove.Claim(source, target, path => !NativeFiles.FolderMoveNameTaken(into, path));
+            token.ThrowIfCancellationRequested();
             var session = new FolderMoveSession(source, planned, parent, into, handle, identity, false);
-            parent = null; into = null; handle = null;
-            token.ThrowIfCancellationRequested(); return session;
+            parent = null; into = null; handle = null; return session;
         }
         finally { handle?.Dispose(); into?.Dispose(); parent?.Dispose(); }
     }
@@ -72,13 +75,14 @@ public sealed class FolderMoveSession : IDisposable
             if (!MoveRules.SameDirectory(receipt.CurrentParent, parent.Snapshot) || !MoveRules.SameDirectory(receipt.OriginalParent, back.Snapshot))
                 throw new UserError(FolderMove.ParentsChanged);
             try { handle = NativeFiles.OpenFolderToMove(receipt.Current); }
+            catch (Win32Exception error) when (error.NativeErrorCode is 5 or 32) { throw new UserError(FolderMove.InUse); }
             catch (Win32Exception) { throw new UserError(FolderMove.Replaced); }
             catch (UserError error) when (error.Message == FolderMove.NotPlain) { throw new UserError(FolderMove.Replaced); }
             if (NativeFiles.FolderMoveIdentity(handle) != receipt.Identity) throw new UserError(FolderMove.Replaced);
             if (NativeFiles.FolderMoveNameTaken(back, receipt.Original)) throw new UserError(FolderMove.OriginalTaken);
+            token.ThrowIfCancellationRequested();
             var session = new FolderMoveSession(receipt.Current, receipt.Original, parent, back, handle, receipt.Identity, true);
-            parent = null; back = null; handle = null;
-            token.ThrowIfCancellationRequested(); return session;
+            parent = null; back = null; handle = null; return session;
         }
         finally { handle?.Dispose(); back?.Dispose(); parent?.Dispose(); }
     }
@@ -138,6 +142,7 @@ public static partial class NativeFiles
     }
 
     internal static MoveIdentity FolderMoveIdentity(SafeFileHandle handle) => ReadMoveIdentity(handle);
+    internal static string StoredLeaf(SafeFileHandle handle) => Leaf(FinalPath(handle));
 
     internal static void CheckFolderMoveTarget(SafeFileHandle folder, string destination)
         => FolderMove.CheckDestination(FinalForCompare(FinalPath(folder)), FinalForCompare(FinalDirectoryPath(destination)));

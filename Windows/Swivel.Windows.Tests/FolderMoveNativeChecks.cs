@@ -78,6 +78,11 @@ internal static class FolderMoveNativeChecks
         FolderCopyOutcome copy, second;
         using (var work = FolderCopyWork.Open(folder, target, default)) { copy = work.Execute(default, null); second = work.Execute(default, null); }
         check(copy.Error is null && copy.Recorded && copy.RootIdentity is not null && copy.Entries.Count == 3, "A copy records its new folder's identity and the 3 items it created");
+        var app = System.Windows.Application.Current as App ?? new App();
+        var results = new FolderCopyResultDialog(app, copy, "summary");
+        check(results.CanUndo == (new DriveInfo(Path.GetPathRoot(copy.Folder!)!).DriveType == DriveType.Fixed) && !results.Moved && results.CurrentReport.Contains(app.L("Copy Folder Results")),
+            "The Copy Folder results window opens and offers undoing the copy on a fixed drive");
+        results.Close();
         if (!RecycleBin.Available(copy.Folder!)) { Console.WriteLine("SKIP: no Recycle Bin on the test drive."); return; }
         string stored = NativeFiles.RecycleCopiedFolder(copy.Folder!, copy.RootIdentity!, copy.Entries);
         check(!Directory.Exists(copy.Folder) && stored.Contains("$Recycle.Bin", StringComparison.OrdinalIgnoreCase) && Directory.Exists(Path.Combine(folder, "sub")),

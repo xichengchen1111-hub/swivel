@@ -173,6 +173,7 @@ public static partial class NativeFiles
                     now = FolderZip.Plan(root, CancellationToken.None);
                     before = FolderSizes.Scan(root, CancellationToken.None);
                 }
+                catch (UserError error) when (error.Message == FolderCopyUndo.Replaced) { throw; }
                 catch (Exception error) when (error is Win32Exception or UserError or IOException or UnauthorizedAccessException) { throw new UserError(FolderCopyUndo.Changed); }
                 if (FolderCopyUndo.Compare(entries, now) is string reason) throw new UserError(reason);
             }, owner, () =>

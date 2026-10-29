@@ -1555,10 +1555,11 @@ public sealed partial class App : Application
         report(summary);
         if (outcome.Folder is null) { if (outcome.Error is not null && !exiting) ShowError(outcome.Error); return; }
         Home.ShowResults(new[] { outcome.Folder }, summary);
-        if (exiting || token.IsCancellationRequested) return;
+        // Also after a cancelled copy, when the partial folder most needs undoing (not after Quit or turning the feature off).
+        if (exiting || !Prefs.IsOn(Feature.FileMoves)) return;
         // The results window shows any problem and can undo the copy while it is open.
         var results = new FolderCopyResultDialog(this, outcome, summary);
-        ShowOperationDialog(results, owner, token);
+        ShowOperationDialog(results, owner, CancellationToken.None);
         if (!results.Moved) return;
         summary += " " + L("The new folder was moved to the Recycle Bin or removed.");
         report(summary); Home.ShowResults(Array.Empty<string>(), summary);

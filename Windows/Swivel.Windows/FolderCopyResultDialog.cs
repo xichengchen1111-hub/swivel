@@ -17,6 +17,7 @@ internal sealed class FolderCopyResultDialog : Window
     private readonly RecycleBinSession<FolderCopyOutcome> bin;
     private readonly TextBlock state;
     private readonly bool offered;
+    internal bool CanUndo => bin.Move.IsEnabled;
     internal bool Moved => bin.Gone.Count > 0; // also when Windows removed it outright
     internal string Summary { get; }
 
@@ -52,8 +53,8 @@ internal sealed class FolderCopyResultDialog : Window
             (copy, owner) => NativeFiles.RecycleCopiedFolder(copy.Folder!, copy.RootIdentity!, copy.Entries, owner),
             (copy, stored) => NativeFiles.RestoreRecycled(copy.Folder!, stored, true),
             "Move the new copied folder to the Recycle Bin?", "Move {0} copies to the Recycle Bin?", "Only the new copy is moved; the original folder stays where it is."),
-            () => offered && !bin!.Gone.Contains(outcome) ? new[] { outcome } : Array.Empty<FolderCopyOutcome>(), Refresh);
-        bin.Move.Content = app.L("Move Copy to Recycle Bin…");
+            () => offered && bin is not null && !bin.Gone.Contains(outcome) ? new[] { outcome } : Array.Empty<FolderCopyOutcome>(), Refresh);
+        bin.Move.Content = app.L("Move Copy to Recycle Bin…"); bin.UpdateButtons();
         footer.Children.Add(bin.Move); footer.Children.Add(bin.Undo);
         footer.Children.Add(UI.Button(app.L("Copy Report"), () => app.Try(() => Clipboard.SetText(CurrentReport))));
         var close = UI.Button(app.L("Close"), () => DialogResult = false); close.IsCancel = true; footer.Children.Add(close);
