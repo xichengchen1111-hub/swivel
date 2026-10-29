@@ -194,6 +194,17 @@ internal static class SevenZipExtractChecks
             check(all && got["folder\\zero.txt"].Length == 0, "7z LZMA with every lc/lp/pb shape, small dictionaries and end markers");
         }
 
+        {
+            // An LZMA-encoded header whose range coder cannot even start is a user-facing refusal.
+            byte[] bad = File.ReadAllBytes(Fixture("libarchive-lzma1.7z"));
+            ulong nextOffset = BinaryPrimitives.ReadUInt64LittleEndian(bad.AsSpan(12)), nextSize = BinaryPrimitives.ReadUInt64LittleEndian(bad.AsSpan(20));
+            byte[] header = bad[(32 + (int)nextOffset)..(32 + (int)nextOffset + (int)nextSize)];
+            check(header[0] == 0x17 && header[1] == 0x06, "7z LZMA header fixture has an encoded header");
+            long headerPack = 32 + (long)new HeaderPosition(header).PackPosition;
+            bad[headerPack] = 0x5A;
+            Refuses(bad, "This 7z archive is damaged and was not extracted.", "7z refuses an encoded header whose LZMA stream cannot start");
+        }
+
         // ---- LZMA2 chunk rules, stored chunks only ----
         static byte[] Lzma2(byte[] stream, long size)
         {
@@ -316,6 +327,24 @@ internal static class SevenZipExtractChecks
             Fuzz(Wrap(packedPart, header), "7z header mutation");
         }
         check(refused > 1000, $"7z fuzzing: {refused} refused with user errors, {accepted} accepted, no other exceptions");
+    }
+
+    // Reads the pack position from "kEncodedHeader kPackInfo <number>".
+    private sealed class HeaderPosition(byte[] header)
+    {
+        public ulong PackPosition
+        {
+            get
+            {
+                byte first = header[2]; ulong value = 0; int mask = 0x80, at = 3;
+                for (int i = 0; i < 8; i++, mask >>= 1)
+                {
+                    if ((first & mask) == 0) return value | (ulong)(first & (mask - 1)) << (8 * i);
+                    value |= (ulong)header[at++] << (8 * i);
+                }
+                return value;
+            }
+        }
     }
 
     private sealed class CancelAfter(CancellationTokenSource cts, long limit) : MemoryStream

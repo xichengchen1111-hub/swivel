@@ -412,20 +412,19 @@ public static class SevenZipExtract
     private static byte[] DecodeAll(Stream archive, Folder folder, CancellationToken token)
     {
         var data = new byte[folder.Unpacked];
-        using (var stream = Open(archive, folder, token))
+        try
         {
+            // Opening may already read: LZMA starts its range decoder in the constructor.
+            using var stream = Open(archive, folder, token);
             int at = 0;
-            try
+            while (at < data.Length)
             {
-                while (at < data.Length)
-                {
-                    int read = stream.Read(data, at, data.Length - at);
-                    if (read == 0) throw new UserError(Damaged);
-                    at += read;
-                }
+                int read = stream.Read(data, at, data.Length - at);
+                if (read == 0) throw new UserError(Damaged);
+                at += read;
             }
-            catch (LzmaDataException) { throw new UserError(Damaged); }
         }
+        catch (LzmaDataException) { throw new UserError(Damaged); }
         if ((ZipExtract.Crc32(0xFFFFFFFF, data) ^ 0xFFFFFFFF) != folder.Crc) throw new UserError(Damaged);
         return data;
     }
