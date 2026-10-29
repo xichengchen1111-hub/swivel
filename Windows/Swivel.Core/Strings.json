@@ -14318,5 +14318,45 @@
     "Windows 先把这个文件解码为 16 位 PCM（解码器可能改变精度、起始静音或尾部填充；上限 128 MiB、两小时）。降噪结果另存为旁边的新 WAV 文件。",
     "Windows 先把這個檔案解碼為 16 位元 PCM（解碼器可能改變精度、起始靜音或尾端填補；上限 128 MiB、兩小時）。降噪結果另存為旁邊的新 WAV 檔案。",
     "Windows がこのファイルをまず 16 ビット PCM にデコードします（コーデックにより精度、先頭の無音、末尾の埋め込みが変わることがあります。128 MiB・2 時間まで）。ノイズ軽減の結果は隣に新しい WAV ファイルとして保存されます。"
+  ],
+  "Choose an EPUB 2 or 3 book with mimetype application/epub+zip, META-INF/container.xml, one OPF package, and a spine of XHTML documents that exist in the book. Paths outside the book, duplicate or case-alias entry names, malformed XML and named entities such as &nbsp; that need a DTD are not supported.": [
+    "请选择 EPUB 2 或 3 图书：mimetype 必须为 application/epub+zip，并包含 META-INF/container.xml、一个 OPF 包文件，以及书中实际存在的 XHTML 文档组成的阅读顺序（spine）。不支持指向书外的路径、重复或仅大小写不同的条目名、格式错误的 XML，以及需要 DTD 的命名实体（如 &nbsp;）。",
+    "請選擇 EPUB 2 或 3 書籍：mimetype 必須為 application/epub+zip，並包含 META-INF/container.xml、一個 OPF 套件檔，以及書中實際存在的 XHTML 文件組成的閱讀順序（spine）。不支援指向書外的路徑、重複或僅大小寫不同的項目名稱、格式錯誤的 XML，以及需要 DTD 的具名實體（如 &nbsp;）。",
+    "EPUB 2 または 3 の本を選んでください。mimetype が application/epub+zip で、META-INF/container.xml、OPF パッケージ 1 つ、本の中に実在する XHTML 文書の読み順（spine）が必要です。本の外を指すパス、重複や大文字小文字だけ異なるエントリ名、不正な XML、DTD が必要な名前付き実体（&nbsp; など）には対応していません。"
+  ],
+  "EPUB is limited to 8 MiB input, 1,000 ZIP entries, 8 MiB per XML part, 32 MiB of XML in total, 2,000,000 XML characters per part and extracted UTF-16 units overall, and XML depth 128.": [
+    "EPUB 的限制：输入 8 MiB、ZIP 条目 1,000 个、每个 XML 部分 8 MiB、XML 合计 32 MiB、每个部分 2,000,000 个 XML 字符、提取文字合计 2,000,000 个 UTF-16 单元、XML 层级 128。",
+    "EPUB 的限制：輸入 8 MiB、ZIP 項目 1,000 個、每個 XML 部分 8 MiB、XML 合計 32 MiB、每個部分 2,000,000 個 XML 字元、擷取文字合計 2,000,000 個 UTF-16 單元、XML 層級 128。",
+    "EPUB の上限：入力 8 MiB、ZIP エントリ 1,000 個、XML パーツごと 8 MiB、XML 合計 32 MiB、パーツごと 2,000,000 XML 文字、抽出文字は全体で 2,000,000 UTF-16 単位、XML の深さ 128。"
+  ],
+  "This EPUB is encrypted or rights-managed, so its text cannot be read. Only books without encryption, or with obfuscated fonts only, are supported.": [
+    "此 EPUB 已加密或受版权保护（DRM），无法读取其文字。仅支持未加密的图书，或只对字体做了混淆的图书。",
+    "此 EPUB 已加密或受版權保護（DRM），無法讀取其文字。僅支援未加密的書籍，或只對字型做了混淆的書籍。",
+    "この EPUB は暗号化または権利保護（DRM）されているため、テキストを読み取れません。暗号化されていない本、またはフォントの難読化だけの本に対応しています。"
+  ],
+  "This EPUB spine uses content other than XHTML documents or images. Only XHTML spine documents are read; images contribute no text.": [
+    "此 EPUB 的阅读顺序（spine）含有 XHTML 文档和图片以外的内容。只读取 spine 中的 XHTML 文档；图片不提供文字。",
+    "此 EPUB 的閱讀順序（spine）含有 XHTML 文件和圖片以外的內容。只讀取 spine 中的 XHTML 文件；圖片不提供文字。",
+    "この EPUB の読み順（spine）に XHTML 文書と画像以外の内容があります。spine の XHTML 文書だけを読み取り、画像からはテキストを得ません。"
+  ],
+  "Choose a valid UTF-8 text file, BOM-marked UTF-16 text file, DOCX, ODT, RTF, EPUB or supported static HTML document. At most 8 MiB input and 2,000,000 UTF-16 units of extracted text are supported.": [
+    "请选择有效的 UTF-8 文字、带 BOM 的 UTF-16 文字、DOCX、ODT、RTF、EPUB 或支持的静态 HTML 文档。输入最多 8 MiB，提取文字最多 2,000,000 个 UTF-16 单元。",
+    "請選擇有效的 UTF-8 文字、帶 BOM 的 UTF-16 文字、DOCX、ODT、RTF、EPUB 或支援的靜態 HTML 文件。輸入最多 8 MiB，擷取文字最多 2,000,000 個 UTF-16 單元。",
+    "有効な UTF-8 テキスト、BOM 付き UTF-16 テキスト、DOCX、ODT、RTF、EPUB、対応する静的 HTML を選んでください。入力 8 MiB、抽出文字 2,000,000 UTF-16 単位までです。"
+  ],
+  "EPUB spine body text": [
+    "EPUB 阅读顺序正文",
+    "EPUB 閱讀順序正文",
+    "EPUB 読み順の本文"
+  ],
+  "EPUB reads the XHTML documents in the book's spine order, not a reading system's layout. Each spine document's body follows the HTML rules above for whitespace, blocks and line breaks, and documents are joined with a line break. Navigation and table-of-contents files are read only when the spine lists them. Images, SVG/MathML and other foreign markup, scripts, styles, head, hidden elements, ruby pronunciation and attribute text are omitted; image spine items are skipped. Encrypted or rights-managed books are refused; obfuscated fonts are never read and do not block reading. Named entities such as &nbsp; that need a DTD are refused. Limits: 1,000 ZIP entries, 8 MiB per XML part, 32 MiB of XML in total and depth 128. Nothing is extracted to disk, executed or fetched, and links never open.": [
+    "EPUB 按图书阅读顺序（spine）读取其中的 XHTML 文档，不是阅读器的排版效果。每个 spine 文档的正文沿用上面 HTML 的空白、区块和换行规则，文档之间以换行连接。导航和目录文件只有列在 spine 中时才会读取。图片、SVG/MathML 等外来标记、脚本、样式、head、隐藏元素、注音（ruby）和属性文字都会省略；spine 中的图片项会跳过。已加密或受版权保护的图书会被拒绝；被混淆的字体从不读取，也不妨碍读取。需要 DTD 的命名实体（如 &nbsp;）会被拒绝。限制：ZIP 条目 1,000 个、每个 XML 部分 8 MiB、XML 合计 32 MiB、层级 128。不会解压到磁盘、执行或联网获取任何内容，链接也不会打开。",
+    "EPUB 依書籍閱讀順序（spine）讀取其中的 XHTML 文件，不是閱讀器的排版效果。每個 spine 文件的正文沿用上面 HTML 的空白、區塊和換行規則，文件之間以換行連接。導覽和目錄檔只有列在 spine 中時才會讀取。圖片、SVG/MathML 等外來標記、指令碼、樣式、head、隱藏元素、注音（ruby）和屬性文字都會省略；spine 中的圖片項目會略過。已加密或受版權保護的書籍會被拒絕；被混淆的字型從不讀取，也不妨礙讀取。需要 DTD 的具名實體（如 &nbsp;）會被拒絕。限制：ZIP 項目 1,000 個、每個 XML 部分 8 MiB、XML 合計 32 MiB、層級 128。不會解壓縮到磁碟、執行或連網取得任何內容，連結也不會開啟。",
+    "EPUB は本の読み順（spine）に沿って XHTML 文書を読み取ります。リーダーのレイアウトではありません。各 spine 文書の本文には上記の HTML の空白・ブロック・改行の規則を使い、文書どうしは改行でつなぎます。ナビゲーションや目次のファイルは spine にある場合だけ読みます。画像、SVG/MathML などの外部マークアップ、スクリプト、スタイル、head、非表示要素、ルビの読み、属性のテキストは省き、spine の画像項目は飛ばします。暗号化や権利保護された本は拒否します。難読化されたフォントは読まず、読み取りの妨げにもなりません。DTD が必要な名前付き実体（&nbsp; など）は拒否します。上限：ZIP エントリ 1,000 個、XML パーツごと 8 MiB、XML 合計 32 MiB、深さ 128。ディスクへの展開、実行、ネットワーク取得は一切せず、リンクも開きません。"
+  ],
+  "Inspect strict UTF-8/BOM UTF-16 text, bounded RTF or UTF-8 static HTML source body text, DOCX/ODT body XML and EPUB spine XHTML. Count whitespace segments and Unicode text elements; save plain TXT, RTF, DOCX, ODT or HTML beside the source. HTML requires explicit balanced markup and refuses scripts; browser rendering, formatting fidelity and full Office/PDF conversion remain pending.": [
+    "检查严格 UTF-8/带 BOM 的 UTF-16 文字、有限的 RTF 或 UTF-8 静态 HTML 源码正文、DOCX/ODT 正文 XML 以及 EPUB 阅读顺序中的 XHTML。统计以空白分隔的片段和 Unicode 文本元素；在原件旁另存纯 TXT、RTF、DOCX、ODT 或 HTML。HTML 需要显式成对的标记并拒绝脚本；浏览器渲染、格式保真和完整的 Office/PDF 转换仍待完成。",
+    "檢查嚴格 UTF-8/帶 BOM 的 UTF-16 文字、有限的 RTF 或 UTF-8 靜態 HTML 原始碼正文、DOCX/ODT 正文 XML 以及 EPUB 閱讀順序中的 XHTML。統計以空白分隔的片段和 Unicode 文字元素；在原件旁另存純 TXT、RTF、DOCX、ODT 或 HTML。HTML 需要明確成對的標記並拒絕指令碼；瀏覽器轉譯、格式保真和完整的 Office/PDF 轉換仍待完成。",
+    "厳密な UTF-8／BOM 付き UTF-16 テキスト、限定的な RTF または UTF-8 静的 HTML ソース本文、DOCX/ODT 本文 XML、EPUB の読み順の XHTML を調べます。空白区切りの区間と Unicode テキスト要素を数え、プレーンな TXT・RTF・DOCX・ODT・HTML を元ファイルの横に保存します。HTML は明示的に対応したタグが必要でスクリプトは拒否します。ブラウザー表示、書式の再現、完全な Office/PDF 変換は今後の予定です。"
   ]
 }
