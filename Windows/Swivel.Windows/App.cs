@@ -983,7 +983,11 @@ public sealed partial class App : Application
             else if (action.Id == "audio.noise")
             {
                 report(L("Loading audio…"));
-                using var document = await Task.Run(() => WaveDocument.Open(files[0], token), token);
+                // WAV is read as it is; MP3, AAC and FLAC are decoded by Windows first (see Decode Audio with Windows).
+                bool wav = System.IO.Path.GetExtension(files[0]).Equals(".wav", StringComparison.OrdinalIgnoreCase);
+                if (!wav) report(L("Decoding the complete local audio stream…"));
+                using var document = wav ? await Task.Run(() => WaveDocument.Open(files[0], token), token) : await Task.Run(() => WaveDocument.OpenDecodedAsync(files[0], token), token);
+                token.ThrowIfCancellationRequested();
                 var dialog = new WaveNoiseDialog(this, document); bool save;
                 try { save = ShowOperationDialog(dialog, owner, token); }
                 finally { await dialog.FinishPreviewAsync(); }

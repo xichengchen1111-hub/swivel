@@ -7234,11 +7234,6 @@
     "縮減顏色為 GIF…",
     "色数を減らして GIF に…"
   ],
-  "Reduce WAV Noise…": [
-    "WAV 降噪…",
-    "WAV 降噪…",
-    "WAV ノイズを軽減…"
-  ],
   "Reduced Colors Preview": [
     "缩减颜色预览",
     "縮減顏色預覽",
@@ -14313,5 +14308,15 @@
     "所选路径中有两个是同一文件的名称（硬链接）。请分开移动。",
     "所選路徑中有兩個是同一檔案的名稱（硬連結）。請分開移動。",
     "選んだパスのうち 2 つは同じファイルの名前（ハードリンク）です。別々に移動してください。"
+  ],
+  "Reduce Audio Noise…": [
+    "音频降噪…",
+    "音訊降噪…",
+    "音声のノイズを軽減…"
+  ],
+  "Windows decoded this file to 16-bit PCM first (its codec can change precision, priming or padding; up to 128 MiB and two hours). The cleaned result is saved as a new WAV file beside it.": [
+    "Windows 先把这个文件解码为 16 位 PCM（解码器可能改变精度、起始静音或尾部填充；上限 128 MiB、两小时）。降噪结果另存为旁边的新 WAV 文件。",
+    "Windows 先把這個檔案解碼為 16 位元 PCM（解碼器可能改變精度、起始靜音或尾端填補；上限 128 MiB、兩小時）。降噪結果另存為旁邊的新 WAV 檔案。",
+    "Windows がこのファイルをまず 16 ビット PCM にデコードします（コーデックにより精度、先頭の無音、末尾の埋め込みが変わることがあります。128 MiB・2 時間まで）。ノイズ軽減の結果は隣に新しい WAV ファイルとして保存されます。"
   ]
 }

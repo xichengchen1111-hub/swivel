@@ -29,6 +29,18 @@ internal static class SystemAudioNativeChecks
             int count=Directory.GetFiles(folder).Length;reject(()=>document.Save(new CancellationToken(true)),"Precancel decoder save");check(count==Directory.GetFiles(folder).Length&&!Directory.GetFiles(folder,".swivel-*.tmp").Any(),"Precancel decoder save has no stage");
         }
         check(File.ReadAllBytes(path).SequenceEqual(original),"System decoder source intact");
+        // Reduce Audio Noise on a file Windows decodes first: the same denoised bytes as from the plain PCM16 WAV, saved beside the original.
+        using(var decoded=Task.Run(()=>WaveDocument.OpenDecodedAsync(path,default)).GetAwaiter().GetResult())
+        using(var plain=WaveDocument.Open(path,default))
+        {
+            var settings=new WaveNoise(0,.25);
+            check(decoded.Decoded&&!plain.Decoded&&decoded.Info==plain.Info&&decoded.Peaks.SequenceEqual(plain.Peaks),"A decoded document has the same PCM facts and waveform as the plain WAV");
+            reject(()=>File.WriteAllBytes(path,new byte[1]),"The decoded document keeps the original held");
+            check(decoded.NoisePreview(settings,default).SequenceEqual(plain.NoisePreview(settings,default)),"Noise preview from decoded audio matches the plain WAV");
+            string cleaned=decoded.SaveNoise(settings,default),reference=plain.SaveNoise(settings,default);
+            check(cleaned.EndsWith(" clean.wav")&&reference.EndsWith(" clean 2.wav")&&File.ReadAllBytes(cleaned).SequenceEqual(File.ReadAllBytes(reference)),"Decoded noise reduction saves beside the original with the plain WAV's exact result");
+        }
+        check(File.ReadAllBytes(path).SequenceEqual(original),"Noise reduction leaves the original intact");
         string unsupported=Path.Combine(folder,"reference.mp3");File.WriteAllText(unsupported,"http://example.invalid/audio");reject(()=>Task.Run(()=>SystemAudioDocument.OpenAsync(unsupported,default)).GetAwaiter().GetResult().Dispose(),"URI/playlist masquerade rejected before native codec");File.Delete(unsupported);
         reject(()=>Task.Run(()=>SystemAudioDocument.OpenAsync(path,new CancellationToken(true))).GetAwaiter().GetResult().Dispose(),"Precancel decoder open");
         if(!NativeIdentity.HasPackage)

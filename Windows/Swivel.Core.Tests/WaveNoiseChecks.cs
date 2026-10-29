@@ -90,7 +90,7 @@ internal static class WaveNoiseChecks
         }
         using(var input=new BrokenInput(pair.Bytes)) using(var output=new MemoryStream()) reject(()=>WaveDenoiser.Export(input,output,options,default),"Profile IO failure is propagated");
         using(var same=new MemoryStream(pair.Bytes)) reject(()=>WaveDenoiser.Export(same,same,options,default),"Denoiser rejects shared input/output stream");
-        check(Catalog.Available(new Prefs(),new[]{"speech.WAV"}).Any(x=>x.Id=="audio.noise") && !Catalog.Available(new Prefs(),new[]{"speech.mp3"}).Any(x=>x.Id=="audio.noise") && !Catalog.Available(new Prefs(),new[]{"a.wav","b.wav"}).Any(x=>x.Id=="audio.noise"),"Noise action requires one explicit WAV");
+        check(new[]{"speech.WAV","talk.mp3","talk.aac","take.FLAC"}.All(f=>Catalog.Available(new Prefs(),new[]{f}).Any(x=>x.Id=="audio.noise")) && !Catalog.Available(new Prefs(),new[]{"speech.m4a"}).Any(x=>x.Id=="audio.noise") && !Catalog.Available(new Prefs(),new[]{"a.wav","b.wav"}).Any(x=>x.Id=="audio.noise"),"Noise action takes one WAV, MP3, AAC or FLAC file (the others decoded by Windows first)");
         string? folder=Environment.GetEnvironmentVariable("SWIVEL_NOISE_FIXTURES");
         if(folder is not null)
         {

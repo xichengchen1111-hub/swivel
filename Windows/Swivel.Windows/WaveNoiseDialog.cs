@@ -19,10 +19,11 @@ internal sealed class WaveNoiseDialog : Window
     public WaveNoiseDialog(App app, WaveDocument document)
     {
         var info = document.Info; Settings = new(0, Math.Min(.25, info.Seconds));
-        Title = app.L("Reduce WAV Noise…"); Width = 760; Height = 730; MinWidth = 500; MinHeight = 400;
+        Title = app.L("Reduce Audio Noise…"); Width = 760; Height = 730; MinWidth = 500; MinHeight = 400;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(20) }; var panel = new StackPanel();
         panel.Children.Add(UI.Text(document.Path, 12));
+        if (document.Decoded) panel.Children.Add(UI.Text(app.L(WaveDocument.DecodedNotice), 12));
         panel.Children.Add(UI.Text(string.Format(app.L("{0:0.###} seconds · {1} Hz · {2} channel(s) · {3}-bit PCM"), info.Seconds, info.Rate, info.Channels, info.Bits), 18));
         panel.Children.Add(UI.Text(app.L("Choose 0.05–2 seconds containing only steady background noise. Speech or music in this sample can also be removed. Listen to the sample, then compare original and processed audio before saving.")));
         var waveform = new WaveEnvelope(document.Peaks); panel.Children.Add(waveform);

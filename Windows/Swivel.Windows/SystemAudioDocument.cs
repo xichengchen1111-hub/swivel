@@ -52,5 +52,8 @@ public sealed class SystemAudioDocument:IDisposable
         token.ThrowIfCancellationRequested();return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(input.Path)+" audio PCM","wav",output=>
         {using var source=new MemoryStream(prepared,false);PcmWave.Export(source,output,new(0,Info.Seconds),token);},token);
     }
-    public void Dispose()=>input.Dispose();
+    private bool detached;
+    /// Hands the held original and the decoded PCM16 WAV to another document, which then owns the input.
+    internal (NativeFiles.Input Input,byte[] Wav) Detach(){detached=true;return(input,prepared);}
+    public void Dispose(){if(!detached)input.Dispose();}
 }

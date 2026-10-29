@@ -206,7 +206,7 @@ public static class Catalog
         new("video.subtitles", "Burn In Subtitles…", SingleFile: true, Extensions: new[] { "mp4", "mov", "m4v", "wmv" }),
         new("audio.g711", "Decode G.711 WAV…", Extensions: new[]{"wav"}, SingleFile: true),
         new("audio.floatpcm", "Convert Float WAV to PCM…", SingleFile: true, Extensions: new[] { "wav" }),
-        new("audio.noise", "Reduce WAV Noise…", SingleFile: true, Extensions: new[] { "wav" }),
+        new("audio.noise", "Reduce Audio Noise…", SingleFile: true, Extensions: new[] { "wav", "mp3", "aac", "flac" }),
         new("audio.wav", "Edit WAV Audio…", SingleFile: true, Extensions: new[] { "wav" }),
         new("file.assistantdraft", "Prepare Assistant Draft…", Core.Feature.AppRouting),
         new("file.copy", "Copy Files"),
