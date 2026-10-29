@@ -262,6 +262,12 @@ internal static class McpChecks
         var docApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)docPlan["plan_id"]! }));
         check((string?)docApplied["outputs"]![0] == @"C:\Users\me\notes text.docx" && paper.Ran[^1] == ("document.docx", doc) && (string?)docApplied["action"] == "document.docx", "MCP apply runs the document action");
         check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\notes text.docx") && paper.Files.ContainsKey(doc), "MCP undo recycles a document conversion");
+        // Two names of one file (hard links) are flagged at planning, not refused later at apply.
+        string linkA = @"C:\Users\me\link a.txt", linkB = @"C:\Users\me\link b.txt";
+        paper.Files[linkA] = paper.Files[linkB] = new FileStamp(1, 4242, 3, 1000, 2000);
+        var linkRows = Body(Call(papers, "plan_rename", new JsonObject { ["paths"] = Paths(linkA, linkB), ["prefix"] = "x " }));
+        check(!linkRows["can_apply"]!.GetValue<bool>() && linkRows["renames"]![0]!["issue"] is null && ((string)linkRows["renames"]![1]!["issue"]!).Contains("hard link"), "MCP plan_rename flags a second name of the same file: " + linkRows.ToJsonString());
+        paper.Files.Remove(linkA); paper.Files.Remove(linkB);
         // plan_zip_folder: one folder, applied only while its contents match the plan; undo recycles the ZIP.
         string photos = @"C:\Users\me\Photos";
         FolderZipPlan PhotosPlan(long length) => new("Photos", new[] { new FolderZipItem("Photos/", "", true, 0, 0), new FolderZipItem("Photos/a.jpg", "a.jpg", false, length, 5) }, new[] { new FolderZipSkip("link", "Link or junction (not followed)") }, 1, 0, length);

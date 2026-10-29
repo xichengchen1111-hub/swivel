@@ -549,6 +549,9 @@ public sealed class McpSession
             }
             if (issue is null && destinations.Where((d, j) => j != i && string.Equals(d, to, StringComparison.OrdinalIgnoreCase)).Any())
                 issue = "Another file in this plan would get the same name.";
+            // Hard links: two paths that are names of one file can't be renamed in one batch.
+            if (issue is null && inputs.Take(i).Any(earlier => earlier.Item2.Volume == inputs[i].Item2.Volume && earlier.Item2.Index == inputs[i].Item2.Index))
+                issue = "Another path in this plan is a name of the same file (a hard link). Rename it in a separate plan.";
             if (issue is null && changed)
             {
                 try { host.CheckRename(from); }

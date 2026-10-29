@@ -158,7 +158,9 @@ public static class FolderZip
         var text = new StringBuilder();
         if (plan.Root is not null) text.Append('R').Append('\0').Append(plan.Root).Append('\n');
         foreach (var item in plan.Items)
-            text.Append(item.Directory ? 'D' : 'F').Append('\0').Append(item.EntryName).Append('\0').Append(item.Length).Append('\0').Append(item.LastWrite).Append('\n');
+            // A folder's time in its parent's listing is updated lazily by NTFS, so it can change
+            // with nothing inside changing; folders count by name only (their files carry the rest).
+            text.Append(item.Directory ? 'D' : 'F').Append('\0').Append(item.EntryName).Append('\0').Append(item.Length).Append('\0').Append(item.Directory ? 0 : item.LastWrite).Append('\n');
         foreach (var skip in plan.Skipped) text.Append('S').Append('\0').Append(skip.RelativePath).Append('\0').Append(skip.Reason).Append('\n');
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))).ToLowerInvariant();
     }

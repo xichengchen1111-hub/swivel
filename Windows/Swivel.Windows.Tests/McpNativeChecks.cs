@@ -151,6 +151,20 @@ internal static class McpNativeChecks
             check((int)renamedAround["total"]! == 1 && File.ReadAllText(Path.Combine(names, "r-009.txt")) == "first" && File.Exists(locked), "Native MCP apply_plan renames around a held file that keeps its name: " + renamedAround.ToJsonString());
             check(Call("undo", new JsonObject())["structuredContent"]!["complete"]!.GetValue<bool>() && File.ReadAllText(r1) == "first", "Native MCP undo of that rename");
             holder.Dispose();
+            // A read-only file and one name of a hard-linked file are renamed through the agent and put back by undo.
+            string roFile = Path.Combine(names, "ro.txt"), linkFirst = Path.Combine(names, "link 1.txt"), linkSecond = Path.Combine(names, "link 2.txt");
+            File.WriteAllText(roFile, "roFile"); File.SetAttributes(roFile, FileAttributes.ReadOnly);
+            File.WriteAllText(linkFirst, "linked");
+            if (!CreateHardLink(linkSecond, linkFirst, IntPtr.Zero)) throw new System.ComponentModel.Win32Exception(System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+            var odd = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(roFile, linkSecond), ["prefix"] = "z " })["structuredContent"]!;
+            var oddDone = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)odd["plan_id"] ?? "" })["structuredContent"]!;
+            check(File.Exists(Path.Combine(names, "z ro.txt")) && (File.GetAttributes(Path.Combine(names, "z ro.txt")) & FileAttributes.ReadOnly) != 0 && File.Exists(Path.Combine(names, "z link 2.txt")) && File.Exists(linkFirst),
+                "Native MCP renames a read-only file (still read-only) and one name of a hard link (the other stays): " + oddDone.ToJsonString());
+            var linkPair = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(linkFirst, Path.Combine(names, "z link 2.txt")), ["prefix"] = "w " })["structuredContent"]!;
+            check(linkPair["can_apply"]?.GetValue<bool>() == false && ((string?)linkPair["renames"]?[1]?["issue"] ?? "").Contains("hard link"), "Native MCP flags two names of one file in a plan: " + linkPair.ToJsonString());
+            var oddUndone = Call("undo", new JsonObject())["structuredContent"]!;
+            check(oddUndone["complete"]?.GetValue<bool>() == true && File.Exists(roFile) && File.Exists(linkSecond), "Native MCP undo puts the read-only file and the link name back: " + oddUndone.ToJsonString());
+            File.SetAttributes(roFile, FileAttributes.Normal); File.Delete(roFile); File.Delete(linkSecond); File.Delete(linkFirst);
 
             // A swap on real files, a dry run of its undo, and the undo.
             var swap = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r2, r1), ["base_name"] = "r", ["number"] = true })["structuredContent"]!;

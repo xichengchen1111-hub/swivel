@@ -132,6 +132,9 @@ internal static class FolderZipChecks
         // The fingerprint covers the root folder's identity as well as its listing.
         check(FolderZip.Fingerprint(plan with { Root = "A" }) != FolderZip.Fingerprint(plan with { Root = "B" }) && FolderZip.Fingerprint(plan) == FolderZip.Fingerprint(FolderZip.Plan(Tree(), default)),
             "The fingerprint changes with another root folder identity and repeats for an identical listing");
+        var touched = plan with { Items = plan.Items.Select(i => i.Directory ? i with { LastWrite = i.LastWrite + 12345 } : i).ToArray() };
+        var edited = plan with { Items = plan.Items.Select(i => i.Directory ? i : i with { LastWrite = i.LastWrite + 1 }).ToArray() };
+        check(FolderZip.Fingerprint(touched) == FolderZip.Fingerprint(plan) && FolderZip.Fingerprint(edited) != FolderZip.Fingerprint(plan), "A folder's listed time does not change the fingerprint; a file's time does");
         // ZIP times.
         check(FolderZip.Time(0).Year == 1980 && FolderZip.Time(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).ToFileTimeUtc()).Year == 1980 && FolderZip.Time(-5).Year == 1980,
             "Unknown or pre-1980 times become 1980");
