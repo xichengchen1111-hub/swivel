@@ -15218,5 +15218,125 @@
     "读取时先尝试精确的平面二维码图片：正方形，0°、90°、180° 或 270°，带精确的四模块白色边框和统一的整数倍像素缩放，不使用纠错。若不符合，照片读取器会在图片中（最多 1600 万像素）寻找一个浅底深色的 Model 2 二维码：可任意旋转，允许轻微透视（较大的码需要更正面的视角）、适度模糊、噪点、光照不均和彩色背景。平面图片若不符合精确规则（例如经平滑缩放或轻微损坏），也会这样读取。它会找到三个角上的定位方块，能找到时使用右下角的校正方块，对网格采样，再使用码自身的纠错。每张图片只读取一个码；有多个码时，读取哪一个不确定。不支持镜像、浅色在深底、弯曲、过小（每模块约少于 2 像素）或严重损坏的码、定位方块被遮挡的码以及条形码。仅支持数字、字母数字、ASCII 字节和明确的 UTF-8 ECI 26；不支持其他字节编码、汉字模式、FNC1 和结构链接。纠错在极少数情况下可能接受另一条合法信息。这不能证明文字或其来源的真实性。",
     "讀取時先嘗試精確的平面 QR 碼圖片：正方形，0°、90°、180° 或 270°，帶精確的四模組白色邊框和統一的整數倍像素縮放，不使用糾錯。若不符合，照片讀取器會在圖片中（最多 1600 萬像素）尋找一個淺底深色的 Model 2 QR 碼：可任意旋轉，允許輕微透視（較大的碼需要更正面的視角）、適度模糊、雜訊、光照不均和彩色背景。平面圖片若不符合精確規則（例如經平滑縮放或輕微損壞），也會這樣讀取。它會找到三個角上的定位方塊，能找到時使用右下角的校正方塊，對網格取樣，再使用碼本身的糾錯。每張圖片只讀取一個碼；有多個碼時，讀取哪一個不確定。不支援鏡像、淺色在深底、彎曲、過小（每模組約少於 2 像素）或嚴重損壞的碼、定位方塊被遮擋的碼以及條碼。僅支援數字、英數字、ASCII 位元組和明確的 UTF-8 ECI 26；不支援其他位元組編碼、漢字模式、FNC1 和結構連結。糾錯在極少數情況下可能接受另一則有效訊息。這不能證明文字或其來源的真實性。",
     "読み取りではまず正確な平面 QR 画像を試します：正方形で 0°・90°・180°・270°、正確な 4 モジュールの白い余白と均一な整数倍のピクセル拡大を持つもので、誤り訂正は使いません。一致しない場合、写真リーダーが画像内（最大 1600 万ピクセル）から明るい地に暗い Model 2 QR コードを 1 つ探します：任意の回転、軽い遠近（大きなコードはより正面からの撮影が必要）、適度なぼけ、ノイズ、ムラのある照明、色付きの背景に対応します。正確な規則に合わない平面画像（なめらかに拡大縮小したものや軽く損傷したものなど）もこの方法で読み取ります。3 つの角の位置検出パターンを見つけ、見つかれば右下のアライメントパターンを使い、グリッドを標本化してからコード自身の誤り訂正を使います。読み取るのは 1 画像につき 1 つのコードだけで、複数ある場合にどれを読むかは決まっていません。鏡像、暗い地に明るいコード、曲がったもの、小さすぎるもの（1 モジュール約 2 ピクセル未満）、損傷の大きいもの、位置検出パターンが隠れたもの、バーコードには対応しません。数字・英数字・ASCII バイトと明示的な UTF-8 ECI 26 のみ対応し、その他のバイト符号化、漢字モード、FNC1、構造的連接には対応しません。誤り訂正はまれに別の有効なメッセージを受け入れることがあります。テキストやその出所の真正性は証明しません。"
+  ],
+  "Keep orientation keeps each page's own baseline Orientation tag and nothing else that is removed. The orientation is read only from that tag, never from EXIF or XMP.": [
+    "保留方向会保留每页自身的基线方向标签，其他要移除的内容一律不保留。方向只从该标签读取，绝不读取 EXIF 或 XMP。",
+    "保留方向會保留每頁自身的基線方向標籤，其他要移除的內容一律不保留。方向只從該標籤讀取，絕不讀取 EXIF 或 XMP。",
+    "「向きを保持」は各ページ自身のベースライン向きタグだけを残し、削除対象のほかの内容は残しません。向きはそのタグからのみ読み取り、EXIF や XMP からは読み取りません。"
+  ],
+  "Remove descriptive and private TIFF tags from every page: document and page names, description, camera make and model, software, date, artist, host computer, copyright, page number and position, rating, XMP, IPTC, Photoshop data, EXIF, GPS and interoperability pointers, and every other private tag except the ICC profile. The file is rebuilt with a new header and new tag tables; strip and tile bytes are copied unchanged and are not recompressed.": [
+    "从每一页移除描述性和私有 TIFF 标签：文档和页面名称、描述、相机制造商和型号、软件、日期、作者、主机、版权、页码和位置、评级、XMP、IPTC、Photoshop 数据、EXIF、GPS 和互操作指针，以及除 ICC 配置文件外的所有其他私有标签。文件会以新的文件头和新的标签表重建；条带和图块字节原样复制，不会重新压缩。",
+    "從每一頁移除描述性和私有 TIFF 標籤：文件和頁面名稱、描述、相機製造商和型號、軟體、日期、作者、主機、版權、頁碼和位置、評等、XMP、IPTC、Photoshop 資料、EXIF、GPS 和互通性指標，以及除 ICC 設定檔外的所有其他私有標籤。檔案會以新的檔頭和新的標籤表重建；條帶和圖塊位元組原樣複製，不會重新壓縮。",
+    "すべてのページから説明用・非公開の TIFF タグを削除します：文書名とページ名、説明、カメラのメーカーとモデル、ソフトウェア、日時、作成者、ホストコンピューター、著作権、ページ番号と位置、レーティング、XMP、IPTC、Photoshop データ、EXIF・GPS・相互運用性ポインター、ICC プロファイル以外のすべてのプライベートタグです。ファイルは新しいヘッダーとタグ表で作り直され、ストリップとタイルのバイトはそのままコピーされ、再圧縮されません。"
+  ],
+  "TIFF Tag Summary": [
+    "TIFF 标签摘要",
+    "TIFF 標籤摘要",
+    "TIFF タグの概要"
+  ],
+  "If this action is saved in My Wheel, earlier Windows versions may reject those settings and fall back to defaults. Keep a pre-upgrade settings backup before downgrading.": [
+    "如果此操作保存在“我的转盘”中，较早的 Windows 版本可能拒绝这些设置并恢复默认值。降级前请保留升级前的设置备份。",
+    "如果此動作儲存在「我的轉盤」中，較早的 Windows 版本可能拒絕這些設定並回復預設值。降級前請保留升級前的設定備份。",
+    "この操作を「マイホイール」に保存している場合、以前の Windows 版はその設定を拒否して既定値に戻すことがあります。ダウングレードする前に、アップグレード前の設定のバックアップを残してください。"
+  ],
+  "Removing the Orientation tag may change how other apps rotate or mirror the image. Pixel samples are not rotated or rewritten. Review the saved copy in your target app.": [
+    "移除方向标签可能改变其他应用旋转或镜像图像的方式。像素样本不会被旋转或改写。请在目标应用中检查保存的副本。",
+    "移除方向標籤可能改變其他應用程式旋轉或鏡像影像的方式。像素樣本不會被旋轉或改寫。請在目標應用程式中檢查儲存的副本。",
+    "向きタグを削除すると、他のアプリでの回転や反転の表示が変わる場合があります。ピクセルのサンプルは回転も書き換えもされません。保存したコピーを使用先のアプリで確認してください。"
+  ],
+  "Every page is kept, including reduced-resolution pages, which may themselves show private content. The ICC profile, resolution, color and other rendering tags are retained and may still contain private information. Strip and tile bytes are copied exactly as their byte counts declare, so edge padding, a padded last strip or bytes after a compressed stream are kept too. Image pixels, the filename and file-system information can also reveal details. This is not complete privacy sanitization.": [
+    "会保留每一页，包括缩小分辨率的页，它们本身可能显示私密内容。ICC 配置文件、分辨率、颜色和其他渲染标签会保留，仍可能包含私密信息。条带和图块字节按其字节数声明原样复制，因此边缘填充、填充的最后一个条带或压缩流之后的字节也会保留。图像像素、文件名和文件系统信息也可能泄露细节。这不是完整的隐私清理。",
+    "會保留每一頁，包括縮小解析度的頁，它們本身可能顯示私密內容。ICC 設定檔、解析度、色彩和其他算繪標籤會保留，仍可能包含私密資訊。條帶和圖塊位元組依其位元組數宣告原樣複製，因此邊緣填補、填補的最後一個條帶或壓縮串流之後的位元組也會保留。影像像素、檔名和檔案系統資訊也可能洩露細節。這不是完整的隱私清理。",
+    "縮小解像度のページも含めてすべてのページを保持します。それ自体が非公開の内容を表示する場合があります。ICC プロファイル、解像度、色などの描画用タグは保持され、非公開の情報を含む場合があります。ストリップとタイルのバイトは宣告されたバイト数どおりにそのままコピーされるため、端のパディング、パディングされた最後のストリップ、圧縮データの後ろのバイトも残ります。画像のピクセル、ファイル名、ファイルシステムの情報からも詳細がわかることがあります。これは完全なプライバシー消去ではありません。"
+  ],
+  "Tag": [
+    "标签",
+    "標籤",
+    "タグ"
+  ],
+  "Save TIFF Copy": [
+    "保存 TIFF 副本",
+    "儲存 TIFF 副本",
+    "TIFF のコピーを保存"
+  ],
+  "Pages": [
+    "页数",
+    "頁數",
+    "ページ数"
+  ],
+  "Declared value bytes": [
+    "声明的值字节数",
+    "宣告的值位元組數",
+    "宣言された値のバイト数"
+  ],
+  "TIFF files with sub-image (SubIFD), JPEG-in-TIFF, YCbCr or volume tags are not supported by this metadata tool. No copy was saved.": [
+    "此元数据工具不支持带子图像（SubIFD）、TIFF 内 JPEG、YCbCr 或体数据标签的 TIFF 文件。未保存副本。",
+    "此中繼資料工具不支援含子影像（SubIFD）、TIFF 內 JPEG、YCbCr 或體積資料標籤的 TIFF 檔案。未儲存副本。",
+    "サブイメージ（SubIFD）、TIFF 内 JPEG、YCbCr、ボリュームのタグを含む TIFF ファイルには、このメタデータツールは対応していません。コピーは保存されていません。"
+  ],
+  "Remove TIFF Metadata…": [
+    "移除 TIFF 元数据…",
+    "移除 TIFF 中繼資料…",
+    "TIFF メタデータを削除…"
+  ],
+  "Source TIFF orientation: {0} ({1}).": [
+    "原件 TIFF 方向：{0}（{1}）。",
+    "原件 TIFF 方向：{0}（{1}）。",
+    "元の TIFF の向き：{0}（{1}）。"
+  ],
+  "Save creates a new TIFF beside the original without replacing it. Source file-system timestamps, attributes and alternate streams are not copied. Only the rebuilt snapshot is sent to the built-in TIFF decoder. No network, clipboard access or persistent history is used.": [
+    "保存会在原件旁创建新的 TIFF，不会替换原件。不会复制原件的文件系统时间戳、属性和备用数据流。只有重建后的快照会交给内置 TIFF 解码器。不使用网络、剪贴板或持久历史记录。",
+    "儲存會在原件旁建立新的 TIFF，不會取代原件。不會複製原件的檔案系統時間戳記、屬性和替代資料流。只有重建後的快照會交給內建 TIFF 解碼器。不使用網路、剪貼簿或永久歷史記錄。",
+    "保存すると元のファイルの隣に新しい TIFF を作成し、元のファイルは置き換えません。元のファイルのタイムスタンプ、属性、代替データストリームはコピーしません。内蔵 TIFF デコーダーに渡すのは再構築したスナップショットだけです。ネットワーク、クリップボード、永続的な履歴は使用しません。"
+  ],
+  "A page's TIFF orientation tag could not be read, so orientation cannot be kept and is removed.": [
+    "某一页的 TIFF 方向标签无法读取，因此不能保留方向，方向会被移除。",
+    "某一頁的 TIFF 方向標籤無法讀取，因此不能保留方向，方向會被移除。",
+    "あるページの TIFF 向きタグを読み取れなかったため、向きは保持できず削除されます。"
+  ],
+  "Remove {0:N0} tag(s) from {1:N0} page(s); new TIFF: {2:N0} bytes.": [
+    "从 {1:N0} 页中移除 {0:N0} 个标签；新 TIFF：{2:N0} 字节。",
+    "從 {1:N0} 頁中移除 {0:N0} 個標籤；新 TIFF：{2:N0} 位元組。",
+    "{1:N0} ページから {0:N0} 個のタグを削除します。新しい TIFF：{2:N0} バイト。"
+  ],
+  "No removable TIFF metadata tags were found. No copy was saved.": [
+    "未找到可移除的 TIFF 元数据标签。未保存副本。",
+    "未找到可移除的 TIFF 中繼資料標籤。未儲存副本。",
+    "削除できる TIFF メタデータタグが見つかりませんでした。コピーは保存されていません。"
+  ],
+  "Inspecting TIFF tags…": [
+    "正在检查 TIFF 标签…",
+    "正在檢查 TIFF 標籤…",
+    "TIFF タグを確認中…"
+  ],
+  "Pages have different TIFF orientations, so orientation cannot be kept and is removed from every page.": [
+    "各页的 TIFF 方向不同，因此不能保留方向，会从每一页移除。",
+    "各頁的 TIFF 方向不同，因此不能保留方向，會從每一頁移除。",
+    "ページごとに TIFF の向きが異なるため、向きは保持できず、すべてのページから削除されます。"
+  ],
+  "{0:N0} page(s) · {1} byte order · {2:N0} bytes of strip or tile data copied unchanged": [
+    "{0:N0} 页 · {1} 字节序 · {2:N0} 字节条带或图块数据原样复制",
+    "{0:N0} 頁 · {1} 位元組順序 · {2:N0} 位元組條帶或圖塊資料原樣複製",
+    "{0:N0} ページ · {1} バイト順 · ストリップ/タイルデータ {2:N0} バイトをそのままコピー"
+  ],
+  "Classic TIFF only (BigTIFF is refused), either byte order: 32 MiB, 64 pages, 16,384 pixels per side and 16 MP in all pages together. Supported pages are 1–16-bit unsigned gray, palette or RGB, uncompressed, LZW, Deflate or PackBits, in strips or tiles. Tags must be sorted and every structural tag known; overlapping or repeated pages, out-of-range data, sub-images, JPEG-in-TIFF, YCbCr and CMYK are refused. These checks and native decoding of every rebuilt page do not prove every compressed bit is valid.": [
+    "仅支持经典 TIFF（拒绝 BigTIFF），两种字节序均可：32 MiB、64 页、每边 16,384 像素、所有页合计 16 MP。支持的页面为 1–16 位无符号灰度、调色板或 RGB，未压缩、LZW、Deflate 或 PackBits，条带或图块。标签必须已排序且每个结构标签都已知；重叠或重复的页、越界数据、子图像、TIFF 内 JPEG、YCbCr 和 CMYK 都会被拒绝。这些检查以及对每个重建页的原生解码并不能证明每个压缩位都有效。",
+    "僅支援經典 TIFF（拒絕 BigTIFF），兩種位元組順序皆可：32 MiB、64 頁、每邊 16,384 像素、所有頁合計 16 MP。支援的頁面為 1–16 位元無號灰階、調色盤或 RGB，未壓縮、LZW、Deflate 或 PackBits，條帶或圖塊。標籤必須已排序且每個結構標籤都已知；重疊或重複的頁、越界資料、子影像、TIFF 內 JPEG、YCbCr 和 CMYK 都會被拒絕。這些檢查以及對每個重建頁的原生解碼並不能證明每個壓縮位元都有效。",
+    "クラシック TIFF のみ（BigTIFF は拒否）、どちらのバイト順も可：32 MiB、64 ページ、各辺 16,384 ピクセル、全ページ合計 16 MP。対応ページは 1〜16 ビット符号なしのグレー・パレット・RGB で、無圧縮・LZW・Deflate・PackBits のストリップまたはタイルです。タグは整列済みで、構造タグはすべて既知である必要があります。重なったり繰り返したりするページ、範囲外データ、サブイメージ、TIFF 内 JPEG、YCbCr、CMYK は拒否されます。これらの確認と再構築した全ページのネイティブデコードでも、圧縮データのすべてのビットが有効とは証明できません。"
+  ],
+  "Use a structurally valid classic TIFF, at most 32 MiB, 64 pages, 16 MP in all pages together and 16,384 pixels per side, with uncompressed, LZW, Deflate or PackBits strips or tiles of 1–16-bit unsigned gray, palette or RGB samples. Damaged offsets, overlapping or repeated pages, unsorted tags and unknown structural tags are refused.": [
+    "请使用结构有效的经典 TIFF：不超过 32 MiB、64 页，所有页合计不超过 16 MP，每边不超过 16,384 像素，条带或图块为未压缩、LZW、Deflate 或 PackBits，样本为 1–16 位无符号灰度、调色板或 RGB。损坏的偏移、重叠或重复的页、未排序的标签和未知的结构标签都会被拒绝。",
+    "請使用結構有效的經典 TIFF：不超過 32 MiB、64 頁，所有頁合計不超過 16 MP，每邊不超過 16,384 像素，條帶或圖塊為未壓縮、LZW、Deflate 或 PackBits，樣本為 1–16 位元無號灰階、調色盤或 RGB。損壞的偏移、重疊或重複的頁、未排序的標籤和未知的結構標籤都會被拒絕。",
+    "構造が有効なクラシック TIFF を使ってください：32 MiB、64 ページ以内、全ページ合計 16 MP 以内、各辺 16,384 ピクセル以内で、ストリップまたはタイルは無圧縮・LZW・Deflate・PackBits、サンプルは 1〜16 ビットの符号なしグレー・パレット・RGB に限ります。壊れたオフセット、重なったり繰り返したりするページ、未整列のタグ、不明な構造タグは拒否されます。"
+  ],
+  "No TIFF orientation tag was found in the source.": [
+    "原件中未找到 TIFF 方向标签。",
+    "原件中未找到 TIFF 方向標籤。",
+    "元のファイルに TIFF の向きタグは見つかりませんでした。"
+  ],
+  "BigTIFF files are not supported by this metadata tool. No copy was saved.": [
+    "此元数据工具不支持 BigTIFF 文件。未保存副本。",
+    "此中繼資料工具不支援 BigTIFF 檔案。未儲存副本。",
+    "このメタデータツールは BigTIFF ファイルに対応していません。コピーは保存されていません。"
   ]
 }

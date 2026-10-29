@@ -1342,6 +1342,17 @@ public sealed partial class App : Application
                 report(L("Processing…")); result = new BatchResult();
                 result.Outputs.Add(await Task.Run(() => document.Save(keepOrientation, token), token));
             }
+            else if (action.Id == "image.tiffmetadata")
+            {
+                report(L("Inspecting TIFF tags…"));
+                using var document = await OnSta(() => TiffMetadataDocument.Open(files[0], token));
+                token.ThrowIfCancellationRequested();
+                var dialog = new TiffMetadataDialog(this, document);
+                if (!ShowOperationDialog(dialog, owner, token)) return;
+                bool keepOrientation = dialog.KeepOrientation;
+                report(L("Processing…")); result = new BatchResult();
+                result.Outputs.Add(await Task.Run(() => document.Save(keepOrientation, token), token));
+            }
             else if (action.Id == "image.pngmetadata")
             {
                 report(L("Inspecting PNG chunks…"));

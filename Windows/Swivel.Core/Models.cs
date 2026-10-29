@@ -191,6 +191,7 @@ public static class Catalog
         new("image.metadata", "Inspect Metadata…", ImageOnly: true, SingleFile: true),
         new("image.pngmetadata", "Remove PNG Text & EXIF…", SingleFile: true, Extensions: new[] { "png" }),
         new("image.jpegmetadata", "Remove JPEG EXIF & Comments…", SingleFile: true, Extensions: new[] { "jpg", "jpeg" }),
+        new("image.tiffmetadata", "Remove TIFF Metadata…", SingleFile: true, Extensions: new[] { "tif", "tiff" }),
         new("image.compress", "Compress JPEG…", ImageOnly: true),
         new("audio.join", "Join WAV Files…", Extensions: new[] { "wav" }),
         new("audio.music", "Add WAV Background Music…", SingleFile: true, Extensions: new[] { "wav" }),
