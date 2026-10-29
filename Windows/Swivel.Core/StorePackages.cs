@@ -43,7 +43,7 @@ public sealed record StorePackageRecord(int Ordinal,PackageText Name,PackageText
     bool? Framework,bool? Resource,bool? Bundle,bool? Development,DateTimeOffset? Installed,PackageText Family,bool TimeLimited);
 public sealed record StorePackagesSnapshot(DateTimeOffset RecordedUtc,IReadOnlyList<StorePackageRecord> Records,PackageListIssue Issues)
 {
-    public bool Partial=>Issues!=PackageListIssue.None||Records.Any(x=>x.TimeLimited||x.Version is null||x.Architecture is null||x.Framework is null||x.Resource is null||x.Bundle is null||x.Development is null||
+    public bool Partial=>Issues!=PackageListIssue.None||Records.Any(x=>x.TimeLimited||x.Version is null||x.Installed is null||x.Architecture is null||x.Framework is null||x.Resource is null||x.Bundle is null||x.Development is null||
         new[]{x.Name,x.Publisher,x.Family}.Any(v=>v.State is not PackageValueState.Present and not PackageValueState.Empty));
 }
 public static class StorePackages
@@ -117,7 +117,7 @@ public static class StorePackages
         {if(flag==true)parts.Add(l(label));else if(flag is null)parts.Add(string.Format(l("{0}: unknown"),l(label)));}
         return parts.Count==0?l("App package"):string.Join(", ",parts);
     }
-    public static string Installed(DateTimeOffset? value,Func<string,string> l)=>value is DateTimeOffset date&&date.Year>1601?date.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'",CultureInfo.InvariantCulture):l("Not reported");
+    public static string Installed(DateTimeOffset? value,Func<string,string> l)=>value is DateTimeOffset date&&date.Year>1601?date.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'",CultureInfo.InvariantCulture):l(value is null?"Not available from the package manager":"Not reported");
     public static string Status(PackageListIssue issue,Func<string,string> l)
     {
         var parts=new List<string>();

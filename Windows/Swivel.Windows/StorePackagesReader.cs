@@ -16,8 +16,8 @@ internal static class StorePackagesReader
     internal static StorePackagesSnapshot Read(CancellationToken token)=>StorePackages.Scan(new Source(),token);
     // Expected failures of the system package manager or of one property. Anything
     // else (a programming error) still surfaces.
-    internal static bool Unavailable(Exception error)=>error is COMException or UnauthorizedAccessException or InvalidOperationException or ArgumentException
-        or NotSupportedException or PlatformNotSupportedException or TypeLoadException or DllNotFoundException or EntryPointNotFoundException or InvalidCastException;
+    internal static bool Unavailable(Exception error)=>error is COMException or UnauthorizedAccessException or InvalidOperationException or System.IO.IOException or NotImplementedException
+        or (ArgumentException and not ArgumentOutOfRangeException) or TypeInitializationException or NotSupportedException or PlatformNotSupportedException or TypeLoadException or DllNotFoundException or EntryPointNotFoundException or InvalidCastException;
     private sealed class Source:IStorePackageSource
     {
         public IStorePackageList? Open()
@@ -46,7 +46,7 @@ internal static class StorePackagesReader
         }
         public PackageVersion? Version()=>Try(()=>{var v=package.Id.Version;return new PackageVersion(v.Major,v.Minor,v.Build,v.Revision);});
         public uint? Architecture()=>Try(()=>(uint)package.Id.Architecture);
-        public bool? Flag(PackageFlag flag)=>Try(()=>flag switch{PackageFlag.Framework=>package.IsFramework,PackageFlag.Resource=>package.IsResourcePackage,PackageFlag.Bundle=>package.IsBundle,PackageFlag.Development=>package.IsDevelopmentMode,_=>throw new ArgumentOutOfRangeException(nameof(flag))});
+        public bool? Flag(PackageFlag flag)=>Try(()=>flag switch{PackageFlag.Framework=>package.IsFramework,PackageFlag.Resource=>package.IsResourcePackage,PackageFlag.Bundle=>package.IsBundle,PackageFlag.Development=>package.IsDevelopmentMode,_=>throw new IndexOutOfRangeException(nameof(flag))});
         public DateTimeOffset? Installed()=>Try(()=>package.InstalledDate);
     }
 }

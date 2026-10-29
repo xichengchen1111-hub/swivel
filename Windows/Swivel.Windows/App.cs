@@ -557,9 +557,13 @@ public sealed partial class App : Application
                     if (records.PackagesRequested && !token.IsCancellationRequested)
                     {
                         report(L("Reading the current user's Store and MSIX packages…"));
-                        var packages = await AwaitDoctorReadAsync(Task.Run(() => StorePackagesReader.Read(token), token),token);
+                        StorePackagesSnapshot packages;
+                        try { packages = await AwaitDoctorReadAsync(Task.Run(() => StorePackagesReader.Read(token), token),token); }
+                        catch (Exception error) when (!token.IsCancellationRequested && StorePackagesReader.Unavailable(error))
+                        { report(L("The package list could not be read. The installation records read earlier are kept.")); if (!exiting) ShowError(new UserError("The package list could not be read. The installation records read earlier are kept.")); continue; }
                         token.ThrowIfCancellationRequested();
                         ShowOperationDialog(new StorePackagesDialog(this, packages), owner, token);
+                        if (token.IsCancellationRequested) break;
                         continue;
                     }
                     if (!records.LeftoversRequested || token.IsCancellationRequested) break;

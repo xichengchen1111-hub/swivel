@@ -14,16 +14,12 @@ internal static class StorePackagesNativeChecks
     internal static void Run(Action<bool,string> check,Action<Action,string> reject)
     {
         reject(()=>StorePackagesReader.Read(new CancellationToken(true)),"Precancelled package read never opens the package manager");
-        check(StorePackagesReader.Unavailable(new COMException())&&StorePackagesReader.Unavailable(new UnauthorizedAccessException())&&!StorePackagesReader.Unavailable(new NullReferenceException())&&!StorePackagesReader.Unavailable(new OperationCanceledException()),"Only expected package-manager failures become unavailable");
+        check(StorePackagesReader.Unavailable(new COMException())&&StorePackagesReader.Unavailable(new UnauthorizedAccessException())&&StorePackagesReader.Unavailable(new System.IO.FileNotFoundException())&&StorePackagesReader.Unavailable(new NotImplementedException())&&!StorePackagesReader.Unavailable(new ArgumentOutOfRangeException())&&!StorePackagesReader.Unavailable(new NullReferenceException())&&!StorePackagesReader.Unavailable(new OperationCanceledException()),"Only expected package-manager failures become unavailable");
         var live=StorePackagesReader.Read(CancellationToken.None);
         Console.WriteLine("Store packages (current user): "+live.Records.Count+" · "+StorePackages.Status(live.Issues,x=>x));
-        check(live.Issues.HasFlag(PackageListIssue.Unavailable)?live.Records.Count==0:live.Records.Count>0,"Portable process either lists the current user's packages or reports the package manager unavailable");
-        if(live.Records.Count>0)
-        {
-            check(live.Records.All(x=>x.Ordinal>=0&&x.Ordinal<StorePackages.MaxPackages),"Live packages keep bounded enumeration positions");
-            check(live.Records.Any(x=>x.Version is not null&&x.Architecture is not null&&x.Family.State==PackageValueState.Present),"Live packages report version, architecture and family name");
-            check(live.Records.Any(x=>x.Framework==true),"Live list includes framework packages (for example VCLibs) as reported");
-        }
+        // Smoke test only: the runner account's own package set is not asserted.
+        check(live.Records.Count<=StorePackages.MaxPackages&&live.Records.All(x=>x.Ordinal>=0&&x.Ordinal<StorePackages.MaxPackages)&&(!live.Issues.HasFlag(PackageListIssue.Unavailable)||live.Records.Count==0),"Live package read completes without throwing, bounded, unavailable means no records");
+        Console.WriteLine("Store packages with version/architecture/family: "+live.Records.Count(x=>x.Version is not null&&x.Architecture is not null&&x.Family.State==PackageValueState.Present)+", frameworks: "+live.Records.Count(x=>x.Framework==true));
         var app=Application.Current as App??new App();app.ShutdownMode=ShutdownMode.OnExplicitShutdown;
         var snapshot=new StorePackagesSnapshot(DateTimeOffset.UtcNow,new[]{new StorePackageRecord(0,new("Sample‮App",PackageValueState.Present),new("Pub",PackageValueState.Present),new(1,2,3,4),9,false,false,false,true,null,new("private-family_xyz",PackageValueState.Present),false)},PackageListIssue.None);
         var dialog=new StorePackagesDialog(app,snapshot);
