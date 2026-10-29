@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.126 合并三个并行分支：F07 辅助进程分组、E03 EPUB、D04 保持音调变速
+
+0.125 之后由三个并行会话在各自工作区完成并推送：`claude/win-f07-helpers-be1291`（bb99f1e、4594f9b）、`claude/win-e03-epub-e6d6ae`（ab6085f、d751671）、`claude/win-d04-timestretch-4d2f75`（fbf93a8、95f4996），主会话依次合并（Strings.json 按三方 JSON 合并，无同键冲突）并统一编号 0.126。
+
+- F07：`AppMemory` 可选分组。Toolhelp32 快照在逐进程查询前后各取一次，父 PID 两次一致才用；父进程须在同一快照、路径与启动时间已知、子进程不早于父进程、子程序文件夹等于或位于父程序文件夹内；Windows 文件夹和根目录父进程、环、未知进程单独。分组以未挂靠的应用开头，链一次解析（4096 内线性），报告头计组数。默认关闭，按完整路径分组不变。
+- E03：`DocumentEpub` 原创有界读取：严格 mimetype、container.xml 的 rootfile、OPF spine 顺序、XHTML 正文沿用 HTML 读取的空白规则；拒绝越界路径、大小写/反斜杠 ZIP 别名、加密或带权利管理（含大小写变体标记）、DTD 实体与非 UTF-8/16 XML；不读混淆字体；8 MiB 输入、每 XML 8 MiB、XML 合计 32 MiB、2M UTF-16 输出、深度 128，不解压、无网络。审查修正：DRM 标记大小写变体、manifest/spine 父级、隐藏 body、media-type 参数。
+- D04：WAV 变速“保持音调”，原创有界 WSOLA（40 ms、75% 重叠、±10 ms 搜索、按权重归一化叠加、固定滑动源窗口），25–400%；关闭时旧的 50–200% 重采样输出逐字节相同；512 MiB/2 h 预算、PCM16 预览前缀与取消不变。审查修正：慢速时结尾不再出现静音空隙、状态文字、短于 40 ms 声音的说明、原生测试时长。
+
 ## 0.125 压缩音频降噪（D03 增强）
 
 `WaveDocument` 改为从 `source` 读取：WAV 时就是持有的文件流（行为与字节结果不变），压缩格式时是 `SystemAudioDocument`（MediaTranscoder，128 MiB/2 h）完整解码出的规范 PCM16 WAV 内存流；`SystemAudioDocument.Detach()` 把持有的原文件交给 `WaveDocument`，原文件在整个窗口和保存期间保持持有，输出仍经 `WriteBeside` 放在原文件旁。`audio.noise` 接受 wav/mp3/aac/flac，标题改为 Reduce Audio Noise…，解码后的文件在窗口中注明。M4A/MP4、视频降噪仍未做。
