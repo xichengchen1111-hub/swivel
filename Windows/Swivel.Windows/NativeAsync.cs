@@ -21,6 +21,13 @@ internal static class NativeAsync
         try{await operation.AsTask().ConfigureAwait(false);token.ThrowIfCancellationRequested();}
         finally{operation.Close();}
     }
+    internal static async Task Join(IAsyncActionWithProgress<double> operation,Action<double> progress,CancellationToken token)
+    {
+        using var cancel=token.Register(()=>TryCancel(operation));
+        operation.Progress=(_,value)=>progress(value);
+        try{await operation.AsTask().ConfigureAwait(false);token.ThrowIfCancellationRequested();}
+        finally{operation.Close();}
+    }
     internal static async Task Join(IAsyncAction operation,CancellationToken token)
     {
         using var cancel=token.Register(()=>TryCancel(operation));

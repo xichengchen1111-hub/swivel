@@ -55,6 +55,15 @@ internal static class VideoTrimNativeChecks
             (seconds, sound) = Probe(silent);
             check(Math.Abs(seconds - 3) < 0.1 && !sound && Colours(silent, seconds) == "RB", $"Removing only the sound keeps the whole picture: {seconds:0.000} s, sound {sound}");
 
+            // A picture change is encoded by another Windows path; its cut must be as exact.
+            foreach (var (start, end, picture, colours) in new[] { (1100L, 1900L, new VideoPicture(FlipHorizontal: true), "GG"), (500L, 2500L, new VideoPicture(QuarterTurns: 1), "RB"), (2100L, 2900L, new VideoPicture(Aspect: VideoAspect.Square), "BB") })
+            {
+                string edited = video.TrimAsync(VideoTrim.Plan(start, end, video.Duration, true, video.HasSound, picture), null, default).GetAwaiter().GetResult();
+                var (s2, sound2) = Probe(edited);
+                check(Path.GetFileName(edited).StartsWith("colours edited", StringComparison.Ordinal) && Math.Abs(s2 - (end - start) / 1000.0) < 0.1 && sound2 && Colours(edited, s2) == colours,
+                    $"A picture change cut {start}–{end} ms keeps exactly that part with sound: {Path.GetFileName(edited)}, {s2:0.000} s, {Colours(edited, s2)} (expected {colours})");
+            }
+
             var before = Directory.GetFiles(root).Length;
             foreach (bool midway in new[] { false, true })
             {
@@ -85,7 +94,7 @@ internal static class VideoTrimNativeChecks
         }
     }
 
-    private static (double Seconds, bool Sound) Probe(string path)
+    internal static (double Seconds, bool Sound) Probe(string path)
     {
         var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
         var clip = MediaClip.CreateFromFileAsync(file).AsTask().GetAwaiter().GetResult();
@@ -143,7 +152,7 @@ internal static class VideoTrimNativeChecks
     }
 
     // 16-bit mono PCM WAV with a 440 Hz tone.
-    private static byte[] Tone(int rate, int seconds)
+    internal static byte[] Tone(int rate, int seconds)
     {
         int frames = rate * seconds, data = frames * 2;
         using var stream = new MemoryStream(); using var w = new BinaryWriter(stream);

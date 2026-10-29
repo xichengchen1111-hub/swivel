@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Swivel.Core;
 using Windows.Media.Editing;
+using Windows.Media.Effects;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
 using Windows.Storage;
@@ -15,9 +16,14 @@ namespace Swivel.Windows;
 /// One video held open for Trim Video…: Windows' media editing API shows frames for the chosen
 /// start and end, then encodes the kept part (optionally without sound) as a new H.264/AAC MP4 in
 /// a private temporary folder, which is published beside the original as `name trimmed.mp4`.
+/// Picture changes go through Windows' built-in video transform effect (crop, quarter turns,
+/// mirror), which the media editing API refuses (0xC00DA7FC on the CI runner), so those are
+/// encoded with MediaTranscoder and its trim times instead; another speed rewrites the encoded file's timescales (Mp4Retime) before publishing,
+/// without the sound. Either is saved as `name edited.mp4`.
 public sealed class VideoTrimmer : IDisposable
 {
     public const string Failed = "Windows could not encode the trimmed video. No file was saved.";
+    public const string NoPictureChanges = "This video is stored with a rotation flag (as phones often do). Windows can trim it and change its speed, but not turn, flip or crop it here.";
     private static readonly Guid RotationKey = new("C380465D-2271-428C-9B83-ECEA3B4A85C1"); // MF_MT_VIDEO_ROTATION
     private readonly NativeFiles.Input input;
     private readonly StorageFile file;
@@ -30,6 +36,10 @@ public sealed class VideoTrimmer : IDisposable
     /// Whole milliseconds.
     public long Duration { get; }
     public bool HasSound { get; }
+    /// Windows' transcoder (which applies picture changes) reads the stored frames and doesn't turn
+    /// a phone video stored with a rotation flag upright, so picture changes are refused when the
+    /// stored size differs from the upright one or an MP4/MOV video track's matrix isn't identity.
+    public bool PictureChanges { get; private init; }
     public bool Hours => Duration >= 3_600_000;
     private readonly uint frameNumerator, frameDenominator, bitrate;
 
@@ -50,12 +60,22 @@ public sealed class VideoTrimmer : IDisposable
         string? workspace = null;
         try
         {
-            StorageFile file; MediaClip clip; VideoEncodingProperties video;
+            StorageFile file; MediaClip clip; VideoEncodingProperties video; bool stored;
             try
             {
                 file = await NativeAsync.Join(StorageFile.GetFileFromPathAsync(path), token).ConfigureAwait(false);
                 clip = await NativeAsync.Join(MediaClip.CreateFromFileAsync(file), token).ConfigureAwait(false);
                 video = clip.GetVideoEncodingProperties();
+                try
+                {
+                    var profile = await NativeAsync.Join(MediaEncodingProfile.CreateFromFileAsync(file), token).ConfigureAwait(false);
+                    stored = profile.Video is { } v && v.Width == video.Width && v.Height == video.Height;
+                    // A 180° or mirrored phone video keeps its size; its track header says so.
+                    input.Stream.Position = 0;
+                    stored &= Mp4Retime.StraightVideo(input.Stream) != false;
+                    input.Stream.Position = 0;
+                }
+                catch (Exception error) when (error is not OperationCanceledException) { stored = false; }
             }
             catch (Exception error) when (error is not OperationCanceledException) { throw new UserError(VideoSubtitles.Unreadable); }
             if (video is null || video.Width == 0 || video.Height == 0) throw new UserError(VideoSubtitles.Unreadable);
@@ -64,7 +84,7 @@ public sealed class VideoTrimmer : IDisposable
             SubtitleBurn.CheckVideo((int)video.Width, (int)video.Height, seconds);
             workspace = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Swivel-trim-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(workspace);
-            return new VideoTrimmer(input, file, clip, workspace, video, VideoTrim.Duration(seconds));
+            return new VideoTrimmer(input, file, clip, workspace, video, VideoTrim.Duration(seconds)) { PictureChanges = stored };
         }
         catch
         {
@@ -101,7 +121,10 @@ public sealed class VideoTrimmer : IDisposable
                 using (image)
                 {
                     using var stream = image.AsStreamForRead();
-                    var frame = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
+                    // Copied out of the decoder, so the frame belongs to no thread and can be turned and cropped anywhere.
+                    var decoded = new FormatConvertedBitmap(BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0], PixelFormats.Bgra32, null, 0);
+                    var pixels = new byte[decoded.PixelWidth * decoded.PixelHeight * 4]; decoded.CopyPixels(pixels, decoded.PixelWidth * 4, 0);
+                    var frame = BitmapSource.Create(decoded.PixelWidth, decoded.PixelHeight, 96, 96, PixelFormats.Bgra32, null, pixels, decoded.PixelWidth * 4);
                     frame.Freeze();
                     return frame;
                 }
@@ -110,10 +133,52 @@ public sealed class VideoTrimmer : IDisposable
         finally { frameLock.Release(); }
     }
 
-    /// Encodes the kept part and publishes `name trimmed.mp4`. Progress runs from 0 to 1.
+    /// Windows' transform effect, as checked on the Windows CI runner with a four-colour picture:
+    /// a crop alone and a turn (then mirror) alone are exact, but a crop that isn't square
+    /// combined with a turn in one effect comes out letterboxed. So a crop is one effect and the
+    /// turn and mirror are a second one after it.
+    internal static VideoTransformEffectDefinition[] Effects(VideoGeometry g, int width, int height)
+    {
+        var list = new System.Collections.Generic.List<VideoTransformEffectDefinition>();
+        var c = g.SourceCrop;
+        if (c != new PixelRect(0, 0, width, height))
+            list.Add(new VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(c.X, c.Y, c.Width, c.Height), OutputSize = new global::Windows.Foundation.Size(c.Width, c.Height) });
+        if (g.Rotation != 0 || g.Mirror)
+            list.Add(new VideoTransformEffectDefinition
+            {
+                Rotation = g.Rotation switch { 1 => MediaRotation.Clockwise90Degrees, 2 => MediaRotation.Clockwise180Degrees, 3 => MediaRotation.Clockwise270Degrees, _ => MediaRotation.None },
+                Mirror = g.Mirror ? MediaMirroringOptions.Horizontal : MediaMirroringOptions.None,
+                OutputSize = new global::Windows.Foundation.Size(g.Width, g.Height),
+            });
+        return list.ToArray();
+    }
+
+    /// A preview frame (any size, the whole upright picture) as the plan's picture would show it.
+    public static BitmapSource Preview(BitmapSource frame, int width, int height, VideoPicture? picture)
+    {
+        if (picture is null || picture.IsIdentity) return frame;
+        var g = VideoEdit.Geometry(width, height, picture);
+        var transform = new TransformGroup();
+        transform.Children.Add(new RotateTransform(90 * picture.QuarterTurns));
+        transform.Children.Add(new ScaleTransform(picture.FlipHorizontal ? -1 : 1, picture.FlipVertical ? -1 : 1));
+        BitmapSource seen = new TransformedBitmap(frame, transform);
+        double scale = seen.PixelWidth / (double)g.SeenWidth;
+        int x = Math.Clamp((int)Math.Round(g.Seen.X * scale), 0, seen.PixelWidth - 1), y = Math.Clamp((int)Math.Round(g.Seen.Y * scale), 0, seen.PixelHeight - 1);
+        int w = Math.Clamp((int)Math.Round(g.Seen.Width * scale), 1, seen.PixelWidth - x), h = Math.Clamp((int)Math.Round(g.Seen.Height * scale), 1, seen.PixelHeight - y);
+        var cropped = new CroppedBitmap(seen, new System.Windows.Int32Rect(x, y, w, h));
+        cropped.Freeze();
+        return cropped;
+    }
+
+    /// Encodes the kept part and publishes `name trimmed.mp4`, or `name edited.mp4` when the
+    /// picture or speed changed. Progress runs from 0 to 1.
     internal async Task<string> TrimAsync(VideoTrimPlan plan, Action<double>? progress, CancellationToken token)
     {
-        plan = VideoTrim.Plan(plan.Start, plan.End, Duration, plan.KeepSound, HasSound);
+        plan = VideoTrim.Plan(plan.Start, plan.End, Duration, plan.KeepSound, HasSound, plan.Picture, plan.Speed);
+        if (plan.Picture is not null && !PictureChanges) throw new UserError(NoPictureChanges);
+        var geometry = plan.Picture is null ? null : VideoEdit.Geometry(Width, Height, plan.Picture);
+        int width = geometry?.Width ?? Width, height = geometry?.Height ?? Height;
+        if (plan.Speed != 100) VideoEdit.CheckRate(width, height, Fps, plan.Speed);
         string rendered = System.IO.Path.Combine(workspace, "trimmed.mp4");
         try
         {
@@ -126,20 +191,41 @@ public sealed class VideoTrimmer : IDisposable
             var composition = new MediaComposition();
             composition.Clips.Add(clip);
             var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.HD1080p);
-            profile.Video.Width = (uint)Width; profile.Video.Height = (uint)Height;
+            profile.Video.Width = (uint)width; profile.Video.Height = (uint)height;
             if (frameNumerator > 0 && frameDenominator > 0) { profile.Video.FrameRate.Numerator = frameNumerator; profile.Video.FrameRate.Denominator = frameDenominator; }
             double fps = frameNumerator > 0 && frameDenominator > 0 ? (double)frameNumerator / frameDenominator : 30;
             // At least the original's bit rate, so the kept part loses as little as re-encoding allows.
-            profile.Video.Bitrate = (uint)Math.Clamp(Math.Max(bitrate, Width * (double)Height * fps * 0.1), 1_000_000, 100_000_000);
+            // Faster speeds play more bits a second, so they ask for proportionally fewer (still at least 1 Mbit/s).
+            double wanted = Math.Max(bitrate, width * (double)height * fps * 0.1);
+            profile.Video.Bitrate = (uint)Math.Clamp(plan.Speed == 100 ? wanted : VideoEdit.EncodeBitrate(wanted, plan.Speed), 1_000_000, 100_000_000);
             if (!sound) profile.Audio = null;
             var output = await NativeAsync.Join(StorageFolder.GetFolderFromPathAsync(workspace), token).ConfigureAwait(false);
             var target = await NativeAsync.Join(output.CreateFileAsync("trimmed.mp4", CreationCollisionOption.FailIfExists), token).ConfigureAwait(false);
             TranscodeFailureReason reason;
-            try { reason = await NativeAsync.Join(composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, profile), value => progress?.Invoke(value / 100), token).ConfigureAwait(false); }
+            try
+            {
+                if (geometry is null) reason = await NativeAsync.Join(composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, profile), value => progress?.Invoke(value / 100), token).ConfigureAwait(false);
+                else
+                {
+                    var transcoder = new MediaTranscoder { AlwaysReencode = true, TrimStartTime = TimeSpan.FromMilliseconds(plan.Start), TrimStopTime = TimeSpan.FromMilliseconds(plan.End) };
+                    foreach (var effect in Effects(geometry, Width, Height)) transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
+                    var prepared = await NativeAsync.Join(transcoder.PrepareFileTranscodeAsync(file, target, profile), token).ConfigureAwait(false);
+                    reason = prepared.CanTranscode ? TranscodeFailureReason.None : prepared.FailureReason;
+                    if (prepared.CanTranscode) await NativeAsync.Join(prepared.TranscodeAsync(), value => progress?.Invoke(Math.Clamp(value / 100, 0, 1)), token).ConfigureAwait(false);
+                }
+            }
             catch (Exception error) when (error is not OperationCanceledException) { throw new UserError(Failed); }
             if (reason != TranscodeFailureReason.None) throw new UserError(Failed);
             token.ThrowIfCancellationRequested();
-            return NativeFiles.WriteBeside(input, System.IO.Path.GetFileNameWithoutExtension(input.Path) + " trimmed", "mp4", stream =>
+            // Another speed: the frames stay, each lasting 100/speed times as long.
+            if (plan.Speed != 100)
+                try
+                {
+                    using var retime = new FileStream(rendered, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+                    Mp4Retime.Apply(retime, plan.Speed);
+                }
+                catch (IOException) { throw new UserError(Failed); }
+            return NativeFiles.WriteBeside(input, System.IO.Path.GetFileNameWithoutExtension(input.Path) + (plan.Edited ? " edited" : " trimmed"), "mp4", stream =>
             {
                 using var source = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
                 if (source.Length == 0) throw new UserError(Failed);
