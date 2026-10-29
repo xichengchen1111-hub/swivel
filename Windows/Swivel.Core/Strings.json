@@ -984,11 +984,6 @@
     "變更 WAV 速度…",
     "WAV の速度を変更…"
   ],
-  "Change playback speed from 50–200%. Pitch changes too: faster is higher, slower is lower. This does not preserve voice pitch or perform time-stretching.": [
-    "将播放速度设为 50–200%。音调也会变化：加速升调，减速降调。不保留人声音调，不进行保音调时间伸缩。",
-    "將播放速度設為 50–200%。音調也會變化：加速升調，減速降調。不保留人聲音調，不進行保音調時間伸縮。",
-    "再生速度を 50–200% に変更します。速くすると音程も上がり、遅くすると下がります。声の音程の維持やタイムストレッチは行いません。"
-  ],
   "Changed path": [
     "路径已改变",
     "路徑已變更",
@@ -2898,11 +2893,6 @@
     "程序路径不可用或不受支持",
     "程式路徑無法取得或不受支援",
     "実行ファイルのパスを取得できないか未対応です"
-  ],
-  "Existing integer PCM, float/G.711 and AIFF tools remain separate. An additional bounded Windows codec decoder prepares PCM16 from local WAV, FLAC, MP3 Layer III or ADTS AAC, with complete prepared-audio preview and exclusive save. Codec availability and runtime quality are unverified; other containers, video, pitch-preserving speed and speech classification remain pending.": [
-    "既有整数 PCM、浮点/G.711 和 AIFF 工具保持独立。另有受限 Windows 编解码器入口，将本地 WAV、FLAC、MP3 Layer III 或 ADTS AAC 准备为 PCM16，随后对同一准备音频试听、独占另存。编解码器可用性和实际质量未验收；其他容器、视频、保音高速度与人声分类仍待做。",
-    "既有整數 PCM、浮點/G.711 和 AIFF 工具保持獨立。另有受限 Windows 編解碼器入口，將本機 WAV、FLAC、MP3 Layer III 或 ADTS AAC 準備為 PCM16，隨後對同一準備音訊試聽、獨占另存。編解碼器可用性和實際品質未驗收；其他容器、影片、保音高速度與人聲分類仍待做。",
-    "既存の整数 PCM、浮動小数点/G.711、AIFF 機能は独立したままです。別の制限付き Windows コーデック機能がローカル WAV、FLAC、MP3 Layer III、ADTS AAC を PCM16 に準備し、同じ準備済み音声のプレビューと排他的保存を提供します。コーデック可用性と実品質は未検証で、他コンテナー、動画、音高維持の速度変更、音声分類は未実装です。"
   ],
   "Expand G.711 A-law or mu-law codewords to 16-bit integer PCM WAV. Sample rate, channel order and frame count are preserved. This does not restore detail already lost in the encoded recording, and no gain, normalization, resampling, filtering or dither is applied.": [
     "将 G.711 A-law 或 mu-law 码字展开为 16 位整数 PCM WAV，保留采样率、声道顺序与帧数。无法恢复录音编码时已丢失的细节，不施加增益、归一化、重采样、滤波或抖动。",
@@ -6469,11 +6459,6 @@
     "預覽新名稱、不覆寫重新命名、核驗身分後復原。僅限 NTFS 一般檔案；僅改大小寫、名稱互換、硬連結和 exFAT 仍待處理。",
     "プレビュー、上書きしない名前変更、識別確認後の取り消しに対応。NTFS の通常ファイルのみで、大文字小文字のみの変更、交換、ハードリンク、exFAT は今後対応予定です。"
   ],
-  "Preview plays the first 10 output seconds as 16-bit PCM using the same full-source filter and target quantization as Save. Output is limited to 512 MB and two hours; long processing can be cancelled.": [
-    "试听以 16 位 PCM 播放输出的前 10 秒，使用与保存相同的全源滤波和目标量化。输出限 512 MB 和两小时；长时间处理可取消。",
-    "試聽以 16 位元 PCM 播放輸出的前 10 秒，使用與儲存相同的全來源濾波和目標量化。輸出限 512 MB 和兩小時；長時間處理可取消。",
-    "プレビューは保存と同じ全ソースのフィルターと目標量子化を使い、出力の先頭 10 秒を 16 ビット PCM で再生します。出力は 512 MB、2 時間までです。長い処理はキャンセルできます。"
-  ],
   "Preview plays the first 10 seconds after the selected integer quantization, delivered as PCM16. The full source and complete output budget are checked before preview or save. Each is limited to 512 MiB and two hours; float64 input does not imply float64 device playback support.": [
     "试听先按所选整数位深量化，再以 PCM16 播放前 10 秒。试听或保存前均检查整份原件与完整输出容量，各限 512 MiB / 两小时；可读 float64 不代表设备可直接播放 float64。",
     "試聽先按所選整數位元深度量化，再以 PCM16 播放前 10 秒。試聽或儲存前均檢查整份原件與完整輸出容量，各限 512 MiB / 兩小時；可讀 float64 不代表裝置可直接播放 float64。",
@@ -8833,11 +8818,6 @@
     "速度",
     "速度",
     "速度"
-  ],
-  "Speed changes use a finite low-pass filter. Faster playback removes frequencies that would exceed the output Nyquist limit; slower playback cannot restore detail. Peaks may clip and reduction rounds without dither.": [
-    "变速使用有限低通滤波。加速会移除超过输出奈奎斯特限的频率；减速不能恢复细节。峰值可能削波，量化时舍入且不加抖动。",
-    "變速使用有限低通濾波。加速會移除超過輸出奈奎斯特限制的頻率；減速無法恢復細節。峰值可能削波，量化時捨入且不加抖動。",
-    "速度変更には有限長のローパスフィルターを使用します。高速再生では出力のナイキスト限界を超える周波数を除き、低速再生でも失われた詳細は復元しません。ピークがクリップする場合があり、量子化はディザなしで丸めます。"
   ],
   "Spring": [
     "春季",
@@ -14428,5 +14408,40 @@
     "请选择 EPUB 2 或 3 图书：mimetype 必须为 application/epub+zip，并包含 META-INF/container.xml、一个 OPF 包文件，以及书中实际存在的 XHTML 文档组成的阅读顺序（spine）。不支持指向书外的路径、重复或仅大小写不同的条目名、格式错误的 XML，以及需要 DTD 的命名实体（如 &nbsp;）。",
     "請選擇 EPUB 2 或 3 書籍：mimetype 必須為 application/epub+zip，並包含 META-INF/container.xml、一個 OPF 套件檔，以及書中實際存在的 XHTML 文件組成的閱讀順序（spine）。不支援指向書外的路徑、重複或僅大小寫不同的項目名稱、格式錯誤的 XML，以及需要 DTD 的具名實體（如 &nbsp;）。",
     "EPUB 2 または 3 の本を選んでください。mimetype が application/epub+zip で、META-INF/container.xml、OPF パッケージ 1 つ、本の中に実在する XHTML 文書の読み順（spine）が必要です。本の外を指すパス、重複や大文字小文字だけ異なるエントリ名、不正な XML、DTD が必要な名前付き実体（&nbsp; など）には対応していません。"
+  ],
+  "Change playback speed. With Keep Pitch on (25–400%), sounds keep their original pitch. With it off (50–200%), pitch changes with speed: faster is higher, slower is lower.": [
+    "更改播放速度。开启“保持音调”（25–400%）时，声音保持原来的音调；关闭时（50–200%），音调随速度变化：加速升调，减速降调。",
+    "變更播放速度。開啟「保持音調」（25–400%）時，聲音保持原來的音調；關閉時（50–200%），音調隨速度變化：加速升調，減速降調。",
+    "再生速度を変更します。「音程を保持」がオンのとき（25–400%）は元の音程のままです。オフのとき（50–200%）は速度に合わせて音程も変わり、速くすると高く、遅くすると低くなります。"
+  ],
+  "Without Keep Pitch, speed changes use a finite low-pass filter. Faster playback removes frequencies that would exceed the output Nyquist limit; slower playback cannot restore detail. Either way, peaks may clip and reduction rounds without dither.": [
+    "未开启“保持音调”时，速度变化使用有限长度低通滤波器。加速会移除超过输出奈奎斯特极限的频率；减速无法恢复细节。两种方式下峰值都可能削波，降低位深时直接舍入，不加抖动。",
+    "未開啟「保持音調」時，速度變化使用有限長度低通濾波器。加速會移除超過輸出奈奎斯特極限的頻率；減速無法恢復細節。兩種方式下峰值都可能削波，降低位元深度時直接捨入，不加抖動。",
+    "「音程を保持」がオフのときは、有限長のローパスフィルターで速度を変更します。速くすると出力のナイキスト限界を超える周波数を除去し、遅くしても失われた細部は戻りません。どちらの場合もピークがクリップすることがあり、量子化はディザなしで丸めます。"
+  ],
+  "Preview plays the first 10 output seconds as 16-bit PCM using the same processing and target quantization as Save. Output is limited to 512 MB and two hours; long processing can be cancelled.": [
+    "预览以 16 位 PCM 播放输出的前 10 秒，处理方式和目标量化与保存相同。输出上限为 512 MB 和两小时；较长的处理可以取消。",
+    "預覽以 16 位元 PCM 播放輸出的前 10 秒，處理方式和目標量化與儲存相同。輸出上限為 512 MB 和兩小時；較長的處理可以取消。",
+    "プレビューは出力の最初の 10 秒を 16 ビット PCM で再生し、処理と目標量子化は保存時と同じです。出力は 512 MB と 2 時間までです。長い処理はキャンセルできます。"
+  ],
+  "Existing integer PCM, float/G.711 and AIFF tools remain separate. An additional bounded Windows codec decoder prepares PCM16 from local WAV, FLAC, MP3 Layer III or ADTS AAC, with complete prepared-audio preview and exclusive save. Change WAV Speed can keep pitch (25–400%, original time-stretch; clicks and chords can show artefacts). Codec availability and runtime quality are unverified; other containers, video and speech classification remain pending.": [
+    "既有整数 PCM、浮点/G.711 和 AIFF 工具保持独立。另有受限 Windows 编解码器入口，将本地 WAV、FLAC、MP3 Layer III 或 ADTS AAC 准备为 PCM16，随后对同一准备音频试听、独占另存。“更改 WAV 速度”可保持音调（25–400%，自研时间伸缩；咔嗒声和和弦可能出现瑕疵）。编解码器可用性和实际质量未验收；其他容器、视频与人声分类仍待做。",
+    "既有整數 PCM、浮點/G.711 和 AIFF 工具保持獨立。另有受限 Windows 編解碼器入口，將本機 WAV、FLAC、MP3 Layer III 或 ADTS AAC 準備為 PCM16，隨後對同一準備音訊試聽、獨占另存。「變更 WAV 速度」可保持音調（25–400%，自行開發的時間伸縮；喀噠聲和和弦可能出現瑕疵）。編解碼器可用性和實際品質未驗收；其他容器、影片與人聲分類仍待做。",
+    "既存の整数 PCM、浮動小数点/G.711、AIFF 機能は独立したままです。別の制限付き Windows コーデック機能がローカル WAV、FLAC、MP3 Layer III、ADTS AAC を PCM16 に準備し、同じ準備済み音声のプレビューと排他的保存を提供します。「WAV の速度を変更」は音程を保持できます（25–400%、独自のタイムストレッチ。クリック音や和音に乱れが出ることがあります）。コーデック可用性と実品質は未検証で、他コンテナー、動画、音声分類は未実装です。"
+  ],
+  "Choose a whole-number speed from 25–400%.": [
+    "请选择 25–400% 的整数速度。",
+    "請選擇 25–400% 的整數速度。",
+    "25–400% の整数の速度を選んでください。"
+  ],
+  "Keep Pitch (time-stretch)": [
+    "保持音调（时间伸缩）",
+    "保持音調（時間伸縮）",
+    "音程を保持（タイムストレッチ）"
+  ],
+  "Keep Pitch repeats or skips short overlapping pieces of the sound (40 ms, lined up by similarity; an original WSOLA method). On steady test tones pitch stays within about 0.3%. Clicks and drum hits can repeat as echoes when slower, or soften and drop out when faster; chords, music and noisy recordings can sound rough or wavering; both stereo channels are lined up together. Sounds shorter than 40 ms are not stretched evenly. It does not separate voices or instruments.": [
+    "“保持音调”会重复或跳过声音中相互重叠的短片段（40 毫秒，按相似度对齐；自研 WSOLA 方法）。在稳定的测试音上，音调偏差约在 0.3% 以内。减速时咔嗒声和鼓点可能重复成回声，加速时可能变弱或丢失；和弦、音乐和噪声较多的录音可能听起来粗糙或发颤；立体声两个声道一起对齐。短于 40 毫秒的声音无法均匀伸缩。不会分离人声或乐器。",
+    "「保持音調」會重複或略過聲音中相互重疊的短片段（40 毫秒，依相似度對齊；自行開發的 WSOLA 方法）。在穩定的測試音上，音調偏差約在 0.3% 以內。減速時喀噠聲和鼓點可能重複成回聲，加速時可能變弱或遺失；和弦、音樂和雜訊較多的錄音可能聽起來粗糙或發顫；立體聲兩個聲道一起對齊。短於 40 毫秒的聲音無法均勻伸縮。不會分離人聲或樂器。",
+    "「音程を保持」は、音の短い重なり合った断片（40 ミリ秒、類似度で位置合わせ。独自実装の WSOLA 方式）を繰り返したり飛ばしたりします。安定したテスト音では音程のずれは約 0.3% 以内です。遅くするとクリック音やドラムがエコーのように繰り返され、速くすると弱まったり抜けたりすることがあります。和音、音楽、ノイズの多い録音はざらついたり揺れたりして聞こえることがあります。ステレオの両チャンネルはまとめて位置合わせされます。40 ミリ秒より短い音は均等には伸縮されません。声や楽器の分離は行いません。"
   ]
 }

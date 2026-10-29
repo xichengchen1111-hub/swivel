@@ -35,6 +35,7 @@ public static class WaveConverter
     {
         if (ReferenceEquals(input, output)) throw new ArgumentException("Input and output must be different streams.");
         var source = PcmWave.Read(input, token); long fullCount = speed.Frames(source);
+        if (speed.KeepPitch && speed.Percent != 100) return WaveStretch.Export(input, output, source, speed.Percent, fullCount, token, preview);
         return ExportCore(input, output, source, new(source.Rate, source.Channels, source.Bits), fullCount, speed.Percent, 100, token, preview);
     }
     private static long ExportCore(Stream input, Stream output, WaveInfo source, WaveFormat format, long fullCount,

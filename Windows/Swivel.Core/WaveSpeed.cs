@@ -2,13 +2,14 @@ using System;
 
 namespace Swivel.Core;
 
-// Playback-rate change, including pitch. No time-stretch or voice classification.
-public sealed record WaveSpeed(int Percent = 100)
+// Speed change. KeepPitch=false is the original playback-rate change (pitch moves with speed, 50–200%);
+// KeepPitch=true time-stretches with WaveStretch and keeps pitch (25–400%). No voice classification.
+public sealed record WaveSpeed(int Percent = 100, bool KeepPitch = false)
 {
     public long Frames(WaveInfo source)
     {
-        if (Percent is < 50 or > 200)
-            throw new UserError("Choose a whole-number speed from 50–200%.");
+        if (KeepPitch ? Percent is < 25 or > 400 : Percent is < 50 or > 200)
+            throw new UserError(KeepPitch ? "Choose a whole-number speed from 25–400%." : "Choose a whole-number speed from 50–200%.");
         long frames = checked((source.Frames * 100 + Percent / 2) / Percent);
         if (frames < 1 || frames > (long)source.Rate * PcmWave.MaxSeconds)
             throw new UserError("The changed-speed WAV must contain at least one frame and be no longer than two hours.");
