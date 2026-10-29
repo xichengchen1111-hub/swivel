@@ -179,6 +179,7 @@ GifExportChecks.Run(Check, Reject);
 GifPaletteChecks.Run(Check, Reject);
 GifPresetChecks.Run(Check, Reject);
 WaveNoiseChecks.Run(Check, Reject);
+WaveNoiseInputChecks.Run(Check, Reject);
 WaveQuietSampleChecks.Run(Check, Reject);
 QrLibraryChecks.Run(Check,Reject);
 QrGardenChecks.Run(Check,Reject);

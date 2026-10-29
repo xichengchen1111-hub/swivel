@@ -9,6 +9,34 @@ using Swivel.Windows;
 
 internal static class WaveToolsChecks
 {
+    internal static void CheckNoiseInput(string path, Action<Stream,Stream> convert, int bits, Action<bool,string> check, Action<Action,string> reject)
+    {
+        byte[] original=File.ReadAllBytes(path);
+        using var expected=new MemoryStream();
+        using(var source=new MemoryStream(original)) convert(source,expected);
+        var settings=new WaveNoise(0,.05,.75);
+        using(var document=WaveDocument.OpenNoise(path,default))
+        {
+            check(document.Info.Bits==bits && !document.Decoded && document.Peaks.Length==600,"Local noise conversion exposes integer PCM without Windows-decoder notice");
+            var app=System.Windows.Application.Current as App??new App();
+            var dialog=new WaveNoiseDialog(app,document);
+            var body=(System.Windows.Controls.StackPanel)((System.Windows.Controls.DockPanel)dialog.Content).Children.OfType<System.Windows.Controls.ScrollViewer>().Single().Content;
+            check(body.Children.OfType<System.Windows.Controls.TextBlock>().Any(x=>x.Text==app.L(WaveNoiseInput.Hint)),"Noise dialog shows supported local inputs and conversion limits");
+            dialog.Close();dialog.FinishPreviewAsync().GetAwaiter().GetResult();
+            using var preview=new MemoryStream();WaveDenoiser.Export(expected,preview,settings,default,preview:true);
+            check(document.NoisePreview(settings,default).SequenceEqual(preview.ToArray()),"Local noise preview matches existing converter then denoiser");
+            using var full=new MemoryStream();WaveDenoiser.Export(expected,full,settings,default);
+            string first=document.SaveNoise(settings,default),second=document.SaveNoise(settings,default);
+            check(Path.GetDirectoryName(first)==Path.GetDirectoryName(path) && first.EndsWith(" clean.wav") && second.EndsWith(" clean 2.wav"),"Converted noise output exclusively published beside held original");
+            check(File.ReadAllBytes(first).SequenceEqual(full.ToArray()) && File.ReadAllBytes(second).SequenceEqual(full.ToArray()),"Converted noise save keeps complete denoiser bytes and prior output");
+            reject(()=>File.WriteAllBytes(path,new byte[1]),"Converted noise source stays pinned");
+            string folder=Path.GetDirectoryName(path)!;reject(()=>Directory.Move(folder,folder+" moved"),"Converted noise ancestors stay pinned");
+            int before=Directory.GetFiles(folder).Length;
+            reject(()=>document.SaveNoise(settings,new CancellationToken(true)),"Converted noise cancellation publishes nothing");
+            check(Directory.GetFiles(folder).Length==before && !Directory.GetFiles(folder,".swivel-*.tmp").Any(),"Converted noise cancellation leaves no staging");
+        }
+        check(File.ReadAllBytes(path).SequenceEqual(original),"Noise conversion keeps original bytes");
+    }
     public static void Run(string directory,Action<bool,string> check,Action<Action,string> reject)
     {
         string folder=Path.Combine(directory,"wave"); Directory.CreateDirectory(folder); string source=Path.Combine(folder,"声音.wav");
@@ -64,7 +92,7 @@ internal static class WaveToolsChecks
             reject(()=>document.SaveFormat(new(4000,2,16),default), "Invalid format rejected before staging");
             check(Directory.GetFiles(folder).Length == before && !Directory.GetFiles(folder,".swivel-*.tmp").Any(), "Conversion errors leave original and outputs intact");
         }
-        using(var document = WaveDocument.Open(source, default))
+        using(var document = WaveDocument.OpenNoise(source, default))
         {
             var app = System.Windows.Application.Current as App ?? new App();
             var dialog = new WaveNoiseDialog(app, document);
@@ -91,6 +119,11 @@ internal static class WaveToolsChecks
                 var info=PcmWave.Read(saved,default); check(info.Rate==8000 && info.Bits==16 && info.Channels==1 && info.Frames==8000, "Denoise preserves native WAV source format and duration");
             }
             check(File.ReadAllBytes(first).SequenceEqual(preview), "Short PCM16 denoise preview equals saved full output");
+            using(var input=new MemoryStream(original)) using(var expected=new MemoryStream())
+            {
+                WaveDenoiser.Export(input,expected,settings,default);
+                check(File.ReadAllBytes(first).SequenceEqual(expected.ToArray()),"Noise loading leaves existing integer WAV output bytes unchanged");
+            }
             reject(()=>File.WriteAllBytes(source,new byte[1]), "Noise source stays pinned across profile/preview/save");
             reject(()=>Directory.Move(folder,folder+" moved"), "Noise source ancestors stay pinned");
             int before = Directory.GetFiles(folder).Length;

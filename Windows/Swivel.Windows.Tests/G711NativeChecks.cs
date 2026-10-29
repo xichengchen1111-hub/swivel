@@ -35,6 +35,7 @@ internal static class G711NativeChecks
                 using(var pcm=new MemoryStream(saved))using(var expected=new MemoryStream()){var info=PcmWave.Read(pcm,default);check(info.Bits==16&&info.Rate==8000&&info.Channels==channels&&info.Frames==80001,"G711output accepted by existing editor");PcmWave.Export(pcm,expected,new(0,info.Seconds),default,true);check(preview.SequenceEqual(expected.ToArray()),"NativeG711 preview exact saved prefix");}
                 int count=Directory.GetFiles(folder).Length;reject(()=>document.Save(new CancellationToken(true)),"G711precancel Save");reject(()=>document.Preview(new CancellationToken(true)),"G711precancel preview");check(count==Directory.GetFiles(folder).Length&&!Directory.GetFiles(folder,".swivel-*.tmp").Any(),"G711precancel noownedstage");
             }
+            WaveToolsChecks.CheckNoiseInput(path,(s,o)=>G711Wave.Export(s,o,default),16,check,reject);
             check(File.ReadAllBytes(path).SequenceEqual(original),"G711source unchanged");
         }
         string bad=Path.Combine(folder,"bad.wav");var invalid=Fixture(false,1,1);invalid[20]=1;File.WriteAllBytes(bad,invalid);reject(()=>G711Document.Open(bad,default).Dispose(),"G711invalid input cleanup");File.Delete(bad);
