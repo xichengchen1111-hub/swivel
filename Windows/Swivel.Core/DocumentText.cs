@@ -33,8 +33,9 @@ public static class DocumentText
         if(extension.Equals("rtf",StringComparison.OrdinalIgnoreCase))return new(DocumentRtf.Read(bytes,token),"RTF body text",false,false,true);
         if(extension.Equals("doc",StringComparison.OrdinalIgnoreCase))
         {
-            // Older Word versions often saved RTF under a .doc name.
+            // Word files are often saved as RTF or DOCX under a .doc name.
             if(bytes.AsSpan().StartsWith("{\\rtf"u8))return new(DocumentRtf.Read(bytes,token),"RTF body text",false,false,true);
+            if(bytes.AsSpan().StartsWith("PK\u0003\u0004"u8))return new(ReadDocx(bytes,token),"DOCX body text",true);
             return new(DocumentDoc.Read(bytes,token),"Word 97-2003 main document text",false,Doc:true);
         }
         if(extension.Equals("epub",StringComparison.OrdinalIgnoreCase))return new(DocumentEpub.Read(bytes,token),"EPUB spine body text",false,Epub:true);

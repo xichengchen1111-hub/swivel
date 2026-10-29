@@ -19,7 +19,7 @@ public static class DocumentDoc
     public const string Old="This is a Word 6, Word 95 or older document. Only Word 97-2003 DOC files are read; open and save it in a newer format first.";
     private const uint End=0xFFFFFFFE, NoStream=0xFFFFFFFF;
     private const int MaxEntries=16384, MaxFields=128, MaxCp=16*1024*1024;
-    private const byte Ttp=1, InnerTtp=2, InnerCell=4, Hidden=8, Deleted=16;
+    private const byte Ttp=1, InnerTtp=2, InnerCell=4, Hidden=8, Deleted=16, Spec=32;
     private static readonly byte[] Signature={0xD0,0xCF,0x11,0xE0,0xA1,0xB1,0x1A,0xE1};
     private const string Cp1252="€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008DŽ\u008F\u0090‘’“”•–—˜™š›œ\u009DžŸ";
 
@@ -124,10 +124,10 @@ public static class DocumentDoc
     // Property pages (FKPs) give flags for byte ranges of the WordDocument stream.
     private sealed class Properties
     {
-        private readonly byte[] word;private readonly bool paragraph;private readonly uint[] bounds,pns;
+        private readonly byte[] word;private readonly bool paragraph;private readonly uint[] bounds,pns;private readonly Func<uint,byte>? huge;
         private uint start=1,end=0;private byte flags;
-        internal Properties(byte[] word,byte[] table,uint fc,uint lcb,bool paragraph)
-        {this.word=word;this.paragraph=paragraph;bounds=Plc(table,fc,lcb,out pns,word);}
+        internal Properties(byte[] word,byte[] table,uint fc,uint lcb,bool paragraph,Func<uint,byte>? huge=null)
+        {this.word=word;this.paragraph=paragraph;this.huge=huge;bounds=Plc(table,fc,lcb,out pns,word);}
         private static uint[] Plc(byte[] table,uint fc,uint lcb,out uint[] pages,byte[] word)
         {
             pages=Array.Empty<uint>();if(lcb==0)return Array.Empty<uint>();
@@ -158,14 +158,15 @@ public static class DocumentDoc
                     if(paragraph){int cb=word[off];if(cb!=0){from=off+1;length=2*cb-1;}else{from=off+2;length=2*word[off+1];}if(length<2)throw Bad();from+=2;length-=2;}
                     else{from=off+1;length=word[off];}
                     if(from+length>p+511)throw Bad();
-                    flags=Sprms(word.AsSpan(from,length));return flags;
+                    flags=Sprms(word.AsSpan(from,length),huge);return flags;
                 }
                 previous=next;
             }
             start=end=fc;end++;return 0;
         }
     }
-    private static byte Sprms(ReadOnlySpan<byte> g)
+    // huge resolves sprmPHugePapx: properties too large for their page live in the Data stream.
+    private static byte Sprms(ReadOnlySpan<byte> g,Func<uint,byte>? huge=null)
     {
         byte flags=0;
         for(int at=0;at+2<=g.Length;)
@@ -175,7 +176,12 @@ public static class DocumentDoc
             if(size<0)
             {
                 if(sprm==0xD608){if(at+2>g.Length)break;size=BinaryPrimitives.ReadUInt16LittleEndian(g[at..])+1;}
-                else{if(at>=g.Length||sprm==0xC615&&g[at]==255)break;size=g[at]+1;}
+                else if(sprm==0xC615&&at<g.Length&&g[at]==255)
+                {
+                    // PChgTabsOperand: cb, then delete/close and add tab lists sized by their counts.
+                    if(at+2>g.Length)break;int deleted=g[at+1];int add=at+2+4*deleted;if(add>=g.Length)break;size=1+(1+4*deleted)+(1+3*g[add]);
+                }
+                else{if(at>=g.Length)break;size=g[at]+1;}
             }
             if(at+size>g.Length)break;byte value=g[at];
             switch(sprm)
@@ -186,6 +192,8 @@ public static class DocumentDoc
                 // Toggle 0x80/0x81 depend on the style, which is not evaluated.
                 case 0x0803:flags=(byte)(value is 1 or 0x81?flags|Hidden:flags&~Hidden);break;
                 case 0x0800:flags=(byte)(value!=0?flags|Deleted:flags&~Deleted);break;
+                case 0x0855:flags=(byte)(value!=0?flags|Spec:flags&~Spec);break;
+                case 0x6646:if(huge is not null)flags|=huge(BinaryPrimitives.ReadUInt32LittleEndian(g[at..]));break;
             }
             at+=size;
         }
@@ -204,9 +212,10 @@ public static class DocumentDoc
         byte[] word=compound.Stream("WordDocument")??throw Bad();
         if(word.Length<0x20)throw Bad();
         ushort ident=U16(word,0),nFib=U16(word,2),bits=U16(word,0x0A);
-        if(ident==0xA5DC||ident==0xA5EC&&nFib<0xC1)throw new UserError(Old);
+        if(ident==0xA5DC||ident==0xA5EC&&nFib<0xC0)throw new UserError(Old);
         if(ident!=0xA5EC)throw Bad();
-        if((bits&0x0100)!=0||(bits&0x8000)!=0)throw new UserError(Encrypted);
+        // fObfuscated only applies together with fEncrypted.
+        if((bits&0x0100)!=0)throw new UserError(Encrypted);
         if(word.Length<0x9A||U16(word,0x20)!=14||U16(word,0x3E)!=22)throw Bad();
         int cbRgFcLcb=U16(word,0x98);if(cbRgFcLcb<0x5D||0x9A+8L*cbRgFcLcb>word.Length)throw Bad();
         uint ccpText=U32(word,0x4C);if(ccpText>MaxCp)throw Bad();
@@ -222,7 +231,15 @@ public static class DocumentDoc
         for(int i=0;i<=pieces;i++){cps[i]=U32(table,at+4L*i);if(i==0?cps[i]!=0:cps[i]<=cps[i-1])throw Bad();}
         if(cps[pieces]<ccpText)throw Bad();
         var chpx=new Properties(word,table,U32(word,0x9A+12*8),U32(word,0x9A+12*8+4),false);
-        var papx=new Properties(word,table,U32(word,0x9A+13*8),U32(word,0x9A+13*8+4),true);
+        byte[]? data=null;var hugePapx=new Dictionary<uint,byte>();
+        byte Huge(uint offset)
+        {
+            if(hugePapx.TryGetValue(offset,out byte cached))return cached;
+            data??=compound.Stream("Data")??throw Bad();int cb=U16(data,offset);
+            if(cb>0x3FA2||(long)offset+2+cb>data.Length)throw Bad();
+            return hugePapx[offset]=Sprms(data.AsSpan((int)offset+2,cb));
+        }
+        var papx=new Properties(word,table,U32(word,0x9A+13*8),U32(word,0x9A+13*8+4),true,Huge);
         var text=new StringBuilder();var fields=new Stack<bool>();int code=0;
         void Append(char c){if(text.Length>=DocumentText.MaxCharacters)throw Bad();text.Append(c);}
         void RowEnd(){if(text.Length>0&&text[^1]=='\t')text[^1]='\n';else Append('\n');}
@@ -245,6 +262,8 @@ public static class DocumentDoc
                 if(code>0||(character&Deleted)!=0)continue;
                 if(c==(char)7){if((papx.At((uint)position)&Ttp)!=0)RowEnd();else Append('\t');continue;}
                 if((character&Hidden)!=0)continue;
+                // Insert-Symbol characters are stored as '(' plus a font glyph code; there is no portable text for them.
+                if(c=='('&&(character&Spec)!=0)continue;
                 if(c=='\r'){byte p=papx.At((uint)position);if((p&InnerTtp)!=0)RowEnd();else Append((p&InnerCell)!=0?'\t':'\n');}
                 else if(c is (char)0x0B or (char)0x0C or (char)0x0E)Append('\n');
                 else if(c=='\t')Append('\t');
@@ -253,6 +272,12 @@ public static class DocumentDoc
             }
         }
         if(fields.Count!=0)throw Bad();
+        // A lone surrogate in a UTF-16 piece is damage, not text; show it as U+FFFD.
+        for(int i=0;i<text.Length;i++)
+        {
+            if(char.IsHighSurrogate(text[i])&&i+1<text.Length&&char.IsLowSurrogate(text[i+1])){i++;continue;}
+            if(char.IsSurrogate(text[i]))text[i]='\uFFFD';
+        }
         string result=text.ToString();DocumentText.Validate(result,token);return result;
     }
 }

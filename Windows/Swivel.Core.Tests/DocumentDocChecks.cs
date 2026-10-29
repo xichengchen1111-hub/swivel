@@ -141,6 +141,7 @@ internal static class DocumentDocChecks
             catch(UserError error){check(error.Message==expected,label+": "+error.Message);}
             catch(Exception error){check(false,label+": "+error.GetType().Name+" "+error.Message);}
         }
+        string bad0=DocumentDoc.Invalid;
         var table=Read(Gunzip(TextutilTable));
         check(table.Doc&&!table.Docx&&!table.Rtf&&table.Encoding=="Word 97-2003 main document text","DOC flagged and labelled as main document text");
         check(table.Text=="Top\nr1c1\tr1c2\tr1c3\n中\t\tlast\nmulti\npara\tx\ty\nBottom\n","textutil DOC table: cells tab, rows line breaks: "+table.Text.Replace("\n","⏎").Replace("\t","⇥"));
@@ -154,6 +155,17 @@ internal static class DocumentDocChecks
         check(Text(Doc(new[]{new Piece("a\u000Bb\u000Cc\u000Ed\te\u001Ef\u001Fg\u0001\u0008\u0002\u0005h\u00A0i\u007F\r",true)}))=="a\nb\nc\nd\te\u2011fgh\u00A0i\n","Line/page/column breaks, tab, hyphens, objects and controls mapped");
         check(Text(Doc(new[]{new Piece("a\u0007b\u0007\u0007c\u0007\u0007\u0007after\r",true)},papx:new[]{new PropRun(0,4,Array.Empty<byte>()),new PropRun(4,5,TtpOn),new PropRun(5,8,Array.Empty<byte>()),new PropRun(8,9,TtpOn),new PropRun(9,15,Array.Empty<byte>())}))=="a\tb\nc\t\nafter\n","Table cell marks become tabs and TTP row marks line breaks, including empty last cells");
         check(Text(Doc(new[]{new Piece("Shown hidden style del end\r",true)},chpx:new[]{new PropRun(0,6,Array.Empty<byte>()),new PropRun(6,13,HiddenOn),new PropRun(13,19,HiddenStyle),new PropRun(19,23,DeletedOn),new PropRun(23,27,Array.Empty<byte>())}))=="Shown style end\n","Direct hidden and tracked-deleted characters skipped; style-relative hidden kept");
+        var hugeData=new byte[21];hugeData[16]=3;new byte[]{0x17,0x24,1}.CopyTo(hugeData,18);
+        check(Text(Doc(new[]{new Piece("a\u0007b\u0007\u0007after\r",true)},papx:new[]{new PropRun(0,4,Array.Empty<byte>()),new PropRun(4,5,new byte[]{0x46,0x66,16,0,0,0}),new PropRun(5,11,Array.Empty<byte>())},extra:new[]{("Data",hugeData)}))=="a\tb\nafter\n","sprmPHugePapx row properties read from the Data stream");
+        Refuse(Doc(new[]{new Piece("a\u0007\u0007\r",true)},papx:new[]{new PropRun(0,2,Array.Empty<byte>()),new PropRun(2,3,new byte[]{0x46,0x66,200,0,0,0}),new PropRun(3,4,Array.Empty<byte>())},extra:new[]{("Data",hugeData)}),bad0,"sprmPHugePapx offset outside the Data stream");
+        byte[] defTableFirst={0x08,0xD6,5,0,9,9,9,9,0x17,0x24,1},tabsFirst={0x15,0xC6,0xFF,1,9,9,9,9,1,9,9,9,0x17,0x24,1};
+        foreach(var (grpprl,label) in new[]{(defTableFirst,"sprmTDefTable"),(tabsFirst,"sprmPChgTabs cb 255")})
+            check(Text(Doc(new[]{new Piece("a\u0007\u0007z\r",true)},papx:new[]{new PropRun(0,2,Array.Empty<byte>()),new PropRun(2,3,grpprl),new PropRun(3,5,Array.Empty<byte>())}))=="a\nz\n","Row flag after a variable-size "+label+" operand");
+        check(Text(Doc(new[]{new Piece("i1\ri2\r\rafter\r",true)},papx:new[]{new PropRun(0,3,new byte[]{0x4B,0x24,1}),new PropRun(3,6,new byte[]{0x4B,0x24,1}),new PropRun(6,7,new byte[]{0x4C,0x24,1}),new PropRun(7,13,Array.Empty<byte>())}))=="i1\ti2\nafter\n","Nested-table cell and row paragraph marks");
+        check(Text(Doc(new[]{new Piece("x(y\r",true)},chpx:new[]{new PropRun(0,1,Array.Empty<byte>()),new PropRun(1,2,new byte[]{0x55,0x08,1,0x09,0x6A,2,0,0x4A,0xF0}),new PropRun(2,4,Array.Empty<byte>())}))=="xy\n","Insert-Symbol characters (fSpec '(') omitted, ordinary '(' kept elsewhere");
+        check(Text(Doc(new[]{new Piece("a\uD800b\uDC00\r",false)}))=="a\uFFFDb\uFFFD\n","Lone surrogates in UTF-16 pieces shown as U+FFFD");
+        var docx=new MemoryStream();DocumentText.Write(docx,"from docx",TextExport.Docx,default);var renamed=Read(docx.ToArray());
+        check(renamed.Docx&&!renamed.Doc&&renamed.Text=="from docx\n","A .doc that is really DOCX uses the DOCX reader");
         check(Text(Doc(new[]{new Piece("x\r",true)},flags:0,extra:new[]{("1Table",new byte[64])}))=="x\n","fWhichTblStm=0 reads 0Table, not 1Table");
         check(Text(Doc(new[]{new Piece("v4 sectors\r",true)},v4:true))=="v4 sectors\n","Version 4 compound file with 4096-byte sectors");
         var big=Doc(new[]{new Piece("difat\r",true)},padSectors:14100);
@@ -163,10 +175,13 @@ internal static class DocumentDocChecks
         check(rtf.Rtf&&!rtf.Doc&&rtf.Text=="Old RTF\n","A .doc that is really RTF uses the RTF reader");
 
         Refuse(Doc(new[]{new Piece("secret\r",true)},flags:0x0300),DocumentDoc.Encrypted,"fEncrypted refused");
-        Refuse(Doc(new[]{new Piece("secret\r",true)},flags:0x8200),DocumentDoc.Encrypted,"fObfuscated refused");
+        Refuse(Doc(new[]{new Piece("secret\r",true)},flags:0x8300),DocumentDoc.Encrypted,"fObfuscated with fEncrypted refused");
+        check(Text(Doc(new[]{new Piece("plain\r",true)},flags:0x8200))=="plain\n","fObfuscated alone is ignored, as the FIB specifies");
+        check(Text(Doc(new[]{new Piece("template\r",true)},nFib:0xC0))=="template\n","nFib 0x00C0 (Word 97 empty template) is read");
+        Refuse(Doc(new[]{new Piece("old\r",true)},nFib:0xBF),DocumentDoc.Old,"nFib below 0x00C0 refused as old");
         Refuse(Doc(new[]{new Piece("old\r",true)},ident:0xA5DC,nFib:0x65),DocumentDoc.Old,"Word 6/95 identifier refused");
         Refuse(Doc(new[]{new Piece("old\r",true)},nFib:0x68),DocumentDoc.Old,"nFib below Word 97 refused");
-        string bad=DocumentDoc.Invalid;
+        string bad=bad0;
         Refuse(new byte[]{0xDB,0xA5,0x2D,0,0,0},bad,"Word 2 / non-compound file refused");
         Refuse(Encoding.UTF8.GetBytes("<html><body>web page saved as .doc</body></html>"),bad,"HTML named .doc refused");
         var good=Doc(new[]{new Piece("good text\r",true)});
