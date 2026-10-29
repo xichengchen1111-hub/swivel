@@ -256,7 +256,7 @@ public sealed class McpHost : IMcpHost
         if (session.DestinationIdentity != plan.DestinationIdentity) throw new McpToolError("The destination folder was replaced since planning. Nothing was moved; plan again.");
         if (session.Source != plan.Source) throw new McpToolError("The folder's name changed since planning. Nothing was moved; plan again.");
         if (session.Planned != plan.Planned) throw new McpToolError("A file or folder with this name is in the destination now. Nothing was moved or overwritten.");
-        return session.Execute(token);
+        return session.Execute(token, exact: true);
     }
 
     public void CheckFolderUndo(FolderMoveReceipt receipt, CancellationToken token)

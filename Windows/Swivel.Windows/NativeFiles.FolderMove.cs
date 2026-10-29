@@ -90,7 +90,9 @@ public sealed class FolderMoveSession : IDisposable
 
     /// Renames the held folder. A move takes the planned name or the next free number; Undo
     /// takes only the original name and is refused if it is taken.
-    public FolderMoveReceipt Execute(CancellationToken token)
+    /// With `exact` (an agent's plan, which keeps names), only the planned name is tried and a
+    /// taken name refuses the move instead of numbering it.
+    public FolderMoveReceipt Execute(CancellationToken token, bool exact = false)
     {
         if (disposed) throw new ObjectDisposedException(nameof(FolderMoveSession));
         if (executed) throw new InvalidOperationException("A folder move preview can only be executed once.");
@@ -98,10 +100,10 @@ public sealed class FolderMoveSession : IDisposable
         start.Verify(); destination.Verify();
         if (NativeFiles.FolderMoveIdentity(folder) != Identity) throw new UserError(FolderMove.Replaced);
         string current;
-        if (undo)
+        if (undo || exact)
         {
             if (!NativeFiles.RenameFolder(folder, destination, Planned, out int error))
-                throw error is 80 or 183 ? new UserError(FolderMove.OriginalTaken) : NativeFiles.FolderMoveError(error);
+                throw error is 80 or 183 ? (undo ? new UserError(FolderMove.OriginalTaken) : new McpToolError("A file or folder with this name is in the destination now. Nothing was moved or overwritten.")) : NativeFiles.FolderMoveError(error);
             current = Planned;
         }
         else
@@ -151,11 +153,13 @@ public static partial class NativeFiles
         try
         {
             path = MoveRules.DirectoryPath(path);
-            if (GetDriveType(path[..3]) is not 2 and not 3 and not 6) return false;
+            if (path.Length == 3 || GetDriveType(path[..3]) is not 2 and not 3 and not 6) return false;
+            // The parent chain held first refuses links and junctions in it, so nothing is followed elsewhere.
+            using var parent = DirectoryLease.Open(MoveRules.Parent(path));
             uint attributes = GetAttributes(path);
             return attributes != uint.MaxValue && (attributes & 0x10) != 0;
         }
-        catch (UserError) { return false; }
+        catch (Exception error) when (error is Win32Exception or UserError or System.IO.IOException or UnauthorizedAccessException) { return false; }
     }
 
     /// The identity of the plain local folder at this path (not a link or junction), or null.
@@ -165,6 +169,7 @@ public static partial class NativeFiles
         {
             path = MoveRules.DirectoryPath(path);
             if (path.Length == 3 || GetDriveType(path[..3]) is not 2 and not 3 and not 6) return null;
+            using var parent = DirectoryLease.Open(MoveRules.Parent(path));
             using var handle = Open(path, ReadAttributes, 7, 3, OpenReparse | BackupSemantics);
             if (GetFileType(handle) != 1 || !GetFileInformationByHandle(handle, out var info) || (info.Attributes & 0x10) == 0 || (info.Attributes & UnsafeAttributes) != 0) return null;
             return ReadMoveIdentity(handle);

@@ -1247,6 +1247,18 @@ internal static class McpChecks
         dirs.Replaced.Remove(src);
         check(Body(Call(folders, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && dirs.Dirs.ContainsKey(album), "MCP undo moves the folder back once its parent is the same again");
 
+        // Receipts of many deep, non-ASCII folders would crowd the log: refused at planning, one alone still fits.
+        string deep = @"C:\" + string.Join(@"\", Enumerable.Repeat("文件夹文件夹文件夹文", 20));
+        var deepFolders = Enumerable.Range(10, 30).Select(i => deep + @"\相册" + i).ToArray();
+        dirs.Folders.Add(deep); foreach (var (path, i) in deepFolders.Select((p, i) => (p, i))) dirs.Dirs[path] = 0x3_0000_0000 + (ulong)i;
+        var crowded = MoveFolders(deepFolders);
+        check(IsError(crowded) && ((string)Body(crowded)["error"]!).Contains("Move fewer folders at a time") && dirs.Dirs.ContainsKey(deepFolders[0]), "MCP plan_move refuses folders whose undo records would crowd the history: " + Body(crowded).ToJsonString());
+        var oneDeep = Body(MoveFolders(deepFolders[0]));
+        check(oneDeep["can_apply"]!.GetValue<bool>(), "MCP plan_move accepts one deep folder");
+        Body(Call(folders, "apply_plan", new JsonObject { ["plan_id"] = (string)oneDeep["plan_id"]! }));
+        check(dirs.History!.Length < McpSession.MaxFolderEntryChars + 4096 && Body(Call(folders, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && dirs.Dirs.ContainsKey(deepFolders[0]),
+            "MCP a deep folder's receipt stays within its estimate and undoes: " + dirs.History!.Length);
+
         // A damaged receipt makes the whole log unreadable, never half trusted.
         string goodLog = dirs.History!;
         var tampered = (JsonObject)JsonNode.Parse(goodLog)!;

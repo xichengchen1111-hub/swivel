@@ -192,6 +192,9 @@ public sealed class McpSession
     private static readonly McpAction PdfPagesAction = new("pdf.pages", "Select PDF Pages", " pages");
     public const int MaxPdfInputs = 10;
     public const long MaxPdfTotal = 128L * 1024 * 1024;
+    /// One folder move's receipts in the history (each with both parent chains), so one entry
+    /// can never push the older ones out of the log or past its limit.
+    public const int MaxFolderEntryChars = 256 * 1024;
 
     public McpSession(IMcpHost host, string version) { this.host = host; this.version = version; }
 
@@ -763,6 +766,9 @@ public sealed class McpSession
             rows.Add(row);
         }
         if (problems) return new JsonObject { ["can_apply"] = false, ["destination"] = folder, ["moves"] = rows, ["next"] = "Resolve the issues (or leave those folders out) and plan again." };
+        long size = plans.Sum(p => ReceiptSize(p!));
+        if (size > MaxFolderEntryChars)
+            throw new McpToolError("Undo records for these folders would take about " + size.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " characters in Swivel's agent history, more than " + MaxFolderEntryChars.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + ". Move fewer folders at a time.");
         var plan = Store(null, null, Array.Empty<(string, FileStamp)>(), folder: folderIdentity) with { Folders = plans.Select(p => p!).ToArray() };
         this.plans[plan.Id] = plan;
         return new JsonObject
@@ -1031,6 +1037,21 @@ public sealed class McpSession
         if (failure is null) return body;
         body["error"] = failure + " Folders already moved stay where they are now and are logged for undo.";
         throw new McpPartial(body);
+    }
+
+    /// An upper estimate of a logged receipt's JSON (paths as the history escapes them, every
+    /// ancestor of both parents with its identity).
+    private static long ReceiptSize(FolderMovePlan plan)
+    {
+        static long Text(string s) => JsonValue.Create(s)!.ToJsonString().Length;
+        static long Chain(string folder)
+        {
+            long size = Text(folder) + 40;
+            for (int cut = 2; cut >= 0 && cut < folder.Length; cut = folder.IndexOf('\\', cut + 1))
+                size += Text(folder[..Math.Max(cut, 3)]) + 120;
+            return size + Text(folder) + 120;
+        }
+        return Text(plan.Source) + Text(plan.Planned) + Chain(MoveRules.Parent(plan.Source)) + Chain(plan.Destination) + 200;
     }
 
     private static JsonObject ReceiptNode(FolderMoveReceipt receipt)
@@ -1466,6 +1487,8 @@ public sealed class McpSession
         // Drop the oldest entries rather than fail to log a new one.
         var entries = (JsonArray)history["entries"]!;
         while (json.Length > MaxHistoryChars && entries.Count > 1) { entries.RemoveAt(0); json = history.ToJsonString(); }
+        // A log over its limit would be refused as unreadable when loaded; never write one.
+        if (json.Length > MaxHistoryChars) throw new McpToolError("The agent history would exceed its size limit.");
         host.SaveHistory(json);
     }
 
