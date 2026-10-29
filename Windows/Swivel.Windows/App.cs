@@ -736,13 +736,40 @@ public sealed partial class App : Application
                 report(L("Reading folder…"));
                 using var work = await Task.Run(() => FolderZipWork.Open(folder, token), token);
                 token.ThrowIfCancellationRequested();
-                if (!ShowOperationDialog(new FolderZipDialog(this, work), owner, token)) return;
+                if (!ShowOperationDialog(new FolderPlanDialog(this, "Compress Folder to ZIP…", work.Plan.Name + ".zip", new[] { work.Folder, L("The ZIP is saved beside the folder under the folder's name, or the next free numbered name. The folder stays unchanged.") }, work.Plan, FolderZip.Notice, "Create ZIP"), owner, token)) return;
                 report(L("Processing…"));
                 string zip = await Task.Run(() => work.Save(token, (done, total) =>
                     Dispatcher.InvokeAsync(() => report(string.Format(L("Compressing file {0} of {1}…"), done, total)))), token);
                 string summary = string.Format(L("Compressed {0} file(s) into a ZIP beside the folder."), work.Plan.Files);
                 if (work.Plan.Skipped.Count > 0) summary += " " + string.Format(L("{0} item(s) were skipped."), work.Plan.Skipped.Count);
                 report(summary); Home.ShowResults(new[] { zip }, summary);
+                return;
+            }
+            if (action.Id == "file.copyfolder")
+            {
+                if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
+                workFeature = Feature.FileMoves; token.ThrowIfCancellationRequested();
+                var from = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose a Folder to Copy…") };
+                if (from.ShowDialog(owner) != true) return;
+                token.ThrowIfCancellationRequested();
+                var to = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose Where to Copy It…") };
+                if (to.ShowDialog(owner) != true) return;
+                token.ThrowIfCancellationRequested();
+                string folder = from.FolderName, destination = to.FolderName;
+                report(L("Reading folder…"));
+                using var work = await Task.Run(() => FolderCopyWork.Open(folder, destination, token), token);
+                token.ThrowIfCancellationRequested();
+                if (!ShowOperationDialog(new FolderPlanDialog(this, "Copy Folder to…", work.Plan.Name, new[] { string.Format(L("From: {0}"), work.Folder), string.Format(L("Into: {0}"), work.Destination) }, work.Plan, FolderCopy.Notice, "Copy Folder"), owner, token)) return;
+                report(L("Processing…"));
+                var outcome = await Task.Run(() => work.Execute(token, (done, total) =>
+                    Dispatcher.InvokeAsync(() => report(string.Format(L("Copying file {0} of {1}…"), done, total)))), token);
+                string summary = string.Format(L("Copied {0} of {1} file(s) into a new folder."), outcome.FilesCopied, outcome.FileCount);
+                if (work.Plan.Skipped.Count > 0) summary += " " + string.Format(L("{0} item(s) were skipped."), work.Plan.Skipped.Count);
+                if (outcome.Cancelled) summary += " " + L("Cancelled. Copies already made were kept.");
+                else if (outcome.Error is not null) summary += " " + L("Copying stopped. Copies already made were kept; nothing was overwritten.");
+                report(summary);
+                if (outcome.Folder is not null) Home.ShowResults(new[] { outcome.Folder }, summary);
+                if (outcome.Error is not null && !exiting) ShowError(outcome.Error);
                 return;
             }
             if (action.Id == "file.move")

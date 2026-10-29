@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Globalization;
 using System.Windows;
@@ -21,22 +22,22 @@ internal sealed class ArchiveDialog : Window
     }
 }
 
-internal sealed class FolderZipDialog : Window
+/// Review before Compress Folder to ZIP or Copy Folder to…: what will be made, from what, how
+/// much, the rules, and every item that will be skipped.
+internal sealed class FolderPlanDialog : Window
 {
-    public FolderZipDialog(App app, FolderZipWork work)
+    public FolderPlanDialog(App app, string title, string heading, IEnumerable<string> lines, FolderZipPlan plan, string notice, string action)
     {
-        var plan = work.Plan;
-        Title = app.L("Compress Folder to ZIP…"); Width = 680; Height = 560; MinWidth = 460; MinHeight = 340; WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Title = app.L(title); Width = 680; Height = 560; MinWidth = 460; MinHeight = 340; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(22) };
         var top = new StackPanel();
-        top.Children.Add(UI.Text(plan.Name + ".zip", 20));
-        top.Children.Add(UI.Text(work.Folder));
+        top.Children.Add(UI.Text(heading, 20));
+        foreach (string line in lines) top.Children.Add(UI.Text(line));
         top.Children.Add(UI.Text(string.Format(app.L("{0} file(s) in {1} folder(s), {2} MB"), plan.Files, plan.Folders + 1, (plan.Bytes / 1048576.0).ToString("0.##", CultureInfo.CurrentCulture))));
-        top.Children.Add(UI.Text(app.L(FolderZip.Notice), 12));
-        top.Children.Add(UI.Text(app.L("The ZIP is saved beside the folder under the folder's name, or the next free numbered name. The folder stays unchanged."), 12));
+        top.Children.Add(UI.Text(app.L(notice), 12));
         if (plan.Skipped.Count > 0) top.Children.Add(UI.Text(string.Format(app.L("Skipped ({0}):"), plan.Skipped.Count)));
         var buttons = new WrapPanel();
-        buttons.Children.Add(UI.Button(app.L("Create ZIP"), () => DialogResult = true));
+        buttons.Children.Add(UI.Button(app.L(action), () => DialogResult = true));
         var cancel = UI.Button(app.L("Cancel"), () => DialogResult = false); cancel.IsCancel = true; buttons.Children.Add(cancel);
         DockPanel.SetDock(top, Dock.Top); root.Children.Add(top); DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
         var skipped = new ListBox { Margin = new Thickness(0, 6, 0, 10) };

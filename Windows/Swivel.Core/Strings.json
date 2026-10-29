@@ -14208,5 +14208,80 @@
     "“{0}”正被其他应用使用或无法读取，未保存任何内容。",
     "「{0}」正被其他應用程式使用或無法讀取，未儲存任何內容。",
     "「{0}」はほかのアプリで使用中か、読み取れません。何も保存されていません。"
+  ],
+  "Copy Folder to…": [
+    "复制文件夹到…",
+    "複製資料夾到…",
+    "フォルダーをコピー…"
+  ],
+  "Copy Folder": [
+    "复制文件夹",
+    "複製資料夾",
+    "フォルダーをコピー"
+  ],
+  "Choose a Folder to Copy…": [
+    "选择要复制的文件夹…",
+    "選擇要複製的資料夾…",
+    "コピーするフォルダーを選択…"
+  ],
+  "Choose Where to Copy It…": [
+    "选择复制到哪里…",
+    "選擇複製到哪裡…",
+    "コピー先を選択…"
+  ],
+  "From: {0}": [
+    "来源：{0}",
+    "來源：{0}",
+    "コピー元：{0}"
+  ],
+  "Into: {0}": [
+    "复制到：{0}",
+    "複製到：{0}",
+    "コピー先：{0}"
+  ],
+  "Copied {0} of {1} file(s) into a new folder.": [
+    "已将 {1} 个文件中的 {0} 个复制到新文件夹。",
+    "已將 {1} 個檔案中的 {0} 個複製到新資料夾。",
+    "{1} 個中 {0} 個のファイルを新しいフォルダーにコピーしました。"
+  ],
+  "Cancelled. Copies already made were kept.": [
+    "已取消。已完成的副本会保留。",
+    "已取消。已完成的複本會保留。",
+    "キャンセルしました。作成済みのコピーは残ります。"
+  ],
+  "Copying stopped. Copies already made were kept; nothing was overwritten.": [
+    "复制已停止。已完成的副本会保留，没有覆盖任何内容。",
+    "複製已停止。已完成的複本會保留，沒有覆寫任何內容。",
+    "コピーを中止しました。作成済みのコピーは残り、上書きされたものはありません。"
+  ],
+  "The copy is a new folder with the same name (or the next free numbered name) inside the destination. Files keep every data stream, including the download warning, their attributes and modified times; folders get new times and the destination's permissions. Links, junctions, cloud-only files and system files are skipped and listed. Nothing is overwritten.": [
+    "副本是目标位置中同名（名称已占用时用下一个编号）的新文件夹。文件保留所有数据流（包括下载警告）、属性和修改时间；文件夹使用新的时间和目标位置的权限。链接、联接点、仅云端文件和系统文件会跳过并列出。不会覆盖任何内容。",
+    "複本是目標位置中同名（名稱已被使用時用下一個編號）的新資料夾。檔案保留所有資料流（包括下載警告）、屬性和修改時間；資料夾使用新的時間和目標位置的權限。連結、連接點、僅雲端檔案和系統檔案會略過並列出。不會覆寫任何內容。",
+    "コピーはコピー先に同じ名前（使用中なら次の空き番号）で作られる新しいフォルダーです。ファイルはすべてのデータストリーム（ダウンロード警告を含む）、属性、更新日時を保持し、フォルダーは新しい日時とコピー先のアクセス許可になります。リンク、ジャンクション、クラウドのみのファイル、システムファイルはスキップして一覧に示します。上書きはしません。"
+  ],
+  "Choose a destination outside the folder being copied.": [
+    "请选择要复制的文件夹之外的目标位置。",
+    "請選擇要複製的資料夾以外的目標位置。",
+    "コピーするフォルダーの外にあるコピー先を選んでください。"
+  ],
+  "Copy Folder currently requires an NTFS destination, so every data stream and the download warning can be kept.": [
+    "复制文件夹目前需要 NTFS 目标位置，才能保留所有数据流和下载警告。",
+    "複製資料夾目前需要 NTFS 目標位置，才能保留所有資料流和下載警告。",
+    "フォルダーのコピーには現在 NTFS のコピー先が必要です（すべてのデータストリームとダウンロード警告を保持するため）。"
+  ],
+  "A file changed after the folder was read. Copying stopped; the copies already made were kept.": [
+    "读取文件夹后有文件发生了变化。复制已停止，已完成的副本会保留。",
+    "讀取資料夾後有檔案發生了變化。複製已停止，已完成的複本會保留。",
+    "フォルダーを読み込んだ後にファイルが変更されました。コピーを中止しました。作成済みのコピーは残ります。"
+  ],
+  "Some copies would have paths longer than 240 characters. Choose a destination with a shorter path.": [
+    "有些副本的路径会超过 240 个字符。请选择路径更短的目标位置。",
+    "有些複本的路徑會超過 240 個字元。請選擇路徑較短的目標位置。",
+    "一部のコピーのパスが 240 文字を超えます。パスの短いコピー先を選んでください。"
+  ],
+  "Something else changed the new folder while copying. Nothing was overwritten.": [
+    "复制时有其他程序改动了新文件夹。没有覆盖任何内容。",
+    "複製時有其他程式改動了新資料夾。沒有覆寫任何內容。",
+    "コピー中にほかのプログラムが新しいフォルダーを変更しました。上書きされたものはありません。"
   ]
 }
