@@ -1047,6 +1047,12 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.120 文件夹树压缩为 ZIP（B08 增强）
+
+批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.119 已推送，CI 40818572638 通过。
+
+Mac 的 ZIP 可直接压缩拖入的文件夹（ditto）。Windows 的选择列表只接受文件，所以新增独立动作 `archive.zipfolder`（Archives 开关，自带文件夹选择器）。`Swivel.Core/FolderZip.cs`：`Plan` 在 `IFolderMetadata` 上按序数名称排序遍历，条目名以文件夹自身名称开头、'/' 分隔、文件夹以 '/' 结尾（空文件夹保留）；属性含 0x400（链接/联接点）、0x1000/0x40000/0x400000（云端/脱机）、0x4（系统）、0x40（设备）或大小/目录标志不一致的项目跳过并记原因，不打开；Windows 不支持的名称、完整路径超过 240 字符、同一文件夹中只有大小写不同的后一项以及无法打开的子文件夹也跳过列出；超 10,000 项、32 层、2 GB 整体拒绝。`Write` 用 .NET ZipArchive（UTF-8 名称，文件 Fastest、文件夹 NoCompression，修改时间按本地 DOS 时间，未知或 1980 年前记 1980-01-01）经 1 MB BufferedStream 写入；每个文件由调用方打开，复制量须恰为计划长度，复制后印记（身份、长度、修改时间）不变，否则整体失败；条目时间取打开时的印记；打开或读取中的 IO/权限/Win32 错误转为写明相对路径的“被占用或无法读取”提示。BufferedStream 只刷新不释放，避免关闭调用方的暂存文件流。Windows `FolderZipWork` 用 `MetadataDirectory.Open` 持有文件夹及其上级，`OpenDuplicate` 经已持有、重新核对的子文件夹打开每个文件（同卷、无链接/占位属性、长度符合），`NativeFiles.WriteInDirectory` 在父文件夹暂存并独占发布；整个驱动器拒绝。`FolderZipDialog` 列出数量、大小、说明和跳过项（虚拟化列表，路径经可见化）。
+
 ## 0.119 跟进 Mac 1.14.x：TGA 与 PSD 读写（C02 增强）
 
 批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.118 已推送，CI 40800721291 通过。

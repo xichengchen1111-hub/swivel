@@ -26,8 +26,11 @@ public static class FolderZip
     public const string TooLarge = "A folder ZIP is limited to 2 GB of files.";
     public const string TooDeep = "A folder ZIP is limited to 32 levels of folders.";
     public const string Changed = "A file changed while it was being compressed. Nothing was saved.";
+    public const string Unreadable = "\"{0}\" is in use by another app or could not be read. Nothing was saved.";
 
-    public static FolderZipPlan Plan(IFolderMetadata root, CancellationToken token)
+    /// `rootPathLength` is the chosen folder's full path length (0 when unknown); items whose full
+    /// path would pass Windows Preview's 240-character limit are skipped.
+    public static FolderZipPlan Plan(IFolderMetadata root, CancellationToken token, int rootPathLength = 0)
     {
         token.ThrowIfCancellationRequested();
         string name = root.Name;
@@ -43,26 +46,34 @@ public static class FolderZip
             {
                 if (child.Name is "." or "..") continue;
                 entries.Add(child);
-                if (entries.Count + items.Count > MaxEntries + 1) throw new UserError(TooMany);
+                // Skipped items do not count toward the limit, but listing stays bounded.
+                if (entries.Count + skipped.Count > 4 * MaxEntries) throw new UserError(TooMany);
             }
             entries.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+            // A case-sensitive folder may hold names that differ only in case; Windows can extract only one.
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var child in entries)
             {
                 token.ThrowIfCancellationRequested();
-                WindowsPathPolicy.ValidateName(child.Name);
                 string path = relative.Length == 0 ? child.Name : relative + "\\" + child.Name;
                 string reason = (child.Attributes & 0x400) != 0 ? "Link or junction (not followed)"
                     : (child.Attributes & (0x1000 | 0x40000 | 0x400000)) != 0 ? "Cloud-only or offline file (not downloaded)"
-                    : (child.Attributes & 0x4) != 0 ? "System file"
-                    : (child.Attributes & 0x40) != 0 || child.Bytes < 0 || child.Directory != ((child.Attributes & 0x10) != 0) ? "Not a regular file or folder" : "";
+                    : (child.Attributes & 0x4) != 0 ? "System file or folder"
+                    : (child.Attributes & 0x40) != 0 || child.Bytes < 0 || child.Directory != ((child.Attributes & 0x10) != 0) ? "Not a regular file or folder"
+                    : !NameSupported(child.Name) ? "Name not supported on Windows"
+                    : rootPathLength > 0 && rootPathLength + 1 + path.Length > 240 ? "Path longer than 240 characters"
+                    : !seen.Add(child.Name) ? "Same name as another item except for letter case" : "";
                 if (reason.Length > 0) { skipped.Add(new(path, reason)); continue; }
                 if (items.Count >= MaxEntries + 1) throw new UserError(TooMany);
                 if (child.Directory)
                 {
                     if (depth + 1 > MaxDepth) throw new UserError(TooDeep);
+                    IFolderMetadata inner;
+                    try { inner = folder.OpenChild(child.Name); }
+                    catch (Exception error) when (error is UserError or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+                    { skipped.Add(new(path, "Folder could not be opened")); continue; }
                     items.Add(new(entry + child.Name + "/", path, true, 0, child.LastWrite)); folders++;
-                    using var inner = folder.OpenChild(child.Name);
-                    Walk(inner, path, entry + child.Name + "/", depth + 1);
+                    using (inner) Walk(inner, path, entry + child.Name + "/", depth + 1);
                 }
                 else
                 {
@@ -74,6 +85,12 @@ public static class FolderZip
         }
         Walk(root, "", name + "/", 1);
         return new(name, items, skipped, files, folders, bytes);
+    }
+
+    private static bool NameSupported(string name)
+    {
+        try { WindowsPathPolicy.ValidateName(name); return true; }
+        catch (UserError) { return false; }
     }
 
     /// Writes the planned items. Each file is opened through `open`, which checks it is still
@@ -90,13 +107,19 @@ public static class FolderZip
             foreach (var item in plan.Items)
             {
                 token.ThrowIfCancellationRequested();
-                var entry = zip.CreateEntry(item.EntryName, item.Directory ? CompressionLevel.NoCompression : CompressionLevel.Fastest);
-                entry.LastWriteTime = Time(item.LastWrite);
-                if (item.Directory) continue;
-                using (var input = open(item))
+                if (item.Directory)
                 {
+                    zip.CreateEntry(item.EntryName, CompressionLevel.NoCompression).LastWriteTime = Time(item.LastWrite);
+                    continue;
+                }
+                try
+                {
+                    using var input = open(item);
                     var before = input.Stamp;
                     if (before.Length != item.Length) throw new UserError(Changed);
+                    // The time of the file as it is read, not as it was listed.
+                    var entry = zip.CreateEntry(item.EntryName, CompressionLevel.Fastest);
+                    entry.LastWriteTime = Time(before.LastWrite);
                     input.Stream.Position = 0;
                     using (var destination = entry.Open())
                     {
@@ -111,6 +134,10 @@ public static class FolderZip
                         if (total != item.Length) throw new UserError(Changed);
                     }
                     if (input.Refresh() != before) throw new UserError(Changed);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+                {
+                    throw new UserError(Unreadable, item.RelativePath);
                 }
                 progress?.Invoke(++done, plan.Files);
             }

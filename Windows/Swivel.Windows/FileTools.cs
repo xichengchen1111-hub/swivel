@@ -46,7 +46,7 @@ public sealed class FolderZipWork : IDisposable
         token.ThrowIfCancellationRequested();
         if (Path.GetDirectoryName(folder) is null) throw new UserError("Choose a folder, not a whole drive.");
         var root = NativeFiles.MetadataDirectory.Open(folder);
-        try { return new(folder, root, FolderZip.Plan(root, token)); }
+        try { return new(folder, root, FolderZip.Plan(root, token, folder.Length)); }
         catch { root.Dispose(); throw; }
     }
     public string Save(CancellationToken token, Action<int, int>? progress) =>

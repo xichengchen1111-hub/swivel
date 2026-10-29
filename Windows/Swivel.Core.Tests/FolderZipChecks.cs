@@ -62,10 +62,11 @@ internal static class FolderZipChecks
         check(plan.Items.Select(i => i.EntryName).SequenceEqual(new[] { "项目 Notes/", "项目 Notes/A/", "项目 Notes/A/deep/", "项目 Notes/A/deep/big.bin", "项目 Notes/A/empty/", "项目 Notes/b.txt", "项目 Notes/hidden.txt" }),
             "Entries start with the folder's own name, folders end in '/', names are in a stable order and hidden files are kept: " + string.Join(", ", plan.Items.Select(i => i.EntryName)));
         check(plan.Items.Single(i => i.EntryName.EndsWith("big.bin")).RelativePath == "A\\deep\\big.bin", "Each item keeps its Windows path below the folder");
-        check(plan.Skipped.Select(s => s.RelativePath + ":" + s.Reason).SequenceEqual(new[] { "cloud.docx:Cloud-only or offline file (not downloaded)", "desktop.ini:System file", "link:Link or junction (not followed)" }),
+        check(plan.Skipped.Select(s => s.RelativePath + ":" + s.Reason).SequenceEqual(new[] { "cloud.docx:Cloud-only or offline file (not downloaded)", "desktop.ini:System file or folder", "link:Link or junction (not followed)" }),
             "Links, cloud-only files and system files are listed as skipped with a reason: " + string.Join(", ", plan.Skipped.Select(s => s.RelativePath + ":" + s.Reason)));
         check(root.Find("link").Open == 0, "A link is never opened");
 
+        string? message;
         var output = new MemoryStream();
         var progress = new List<(int, int)>();
         FolderZip.Write(plan, item => new Input(root.Find(item.RelativePath)), output, default, (done, total) => progress.Add((done, total)));
@@ -83,9 +84,23 @@ internal static class FolderZipChecks
         check(output.CanWrite, "Writing leaves the caller's output stream open for it to flush and publish");
         check(progress.Select(p => p.Item1).SequenceEqual(new[] { 1, 2, 3 }) && progress.All(p => p.Item2 == 3), "Progress counts the files");
 
+        // Names Windows cannot hold, long paths and case-only twins are skipped, not fatal; a folder that cannot be opened is skipped.
+        var odd = new Node("odd", true, children: new[]
+        {
+            new Node("Icon\r", false, new byte[1]), new Node("con.txt", false, new byte[1]), new Node("x", false, new byte[1]), new Node("X", false, new byte[1]),
+            new Node(new string('n', 100), true, children: new[] { new Node(new string('m', 100) + ".txt", false, new byte[1]) }),
+        });
+        var oddPlan = FolderZip.Plan(odd, default, 40);
+        check(oddPlan.Files == 1 && oddPlan.Folders == 1 && oddPlan.Skipped.Select(x => x.Reason).OrderBy(x => x, StringComparer.Ordinal).SequenceEqual(new[] { "Name not supported on Windows", "Name not supported on Windows", "Path longer than 240 characters", "Same name as another item except for letter case" }),
+            "Unsupported names, a path over 240 characters and a case-only twin are skipped with reasons: " + string.Join(", ", oddPlan.Skipped.Select(x => x.RelativePath.Replace("\r", "\\r") + ":" + x.Reason)));
+        var locked = Tree(); var lockedPlan = FolderZip.Plan(locked, default);
+        message = null;
+        try { FolderZip.Write(lockedPlan, item => item.RelativePath == "b.txt" ? throw new System.ComponentModel.Win32Exception(32) : new Input(locked.Find(item.RelativePath)), new MemoryStream(), default); }
+        catch (UserError error) { message = error.Message; }
+        check(message == "\"b.txt\" is in use by another app or could not be read. Nothing was saved.", "A file in use names itself in the message: " + message);
         // A file that changes while being read, or no longer has its planned length, stops the whole ZIP.
         var changing = Tree(); var changingPlan = FolderZip.Plan(changing, default);
-        string? message = null;
+        message = null;
         try { FolderZip.Write(changingPlan, item => new Input(changing.Find(item.RelativePath), () => changing.Find("b.txt").Data = Encoding.UTF8.GetBytes("changed!")), new MemoryStream(), default); }
         catch (UserError error) { message = error.Message; }
         check(message == FolderZip.Changed, "A file that changes while it is compressed stops the ZIP with the changed message");

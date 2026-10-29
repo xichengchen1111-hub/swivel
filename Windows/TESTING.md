@@ -1327,6 +1327,14 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.120 — Compress Folder to ZIP (B08, 2026-10-29)
+
+- Core 4,521,117 on Mac; native compiled 0 warnings/errors there. Windows CI: 40819163755 failed (FolderZipNativeChecks: ObjectDisposedException — disposing the BufferedStream closed the staged file stream; the review's P1), 40819580185 passed every native check (5,510) after that fix but failed cleanup removing the test junction recursively; after the review fixes — result below.
+- `FolderZipChecks` (core): plan counts files/folders/bytes; entries start with the folder name, sorted, folders end in '/', hidden files kept; links, cloud-only and system files skipped with reasons and a link never opened; the ZIP holds exactly the planned entries, contents exact (200 KB file), empty folder kept, modified time kept within ZIP's two seconds, unknown time 1980; the caller's output stays open; progress; Mac "Icon\r", reserved "con.txt", a path over 240 characters and a case-only twin skipped with reasons; a file in use (Win32 error 32) named in the message; a file changing while read or after planning stops the ZIP; cancellation; 10,000 items fit/10,001 refused, 32 levels fit/33 refused, exactly 2 GB fits/more refused; time edge cases; catalog.
+- Native, `FolderZipNativeChecks`: a real NTFS tree with a 3 MB file, hidden and system files → "报告 2024.zip" beside the folder then "报告 2024 2.zip"; entries, contents and modified time; folder unchanged; Swivel's own extraction reads it back; a whole drive refused; a junction skipped; a cancelled save leaves no file.
+- Independent agent review: P1 (every save failed: the disposed BufferedStream closed the output; also caught by CI) fixed; P2s (one unsupported name or long path aborted the plan or failed after confirming; a locked/denied file gave only the generic message) and P3s (entry time from the listing, case-only twins, skipped items counted toward the limit, "System file" for folders) fixed.
+- Not tested: 10,000-file folders' speed on a real PC (each file reopens its folders), files locked by other apps on a real PC, OneDrive folders.
+
 ## Windows0.119 — TGA and PSD read/write, from Mac 1.14.x (C02, 2026-10-29)
 
 - Core 4,521,086 on Mac; native compiled 0 warnings/errors there. Windows CI: 40817292868 passed the first version (core 4,521,038, native 5,498); 40818572638 passed after the review fixes, docs and version (core 4,521,044, native 5,498).

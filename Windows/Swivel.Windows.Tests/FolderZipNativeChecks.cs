@@ -63,7 +63,11 @@ internal static class FolderZipNativeChecks
         mklink!.WaitForExit();
         if (Directory.Exists(junction))
             using (var work = FolderZipWork.Open(folder, default))
+            {
                 check(work.Plan.Skipped.Any(s => s.RelativePath == "jump" && s.Reason.StartsWith("Link")), "A junction inside the folder is skipped, not followed");
+            }
+        // Remove the junction itself (not its target) so the test folder can be cleaned up.
+        if (Directory.Exists(junction)) Directory.Delete(junction);
         var cancelled = new System.Threading.CancellationTokenSource(); cancelled.Cancel();
         int before = Directory.GetFiles(parent).Length;
         using (var work = FolderZipWork.Open(folder, default))
