@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.129 合并第四轮并行分支：E05 照片二维码、C06 TIFF、D03/D04 M4A
+
+分支 `claude/win-e05-photoqr-326c47`（2e344a7、d4a2b92）、`claude/win-c06-tiff-fd1801`（425da0c、143750f）、`claude/win-d04-m4a-3213f4`（85dc877、ef77560）。Strings.json 三方 JSON 合并无同键冲突。
+
+- E05：严格平面读取不变且先试；失败后原创有界照片读取：灰度、分块局部阈值、1:1:3:1:1 寻像行列、少量排名的寻像三元组（最多 16 组）、按间距估计版本（v7 起以版本信息确认）、右下校正图形做透视否则仿射、网格采样，共享解码器的容错模式（最近 BCH 格式/版本、RS 纠错）。审查（无 P1/P2）修正：寻像交叉检查步长有界（16 MP 条纹图约 5 s→0.13 s）、校正图形搜索随码尺寸缩放、两侧模块尺寸分别估计版本、1-L/1-M/2-L 采样结果保留标准的误读保护、采样结果标为经纠错读取。
+- C06：原创有界经典 TIFF 重写：每页保留，条带/图块字节原样复制，删除描述/EXIF/GPS/XMP/IPTC/Photoshop/私有标签，保留 ICC 与渲染标签，可选保留方向；BigTIFF、循环/重叠 IFD、未知结构标签拒绝。审查（无 P1）修正：整页验证解码、仅在确有删除时保存、损坏的 Orientation 作为畸形删除、摘要列出删除大小、说明保留的条带填充。
+- D03/D04：原创有界 ISO-BMFF 盒检查（ftyp、moov/trak/mdia/minf/hdlr soun、stsd mp4a/alac、单音轨、无视频/DRM/moof、盒数量与嵌套有界、mdat 在范围内、单声道/立体声 8–192 kHz、2 小时）后交给既有 Windows 解码；系统解码、降噪、语音转文字接受 .m4a。审查修正：mdat 数量上限、以解码器配置判断声道、显式 HE-AAC 拒绝、接受 MPEG-2 AAC-LC、minf 中的 hdlr。
+
 ## 0.128 合并第三轮并行分支：F09 启动应用、C02 WebP、E03 DOC
 
 分支 `claude/win-f09-startup-87ed4d`（26bac1c、c835289）、`claude/win-c02-webp-52401e`（3f82a21、bb23090）、`claude/win-e03-doc-3aff11`（c632c8f、959195a）。Strings.json 三方 JSON 合并无同键冲突；Mcp.cs 的输入提示同时保留 DOC 与 WebP 两处改动。
