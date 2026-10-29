@@ -16,6 +16,7 @@ internal static class FolderCopyNativeChecks
         File.WriteAllText(Path.Combine(folder, "a.txt"), "alpha", Encoding.UTF8);
         var big = new byte[2_000_000]; new Random(4).NextBytes(big);
         File.WriteAllBytes(Path.Combine(folder, "sub", "big.bin"), big);
+        File.WriteAllBytes(Path.Combine(folder, "sub", "empty.txt"), Array.Empty<byte>());
         File.WriteAllText(Path.Combine(folder, "a.txt:Zone.Identifier"), "[ZoneTransfer]\r\nZoneId=3\r\n");
         var stamp = new DateTime(2022, 2, 2, 9, 0, 0, DateTimeKind.Local); File.SetLastWriteTime(Path.Combine(folder, "a.txt"), stamp);
         string ini = Path.Combine(folder, "desktop.ini"); File.WriteAllText(ini, "x"); File.SetAttributes(ini, FileAttributes.Hidden | FileAttributes.System);
@@ -24,14 +25,15 @@ internal static class FolderCopyNativeChecks
         FolderCopyOutcome outcome;
         using (var work = FolderCopyWork.Open(folder, target, default))
         {
-            check(work.Plan.Files == 2 && work.Plan.Folders == 2 && work.Plan.Skipped.Count == 1, "The plan has 2 files, 2 sub-folders and skips desktop.ini");
+            check(work.Plan.Files == 3 && work.Plan.Folders == 2 && work.Plan.Skipped.Count == 1, "The plan has 3 files (one empty), 2 sub-folders and skips desktop.ini");
             int last = 0; outcome = work.Execute(default, (done, total) => last = done);
-            check(outcome.Error is null && !outcome.Cancelled && outcome.FilesCopied == 2 && last == 2 && outcome.Folder == Path.Combine(target, "相册 2024"), "The folder is copied as a new folder of the same name: " + outcome.Folder + " " + outcome.Error?.Message);
+            check(outcome.Error is null && !outcome.Cancelled && outcome.FilesCopied == 3 && last == 3 && outcome.Folder == Path.Combine(target, "相册 2024"), "The folder is copied as a new folder of the same name: " + outcome.Folder + " " + outcome.Error?.Message);
             var again = work.Execute(default, null);
             check(again.Error is null && again.Folder == Path.Combine(target, "相册 2024 2"), "A second copy takes the next numbered name: " + again.Folder);
         }
         string copy = outcome.Folder!;
         check(File.ReadAllBytes(Path.Combine(copy, "sub", "big.bin")).SequenceEqual(big) && File.ReadAllText(Path.Combine(copy, "a.txt")) == "alpha", "File contents arrive exactly");
+        check(File.Exists(Path.Combine(copy, "sub", "empty.txt")) && new FileInfo(Path.Combine(copy, "sub", "empty.txt")).Length == 0, "An empty file is copied and verified inside its new folder");
         check(Directory.Exists(Path.Combine(copy, "sub", "empty")) && !File.Exists(Path.Combine(copy, "desktop.ini")), "The empty folder is created and the system file is not copied");
         check(File.Exists(Path.Combine(copy, "a.txt:Zone.Identifier")) && File.ReadAllText(Path.Combine(copy, "a.txt:Zone.Identifier")).Contains("ZoneId=3"), "The download warning stream is copied");
         check(Math.Abs((File.GetLastWriteTime(Path.Combine(copy, "a.txt")) - stamp).TotalSeconds) < 1, "The file's modified time is kept");
