@@ -1329,7 +1329,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 ## Windows0.121 — Copy Folder to… (B06, 2026-10-29)
 
-- Core 4,521,157 on Mac; native compiled 0 warnings/errors there. Windows CI: 40821627204 passed the first version (core 4,521,157, native 5,522); after the review fixes — result below.
+- Core 4,521,157 on Mac; native compiled 0 warnings/errors there. Windows CI: 40821627204 passed the first version (core 4,521,157, native 5,522); 40822109604 passed after the review fixes (core 4,521,161, native 5,522); 40822731102 passed with the empty-file case (native 5,523).
 - `FolderCopyChecks` (core): a destination equal to or inside the source refused whatever the case, a sibling with the same prefix and the parent accepted; numbered folder names; the 240-character precheck at its exact boundary; catalog.
 - Native, `FolderCopyNativeChecks`: a real NTFS tree (2 MB file, empty file, empty folder, Zone.Identifier stream, system desktop.ini) copied as "相册 2024" then "相册 2024 2"; contents, empty folder, download warning stream and modified time arrive; the system file is not copied; the source is unchanged; a destination inside the source and one too long are refused; a pre-cancelled copy makes no folder.
 - Independent agent review: no P1; P2 (a new empty folder turned into a mount point after it was checked could redirect a copy outside it — now checked in CopyFile2's stream-started callback, cancelling the copy) and P3s (subst/8.3 spellings of a destination inside the source, ZIP wording for copy limits, unnamed locked files, unverified copy not counted, ZIP dialog footnote order) fixed. Recheck: no P1/P2; an empty file added to the native check to confirm CopyFile2's callback verifies it.
