@@ -19,8 +19,10 @@ public sealed class PdfValue
     public PdfKind Kind{get;private init;}
     public byte[] Raw{get;private init;}=System.Array.Empty<byte>();
     public string Text{get;private init;}="";
-    public List<PdfValue> Items{get;private init;}=new();
-    public List<(byte[] RawKey,string Key,PdfValue Value)> Entries{get;private init;}=new();
+    // Atoms share these empty lists; parsed values are never changed after construction.
+    private static readonly List<PdfValue> NoItems=new();private static readonly List<(byte[],string,PdfValue)> NoEntries=new();
+    public List<PdfValue> Items{get;private init;}=NoItems;
+    public List<(byte[] RawKey,string Key,PdfValue Value)> Entries{get;private init;}=NoEntries;
     public int Number{get;private init;}
     public int Generation{get;private init;}
     public byte[] Data{get;private init;}=System.Array.Empty<byte>();
@@ -50,6 +52,9 @@ public sealed record PdfStructurePage(int Index,PdfValue Node,int ObjectNumber,P
 /// inherited Resources, MediaBox, CropBox and Rotate. It never repairs: a cross-reference
 /// offset that does not hold the object it names, a cycle, an unsupported filter or any
 /// bound being exceeded refuses the whole file.
+/// A parsed-value budget shared by every file of one task (memory scales with values, not bytes).
+public sealed class PdfBudget(long maxValues=PdfBudget.MaxValues){public const long MaxValues=4_000_000;internal readonly long Max=maxValues;internal long Values;}
+
 public sealed class PdfStructure
 {
     public const long MaxBytes=32L*1024*1024;
@@ -57,7 +62,7 @@ public sealed class PdfStructure
     public const long MaxStreamDecoded=64L*1024*1024,MaxDecodedTotal=256L*1024*1024;
     public const string Damaged="This PDF's structure could not be read exactly. Damaged files, files needing cross-reference repair and unsupported structures are refused rather than repaired. The original is kept unchanged.";
     public const string Encrypted="Encrypted or password-protected PDFs are not supported. The original is kept unchanged.";
-    public const string Limit="Content-preserving PDF pages are limited to 10 files, 32 MiB each and 128 MiB in total, 1,000 source pages, 1,000 selected pages, 1,000,000 cross-reference entries, 64 updates and nesting depth, and 64 MiB per decompressed object or cross-reference stream (256 MiB per file).";
+    public const string Limit="Content-preserving PDF pages are limited to 10 files, 32 MiB each and 128 MiB in total, 1,000 source pages, 1,000 selected pages, 1,000,000 cross-reference entries, 64 updates and nesting depth, 64 MiB per decompressed object or cross-reference stream (256 MiB per file) and 4,000,000 parsed values in total.";
 
     private readonly byte[] data;private readonly Dictionary<int,(byte Type,long A,int B)> xref=new();
     private readonly Dictionary<int,PdfValue> cache=new();private readonly HashSet<int> loading=new();
@@ -71,14 +76,20 @@ public sealed class PdfStructure
     /// Object numbers of the catalog and every page-tree node: references to them from
     /// copied content are back-references to the document and are cleared.
     public HashSet<int> TreeNodes{get;}=new();
+    /// The same nodes as parsed values, so an indirect alias that resolves to one is also caught.
+    public HashSet<PdfValue> TreeValues{get;}=new(ReferenceEqualityComparer.Instance);
+    private readonly PdfBudget budget;
     public int Updates{get;private set;}
 
-    private PdfStructure(byte[] data,CancellationToken token){this.data=data;this.token=token;}
+    private PdfStructure(byte[] data,CancellationToken token,PdfBudget budget){this.data=data;this.token=token;this.budget=budget;}
 
-    public static PdfStructure Read(byte[] data,CancellationToken token)
+    public static PdfStructure Read(byte[] data,CancellationToken token)=>Read(data,token,new PdfBudget(),MaxBytes);
+    public static PdfStructure Read(byte[] data,CancellationToken token,PdfBudget budget)=>Read(data,token,budget,MaxBytes);
+    // The copier reads its own (possibly larger) output back with the output bound.
+    internal static PdfStructure Read(byte[] data,CancellationToken token,PdfBudget budget,long maxBytes)
     {
-        if(data.Length>MaxBytes)throw new UserError(Limit);
-        var pdf=new PdfStructure(data,token);
+        if(data.Length>maxBytes)throw new UserError(Limit);
+        var pdf=new PdfStructure(data,token,budget);
         try{pdf.Parse();}
         catch(Exception error) when (error is IndexOutOfRangeException or ArgumentException or FormatException or OverflowException or InvalidDataException or InvalidCastException or KeyNotFoundException){throw new UserError(Damaged);}
         return pdf;
@@ -112,7 +123,7 @@ public sealed class PdfStructure
         CatalogNumber=rootRef.Number;Catalog=Resolve(rootRef);if(Catalog.Kind!=PdfKind.Dict)throw Bad();
         var type=Catalog.Get("Type");if(type is not null&&!(type.Kind==PdfKind.Name&&type.Text=="Catalog"))throw Bad();
         if(Catalog.Get("Version") is {Kind:PdfKind.Name} v&&v.Text.Length==3&&IsDigit((byte)v.Text[0])&&v.Text[1]=='.'&&IsDigit((byte)v.Text[2])&&string.CompareOrdinal(v.Text,Version)>0)Version=v.Text;
-        TreeNodes.Add(CatalogNumber);ReadPages();
+        TreeNodes.Add(CatalogNumber);TreeValues.Add(Catalog);ReadPages();
     }
 
     // One cross-reference section. Entries already recorded by a newer section win;
@@ -291,7 +302,7 @@ public sealed class PdfStructure
             token.ThrowIfCancellationRequested();
             if(reference.Kind!=PdfKind.Ref||depth>MaxDepth)throw depth>MaxDepth?new UserError(Limit):Bad();
             if(!TreeNodes.Add(reference.Number))throw Bad();
-            var node=Resolve(reference);if(node.Kind!=PdfKind.Dict)throw Bad();
+            var node=Resolve(reference);if(node.Kind!=PdfKind.Dict)throw Bad();TreeValues.Add(node);
             resources=node.Get("Resources")??resources;media=node.Get("MediaBox")??media;crop=node.Get("CropBox")??crop;rotate=node.Get("Rotate")??rotate;
             var type=node.Get("Type");var kids=node.Get("Kids");
             bool isPages=type is {Kind:PdfKind.Name,Text:"Pages"}||type is null&&kids is not null;
@@ -345,7 +356,7 @@ public sealed class PdfStructure
         public PdfValue Value(int depth,bool allowStream=false)
         {
             if(depth>MaxDepth)throw new UserError(Limit);
-            owner.token.ThrowIfCancellationRequested();SkipWhite();if(Position>=data.Length)throw Bad();
+            owner.token.ThrowIfCancellationRequested();if(++owner.budget.Values>owner.budget.Max)throw new UserError(Limit);SkipWhite();if(Position>=data.Length)throw Bad();
             byte b=data[Position];
             if(b=='/')
             {
@@ -367,12 +378,12 @@ public sealed class PdfStructure
             }
             if(b=='<'&&Position+1<data.Length&&data[Position+1]=='<')
             {
-                Position+=2;var entries=new List<(byte[],string,PdfValue)>();
+                Position+=2;var entries=new List<(byte[],string,PdfValue)>();var keys=new HashSet<string>(StringComparer.Ordinal);
                 while(true)
                 {
                     SkipWhite();if(Position+1<data.Length&&data[Position]=='>'&&data[Position+1]=='>'){Position+=2;break;}
                     var key=Value(depth+1);if(key.Kind!=PdfKind.Name)throw Bad();
-                    var value=Value(depth+1);if(entries.Any(e=>e.Item2==key.Text))throw Bad();
+                    var value=Value(depth+1);if(!keys.Add(key.Text))throw Bad();
                     // A null value is the same as an absent entry.
                     if(value.Kind!=PdfKind.Null)entries.Add((key.Raw,key.Text,value));
                 }

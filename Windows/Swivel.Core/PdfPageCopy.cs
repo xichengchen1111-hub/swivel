@@ -25,8 +25,17 @@ public static class PdfPageCopy
     private static readonly HashSet<string> SafeAnnotations=new(StringComparer.Ordinal){"Text","FreeText","Line","Square","Circle","Polygon","PolyLine","Highlight","Underline","Squiggly","StrikeOut","Stamp","Caret","Ink","Link"};
     // Page keys that point back into the document, run code, or only make sense with
     // document-level structures that are not copied.
-    private static readonly HashSet<string> DroppedPageKeys=new(StringComparer.Ordinal){"Parent","Annots","AA","B","StructParents","Metadata","PieceInfo","Rotate","Thumb","ID","PZ","SeparationInfo","PresSteps","Trans","Dur","Resources","MediaBox","CropBox"};
-    private static readonly HashSet<string> DroppedAnnotationKeys=new(StringComparer.Ordinal){"P","Parent","Popup","IRT","AA","A","Dest","PA","StructParent","RT"};
+    private static readonly HashSet<string> DroppedPageKeys=new(StringComparer.Ordinal){"Parent","Annots","AA","B","StructParents","Metadata","PieceInfo","Rotate","Thumb","ID","PZ","SeparationInfo","PresSteps","Trans","Dur","Resources","MediaBox","CropBox","AF"};
+    private static readonly HashSet<string> DroppedAnnotationKeys=new(StringComparer.Ordinal){"P","Parent","Popup","IRT","AA","A","Dest","PA","StructParent","RT","AF"};
+
+    // Only plain literal http, https and mailto addresses are kept as link targets.
+    private static bool WebUri(byte[] raw)
+    {
+        if(raw.Length<3||raw[0]!='('||raw[^1]!=')')return false;
+        var text=Encoding.Latin1.GetString(raw,1,raw.Length-2);
+        if(text.Any(c=>c is '\\' or '(' or ')'||c<' '||c>'~'))return false;
+        return text.StartsWith("https://",StringComparison.OrdinalIgnoreCase)||text.StartsWith("http://",StringComparison.OrdinalIgnoreCase)||text.StartsWith("mailto:",StringComparison.OrdinalIgnoreCase);
+    }
 
     public static int[] Parse(string text,int count)
     {
@@ -58,7 +67,10 @@ public static class PdfPageCopy
                 {
                     var pdf=sources[source];
                     if(pdf.TreeNodes.Contains(value.Number)){cleared++;return PdfValue.Null;}
-                    if(pdf.Resolve(value).Kind==PdfKind.Null)return PdfValue.Null;
+                    var target=pdf.Resolve(value);if(target.Kind==PdfKind.Null)return PdfValue.Null;
+                    // Aliases of page-tree nodes, structure streams (which hold other objects,
+                    // including removed ones) and streams whose data lives in another file are cleared.
+                    if(pdf.TreeValues.Contains(target)||target.IsDict&&(target.Get("Type") is {Kind:PdfKind.Name,Text:"Page" or "Pages" or "Catalog" or "ObjStm" or "XRef"}||target.Kind==PdfKind.Stream&&(target.Get("F") is not null||target.Get("FFilter") is not null||target.Get("FDecodeParms") is not null))){cleared++;return PdfValue.Null;}
                     if(!numbers.TryGetValue((source,value.Number),out int n)){n=Allocate();numbers[(source,value.Number)]=n;queue.Enqueue((source,value.Number));}
                     return PdfValue.Ref(n,0);
                 }
@@ -81,7 +93,7 @@ public static class PdfPageCopy
             if(subtype.Text=="Link")
             {
                 var action=pdf.Resolve(annot.Get("A"));
-                if(annot.Get("Dest") is not null||action.Kind!=PdfKind.Dict||action.Get("S") is not {Kind:PdfKind.Name,Text:"URI"}||pdf.Resolve(action.Get("URI")) is not {Kind:PdfKind.String} target){dropped++;return null;}
+                if(annot.Get("Dest") is not null||action.Kind!=PdfKind.Dict||action.Get("S") is not {Kind:PdfKind.Name,Text:"URI"}||pdf.Resolve(action.Get("URI")) is not {Kind:PdfKind.String} target||!WebUri(target.Raw)){dropped++;return null;}
                 uri=PdfValue.Dict(new(){("/S"u8.ToArray(),"S",PdfValue.Name("URI")),("/URI"u8.ToArray(),"URI",target)});
             }
             var entries=annot.Entries.Where(e=>!DroppedAnnotationKeys.Contains(e.Key)).Select(e=>(e.RawKey,e.Key,Copy(source,e.Value,1))).ToList();
@@ -162,12 +174,12 @@ public static class PdfPageCopy
     // The written file is read back by the same strict reader: same page count, boxes and rotation.
     private static void Verify(byte[] bytes,IReadOnlyList<PdfStructure> sources,IReadOnlyList<PdfPageChoice> order,int turn,CancellationToken token)
     {
-        PdfStructure check;try{check=PdfStructure.Read(bytes,token);}catch(UserError){throw new InvalidDataException("Written PDF did not read back.");}
-        if(check.Pages.Count!=order.Count)throw new InvalidDataException("Written PDF page count changed.");
+        PdfStructure check;try{check=PdfStructure.Read(bytes,token,new PdfBudget(),MaxOutput);}catch(UserError error) when (error.Message!=PdfStructure.Limit){throw new UserError(PdfStructure.Damaged);}
+        if(check.Pages.Count!=order.Count)throw new UserError(PdfStructure.Damaged);
         for(int i=0;i<order.Count;i++)
         {
             var source=sources[order[i].Source].Pages[order[i].Page];var page=check.Pages[i];
-            if(!page.MediaBox.SequenceEqual(source.MediaBox)||page.Rotate!=(source.Rotate+turn)%360)throw new InvalidDataException("Written PDF page geometry changed.");
+            if(!page.MediaBox.SequenceEqual(source.MediaBox)||page.Rotate!=(source.Rotate+turn)%360)throw new UserError(PdfStructure.Damaged);
         }
     }
 }

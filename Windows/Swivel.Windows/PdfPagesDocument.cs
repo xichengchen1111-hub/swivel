@@ -22,7 +22,7 @@ public sealed class PdfPagesDocument:IDisposable
     public static PdfPagesDocument Open(IReadOnlyList<string> paths,CancellationToken token)
     {
         token.ThrowIfCancellationRequested();if(paths.Count is <1 or >10)throw new UserError(PdfStructure.Limit);
-        var work=new PdfPagesDocument();long total=0;
+        var work=new PdfPagesDocument();long total=0;var budget=new PdfBudget();
         try
         {
             foreach(string path in paths)
@@ -32,7 +32,7 @@ public sealed class PdfPagesDocument:IDisposable
                 if(length>PdfStructure.MaxBytes||total>128L*1024*1024)throw new UserError(PdfStructure.Limit);
                 var bytes=new byte[length];input.Stream.Position=0;
                 for(int at=0;at<bytes.Length;){token.ThrowIfCancellationRequested();int read=input.Stream.Read(bytes,at,Math.Min(1<<20,bytes.Length-at));if(read<=0)throw new UserError(PdfStructure.Damaged);at+=read;}
-                var pdf=PdfStructure.Read(bytes,token);
+                var pdf=PdfStructure.Read(bytes,token,budget);
                 if(work.rows.Count+pdf.Pages.Count>PdfRasterPlan.MaxPages)throw new UserError(PdfStructure.Limit);
                 int source=work.sources.Count;work.sources.Add(pdf);
                 foreach(var page in pdf.Pages){work.choices.Add(new(source,page.Index));work.rows.Add(new(work.rows.Count+1,path,page.Index+1,page.Width,page.Height,page.Rotate));}

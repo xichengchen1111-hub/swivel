@@ -51,7 +51,7 @@ internal static class PdfPagesNativeChecks
             check(document.Pages.Count==2&&document.Pages[0].Width==595&&document.Pages[1].Rotate==90,"Native structure reader lists both pages with inherited size and own rotation");
             reject(()=>File.Move(path,path+" moved"),"PDF source remains pinned during selection/save");reject(()=>Directory.Move(folder,folder+" moved"),"PDF ancestor remains pinned");
             var app=Application.Current as App??new App();var dialog=new PdfPagesDialog(app,document);var children=Children(dialog).ToArray();
-            check(children.OfType<ListView>().Single().Items.Count==2&&children.OfType<TextBox>().Single().Text=="1-2"&&children.OfType<Button>().Any(b=>Equals(b.Content,app.L("Save PDF"))),"Native dialog lists pages, defaults to all and offers explicit Save");dialog.Close();
+            check(children.OfType<ListBox>().Single().Items.Count==2&&children.OfType<ListBox>().Single().Items[0] is string first&&first.Contains("595 × 842 pt")&&children.OfType<TextBox>().Single().Text=="1-2"&&children.OfType<Button>().Any(b=>Equals(b.Content,app.L("Save PDF"))),"Native dialog lists pages, defaults to all and offers explicit Save");dialog.Close();
             reject(()=>document.Plan("3"),"Out-of-range selection refused");
             int count=Directory.GetFiles(folder).Length;reject(()=>document.Save(document.Plan("1"),0,new CancellationToken(true)),"Canceled save does not publish");check(Directory.GetFiles(folder).Length==count,"Canceled save creates no file");
             output=document.Save(document.Plan("2,1,2"),90,default);

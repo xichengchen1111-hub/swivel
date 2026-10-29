@@ -15,7 +15,7 @@ internal sealed class PdfPagesDialog:Window
         Title=app.L("Select PDF Pages…");Width=820;Height=760;MinWidth=500;MinHeight=400;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var root=new DockPanel{Margin=new Thickness(20)};var footer=new StackPanel();var status=UI.Text("");footer.Children.Add(status);var buttons=new WrapPanel();footer.Children.Add(buttons);DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);var body=new StackPanel();root.Children.Add(UI.Scroll(body));Content=root;
         body.Children.Add(UI.Text(app.L(PdfPageCopy.Fidelity)));body.Children.Add(UI.Text(app.L(PdfStructure.Limit),12));body.Children.Add(UI.Text(app.L("The new PDF is saved beside the first input. Page sizes are kept; rotation is added to each page's own rotation."),12));
-        var list=new ListView{Height=200};list.View=new GridView();
+        var list=new ListBox{Height=200};
         foreach(var row in document.Pages)list.Items.Add(row.Number+" · "+AppMemory.Visible(row.Path)+" · "+app.L("Page")+" "+row.Page+" · "+row.Width.ToString("0.#",CultureInfo.InvariantCulture)+" × "+row.Height.ToString("0.#",CultureInfo.InvariantCulture)+" pt"+(row.Rotate==0?"":" · "+row.Rotate.ToString(CultureInfo.InvariantCulture)+"°"));
         VirtualizingPanel.SetIsVirtualizing(list,true);ScrollViewer.SetCanContentScroll(list,true);AutomationProperties.SetName(list,app.L("PDF Source Pages"));body.Children.Add(list);
         body.Children.Add(UI.Text(app.L(PdfPageCopy.Selection),12));

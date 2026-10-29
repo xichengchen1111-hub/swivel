@@ -15379,9 +15379,9 @@
     "不支援加密或受密碼保護的 PDF。原檔案保持不變。",
     "暗号化またはパスワード保護された PDF には対応していません。元のファイルは変更されません。"
   ],
-  "Content-preserving PDF pages are limited to 10 files, 32 MiB each and 128 MiB in total, 1,000 source pages, 1,000 selected pages, 1,000,000 cross-reference entries, 64 updates and nesting depth, and 64 MiB per decompressed object or cross-reference stream (256 MiB per file).": [
-    "保留内容的 PDF 页面处理限制为 10 个文件、每个 32 MiB、合计 128 MiB，1,000 个源页面、1,000 个选中页面，1,000,000 个交叉引用条目，64 次更新和 64 层嵌套，每个解压后的对象流或交叉引用流 64 MiB（每个文件合计 256 MiB）。",
-    "保留內容的 PDF 頁面處理限制為 10 個檔案、每個 32 MiB、合計 128 MiB，1,000 個來源頁面、1,000 個選取頁面，1,000,000 個交互參照項目，64 次更新和 64 層巢狀，每個解壓縮後的物件串流或交互參照串流 64 MiB（每個檔案合計 256 MiB）。",
-    "内容を保持する PDF ページ処理の上限は、10 ファイル、各 32 MiB・合計 128 MiB、元ページ 1,000、選択ページ 1,000、相互参照エントリ 1,000,000、更新 64 回とネスト 64 階層、展開後のオブジェクトストリームまたは相互参照ストリーム 1 つあたり 64 MiB（1 ファイル合計 256 MiB）です。"
+  "Content-preserving PDF pages are limited to 10 files, 32 MiB each and 128 MiB in total, 1,000 source pages, 1,000 selected pages, 1,000,000 cross-reference entries, 64 updates and nesting depth, 64 MiB per decompressed object or cross-reference stream (256 MiB per file) and 4,000,000 parsed values in total.": [
+    "保留内容的 PDF 页面处理限制为 10 个文件、每个 32 MiB、合计 128 MiB，1,000 个源页面、1,000 个选中页面，1,000,000 个交叉引用条目，64 次更新和 64 层嵌套，每个解压后的对象流或交叉引用流 64 MiB（每个文件合计 256 MiB），以及总计 4,000,000 个解析值。",
+    "保留內容的 PDF 頁面處理限制為 10 個檔案、每個 32 MiB、合計 128 MiB，1,000 個來源頁面、1,000 個選取頁面，1,000,000 個交互參照項目，64 次更新和 64 層巢狀，每個解壓縮後的物件串流或交互參照串流 64 MiB（每個檔案合計 256 MiB），以及總計 4,000,000 個解析值。",
+    "内容を保持する PDF ページ処理の上限は、10 ファイル、各 32 MiB・合計 128 MiB、元ページ 1,000、選択ページ 1,000、相互参照エントリ 1,000,000、更新 64 回とネスト 64 階層、展開後のオブジェクトストリームまたは相互参照ストリーム 1 つあたり 64 MiB（1 ファイル合計 256 MiB）、解析値は合計 4,000,000 個までです。"
   ]
 }

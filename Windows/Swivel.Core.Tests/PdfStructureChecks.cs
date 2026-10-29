@@ -199,6 +199,31 @@ internal static class PdfStructureChecks
             foreach(var (name,bytes) in new[]{("classic",classic),("classic-out",output),("compressed",cmp),("compressed-out",Copy(Read(cmp),new[]{1,2},270,out _)),("updated",updated),("updated-out",uo)})File.WriteAllBytes(Path.Combine(dump,name+".pdf"),bytes);
         }
 
+        // Review regressions.
+        {
+            // An indirect alias of a removed page, a reference to an object stream and an external-file stream are cleared.
+            var objs=Document();objs[5]=new(6,"<< /Type /Page /Parent 3 0 R /Contents [8 0 R] /Rotate 180 /Foo 26 0 R /Bar 30 0 R /Ext 27 0 R /AF [28 0 R] >>");
+            objs.Add(new(26,"4 0 R"));objs.Add(new(27,"<< /F (outside.bin) >>",new byte[]{1}));objs.Add(new(28,"<< /Type /Filespec /F (AttachedSecret.txt) >>"));
+            objs.Add(new(29,"<< /Type /Annot /Subtype /Link /Rect [0 0 5 5] /A << /S /URI /URI (javascript:alert\\(1\\)) >> >>"));
+            objs[4]=new(5,"<< /Type /Page /Parent 3 0 R /Contents 7 0 R /Annots [14 0 R 29 0 R] >>");
+            var packed=new HashSet<int>{10,11};var alias=Read(Compressed(objs,packed,30));
+            var ao=PdfPageCopy.Write(new[]{alias},new[]{new PdfPageChoice(0,1),new PdfPageChoice(0,0)},0,default,out var ar);var ap=Read(ao);
+            check(!Has(ao,Content3),"Alias of a removed page cleared");check(!Has(ao,Ascii("/ObjStm")),"Object-stream reference cleared");check(!Has(ao,Ascii("outside.bin")),"External-file stream cleared");check(!Has(ao,Ascii("AttachedSecret")),"Page attachments dropped");check(ap.Pages[0].Node.Get("Foo") is null&&ar.ClearedReferences>=3,"Cleared references counted (null entries read as absent)");
+            check(!Has(ao,Ascii("javascript:"))&&Has(ao,Ascii("(https://example.com/)")),"Only http, https and mailto link targets kept");
+            // Output above the 32 MiB input bound reads back with the output bound.
+            var big=new byte[20*1024*1024];new Random(7).NextBytes(big);
+            var one=Read(Classic(new List<O>{new(1,"<< /Type /Catalog /Pages 2 0 R >>"),new(2,"<< /Type /Pages /Kids [3 0 R] /MediaBox [0 0 100 100] >>"),new(3,"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>"),new(4,"<< >>",big)}));
+            var merged=PdfPageCopy.Write(new[]{one,one},new[]{new PdfPageChoice(0,0),new PdfPageChoice(1,0)},0,default);
+            check(merged.Length>PdfStructure.MaxBytes&&Count(merged,big.AsSpan(0,64).ToArray())==2,"Merged output above 32 MiB written and verified");
+            // Many keys in one dictionary parse in linear time.
+            var keys=string.Join(" ",Enumerable.Range(0,200_000).Select(i=>$"/K{i} 1"));var timer=System.Diagnostics.Stopwatch.StartNew();
+            var wide=Document();wide[9]=new(10,"<< /Font << /F1 11 0 R >> /Wide << "+keys+" >> >>");var wp=Read(Classic(wide));wp.Load(10,0);
+            check(timer.Elapsed.TotalSeconds<10,"200,000-key dictionary parsed without quadratic checks");
+            // The parsed-value budget is shared across files and refuses cleanly.
+            var budget=new PdfBudget(400);Read(classic);
+            try{PdfStructure.Read(classic,default,budget);PdfStructure.Read(classic,default,budget);var p=PdfStructure.Read(classic,default,budget);for(int n=1;n<25;n++)p.Load(n,0);check(false,"Value budget");}catch(UserError e){check(e.Message==PdfStructure.Limit,"Shared parsed-value budget refuses with the limit message");}
+        }
+
         // Selection parsing.
         check(PdfPageCopy.Parse("3-1,2,2",3).SequenceEqual(new[]{2,1,0,1,1}),"Descending range and repeats kept in order");
         check(PdfPageCopy.Parse("1-1000",1000).Length==1000,"1,000 selected pages allowed");
