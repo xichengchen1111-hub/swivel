@@ -1047,6 +1047,12 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.121 复制文件夹到…（B06 增强）
+
+批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6）。
+
+Mac 的 Copy to… 可复制文件夹；Windows 的“复制到文件夹”只接受文件。新增 `file.copyfolder`（Move Files 开关，自带两个文件夹选择器）。`FolderCopyWork.Open` 持有来源（MetadataDirectory），用 `FolderZip.Plan` 规划（同一套跳过规则与上限），`FolderCopy.CheckDestination` 拒绝目标为来源本身或其子文件夹（不区分大小写），`CheckLengths` 按“目标+名称+编号余量+最长相对路径 ≤240”预检，租用目标文件夹并要求 NTFS 与足够空间。`NativeFiles.CopyFolderTree` 仿照解压：在已持有的目标文件夹中用 CreateDirectory 独占建“名称/名称 N”，`HoldCreated`+`CheckCreatedIn` 持有并核对，子文件夹逐个独占新建（已存在即视为被干扰而停止），每个文件经 `OpenRead`（祖先租约、无链接）打开并核对长度后由既有 `CopyInto`（CopyFile2 FAIL_IF_EXISTS|COPY_SYMLINK、按创建句柄核验流）复制到其新文件夹，名称不符或未能核验即停止；已完成的副本保留。CopyFile2 开始写入时在回调中核对目标文件的真实路径就在所持有的新文件夹内，被挂载点重定向则取消（CopyFile2 删除该副本）并停止；“目标在来源内部”另按两侧文件系统报告的真实路径再比较一次（subst 盘符、8.3 短名）；上限提示用复制自己的文字；来源文件打不开时提示写明相对路径；未能核验的副本计入数量。`FolderPlanDialog` 由 ZIP 与复制共用。未提供撤销（复制文件的结果窗口撤销仍只针对单个文件复制）。
+
 ## 0.120 文件夹树压缩为 ZIP（B08 增强）
 
 批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6），0.119 已推送，CI 40818572638 通过。

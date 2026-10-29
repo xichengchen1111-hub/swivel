@@ -40,9 +40,16 @@ public sealed class FolderCopyWork : IDisposable
         FolderCopyWork? work = null;
         try
         {
-            work = new FolderCopyWork(folder, destination, root, FolderZip.Plan(root, token, folder.Length));
+            FolderZipPlan plan;
+            try { plan = FolderZip.Plan(root, token, folder.Length); }
+            catch (UserError error) when (error.Message is FolderZip.TooMany or FolderZip.TooLarge or FolderZip.TooDeep)
+            { throw new UserError(error.Message == FolderZip.TooMany ? FolderCopy.TooMany : error.Message == FolderZip.TooLarge ? FolderCopy.TooLarge : FolderCopy.TooDeep); }
+            work = new FolderCopyWork(folder, destination, root, plan);
             FolderCopy.CheckLengths(work.Plan, destination);
             work.destination = NativeFiles.DirectoryLease.Open(destination);
+            // Compared again by the paths the file system reports, so another spelling of the same
+            // place (a subst drive letter, a short 8.3 name) cannot put the copy inside the source.
+            FolderCopy.CheckDestination(NativeFiles.FinalDirectoryPath(folder), NativeFiles.FinalDirectoryPath(destination));
             NativeFiles.RequireNtfs(destination, FolderCopy.NeedsNtfs);
             if (!NativeFiles.HasFreeSpace(destination, (ulong)work.Plan.Bytes + (ulong)work.Plan.Items.Count * 4096 + 64UL * 1024 * 1024))
                 throw new UserError("There is not enough free space in the destination folder.");
@@ -58,6 +65,13 @@ public sealed class FolderCopyWork : IDisposable
 
 public static partial class NativeFiles
 {
+    internal static string FinalDirectoryPath(string directory)
+    {
+        using var handle = Open(directory, ReadAttributes, 7, 3, OpenReparse | BackupSemantics);
+        Check(handle, true);
+        return FinalPath(handle);
+    }
+
     /// Stops at the first failure or cancellation; the new folder and completed copies stay.
     internal static FolderCopyOutcome CopyFolderTree(string folder, string destination, FolderZipPlan plan, CancellationToken token, Action<int, int>? progress)
     {
@@ -106,12 +120,19 @@ public static partial class NativeFiles
                     folders[item.RelativePath] = created;
                     continue;
                 }
-                using var input = OpenRead(System.IO.Path.Combine(folder, item.RelativePath));
-                if (input.Stream.Length != item.Length) throw new UserError(FolderCopy.Changed);
-                var (copy, _, unverified) = CopyInto(input, System.IO.Path.GetDirectoryName(path)!, token);
-                if (!string.Equals(copy, path, StringComparison.OrdinalIgnoreCase)) throw new UserError(FolderCopy.Interfered);
-                if (unverified is not null) throw unverified;
-                outcome.FilesCopied = ++done;
+                Input input;
+                try { input = OpenRead(System.IO.Path.Combine(folder, item.RelativePath)); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or Win32Exception)
+                { throw new UserError(FolderCopy.Unreadable, item.RelativePath); }
+                using (input)
+                {
+                    if (input.Stream.Length != item.Length) throw new UserError(FolderCopy.Changed);
+                    var (copy, _, unverified) = CopyInto(input, System.IO.Path.GetDirectoryName(path)!, token, folders[container]);
+                    if (!string.Equals(copy, path, StringComparison.OrdinalIgnoreCase)) throw new UserError(FolderCopy.Interfered);
+                    // An unverified copy exists, so it is counted before stopping.
+                    outcome.FilesCopied = ++done;
+                    if (unverified is not null) throw unverified;
+                }
                 progress?.Invoke(done, plan.Files);
             }
         }

@@ -1327,6 +1327,14 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.121 — Copy Folder to… (B06, 2026-10-29)
+
+- Core 4,521,157 on Mac; native compiled 0 warnings/errors there. Windows CI: 40821627204 passed the first version (core 4,521,157, native 5,522); after the review fixes — result below.
+- `FolderCopyChecks` (core): a destination equal to or inside the source refused whatever the case, a sibling with the same prefix and the parent accepted; numbered folder names; the 240-character precheck at its exact boundary; catalog.
+- Native, `FolderCopyNativeChecks`: a real NTFS tree (2 MB file, empty folder, Zone.Identifier stream, system desktop.ini) copied as "相册 2024" then "相册 2024 2"; contents, empty folder, download warning stream and modified time arrive; the system file is not copied; the source is unchanged; a destination inside the source and one too long are refused; a pre-cancelled copy makes no folder.
+- Independent agent review: no P1; P2 (a new empty folder turned into a mount point after it was checked could redirect a copy outside it — now checked in CopyFile2's stream-started callback, cancelling the copy) and P3s (subst/8.3 spellings of a destination inside the source, ZIP wording for copy limits, unnamed locked files, unverified copy not counted, ZIP dialog footnote order) fixed.
+- Not tested: large trees' speed on a real PC, files locked by other apps, copying to removable NTFS drives, a real mount-point race.
+
 ## Windows0.120 — Compress Folder to ZIP (B08, 2026-10-29)
 
 - Core 4,521,118 on Mac; native compiled 0 warnings/errors there. Windows CI: 40819163755 failed (FolderZipNativeChecks: ObjectDisposedException — disposing the BufferedStream closed the staged file stream; the review's P1), 40819580185 passed every native check (5,510) after that fix but failed cleanup removing the test junction recursively; 40820226034 passed after the review fixes (core 4,521,117, native 5,510); 40820785718 passed after the recheck fix (core 4,521,118, native 5,510).

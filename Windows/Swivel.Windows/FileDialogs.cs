@@ -1,5 +1,5 @@
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
@@ -26,7 +26,7 @@ internal sealed class ArchiveDialog : Window
 /// much, the rules, and every item that will be skipped.
 internal sealed class FolderPlanDialog : Window
 {
-    public FolderPlanDialog(App app, string title, string heading, IEnumerable<string> lines, FolderZipPlan plan, string notice, string action)
+    public FolderPlanDialog(App app, string title, string heading, IEnumerable<string> lines, FolderZipPlan plan, string notice, string action, string? footnote = null)
     {
         Title = app.L(title); Width = 680; Height = 560; MinWidth = 460; MinHeight = 340; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(22) };
@@ -35,6 +35,7 @@ internal sealed class FolderPlanDialog : Window
         foreach (string line in lines) top.Children.Add(UI.Text(line));
         top.Children.Add(UI.Text(string.Format(app.L("{0} file(s) in {1} folder(s), {2} MB"), plan.Files, plan.Folders + 1, (plan.Bytes / 1048576.0).ToString("0.##", CultureInfo.CurrentCulture))));
         top.Children.Add(UI.Text(app.L(notice), 12));
+        if (footnote is not null) top.Children.Add(UI.Text(app.L(footnote), 12));
         if (plan.Skipped.Count > 0) top.Children.Add(UI.Text(string.Format(app.L("Skipped ({0}):"), plan.Skipped.Count)));
         var buttons = new WrapPanel();
         buttons.Children.Add(UI.Button(app.L(action), () => DialogResult = true));

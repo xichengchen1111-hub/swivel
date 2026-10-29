@@ -13,6 +13,10 @@ public static class FolderCopy
     public const string NeedsNtfs = "Copy Folder currently requires an NTFS destination, so every data stream and the download warning can be kept.";
     public const string Changed = "A file changed after the folder was read. Copying stopped; the copies already made were kept.";
     public const string TooLong = "Some copies would have paths longer than 240 characters. Choose a destination with a shorter path.";
+    public const string TooMany = "Copy Folder is limited to 10,000 files and folders.";
+    public const string TooLarge = "Copy Folder is limited to 2 GB of files.";
+    public const string TooDeep = "Copy Folder is limited to 32 levels of folders.";
+    public const string Unreadable = "\"{0}\" is in use by another app or could not be read. Copying stopped; the copies already made were kept.";
     public const string Interfered = "Something else changed the new folder while copying. Nothing was overwritten.";
 
     /// The destination may not be the folder itself or anywhere inside it (a copy would copy itself).

@@ -111,8 +111,12 @@ public static partial class NativeFiles
 
     /// Returns the new copy, its stamp once verified and, when it exists but could not be
     /// confirmed, a warning.
-    internal static (string Destination, DuplicateStamp? Stamp, UserError? Unverified) CopyInto(Input source, string directory, CancellationToken token)
+    /// With `folder` (a held folder this app created), the copy must be created in that very
+    /// folder: if the path was redirected (an empty folder turned into a mount point), CopyFile2 is
+    /// cancelled, which removes the copy, and the copy is refused.
+    internal static (string Destination, DuplicateStamp? Stamp, UserError? Unverified) CopyInto(Input source, string directory, CancellationToken token, SafeFileHandle? folder = null)
     {
+        string? inside = folder is null ? null : FinalPath(folder);
         string leaf = System.IO.Path.GetFileName(source.Path);
         var expected = Streams(source.Stream.SafeFileHandle);
         IntPtr cancel = Marshal.AllocHGlobal(4);
@@ -127,7 +131,7 @@ public static partial class NativeFiles
                 WindowsPathPolicy.Validate(destination);
                 // CopyFile2 hands us the destination it created: its identity is recorded from that
                 // handle, so verification never trusts whatever happens to be at the path later.
-                string? created = null; bool callbackFailed = false;
+                string? created = null; bool callbackFailed = false, redirected = false;
                 CopyProgress progress = (message, _) =>
                 {
                     try
@@ -135,6 +139,8 @@ public static partial class NativeFiles
                         if (Marshal.ReadInt32(message, 0) == 3 && Marshal.ReadInt32(message, 8) == 1)
                         {
                             using var handle = new SafeFileHandle(Marshal.ReadIntPtr(message, 16 + IntPtr.Size), false);
+                            if (inside is not null && !string.Equals(FinalPath(handle), System.IO.Path.Combine(inside, System.IO.Path.GetFileName(destination)), StringComparison.Ordinal))
+                            { redirected = true; return 1; }
                             created = Identity(handle);
                         }
                         return 0;
@@ -151,6 +157,7 @@ public static partial class NativeFiles
                 };
                 int result = CopyFile2(source.Path, destination, ref parameters);
                 GC.KeepAlive(progress);
+                if (redirected) throw new UserError(FolderCopy.Interfered);
                 if (result == 0) { var (unverified, stamp) = Verify(destination, expected, created); return (destination, stamp, unverified); }
                 if (callbackFailed && !token.IsCancellationRequested) throw new UserError("The copy could not be verified.");
                 if (unchecked((uint)result & 0xFFFF0000) != 0x80070000) throw Marshal.GetExceptionForHR(result)!;

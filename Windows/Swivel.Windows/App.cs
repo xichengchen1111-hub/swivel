@@ -736,7 +736,7 @@ public sealed partial class App : Application
                 report(L("Reading folder…"));
                 using var work = await Task.Run(() => FolderZipWork.Open(folder, token), token);
                 token.ThrowIfCancellationRequested();
-                if (!ShowOperationDialog(new FolderPlanDialog(this, "Compress Folder to ZIP…", work.Plan.Name + ".zip", new[] { work.Folder, L("The ZIP is saved beside the folder under the folder's name, or the next free numbered name. The folder stays unchanged.") }, work.Plan, FolderZip.Notice, "Create ZIP"), owner, token)) return;
+                if (!ShowOperationDialog(new FolderPlanDialog(this, "Compress Folder to ZIP…", work.Plan.Name + ".zip", new[] { work.Folder }, work.Plan, FolderZip.Notice, "Create ZIP", "The ZIP is saved beside the folder under the folder's name, or the next free numbered name. The folder stays unchanged."), owner, token)) return;
                 report(L("Processing…"));
                 string zip = await Task.Run(() => work.Save(token, (done, total) =>
                     Dispatcher.InvokeAsync(() => report(string.Format(L("Compressing file {0} of {1}…"), done, total)))), token);
