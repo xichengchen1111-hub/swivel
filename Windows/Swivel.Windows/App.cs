@@ -606,8 +606,10 @@ public sealed partial class App : Application
                 report(L("Reading process memory metadata…"));
                 var snapshot = await AwaitDoctorReadAsync(Task.Run(() => AppMemoryReader.Read(token),token),token);
                 token.ThrowIfCancellationRequested();
-                await ShowDoctorOperationAsync(new AppMemoryDialog(this,snapshot),DoctorAssistantSummary.Memory(snapshot),owner,token,DoctorLabels.Memory(snapshot));
-                report(token.IsCancellationRequested ? L("Cancelled.") : L("Read-only app memory inspection finished. No processes were changed.")); return;
+                var memoryDialog = new AppMemoryDialog(this,snapshot,token);
+                try { await ShowDoctorOperationAsync(memoryDialog,DoctorAssistantSummary.Memory(snapshot),owner,token,DoctorLabels.Memory(snapshot)); }
+                finally { await memoryDialog.FinishAsync(); }
+                report(token.IsCancellationRequested ? L("Cancelled.") : memoryDialog.Asked ? L("App memory closed. Any close request already sent may still be handled by its app.") : L("Read-only app memory inspection finished. No processes were changed.")); return;
             }
             if (action.Id == "doctor.monitor")
             {

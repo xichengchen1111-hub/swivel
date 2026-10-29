@@ -21,9 +21,11 @@ internal static class Program
     private static void Group(string name, Action run) { Console.WriteLine("RUN: " + name); try { run(); } catch (Exception error) { failures.Add(name + " threw " + error.GetType().Name + ": " + error.Message); Console.Error.WriteLine(name + " threw: " + error); } }
     private static void Reject(Action action, string name) { bool failed = false; try { action(); } catch { failed = true; } Check(failed, name); }
     [STAThread]
-    public static int Main()
+    public static int Main(string[] args)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Run these tests on Windows.");
+        // Child processes started by AppQuitNativeChecks run only their small window fixture.
+        if (AppQuitNativeChecks.Fixture(args) is int fixture) return fixture;
         string directory = Path.Combine(Path.GetTempPath(), "swivel-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var validationApp=new App(validationHost:true);
@@ -179,6 +181,7 @@ internal static class Program
             Group("UsageNativeChecks", () => UsageNativeChecks.Run(Check,Reject));
             Group("AppMemoryNativeChecks", () => AppMemoryNativeChecks.Run(Check,Reject));
             Group("AppMemoryHelperNativeChecks", () => AppMemoryHelperNativeChecks.Run(Check,Reject));
+            Group("AppQuitNativeChecks", () => AppQuitNativeChecks.Run(Check,Reject));
             Group("InstalledAppsNativeChecks", () => InstalledAppsNativeChecks.Run(Check,Reject));
             Group("StorePackagesNativeChecks", () => StorePackagesNativeChecks.Run(Check,Reject));
             Group("StartupNativeChecks", () => StartupNativeChecks.Run(Check,Reject));

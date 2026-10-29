@@ -21,7 +21,9 @@ internal static class CloseWindowsReader
         "lsass.exe", "smss.exe", "fontdrvhost.exe", "sihost.exe", "ShellExperienceHost.exe", "StartMenuExperienceHost.exe",
         "SearchHost.exe", "SearchApp.exe", "RuntimeBroker.exe", "ApplicationFrameHost.exe", "conhost.exe", "OpenConsole.exe"
     };
-    internal static CloseWindowsSession Read(CancellationToken token)
+    /// With `quit`, a window of an elevated process is still left out unless Swivel itself is
+    /// elevated (the App Memory quit flow); every other rule is the same.
+    internal static CloseWindowsSession Read(CancellationToken token, bool quit = false)
     {
         token.ThrowIfCancellationRequested();
         uint self = (uint)Environment.ProcessId;
@@ -31,7 +33,7 @@ internal static class CloseWindowsReader
         string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows).TrimEnd('\\');
         try { WindowsPathPolicy.Validate(windows + "\\placeholder"); }
         catch (UserError) { throw new UserError("The Windows system folder could not be checked. No window requests are available."); }
-        return CloseWindows.Scan(new Source(self, scope, windows), token);
+        return CloseWindows.Scan(new Source(self, scope, windows, quit), token);
     }
     // A dedicated MTA thread has no application windows or message loop. Never
     // attach input queues. No Task.WaitAsync: cancellation must join this native
@@ -59,7 +61,7 @@ internal static class CloseWindowsReader
         thread.SetApartmentState(ApartmentState.MTA); thread.Start(); return completion.Task;
     }
     private sealed record Scope(byte[] Sid, uint Session, bool Elevated);
-    private sealed class Source(uint self, Scope scope, string windows) : ICloseWindowsSource
+    private sealed class Source(uint self, Scope scope, string windows, bool quit) : ICloseWindowsSource
     {
         public CloseWindowsEnumeration Enumerate(CancellationToken token)
         {
@@ -85,17 +87,17 @@ internal static class CloseWindowsReader
             if (handle.IsInvalid) { handle.Dispose(); return null; }
             try
             {
-                var info = Inspect(handle, window, self, scope, windows, token);
+                var info = Inspect(handle, window, self, scope, windows, quit, token);
                 if (info is null) return null;
-                var lease = new Lease(handle, info, self, scope, windows); handle = null!; return lease;
+                var lease = new Lease(handle, info, self, scope, windows, quit); handle = null!; return lease;
             }
             finally { handle?.Dispose(); }
         }
     }
-    private sealed class Lease(SafeProcessHandle handle, CloseWindowInfo info, uint self, Scope scope, string windows) : ICloseWindowLease
+    private sealed class Lease(SafeProcessHandle handle, CloseWindowInfo info, uint self, Scope scope, string windows, bool quit) : ICloseWindowLease
     {
         public CloseWindowInfo Info => info;
-        public CloseWindowInfo? Inspect(CancellationToken token) => CloseWindowsReader.Inspect(handle, info.Handle, self, scope, windows, token);
+        public CloseWindowInfo? Inspect(CancellationToken token) => CloseWindowsReader.Inspect(handle, info.Handle, self, scope, windows, quit, token);
         public CloseWindowsResult Send(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -111,7 +113,7 @@ internal static class CloseWindowsReader
         }
         public void Dispose() => handle.Dispose();
     }
-    private static CloseWindowInfo? Inspect(SafeProcessHandle handle, nint window, uint self, Scope scope, string windows, CancellationToken token)
+    private static CloseWindowInfo? Inspect(SafeProcessHandle handle, nint window, uint self, Scope scope, string windows, bool quit, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (WaitForSingleObject(handle, 0) != 0x102) return null;
@@ -119,7 +121,7 @@ internal static class CloseWindowsReader
         if (thread == 0 || pid is 0 or 4 || pid == self || GetProcessId(handle) != pid || !OrdinaryWindow(window)) return null;
         if (!IsProcessCritical(handle, out bool critical) || critical) return null;
         var current = ScopeOf(handle);
-        if (current is null || current.Elevated || current.Session != scope.Session || !current.Sid.SequenceEqual(scope.Sid)) return null;
+        if (current is null || current.Elevated && !(quit && scope.Elevated) || current.Session != scope.Session || !current.Sid.SequenceEqual(scope.Sid)) return null;
         token.ThrowIfCancellationRequested();
         if (!GetProcessTimes(handle, out var created, out _, out _, out _) || created.Value == 0) return null;
         var path = new StringBuilder(CloseWindows.MaxPath + 1); uint length = (uint)path.Capacity;
