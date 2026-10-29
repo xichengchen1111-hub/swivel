@@ -19,7 +19,10 @@ internal static class StartupAppsNativeChecks
         string name="SwivelStartupAppsCheck-"+Guid.NewGuid().ToString("N");
         const string runKey=@"Software\Microsoft\Windows\CurrentVersion\Run";string approvedKey=StartupApprovalReader.Key(StartupApprovalArea.Run);
         var when=new DateTime(2026,10,1,12,0,0,DateTimeKind.Utc);var data=new byte[12];data[0]=3;BitConverter.GetBytes(when.ToFileTimeUtc()).CopyTo(data,4);
-        bool created=false;
+        bool created=false,approvedExisted;
+        // Remove values an interrupted earlier run may have left behind; only this check's own prefix is touched.
+        foreach(string path in new[]{runKey,approvedKey})using(var key=Registry.CurrentUser.OpenSubKey(path,true))foreach(string old in key?.GetValueNames().Where(v=>v.StartsWith("SwivelStartupAppsCheck-",StringComparison.Ordinal)).ToArray()??Array.Empty<string>())key!.DeleteValue(old,false);
+        using(var existing=Registry.CurrentUser.OpenSubKey(approvedKey))approvedExisted=existing is not null;
         try
         {
             using(var run=Registry.CurrentUser.CreateSubKey(runKey))run.SetValue(name,@"C:\SwivelNoSuchFolder\does-not-exist.exe",RegistryValueKind.String);
@@ -35,12 +38,14 @@ internal static class StartupAppsNativeChecks
             check(enabled.Length==1&&enabled[0].Meaning.State==StartupAppState.Enabled,"Native StartupApproved 02 form decodes as enabled");
             using(var approved=Registry.CurrentUser.OpenSubKey(approvedKey,true)!)approved.DeleteValue(name,false);
             var none=StartupApps.Combine(StartupReader.Read(default),StartupApprovalReader.Read(default),null,app.L,default).Rows.Where(r=>r.Name==name).ToArray();
-            check(none.Length==1&&none[0].Meaning.State is StartupAppState.NoEntry or StartupAppState.Unknown,"Native Run value without StartupApproved is not reported as enabled or disabled");
+            check(none.Length==1&&none[0].Meaning.State==StartupAppState.NoEntry,"Native Run value without StartupApproved reports no entry, not enabled or disabled");
         }
         finally
         {
             using(var run=Registry.CurrentUser.OpenSubKey(runKey,true))run?.DeleteValue(name,false);
             using(var approved=Registry.CurrentUser.OpenSubKey(approvedKey,true))approved?.DeleteValue(name,false);
+            if(!approvedExisted)using(var parent=Registry.CurrentUser.OpenSubKey(StartupApprovalReader.BaseKey,true))
+            {bool empty;using(var child=parent?.OpenSubKey("Run"))empty=child is {ValueCount:0,SubKeyCount:0};if(empty)parent!.DeleteSubKey("Run",false);}
         }
         using(var run=Registry.CurrentUser.OpenSubKey(runKey))using(var approved=Registry.CurrentUser.OpenSubKey(approvedKey))
             check(created&&run?.GetValue(name) is null&&approved?.GetValue(name) is null,"Native test values are removed after the check");

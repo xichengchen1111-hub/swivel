@@ -22,8 +22,8 @@ public sealed record StartupAppsResult(DateTimeOffset RecordedUtc,IReadOnlyList<
 public static class StartupApps
 {
     public const int MaxReportBytes=4*1024*1024;
-    public const string Scope="Read-only combination of the existing Run/RunOnce records, StartupApproved values and, if you choose, Startup-folder entry names. Each Run value and Startup-folder item is matched to the StartupApproved value with the same name, ignoring letter case like the registry, in the corresponding key: current-user Run, machine Run, machine Run32 for the 32-bit machine view, and the current-user or machine StartupFolder key. Both registry views of StartupApproved are consulted.";
-    public const string Meaning="Microsoft does not document StartupApproved. Values are interpreted only in the publicly observed Task Manager form: 12 bytes of REG_BINARY whose first four bytes are 02, 06 (enabled) or 03, 07 (disabled) and whose last eight bytes are a FILETIME, usually the time it was disabled. Any other form, conflicting values, malformed or incomplete data are shown as unknown. An item without a StartupApproved value is usually shown as enabled by Task Manager, but that is not verified here. RunOnce is not covered by StartupApproved. The result does not prove that an item runs, exists, is trusted or slows startup.";
+    public const string Scope="Read-only combination of the existing Run/RunOnce records, StartupApproved values and, if you choose, Startup-folder entry names. Each Run value and Startup-folder item is matched to the StartupApproved value with the same name, ignoring letter case like the registry, in the corresponding key: current-user Run, machine Run, machine Run32 for the 32-bit machine view, and the current-user or machine StartupFolder key. Both registry views of StartupApproved are read; for the machine key, a value seen only through the 32-bit view, a conflict between views or incomplete data is shown as unknown.";
+    public const string Meaning="Microsoft does not document StartupApproved. Values are interpreted only in the publicly observed Task Manager form: 12 bytes of REG_BINARY whose first four bytes are 02 00 00 00 or 06 00 00 00 (enabled), or 03 00 00 00 or 07 00 00 00 (disabled), and whose last eight bytes are a FILETIME, usually the time it was disabled. Any other form, conflicting values, malformed or incomplete data are shown as unknown. An item without a StartupApproved value is usually shown as enabled by Task Manager, but that is not verified here. RunOnce is not covered by StartupApproved. The result does not prove that an item runs, exists, is trusted or slows startup.";
     public const string Privacy="Names are visible and can contain private app names or paths. Commands and file contents are not shown or read; use Logon Startup Records for commands. Nothing is enabled, disabled, deleted, saved automatically or sent over the network. Copy Report and Copy Selected Row are explicit and limited to 4 MiB of UTF-8 text; oversized copies are refused whole.";
     public const string ReportLimit="The Startup Apps report exceeds 4 MiB of UTF-8 text. Copy one selected row instead.";
     public const string OrphanNote="No matching startup item was recorded; the item may be missing, in an uninspected location or beyond a limit.";
@@ -66,10 +66,16 @@ public static class StartupApps
             if(name is null)return(Unknown("The startup name is unavailable, so it cannot be matched."),0);
             var found=byKey.TryGetValue((key.Source,key.Area),out var all)?all.Where(r=>r.Name is not null&&string.Equals(r.Name,name,StringComparison.OrdinalIgnoreCase)).ToArray():Array.Empty<StartupApprovalRecord>();
             foreach(var f in found)used.Add(f);
+            // Count each distinct value once: both current-user views return the same key.
+            int distinct=found.Select(r=>(r.HexData,r.Type,r.Issues)).Distinct().Count();
             if(found.Length==0)return Incomplete(key)?(Unknown("No matching StartupApproved value was recorded, but that StartupApproved data is incomplete."),0):(new(StartupAppState.NoEntry,null,null,"No StartupApproved value with this name. Task Manager usually shows such items as enabled; this is not verified."),0);
+            if(found.Any(r=>r.Issues!=StartupApprovalIssue.None||r.HexData is null))return(Unknown("StartupApproved value is malformed, repeated, oversized or unavailable."),distinct);
+            if(Incomplete(key))return(Unknown("A matching StartupApproved value was recorded, but that StartupApproved data is incomplete."),distinct);
+            // The 64-bit Task Manager reads the machine key through the 64-bit view; a value seen only through the 32-bit view is not decisive.
+            if(key.Source==RegistrationSource.Machine64&&found.All(r=>r.Location.Source==RegistrationSource.Machine32))return(Unknown("This StartupApproved value was recorded only through the 32-bit machine view."),distinct);
             var meanings=found.Select(Decode).Distinct().ToArray();
-            if(meanings.Length>1)return(Unknown("Different StartupApproved values with this name were recorded in the registry views."),found.Length);
-            return(meanings[0],found.Length);
+            if(meanings.Length>1)return(Unknown("Different StartupApproved values with this name were recorded in the registry views."),distinct);
+            return(meanings[0],distinct);
         }
         // Current-user Run is shared by both registry views, so identical rows are listed once.
         var seenUser=new HashSet<(string,bool,string)>();
@@ -86,7 +92,8 @@ public static class StartupApps
             token.ThrowIfCancellationRequested();if(result.Scan is null)continue;var wanted=ApprovalFor(result.Choice.Kind);
             foreach(var node in result.Scan.Root.Children)
             {
-                var (meaning,matches)=node.Directory?(new StartupApprovalMeaning(StartupAppState.NotCovered,null,null,"Folders inside a Startup folder are not matched."),0):Match(node.Name,wanted);
+                var (meaning,matches)=node.Directory?(new StartupApprovalMeaning(StartupAppState.NotCovered,null,null,"Folders inside a Startup folder are not matched."),0)
+                    :node.Issue is not null?(new StartupApprovalMeaning(StartupAppState.NotCovered,null,null,"Skipped by the folder reader (system, link, cloud or unreadable item); not matched."),0):Match(node.Name,wanted);
                 rows.Add(new(StartupAppKind.Folder,node.Name,l(StartupFolders.Name(result.Choice.Kind)),wanted,meaning,matches));
             }
         }
@@ -105,7 +112,7 @@ public static class StartupApps
         foreach(var kind in Enum.GetValues<StartupFolderKind>())
         {
             var result=folders?.FirstOrDefault(r=>r.Choice.Kind==kind);
-            sources.Add(new(l(StartupFolders.Name(kind)),result is null?l("Not inspected; its items and matching StartupApproved values are not listed as items."):result.Scan is null?l(result.Issue??StartupFolders.Unavailable):l(result.Scan.Root.Incomplete||result.Scan.EntryLimit||result.Scan.TimeLimit?"Partial":"Counted")));
+            sources.Add(new(l(StartupFolders.Name(kind)),result is null?l("Not inspected; its items are not listed, and its StartupApproved values appear only as approval-only rows."):result.Scan is null?l(result.Issue??StartupFolders.Unavailable):l(result.Scan.Root.Incomplete||result.Scan.EntryLimit||result.Scan.TimeLimit?"Partial":"Counted")));
         }
         token.ThrowIfCancellationRequested();return new(DateTimeOffset.UtcNow,rows.AsReadOnly(),sources.AsReadOnly(),inspected);
     }

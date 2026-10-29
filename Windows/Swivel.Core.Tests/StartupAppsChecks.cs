@@ -44,13 +44,14 @@ internal static class StartupAppsChecks
             Approval(RegistrationSource.User64,StartupApprovalArea.Run,"Orphan","070000000000000000000000"),Approval(RegistrationSource.User32,StartupApprovalArea.Run,"Orphan","070000000000000000000000"),
             Approval(RegistrationSource.User64,StartupApprovalArea.StartupFolder,"Tool.lnk","030000000000000000000000"),
             Approval(RegistrationSource.User64,StartupApprovalArea.Run32,"Alpha","020000000000000000000000"));
-        var folder=new FolderSizeNode("Startup",true);var entries=new[]{new FolderSizeNode("tool.LNK",false),new FolderSizeNode("Other.lnk",false),new FolderSizeNode("Sub",true)};
+        var folder=new FolderSizeNode("Startup",true);var entries=new[]{new FolderSizeNode("tool.LNK",false),new FolderSizeNode("Other.lnk",false),new FolderSizeNode("Sub",true),new FolderSizeNode("desktop.ini",false)};
+        typeof(FolderSizeNode).GetProperty("Issue")!.SetValue(entries[3],"System or device item");
         typeof(FolderSizeNode).GetProperty("Children")!.SetValue(folder,entries);
         var folders=new[]{new StartupFolderResult(StartupFolderChoice.FromReported(StartupFolderKind.CurrentUser,"C:\\Startup"),new FolderScanResult(folder,3,false,false),null,null,512,10,DateTimeOffset.Now)};
         var result=StartupApps.Combine(run,approval,folders,l,default);
         StartupAppRow One(StartupAppKind kind,string? name)=>result.Rows.Single(r=>r.Kind==kind&&r.Name==name);
         check(result.Rows.Count(r=>r.Kind==StartupAppKind.Registry&&r.Name=="Alpha")==1,"Identical current-user Run rows from both views are listed once");
-        check(One(StartupAppKind.Registry,"Alpha") is {Meaning.State:StartupAppState.Disabled,Matches:2} a&&a.Meaning.DisabledUtc is not null,"Case-insensitive match across both views of the same value decodes once");
+        check(One(StartupAppKind.Registry,"Alpha") is {Meaning.State:StartupAppState.Disabled,Matches:1} a&&a.Meaning.DisabledUtc is not null,"Case-insensitive match across both views of the same value decodes and counts once");
         check(One(StartupAppKind.Registry,"Beta").Meaning.State==StartupAppState.Enabled,"Exact name match in HKCU Run decodes enabled");
         var gammas=result.Rows.Where(r=>r.Kind==StartupAppKind.Registry&&r.Name=="Gamma").ToArray();
         check(gammas.Length==2&&gammas.Count(g=>g.Meaning.State==StartupAppState.Disabled&&g.Approval!.Value.Area==StartupApprovalArea.Run32)==1&&gammas.Count(g=>g.Meaning.State==StartupAppState.NoEntry)==1,"Machine 32-bit Run matches only Run32; the 64-bit value is not borrowed");
@@ -58,6 +59,7 @@ internal static class StartupAppsChecks
         check(One(StartupAppKind.Registry,"Once").Meaning.State==StartupAppState.NotCovered,"RunOnce is reported as not covered");
         check(One(StartupAppKind.Registry,null).Meaning.State==StartupAppState.Unknown,"Unavailable startup names stay visible as unknown");
         check(One(StartupAppKind.Folder,"tool.LNK").Meaning.State==StartupAppState.Disabled&&One(StartupAppKind.Folder,"Other.lnk").Meaning.State==StartupAppState.NoEntry&&One(StartupAppKind.Folder,"Sub").Meaning.State==StartupAppState.NotCovered,"Startup-folder files match the StartupFolder key by file name; folders are not matched");
+        check(One(StartupAppKind.Folder,"desktop.ini").Meaning is {State:StartupAppState.NotCovered} ini&&ini.Reason.StartsWith("Skipped"),"Entries the folder reader skipped (desktop.ini, links, cloud) are not matched or shown as apps");
         check(result.Rows.Count(r=>r.Kind==StartupAppKind.ApprovalOnly&&r.Name=="Orphan")==1&&One(StartupAppKind.ApprovalOnly,"Orphan").Meaning.State==StartupAppState.Disabled,"Unmatched approval values stay visible once with their decoded state");
         check(One(StartupAppKind.ApprovalOnly,"Alpha").Approval!.Value.Area==StartupApprovalArea.Run32,"A current-user Run32 value is not used for current-user Run and stays visible");
         check(result.FoldersInspected&&result.Sources.Count==run.Roots.Count+approval.Roots.Count+2,"Every source root and both startup folders have a status row");
@@ -68,6 +70,15 @@ internal static class StartupAppsChecks
         var partialRoots=StartupApprovalSnapshotReader.Locations().Select(x=>new StartupApprovalRootResult(x,0,x==new StartupApprovalLocation(RegistrationSource.User32,StartupApprovalArea.Run)?StartupApprovalRootIssue.TimeLimit:StartupApprovalRootIssue.Missing)).ToArray();
         var partial=StartupApps.Combine(Runs(Run(RegistrationSource.User64,"Beta"),Run(RegistrationSource.Machine64,"Beta")),new(DateTimeOffset.UtcNow,Array.Empty<StartupApprovalRecord>(),partialRoots),null,l,default);
         check(partial.Rows.Single(r=>r.Where.Contains("Current-user")).Meaning.State==StartupAppState.Unknown&&partial.Rows.Single(r=>r.Where.Contains("Machine")).Meaning.State==StartupAppState.NoEntry,"Missing match in an incomplete approval key is unknown; a complete missing key is no entry");
+        var only32=StartupApps.Combine(Runs(Run(RegistrationSource.Machine64,"Eps")),Approvals(Approval(RegistrationSource.Machine32,StartupApprovalArea.Run,"Eps","030000000000000000000000")),null,l,default);
+        check(only32.Rows.Single(r=>r.Kind==StartupAppKind.Registry).Meaning is {State:StartupAppState.Unknown} o32&&o32.Reason.Contains("32-bit"),"A machine value seen only through the 32-bit view is not decisive");
+        var both=StartupApps.Combine(Runs(Run(RegistrationSource.Machine64,"Eps")),Approvals(Approval(RegistrationSource.Machine64,StartupApprovalArea.Run,"Eps","030000000000000000000000"),Approval(RegistrationSource.Machine32,StartupApprovalArea.Run,"Eps","030000000000000000000000")),null,l,default);
+        check(both.Rows.Single().Meaning.State==StartupAppState.Disabled,"Identical machine values in both views decode");
+        var incompleteRoots=StartupApprovalSnapshotReader.Locations().Select(x=>new StartupApprovalRootResult(x,0,x==new StartupApprovalLocation(RegistrationSource.Machine32,StartupApprovalArea.Run)?StartupApprovalRootIssue.Limit:StartupApprovalRootIssue.None)).ToArray();
+        var matchedPartial=StartupApps.Combine(Runs(Run(RegistrationSource.Machine64,"Eps")),new(DateTimeOffset.UtcNow,new[]{Approval(RegistrationSource.Machine64,StartupApprovalArea.Run,"Eps","030000000000000000000000")},incompleteRoots),null,l,default);
+        check(matchedPartial.Rows.Single().Meaning.State==StartupAppState.Unknown,"A match is not decisive while the other view of that key is incomplete");
+        var dup=StartupApps.Combine(Runs(Run(RegistrationSource.User64,"Dup")),Approvals(Approval(RegistrationSource.User64,StartupApprovalArea.Run,"Dup","030000000000000000000000"),Approval(RegistrationSource.User64,StartupApprovalArea.Run,"dup","020000000000000000000000",3,StartupApprovalIssue.Duplicate,1)),null,l,default);
+        check(dup.Rows.Single().Meaning is {State:StartupAppState.Unknown} dr&&dr.Reason.Contains("malformed, repeated"),"A repeated value is reported as such, not as a view conflict");
         var badName=StartupApps.Combine(Runs(Run(RegistrationSource.User64,"Beta")),Approvals(Approval(RegistrationSource.User64,StartupApprovalArea.Run,null,null,3,StartupApprovalIssue.InvalidName)),null,l,default);
         check(badName.Rows.Single(r=>r.Kind==StartupAppKind.Registry).Meaning.State==StartupAppState.Unknown&&badName.Rows.Single(r=>r.Kind==StartupAppKind.ApprovalOnly).Meaning.State==StartupAppState.Unknown,"An unreadable approval name makes no-match unknown and stays visible itself");
 

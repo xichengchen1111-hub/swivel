@@ -14859,16 +14859,6 @@
     "檢視 Run/RunOnce 記錄、StartupApproved 原始值、依工作管理員已觀察到的格式解讀啟用狀態的啟動應用程式、本機服務狀態、所選啟動資料夾項目或有界本機排程工作資訊。這些資訊無法證明實際啟用狀態、可信度、工作歸屬或殘留歸屬。停用及移除仍待實作。",
     "Run/RunOnce の記録、StartupApproved の生の値、タスク マネージャーで観察されている形式から有効状態を解釈したスタートアップ アプリ、ローカルサービスの状態、選択したスタートアップフォルダーの項目、または範囲を制限したローカルタスク情報を確認します。実際の有効状態、信頼性、タスクや残存物の帰属は証明できません。無効化と削除は未実装です。"
   ],
-  "Read-only combination of the existing Run/RunOnce records, StartupApproved values and, if you choose, Startup-folder entry names. Each Run value and Startup-folder item is matched to the StartupApproved value with the same name, ignoring letter case like the registry, in the corresponding key: current-user Run, machine Run, machine Run32 for the 32-bit machine view, and the current-user or machine StartupFolder key. Both registry views of StartupApproved are consulted.": [
-    "只读地合并现有的 Run/RunOnce 记录、StartupApproved 值，以及（如你选择）启动文件夹条目名称。每个 Run 值和启动文件夹项目都会与对应键中同名的 StartupApproved 值匹配（与注册表一样不区分大小写）：当前用户 Run、计算机 Run、32 位计算机视图对应计算机 Run32，以及当前用户或计算机的 StartupFolder 键。会同时查看 StartupApproved 的两种注册表视图。",
-    "唯讀地合併現有的 Run/RunOnce 記錄、StartupApproved 值，以及（如你選擇）啟動資料夾項目名稱。每個 Run 值和啟動資料夾項目都會與對應機碼中同名的 StartupApproved 值比對（與登錄一樣不區分大小寫）：目前使用者 Run、電腦 Run、32 位元電腦檢視對應電腦 Run32，以及目前使用者或電腦的 StartupFolder 機碼。會同時檢視 StartupApproved 的兩種登錄檢視。",
-    "既存の Run/RunOnce の記録、StartupApproved の値、および選択した場合はスタートアップフォルダーの項目名を、読み取り専用で組み合わせます。各 Run 値とスタートアップフォルダー項目は、対応するキー内の同じ名前の StartupApproved 値と照合されます（レジストリと同様に大文字小文字は区別しません）：現在のユーザーの Run、コンピューターの Run、32 ビットのコンピュータービューにはコンピューターの Run32、現在のユーザーまたはコンピューターの StartupFolder キー。StartupApproved の両方のレジストリビューを参照します。"
-  ],
-  "Microsoft does not document StartupApproved. Values are interpreted only in the publicly observed Task Manager form: 12 bytes of REG_BINARY whose first four bytes are 02, 06 (enabled) or 03, 07 (disabled) and whose last eight bytes are a FILETIME, usually the time it was disabled. Any other form, conflicting values, malformed or incomplete data are shown as unknown. An item without a StartupApproved value is usually shown as enabled by Task Manager, but that is not verified here. RunOnce is not covered by StartupApproved. The result does not prove that an item runs, exists, is trusted or slows startup.": [
-    "Microsoft 未公开说明 StartupApproved。只按公开观察到的任务管理器格式解读：12 字节 REG_BINARY，前四个字节为 02、06（已启用）或 03、07（已禁用），后八个字节为 FILETIME，通常是禁用时间。其他格式、相互矛盾的值、格式错误或不完整的数据均显示为未知。没有 StartupApproved 值的项目通常被任务管理器显示为已启用，但这里未加验证。RunOnce 不受 StartupApproved 约束。结果不能证明项目会运行、存在、可信或拖慢启动。",
-    "Microsoft 未公開說明 StartupApproved。只依公開觀察到的工作管理員格式解讀：12 位元組 REG_BINARY，前四個位元組為 02、06（已啟用）或 03、07（已停用），後八個位元組為 FILETIME，通常是停用時間。其他格式、互相矛盾的值、格式錯誤或不完整的資料均顯示為未知。沒有 StartupApproved 值的項目通常被工作管理員顯示為已啟用，但這裡未加驗證。RunOnce 不受 StartupApproved 約束。結果無法證明項目會執行、存在、可信或拖慢啟動。",
-    "Microsoft は StartupApproved を公開文書化していません。公開されている観察に基づくタスク マネージャーの形式のみを解釈します：12 バイトの REG_BINARY で、先頭 4 バイトが 02、06（有効）または 03、07（無効）、末尾 8 バイトが FILETIME（通常は無効にした日時）です。その他の形式、矛盾する値、不正または不完全なデータは不明と表示します。StartupApproved 値のない項目は通常タスク マネージャーで有効と表示されますが、ここでは検証していません。RunOnce は StartupApproved の対象外です。結果は、項目が実行される、存在する、信頼できる、または起動を遅くすることを証明しません。"
-  ],
   "Names are visible and can contain private app names or paths. Commands and file contents are not shown or read; use Logon Startup Records for commands. Nothing is enabled, disabled, deleted, saved automatically or sent over the network. Copy Report and Copy Selected Row are explicit and limited to 4 MiB of UTF-8 text; oversized copies are refused whole.": [
     "名称会显示，可能包含私人应用名称或路径。不显示也不读取命令和文件内容；如需命令请使用“登录启动记录”。不会启用、禁用、删除、自动保存或通过网络发送任何内容。“复制报告”和“复制所选行”需明确操作，限 4 MiB UTF-8 文本；超出时整体拒绝复制。",
     "名稱會顯示，可能包含私人應用程式名稱或路徑。不顯示也不讀取命令和檔案內容；如需命令請使用「登入啟動記錄」。不會啟用、停用、刪除、自動儲存或透過網路傳送任何內容。「複製報告」和「複製所選列」需明確操作，限 4 MiB UTF-8 文字；超出時整體拒絕複製。",
@@ -14958,11 +14948,6 @@
     "启动文件夹内的子文件夹不参与匹配。",
     "啟動資料夾內的子資料夾不參與比對。",
     "スタートアップフォルダー内のフォルダーは照合しません。"
-  ],
-  "Not inspected; its items and matching StartupApproved values are not listed as items.": [
-    "未检查；其中的项目及对应的 StartupApproved 值不会作为项目列出。",
-    "未檢查；其中的項目及對應的 StartupApproved 值不會作為項目列出。",
-    "未確認です。その項目と対応する StartupApproved 値は項目として一覧に表示されません。"
   ],
   "Enabled (observed form)": [
     "已启用（已观察格式）",
@@ -15088,5 +15073,35 @@
     "启动应用已关闭。未更改任何启动设置。",
     "啟動應用程式已關閉。未變更任何啟動設定。",
     "スタートアップ アプリを閉じました。スタートアップ設定は変更されていません。"
+  ],
+  "Read-only combination of the existing Run/RunOnce records, StartupApproved values and, if you choose, Startup-folder entry names. Each Run value and Startup-folder item is matched to the StartupApproved value with the same name, ignoring letter case like the registry, in the corresponding key: current-user Run, machine Run, machine Run32 for the 32-bit machine view, and the current-user or machine StartupFolder key. Both registry views of StartupApproved are read; for the machine key, a value seen only through the 32-bit view, a conflict between views or incomplete data is shown as unknown.": [
+    "只读地合并现有的 Run/RunOnce 记录、StartupApproved 值，以及（如你选择）启动文件夹条目名称。每个 Run 值和启动文件夹项目都会与对应键中同名的 StartupApproved 值匹配（与注册表一样不区分大小写）：当前用户 Run、计算机 Run、32 位计算机视图对应计算机 Run32，以及当前用户或计算机的 StartupFolder 键。会读取 StartupApproved 的两种注册表视图；对于计算机键，仅在 32 位视图中看到的值、视图之间的冲突或不完整的数据都显示为未知。",
+    "唯讀地合併現有的 Run/RunOnce 記錄、StartupApproved 值，以及（如你選擇）啟動資料夾項目名稱。每個 Run 值和啟動資料夾項目都會與對應機碼中同名的 StartupApproved 值比對（與登錄一樣不區分大小寫）：目前使用者 Run、電腦 Run、32 位元電腦檢視對應電腦 Run32，以及目前使用者或電腦的 StartupFolder 機碼。會讀取 StartupApproved 的兩種登錄檢視；對於電腦機碼，僅在 32 位元檢視中看到的值、檢視之間的衝突或不完整的資料都顯示為未知。",
+    "既存の Run/RunOnce の記録、StartupApproved の値、および選択した場合はスタートアップフォルダーの項目名を、読み取り専用で組み合わせます。各 Run 値とスタートアップフォルダー項目は、対応するキー内の同じ名前の StartupApproved 値と照合されます（レジストリと同様に大文字小文字は区別しません）：現在のユーザーの Run、コンピューターの Run、32 ビットのコンピュータービューにはコンピューターの Run32、現在のユーザーまたはコンピューターの StartupFolder キー。StartupApproved の両方のレジストリビューを読み取ります。コンピューターのキーでは、32 ビットビューでのみ見える値、ビュー間の矛盾、不完全なデータは不明と表示します。"
+  ],
+  "Microsoft does not document StartupApproved. Values are interpreted only in the publicly observed Task Manager form: 12 bytes of REG_BINARY whose first four bytes are 02 00 00 00 or 06 00 00 00 (enabled), or 03 00 00 00 or 07 00 00 00 (disabled), and whose last eight bytes are a FILETIME, usually the time it was disabled. Any other form, conflicting values, malformed or incomplete data are shown as unknown. An item without a StartupApproved value is usually shown as enabled by Task Manager, but that is not verified here. RunOnce is not covered by StartupApproved. The result does not prove that an item runs, exists, is trusted or slows startup.": [
+    "Microsoft 未公开说明 StartupApproved。只按公开观察到的任务管理器格式解读：12 字节 REG_BINARY，前四个字节为 02 00 00 00 或 06 00 00 00（已启用），或 03 00 00 00 或 07 00 00 00（已禁用），后八个字节为 FILETIME，通常是禁用时间。其他格式、相互矛盾的值、格式错误或不完整的数据均显示为未知。没有 StartupApproved 值的项目通常被任务管理器显示为已启用，但这里未加验证。RunOnce 不受 StartupApproved 约束。结果不能证明项目会运行、存在、可信或拖慢启动。",
+    "Microsoft 未公開說明 StartupApproved。只依公開觀察到的工作管理員格式解讀：12 位元組 REG_BINARY，前四個位元組為 02 00 00 00 或 06 00 00 00（已啟用），或 03 00 00 00 或 07 00 00 00（已停用），後八個位元組為 FILETIME，通常是停用時間。其他格式、互相矛盾的值、格式錯誤或不完整的資料均顯示為未知。沒有 StartupApproved 值的項目通常被工作管理員顯示為已啟用，但這裡未加驗證。RunOnce 不受 StartupApproved 約束。結果無法證明項目會執行、存在、可信或拖慢啟動。",
+    "Microsoft は StartupApproved を公開文書化していません。公開されている観察に基づくタスク マネージャーの形式のみを解釈します：12 バイトの REG_BINARY で、先頭 4 バイトが 02 00 00 00 または 06 00 00 00（有効）、03 00 00 00 または 07 00 00 00（無効）、末尾 8 バイトが FILETIME（通常は無効にした日時）です。その他の形式、矛盾する値、不正または不完全なデータは不明と表示します。StartupApproved 値のない項目は通常タスク マネージャーで有効と表示されますが、ここでは検証していません。RunOnce は StartupApproved の対象外です。結果は、項目が実行される、存在する、信頼できる、または起動を遅くすることを証明しません。"
+  ],
+  "Not inspected; its items are not listed, and its StartupApproved values appear only as approval-only rows.": [
+    "未检查；不会列出其中的项目，其 StartupApproved 值仅作为“仅 StartupApproved 值”行显示。",
+    "未檢查；不會列出其中的項目，其 StartupApproved 值僅作為「僅 StartupApproved 值」列顯示。",
+    "未確認です。その項目は表示されず、その StartupApproved 値は「StartupApproved 値のみ」の行としてのみ表示されます。"
+  ],
+  "A matching StartupApproved value was recorded, but that StartupApproved data is incomplete.": [
+    "记录到匹配的 StartupApproved 值，但该处 StartupApproved 数据不完整。",
+    "記錄到相符的 StartupApproved 值，但該處 StartupApproved 資料不完整。",
+    "一致する StartupApproved 値は記録されましたが、その StartupApproved データは不完全です。"
+  ],
+  "This StartupApproved value was recorded only through the 32-bit machine view.": [
+    "此 StartupApproved 值仅通过 32 位计算机视图记录。",
+    "此 StartupApproved 值僅透過 32 位元電腦檢視記錄。",
+    "この StartupApproved 値は 32 ビットのコンピュータービューでのみ記録されました。"
+  ],
+  "Skipped by the folder reader (system, link, cloud or unreadable item); not matched.": [
+    "已被文件夹读取器跳过（系统、链接、云端或不可读项目）；未匹配。",
+    "已被資料夾讀取器略過（系統、連結、雲端或無法讀取的項目）；未比對。",
+    "フォルダー読み取りでスキップされました（システム、リンク、クラウド、または読み取れない項目）。照合していません。"
   ]
 }
