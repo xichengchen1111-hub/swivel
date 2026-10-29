@@ -62,7 +62,7 @@ public sealed class PdfStructure
     public const long MaxStreamDecoded=64L*1024*1024,MaxDecodedTotal=256L*1024*1024;
     public const string Damaged="This PDF's structure could not be read exactly. Damaged files, files needing cross-reference repair and unsupported structures are refused rather than repaired. The original is kept unchanged.";
     public const string Encrypted="Encrypted or password-protected PDFs are not supported. The original is kept unchanged.";
-    public const string Limit="Content-preserving PDF pages are limited to 10 files, 32 MiB each and 128 MiB in total, 1,000 source pages, 1,000 selected pages, 1,000,000 cross-reference entries, 64 updates and nesting depth, 64 MiB per decompressed object or cross-reference stream (256 MiB per file) and 4,000,000 parsed values in total.";
+    public const string Limit="Content-preserving PDF pages are limited to 10 files, 32 MiB each and 128 MiB in total, 1,000 source pages, 1,000 selected pages, 1,000,000 cross-reference entries, 64 updates and nesting depth, 64 MiB per decompressed object or cross-reference stream (256 MiB per file), and 4,000,000 parsed values in total and copied values per output.";
 
     private readonly byte[] data;private readonly Dictionary<int,(byte Type,long A,int B)> xref=new();
     private readonly Dictionary<int,PdfValue> cache=new();private readonly HashSet<int> loading=new();

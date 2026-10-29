@@ -18,6 +18,8 @@ public sealed record PdfCopyReport(int Pages,int Objects,int DroppedAnnotations,
 public static class PdfPageCopy
 {
     public const int MaxSelected=1000,MaxObjects=500_000;
+    // Every value the copier creates counts, so repeated pages cannot multiply memory without bound.
+    public const long MaxCopiedValues=4_000_000;
     public const long MaxOutput=512L*1024*1024;
     public const string Selection="Enter 1–1,000 page numbers or ranges, such as 1,3-5,2. Only ASCII numbers are accepted; repeats and descending ranges are allowed. The listed order is the output order.";
     public const string Fidelity="Each selected page keeps its own text, vector drawings, images, fonts and appearance-only annotations (comments, highlights, stamps, drawings and web links). Not carried over: bookmarks, links to pages, named destinations, form fields, JavaScript and open actions, attachments, tags and accessibility structure, page labels, layers configuration, document information and XMP metadata, and digital signatures. Rotation is added to each page's own rotation. The originals are kept unchanged.";
@@ -58,9 +60,11 @@ public static class PdfPageCopy
         int next=3+order.Count;var pending=new List<(int Number,Func<PdfValue> Build)>();
         int dropped=0,cleared=0;
         int Allocate(){if(next-3-order.Count>=MaxObjects)throw new UserError(PdfStructure.Limit);return next++;}
+        long copiedValues=0;
         PdfValue Copy(int source,PdfValue value,int depth)
         {
-            if(depth>PdfStructure.MaxDepth)throw new UserError(PdfStructure.Limit);
+            if(depth>PdfStructure.MaxDepth||++copiedValues>MaxCopiedValues)throw new UserError(PdfStructure.Limit);
+            token.ThrowIfCancellationRequested();
             switch(value.Kind)
             {
                 case PdfKind.Ref:
@@ -70,7 +74,7 @@ public static class PdfPageCopy
                     var target=pdf.Resolve(value);if(target.Kind==PdfKind.Null)return PdfValue.Null;
                     // Aliases of page-tree nodes, structure streams (which hold other objects,
                     // including removed ones) and streams whose data lives in another file are cleared.
-                    if(pdf.TreeValues.Contains(target)||target.IsDict&&(target.Get("Type") is {Kind:PdfKind.Name,Text:"Page" or "Pages" or "Catalog" or "ObjStm" or "XRef"}||target.Kind==PdfKind.Stream&&(target.Get("F") is not null||target.Get("FFilter") is not null||target.Get("FDecodeParms") is not null))){cleared++;return PdfValue.Null;}
+                    if(pdf.TreeValues.Contains(target)||target.IsDict&&(target.Get("Type") is {Kind:PdfKind.Name,Text:"Page" or "Pages" or "Catalog" or "ObjStm" or "XRef" or "Annot"}||target.Get("JS") is not null||target.Kind==PdfKind.Stream&&(target.Get("F") is not null||target.Get("FFilter") is not null||target.Get("FDecodeParms") is not null))){cleared++;return PdfValue.Null;}
                     if(!numbers.TryGetValue((source,value.Number),out int n)){n=Allocate();numbers[(source,value.Number)]=n;queue.Enqueue((source,value.Number));}
                     return PdfValue.Ref(n,0);
                 }
@@ -174,7 +178,7 @@ public static class PdfPageCopy
     // The written file is read back by the same strict reader: same page count, boxes and rotation.
     private static void Verify(byte[] bytes,IReadOnlyList<PdfStructure> sources,IReadOnlyList<PdfPageChoice> order,int turn,CancellationToken token)
     {
-        PdfStructure check;try{check=PdfStructure.Read(bytes,token,new PdfBudget(),MaxOutput);}catch(UserError error) when (error.Message!=PdfStructure.Limit){throw new UserError(PdfStructure.Damaged);}
+        PdfStructure check;try{check=PdfStructure.Read(bytes,token,new PdfBudget(2*MaxCopiedValues),MaxOutput);}catch(UserError error) when (error.Message!=PdfStructure.Limit){throw new UserError(PdfStructure.Damaged);}
         if(check.Pages.Count!=order.Count)throw new UserError(PdfStructure.Damaged);
         for(int i=0;i<order.Count;i++)
         {

@@ -224,6 +224,15 @@ internal static class PdfStructureChecks
             try{PdfStructure.Read(classic,default,budget);PdfStructure.Read(classic,default,budget);var p=PdfStructure.Read(classic,default,budget);for(int n=1;n<25;n++)p.Load(n,0);check(false,"Value budget");}catch(UserError e){check(e.Message==PdfStructure.Limit,"Shared parsed-value budget refuses with the limit message");}
         }
 
+        {
+            // Repeating a page whose dictionary holds a large direct array is refused by the copy budget, not memory.
+            var zeros=string.Join(" ",Enumerable.Repeat("0",300_000));
+            var heavy=Read(Classic(new List<O>{new(1,"<< /Type /Catalog /Pages 2 0 R >>"),new(2,"<< /Type /Pages /Kids [3 0 R] /MediaBox [0 0 100 100] >>"),new(3,"<< /Type /Page /Parent 2 0 R /Foo ["+zeros+"] /Other 4 0 R >>"),new(4,"<< /Type /Annot /Subtype /Widget /A << /S /JavaScript /JS (StrayScript) >> >>")}));
+            check(PdfPageCopy.Write(new[]{heavy},Enumerable.Repeat(new PdfPageChoice(0,0),13).ToArray(),0,default).Length>0,"Repeats within the copy budget succeed");
+            try{PdfPageCopy.Write(new[]{heavy},Enumerable.Repeat(new PdfPageChoice(0,0),14).ToArray(),0,default);check(false,"Copy budget");}catch(UserError e){check(e.Message==PdfStructure.Limit,"Copied-value budget refuses repeated large pages");}
+            check(!Has(PdfPageCopy.Write(new[]{heavy},new[]{new PdfPageChoice(0,0)},0,default),Ascii("StrayScript")),"Stray reference to another annotation's script cleared");
+        }
+
         // Selection parsing.
         check(PdfPageCopy.Parse("3-1,2,2",3).SequenceEqual(new[]{2,1,0,1,1}),"Descending range and repeats kept in order");
         check(PdfPageCopy.Parse("1-1000",1000).Length==1000,"1,000 selected pages allowed");
