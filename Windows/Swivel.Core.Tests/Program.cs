@@ -113,6 +113,7 @@ CommonFolderChecks.Run(Check,Reject);
 CommonDuplicateChecks.Run(Check,Reject);
 StartupFolderChecks.Run(Check,Reject);
 StartupApprovalChecks.Run(Check,Reject);
+StartupAppsChecks.Run(Check,Reject);
 CacheLocationChecks.Run(Check,Reject);
 AppCacheChecks.Run(Check,Reject);
 AppLeftoverChecks.Run(Check,Reject);

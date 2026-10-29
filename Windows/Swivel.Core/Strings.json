@@ -14848,5 +14848,245 @@
     "“保留方向”会在原 EXIF 的位置写入一段新的最小 EXIF，其中只有方向标签（不含相机、时间、GPS、缩略图或厂商数据）。其他保留的字节一律不变，图像不会重新压缩。方向只从源文件的 EXIF 读取，绝不从 XMP 或文本读取。",
     "「保留方向」會在原 EXIF 的位置寫入一段新的最小 EXIF，其中只有方向標籤（不含相機、時間、GPS、縮圖或廠商資料）。其他保留的位元組一律不變，影像不會重新壓縮。方向只從來源檔案的 EXIF 讀取，絕不從 XMP 或文字讀取。",
     "「向きを保持」は、元の EXIF の位置に向きタグだけを含む新しい最小限の EXIF を書き込みます（カメラ、日時、GPS、サムネイル、メーカー情報は含みません）。その他の保持されるバイトはすべてそのままで、画像は再圧縮されません。向きは元ファイルの EXIF からのみ読み取り、XMP やテキストからは読み取りません。"
+  ],
+  "Inspect Startup Apps…": [
+    "查看启动应用…",
+    "檢視啟動應用程式…",
+    "スタートアップ アプリを確認…"
+  ],
+  "Inspect Run/RunOnce records, raw StartupApproved values, startup apps with their observed Task Manager approval state, local service status, selected Startup-folder entries or bounded local scheduled-task metadata. These do not prove effective enablement, trust, task ownership or leftover ownership. Disabling and removal are still planned.": [
+    "查看 Run/RunOnce 记录、StartupApproved 原始值、按任务管理器已观察到的格式解读启用状态的启动应用、本地服务状态、所选启动文件夹条目或有界本机计划任务信息。这些信息不能证明实际启用状态、可信度、任务归属或残留归属。禁用及移除仍待实现。",
+    "檢視 Run/RunOnce 記錄、StartupApproved 原始值、依工作管理員已觀察到的格式解讀啟用狀態的啟動應用程式、本機服務狀態、所選啟動資料夾項目或有界本機排程工作資訊。這些資訊無法證明實際啟用狀態、可信度、工作歸屬或殘留歸屬。停用及移除仍待實作。",
+    "Run/RunOnce の記録、StartupApproved の生の値、タスク マネージャーで観察されている形式から有効状態を解釈したスタートアップ アプリ、ローカルサービスの状態、選択したスタートアップフォルダーの項目、または範囲を制限したローカルタスク情報を確認します。実際の有効状態、信頼性、タスクや残存物の帰属は証明できません。無効化と削除は未実装です。"
+  ],
+  "Read-only combination of the existing Run/RunOnce records, StartupApproved values and, if you choose, Startup-folder entry names. Each Run value and Startup-folder item is matched to the StartupApproved value with the same name, ignoring letter case like the registry, in the corresponding key: current-user Run, machine Run, machine Run32 for the 32-bit machine view, and the current-user or machine StartupFolder key. Both registry views of StartupApproved are consulted.": [
+    "只读地合并现有的 Run/RunOnce 记录、StartupApproved 值，以及（如你选择）启动文件夹条目名称。每个 Run 值和启动文件夹项目都会与对应键中同名的 StartupApproved 值匹配（与注册表一样不区分大小写）：当前用户 Run、计算机 Run、32 位计算机视图对应计算机 Run32，以及当前用户或计算机的 StartupFolder 键。会同时查看 StartupApproved 的两种注册表视图。",
+    "唯讀地合併現有的 Run/RunOnce 記錄、StartupApproved 值，以及（如你選擇）啟動資料夾項目名稱。每個 Run 值和啟動資料夾項目都會與對應機碼中同名的 StartupApproved 值比對（與登錄一樣不區分大小寫）：目前使用者 Run、電腦 Run、32 位元電腦檢視對應電腦 Run32，以及目前使用者或電腦的 StartupFolder 機碼。會同時檢視 StartupApproved 的兩種登錄檢視。",
+    "既存の Run/RunOnce の記録、StartupApproved の値、および選択した場合はスタートアップフォルダーの項目名を、読み取り専用で組み合わせます。各 Run 値とスタートアップフォルダー項目は、対応するキー内の同じ名前の StartupApproved 値と照合されます（レジストリと同様に大文字小文字は区別しません）：現在のユーザーの Run、コンピューターの Run、32 ビットのコンピュータービューにはコンピューターの Run32、現在のユーザーまたはコンピューターの StartupFolder キー。StartupApproved の両方のレジストリビューを参照します。"
+  ],
+  "Microsoft does not document StartupApproved. Values are interpreted only in the publicly observed Task Manager form: 12 bytes of REG_BINARY whose first four bytes are 02, 06 (enabled) or 03, 07 (disabled) and whose last eight bytes are a FILETIME, usually the time it was disabled. Any other form, conflicting values, malformed or incomplete data are shown as unknown. An item without a StartupApproved value is usually shown as enabled by Task Manager, but that is not verified here. RunOnce is not covered by StartupApproved. The result does not prove that an item runs, exists, is trusted or slows startup.": [
+    "Microsoft 未公开说明 StartupApproved。只按公开观察到的任务管理器格式解读：12 字节 REG_BINARY，前四个字节为 02、06（已启用）或 03、07（已禁用），后八个字节为 FILETIME，通常是禁用时间。其他格式、相互矛盾的值、格式错误或不完整的数据均显示为未知。没有 StartupApproved 值的项目通常被任务管理器显示为已启用，但这里未加验证。RunOnce 不受 StartupApproved 约束。结果不能证明项目会运行、存在、可信或拖慢启动。",
+    "Microsoft 未公開說明 StartupApproved。只依公開觀察到的工作管理員格式解讀：12 位元組 REG_BINARY，前四個位元組為 02、06（已啟用）或 03、07（已停用），後八個位元組為 FILETIME，通常是停用時間。其他格式、互相矛盾的值、格式錯誤或不完整的資料均顯示為未知。沒有 StartupApproved 值的項目通常被工作管理員顯示為已啟用，但這裡未加驗證。RunOnce 不受 StartupApproved 約束。結果無法證明項目會執行、存在、可信或拖慢啟動。",
+    "Microsoft は StartupApproved を公開文書化していません。公開されている観察に基づくタスク マネージャーの形式のみを解釈します：12 バイトの REG_BINARY で、先頭 4 バイトが 02、06（有効）または 03、07（無効）、末尾 8 バイトが FILETIME（通常は無効にした日時）です。その他の形式、矛盾する値、不正または不完全なデータは不明と表示します。StartupApproved 値のない項目は通常タスク マネージャーで有効と表示されますが、ここでは検証していません。RunOnce は StartupApproved の対象外です。結果は、項目が実行される、存在する、信頼できる、または起動を遅くすることを証明しません。"
+  ],
+  "Names are visible and can contain private app names or paths. Commands and file contents are not shown or read; use Logon Startup Records for commands. Nothing is enabled, disabled, deleted, saved automatically or sent over the network. Copy Report and Copy Selected Row are explicit and limited to 4 MiB of UTF-8 text; oversized copies are refused whole.": [
+    "名称会显示，可能包含私人应用名称或路径。不显示也不读取命令和文件内容；如需命令请使用“登录启动记录”。不会启用、禁用、删除、自动保存或通过网络发送任何内容。“复制报告”和“复制所选行”需明确操作，限 4 MiB UTF-8 文本；超出时整体拒绝复制。",
+    "名稱會顯示，可能包含私人應用程式名稱或路徑。不顯示也不讀取命令和檔案內容；如需命令請使用「登入啟動記錄」。不會啟用、停用、刪除、自動儲存或透過網路傳送任何內容。「複製報告」和「複製所選列」需明確操作，限 4 MiB UTF-8 文字；超出時整體拒絕複製。",
+    "名前は表示され、個人的なアプリ名やパスを含む場合があります。コマンドやファイルの内容は表示も読み取りもしません。コマンドは「ログオン時のスタートアップ記録」で確認してください。有効化、無効化、削除、自動保存、ネットワーク送信は一切行いません。「レポートをコピー」と「選択した行をコピー」は明示的な操作で、UTF-8 テキスト 4 MiB までです。超える場合はコピー全体を拒否します。"
+  ],
+  "The Startup Apps report exceeds 4 MiB of UTF-8 text. Copy one selected row instead.": [
+    "启动应用报告超过 4 MiB UTF-8 文本。请改为复制一个所选行。",
+    "啟動應用程式報告超過 4 MiB UTF-8 文字。請改為複製一個所選列。",
+    "スタートアップ アプリのレポートが UTF-8 テキスト 4 MiB を超えています。代わりに選択した 1 行をコピーしてください。"
+  ],
+  "No matching startup item was recorded; the item may be missing, in an uninspected location or beyond a limit.": [
+    "未记录到匹配的启动项目；该项目可能已不存在、位于未检查的位置或超出限制。",
+    "未記錄到相符的啟動項目；該項目可能已不存在、位於未檢查的位置或超出限制。",
+    "一致するスタートアップ項目は記録されていません。項目が存在しない、未確認の場所にある、または制限を超えている可能性があります。"
+  ],
+  "StartupApproved value is malformed, repeated, oversized or unavailable.": [
+    "StartupApproved 值格式错误、重复、过大或不可用。",
+    "StartupApproved 值格式錯誤、重複、過大或無法使用。",
+    "StartupApproved 値が不正、重複、大きすぎる、または利用できません。"
+  ],
+  "StartupApproved value is not REG_BINARY.": [
+    "StartupApproved 值不是 REG_BINARY。",
+    "StartupApproved 值不是 REG_BINARY。",
+    "StartupApproved 値が REG_BINARY ではありません。"
+  ],
+  "StartupApproved value does not have the observed 12-byte form.": [
+    "StartupApproved 值不是已观察到的 12 字节格式。",
+    "StartupApproved 值不是已觀察到的 12 位元組格式。",
+    "StartupApproved 値が観察されている 12 バイトの形式ではありません。"
+  ],
+  "Unrecognized StartupApproved flag value.": [
+    "无法识别的 StartupApproved 标志值。",
+    "無法辨識的 StartupApproved 旗標值。",
+    "認識できない StartupApproved フラグ値です。"
+  ],
+  "Observed enabled form.": [
+    "已观察到的启用格式。",
+    "已觀察到的啟用格式。",
+    "観察されている有効の形式です。"
+  ],
+  "Observed enabled flag; the time field is not zero and is not interpreted.": [
+    "已观察到的启用标志；时间字段不为零，未解读。",
+    "已觀察到的啟用旗標；時間欄位不為零，未解讀。",
+    "観察されている有効フラグです。時刻フィールドが 0 ではなく、解釈していません。"
+  ],
+  "Observed disabled flag without a recorded time.": [
+    "已观察到的禁用标志，未记录时间。",
+    "已觀察到的停用旗標，未記錄時間。",
+    "観察されている無効フラグです。時刻は記録されていません。"
+  ],
+  "Observed disabled flag; the time field is out of range.": [
+    "已观察到的禁用标志；时间字段超出范围。",
+    "已觀察到的停用旗標；時間欄位超出範圍。",
+    "観察されている無効フラグです。時刻フィールドが範囲外です。"
+  ],
+  "Observed disabled form with the recorded time.": [
+    "已观察到的禁用格式，附有记录时间。",
+    "已觀察到的停用格式，附有記錄時間。",
+    "観察されている無効の形式で、時刻が記録されています。"
+  ],
+  "RunOnce values are not covered by StartupApproved.": [
+    "RunOnce 值不受 StartupApproved 约束。",
+    "RunOnce 值不受 StartupApproved 約束。",
+    "RunOnce 値は StartupApproved の対象外です。"
+  ],
+  "The startup name is unavailable, so it cannot be matched.": [
+    "启动名称不可用，因此无法匹配。",
+    "啟動名稱無法使用，因此無法比對。",
+    "スタートアップ名を取得できないため、照合できません。"
+  ],
+  "No matching StartupApproved value was recorded, but that StartupApproved data is incomplete.": [
+    "未记录到匹配的 StartupApproved 值，但该处 StartupApproved 数据不完整。",
+    "未記錄到相符的 StartupApproved 值，但該處 StartupApproved 資料不完整。",
+    "一致する StartupApproved 値は記録されていませんが、その StartupApproved データは不完全です。"
+  ],
+  "No StartupApproved value with this name. Task Manager usually shows such items as enabled; this is not verified.": [
+    "没有此名称的 StartupApproved 值。任务管理器通常将此类项目显示为已启用；此处未验证。",
+    "沒有此名稱的 StartupApproved 值。工作管理員通常將此類項目顯示為已啟用；此處未驗證。",
+    "この名前の StartupApproved 値はありません。タスク マネージャーは通常このような項目を有効と表示しますが、ここでは検証していません。"
+  ],
+  "Different StartupApproved values with this name were recorded in the registry views.": [
+    "在注册表视图中记录到此名称的不同 StartupApproved 值。",
+    "在登錄檢視中記錄到此名稱的不同 StartupApproved 值。",
+    "レジストリビューにこの名前の異なる StartupApproved 値が記録されています。"
+  ],
+  "Folders inside a Startup folder are not matched.": [
+    "启动文件夹内的子文件夹不参与匹配。",
+    "啟動資料夾內的子資料夾不參與比對。",
+    "スタートアップフォルダー内のフォルダーは照合しません。"
+  ],
+  "Not inspected; its items and matching StartupApproved values are not listed as items.": [
+    "未检查；其中的项目及对应的 StartupApproved 值不会作为项目列出。",
+    "未檢查；其中的項目及對應的 StartupApproved 值不會作為項目列出。",
+    "未確認です。その項目と対応する StartupApproved 値は項目として一覧に表示されません。"
+  ],
+  "Enabled (observed form)": [
+    "已启用（已观察格式）",
+    "已啟用（已觀察格式）",
+    "有効（観察されている形式）"
+  ],
+  "Disabled (observed form)": [
+    "已禁用（已观察格式）",
+    "已停用（已觀察格式）",
+    "無効（観察されている形式）"
+  ],
+  "No StartupApproved value": [
+    "无 StartupApproved 值",
+    "無 StartupApproved 值",
+    "StartupApproved 値なし"
+  ],
+  "Not covered": [
+    "不适用",
+    "不適用",
+    "対象外"
+  ],
+  "Run registry value": [
+    "Run 注册表值",
+    "Run 登錄值",
+    "Run レジストリ値"
+  ],
+  "Startup-folder item": [
+    "启动文件夹项目",
+    "啟動資料夾項目",
+    "スタートアップフォルダーの項目"
+  ],
+  "StartupApproved value only": [
+    "仅 StartupApproved 值",
+    "僅 StartupApproved 值",
+    "StartupApproved 値のみ"
+  ],
+  "Name unavailable": [
+    "名称不可用",
+    "名稱無法使用",
+    "名前を取得できません"
+  ],
+  "None": [
+    "无",
+    "無",
+    "なし"
+  ],
+  "StartupApproved key": [
+    "StartupApproved 键",
+    "StartupApproved 機碼",
+    "StartupApproved キー"
+  ],
+  "Approval state": [
+    "启用状态",
+    "啟用狀態",
+    "有効状態"
+  ],
+  "Flag byte": [
+    "标志字节",
+    "旗標位元組",
+    "フラグ バイト"
+  ],
+  "Recorded disabled time (UTC)": [
+    "记录的禁用时间 (UTC)",
+    "記錄的停用時間 (UTC)",
+    "記録された無効化日時 (UTC)"
+  ],
+  "Matching StartupApproved values: {0}": [
+    "匹配的 StartupApproved 值：{0}",
+    "相符的 StartupApproved 值：{0}",
+    "一致する StartupApproved 値：{0}"
+  ],
+  "Startup Apps": [
+    "启动应用",
+    "啟動應用程式",
+    "スタートアップ アプリ"
+  ],
+  "Listed rows: {0} (not a count of unique or running apps)": [
+    "列出的行：{0}（并非不重复或正在运行的应用数量）",
+    "列出的列：{0}（並非不重複或正在執行的應用程式數量）",
+    "表示行数：{0}（固有または実行中のアプリの数ではありません）"
+  ],
+  "Startup-folder items were included as you chose.": [
+    "已按你的选择包含启动文件夹项目。",
+    "已依你的選擇包含啟動資料夾項目。",
+    "選択に従い、スタートアップフォルダーの項目を含めました。"
+  ],
+  "Startup folders were not inspected.": [
+    "未检查启动文件夹。",
+    "未檢查啟動資料夾。",
+    "スタートアップフォルダーは確認していません。"
+  ],
+  "Copy Selected Row": [
+    "复制所选行",
+    "複製所選列",
+    "選択した行をコピー"
+  ],
+  "No startup items or StartupApproved values were recorded. This does not prove that no apps start at logon.": [
+    "未记录到启动项目或 StartupApproved 值。这不能证明登录时没有应用启动。",
+    "未記錄到啟動項目或 StartupApproved 值。這無法證明登入時沒有應用程式啟動。",
+    "スタートアップ項目や StartupApproved 値は記録されませんでした。ログオン時に起動するアプリがないことの証明にはなりません。"
+  ],
+  "Selected Row": [
+    "所选行",
+    "所選列",
+    "選択した行"
+  ],
+  "Sources": [
+    "来源",
+    "來源",
+    "ソース"
+  ],
+  "If this action is saved in My Wheel, older Windows versions may reject those settings and fall back to defaults. Keep a pre-upgrade settings backup before downgrading.": [
+    "如果此操作已保存在“我的轮盘”中，旧版 Windows 版本可能拒绝这些设置并恢复默认值。降级前请保留升级前的设置备份。",
+    "如果此操作已儲存在「我的輪盤」中，舊版 Windows 版本可能拒絕這些設定並恢復預設值。降級前請保留升級前的設定備份。",
+    "この操作をマイ ホイールに保存している場合、古い Windows 版はその設定を拒否して既定値に戻ることがあります。ダウングレード前にアップグレード前の設定のバックアップを保管してください。"
+  ],
+  "Continue Without Startup Folders": [
+    "不检查启动文件夹并继续",
+    "不檢查啟動資料夾並繼續",
+    "スタートアップフォルダーなしで続行"
+  ],
+  "Startup Apps closed. No startup settings were changed.": [
+    "启动应用已关闭。未更改任何启动设置。",
+    "啟動應用程式已關閉。未變更任何啟動設定。",
+    "スタートアップ アプリを閉じました。スタートアップ設定は変更されていません。"
   ]
 }

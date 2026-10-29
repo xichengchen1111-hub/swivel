@@ -157,6 +157,7 @@ internal static class Program
             Group("CommonDuplicateNativeChecks", () => CommonDuplicateNativeChecks.Run(Check,Reject));
             Group("StartupFolderNativeChecks", () => StartupFolderNativeChecks.Run(Check,Reject));
             Group("StartupApprovalNativeChecks", () => StartupApprovalNativeChecks.Run(Check,Reject));
+            Group("StartupAppsNativeChecks", () => StartupAppsNativeChecks.Run(Check,Reject));
             Group("CacheLocationNativeChecks", () => CacheLocationNativeChecks.Run(directory,Check,Reject));
             Group("WaveToolsChecks", () => WaveToolsChecks.Run(directory,Check,Reject));
             Group("FolderSizeNativeChecks", () => FolderSizeNativeChecks.Run(directory,Check,Reject));
