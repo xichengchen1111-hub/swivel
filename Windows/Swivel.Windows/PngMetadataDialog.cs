@@ -20,15 +20,21 @@ internal static class PngMetadataNotices
 internal sealed class PngMetadataDialog : Window
 {
     private sealed record Row(string Type,int Count,string Bytes,string Result);
+    internal bool KeepOrientation=>keep.IsChecked==true;
+    private readonly CheckBox keep;
     internal PngMetadataDialog(App app,PngMetadataDocument document)
     {
         var plan=document.Plan;Title=app.L("Remove PNG Text & EXIF…");Width=850;Height=780;MinWidth=460;MinHeight=320;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var root=new DockPanel{Margin=new Thickness(20)};var footer=new StackPanel();DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
-        footer.Children.Add(UI.Text(plan.RemovedCount==0?app.L("No matching PNG text, EXIF or time chunks were found. No copy was saved."):string.Format(app.L("Remove {0:N0} chunk(s), {1:N0} bytes; new PNG: {2:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,plan.OutputBytes)));
+        keep=new CheckBox{Content=app.L("Keep orientation"),IsChecked=plan.Orientation.CanKeep,IsEnabled=plan.Orientation.CanKeep,Margin=new Thickness(0,4,0,8)};
+        var summary=UI.Text("");footer.Children.Add(summary);
+        void Summarize()=>summary.Text=plan.RemovedCount==0?app.L("No matching PNG text, EXIF or time chunks were found. No copy was saved."):keep.IsChecked==true?string.Format(app.L("Remove {0:N0} chunk(s), {1:N0} bytes; add a {2:N0}-byte orientation-only eXIf chunk; new PNG: {3:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,PngMetadata.OrientationChunkLength,plan.OutputBytesKeeping(true)):string.Format(app.L("Remove {0:N0} chunk(s), {1:N0} bytes; new PNG: {2:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,plan.OutputBytes);
+        Summarize();keep.Checked+=(_,_)=>Summarize();keep.Unchecked+=(_,_)=>Summarize();
         var buttons=new WrapPanel();footer.Children.Add(buttons);var save=UI.Button(app.L("Save PNG Copy"),()=>DialogResult=true);save.IsEnabled=plan.RemovedCount>0;buttons.Children.Add(save);var cancel=UI.Button(app.L("Cancel"),()=>DialogResult=false);cancel.IsCancel=true;buttons.Children.Add(cancel);
         var body=new StackPanel();root.Children.Add(UI.Scroll(body));Content=root;
         body.Children.Add(UI.Text(app.L("Source (JSON path)")));var path=new TextBox{Text=JsonSerializer.Serialize(document.Path),IsReadOnly=true,TextWrapping=TextWrapping.Wrap};AutomationProperties.SetName(path,app.L("Source (JSON path)"));body.Children.Add(path);
         body.Children.Add(UI.Text(string.Format(app.L("{0} × {1} pixels · source: {2:N0} bytes"),plan.Width,plan.Height,plan.SourceBytes)));
+        body.Children.Add(UI.Text(OrientationNotices.Status(app,plan.Orientation)));body.Children.Add(keep);body.Children.Add(UI.Text(app.L(OrientationNotices.Keep),12));
         foreach(string note in new[]{PngMetadataNotices.Scope,PngMetadataNotices.Limits,PngMetadataNotices.Retained,PngMetadataNotices.Orientation,PngMetadataNotices.Export})body.Children.Add(UI.Text(app.L(note),12));
         body.Children.Add(UI.Text(app.L("PNG Chunk Summary"),18));var list=new ListView{Height=240,ItemsSource=plan.Chunks.Select(c=>new Row(c.Type,c.Count,c.Bytes.ToString("N0"),app.L(c.Removed?"Remove":"Keep"))).ToArray()};
         VirtualizingPanel.SetIsVirtualizing(list,true);VirtualizingPanel.SetVirtualizationMode(list,VirtualizationMode.Recycling);ScrollViewer.SetCanContentScroll(list,true);AutomationProperties.SetName(list,app.L("PNG Chunk Summary"));

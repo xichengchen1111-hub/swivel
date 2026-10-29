@@ -23,6 +23,7 @@ public static class JpegMetadata
     {
         private readonly byte[] source;
         private readonly Piece[] pieces;
+        private readonly int orientationSlot;
         public int Width{get;}
         public int Height{get;}
         public bool Progressive{get;}
@@ -34,20 +35,29 @@ public static class JpegMetadata
         public long OutputBytes=>SourceBytes-RemovedBytes;
         public int RemovedCount{get;}
         public IReadOnlyList<JpegMetadataSegment> Segments{get;}
-        private Plan(byte[] source,Piece[] pieces,int width,int height,bool progressive,int scans,int markers,int restarts)
+        // Read strictly from the single EXIF APP1 segment; never from XMP or other APP1 data.
+        public ExifOrientationInfo Orientation{get;}
+        public long OutputBytesKeeping(bool keepOrientation)=>OutputBytes+(keepOrientation&&Orientation.CanKeep?OrientationSegmentLength:0);
+        private Plan(byte[] source,Piece[] pieces,int width,int height,bool progressive,int scans,int markers,int restarts,ExifOrientationInfo orientation,int orientationSlot)
         {
-            this.source=source;this.pieces=pieces;Width=width;Height=height;Progressive=progressive;ScanCount=scans;MarkerCount=markers;RestartCount=restarts;
+            this.source=source;this.pieces=pieces;this.orientationSlot=orientationSlot;Orientation=orientation;Width=width;Height=height;Progressive=progressive;ScanCount=scans;MarkerCount=markers;RestartCount=restarts;
             RemovedBytes=pieces.Where(p=>p.Removed).Sum(p=>(long)p.Length);RemovedCount=pieces.Count(p=>p.Removed);
             Segments=Array.AsReadOnly(pieces.GroupBy(p=>p.Marker).Select(g=>new JpegMetadataSegment(g.Key,g.Count(),g.Sum(p=>(long)p.Length),g.First().Removed)).ToArray());
         }
-        internal static Plan Create(byte[] source,Piece[] pieces,int width,int height,bool progressive,int scans,int markers,int restarts)=>new(source,pieces,width,height,progressive,scans,markers,restarts);
-        public void Write(Stream output,CancellationToken token)
+        internal static Plan Create(byte[] source,Piece[] pieces,int width,int height,bool progressive,int scans,int markers,int restarts,ExifOrientationInfo orientation,int orientationSlot)=>new(source,pieces,width,height,progressive,scans,markers,restarts,orientation,orientationSlot);
+        public void Write(Stream output,CancellationToken token)=>Write(output,false,token);
+        // keepOrientation writes one new minimal EXIF APP1 (only IFD0 Orientation) where the
+        // source EXIF segment stood; every retained byte is otherwise copied unchanged.
+        public void Write(Stream output,bool keepOrientation,CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(output);token.ThrowIfCancellationRequested();
             if(!output.CanWrite)throw new ArgumentException("A writable output stream is required.",nameof(output));
-            foreach(var piece in pieces)
+            if(keepOrientation&&!Orientation.CanKeep)throw new InvalidOperationException("No source orientation to keep.");
+            for(int index=0;index<pieces.Length;index++)
             {
-                token.ThrowIfCancellationRequested();if(piece.Removed)continue;
+                var piece=pieces[index];token.ThrowIfCancellationRequested();
+                if(keepOrientation&&index==orientationSlot)output.Write(OrientationSegment(Orientation.Value));
+                if(piece.Removed)continue;
                 for(int at=0;at<piece.Length;)
                 {token.ThrowIfCancellationRequested();int count=Math.Min(65536,piece.Length-at);output.Write(source.AsSpan(piece.Offset+at,count));at+=count;}
             }
@@ -64,6 +74,7 @@ public static class JpegMetadata
         catch(EndOfStreamException){throw new UserError(Invalid);}
         token.ThrowIfCancellationRequested();if(bytes[0]!=255||bytes[1]!=0xd8)throw new UserError(Invalid);
         var pieces=new List<Piece>{new(0xd8,0,2,false)};var components=new HashSet<byte>();
+        int exifSegments=0,orientationSlot=-1;var orientation=ExifOrientationInfo.None;
         int position=2,width=0,height=0,scans=0,markers=1,restarts=0,restartInterval=0,expectedRestart=0,iccTotal=0;
         bool progressive=false,entropy=false,ended=false;var iccParts=new HashSet<int>();
         void CountMarker(){token.ThrowIfCancellationRequested();if(++markers>MaxMarkers)throw new UserError(Invalid);}
@@ -147,10 +158,21 @@ public static class JpegMetadata
             }
             else if(marker==0xdd)
             {if(payload!=2)throw new UserError(Invalid);restartInterval=BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(dataStart,2));}
+            if(marker==0xe1&&payload>=6&&bytes.AsSpan(dataStart,6).SequenceEqual("Exif\0\0"u8)&&++exifSegments==1)
+            {orientationSlot=pieces.Count;orientation=ExifOrientation.Read(bytes.AsSpan(dataStart+6,payload-6));}
             pieces.Add(new(marker,markerStart,segmentEnd-markerStart,marker is 0xe1 or 0xed or 0xfe));position=segmentEnd;
         }
         if(!ended||(iccTotal!=0&&iccParts.Count!=iccTotal))throw new UserError(iccTotal!=0&&iccParts.Count!=iccTotal?Icc:Invalid);
-        token.ThrowIfCancellationRequested();return Plan.Create(bytes,pieces.ToArray(),width,height,progressive,scans,markers,restarts);
+        // Several EXIF APP1 segments leave no single source of truth; nothing is kept.
+        if(exifSegments>1)orientation=ExifOrientationInfo.Ambiguous;
+        token.ThrowIfCancellationRequested();return Plan.Create(bytes,pieces.ToArray(),width,height,progressive,scans,markers,restarts,orientation,orientationSlot);
+    }
+    public const int OrientationSegmentLength=4+6+ExifOrientation.TiffLength;
+    public static byte[] OrientationSegment(int orientation)
+    {
+        var bytes=new byte[OrientationSegmentLength];bytes[0]=255;bytes[1]=0xe1;
+        BinaryPrimitives.WriteUInt16BigEndian(bytes.AsSpan(2),(ushort)(OrientationSegmentLength-2));
+        "Exif\0\0"u8.CopyTo(bytes.AsSpan(4));ExifOrientation.Tiff(orientation).CopyTo(bytes,10);return bytes;
     }
     public static string MarkerName(int marker)=>marker switch
     {
