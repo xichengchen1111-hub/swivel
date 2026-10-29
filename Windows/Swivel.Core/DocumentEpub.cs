@@ -59,8 +59,11 @@ public static class DocumentEpub
                 return buffer.ToArray();
             }
             if(!Part("mimetype",64).AsSpan().SequenceEqual("application/epub+zip"u8))throw new UserError(Invalid);
-            if(entries.ContainsKey("META-INF/rights.xml"))throw new UserError(Encrypted);
-            var encrypted=entries.ContainsKey("META-INF/encryption.xml")?EncryptedPaths(Part("META-INF/encryption.xml",MaxPartBytes),token):new HashSet<string>(StringComparer.Ordinal);
+            // DRM markers are matched in any letter case, so a renamed twin
+            // still reports the book as encrypted.
+            string? Marker(string name)=>entries.Keys.FirstOrDefault(x=>x.Equals(name,StringComparison.OrdinalIgnoreCase));
+            if(Marker("META-INF/rights.xml") is not null)throw new UserError(Encrypted);
+            var encrypted=Marker("META-INF/encryption.xml") is string marker?EncryptedPaths(Part(marker,MaxPartBytes),token):new HashSet<string>(StringComparer.Ordinal);
             string opf=Rootfile(Part("META-INF/container.xml",MaxPartBytes),token);
             if(encrypted.Contains(opf))throw new UserError(Encrypted);
             var spine=Spine(Part(opf,MaxPartBytes),Folder(opf),token);
@@ -68,10 +71,11 @@ public static class DocumentEpub
             foreach(var (path,mediaType) in spine)
             {
                 token.ThrowIfCancellationRequested();
-                if(encrypted.Contains(path))throw new UserError(Encrypted);
                 if(!entries.ContainsKey(path))throw new UserError(Invalid);
-                if(mediaType.StartsWith("image/",StringComparison.OrdinalIgnoreCase))continue;
-                if(!mediaType.Equals("application/xhtml+xml",StringComparison.OrdinalIgnoreCase))throw new UserError(Unsupported);
+                string media=mediaType.Split(';')[0].Trim();
+                if(media.StartsWith("image/",StringComparison.OrdinalIgnoreCase))continue;
+                if(!media.Equals("application/xhtml+xml",StringComparison.OrdinalIgnoreCase))throw new UserError(Unsupported);
+                if(encrypted.Contains(path))throw new UserError(Encrypted);
                 if(output.Length>0&&output[^1]!='\n'){if(output.Length>=DocumentText.MaxCharacters)throw new UserError(Limit);output.Append('\n');}
                 Body(Part(path,MaxPartBytes),output,token);
             }
@@ -95,7 +99,7 @@ public static class DocumentEpub
         catch(DecoderFallbackException){throw new UserError(Invalid);}
         if(text.Length>DocumentText.MaxCharacters)throw new UserError(Limit);
         var declared=Declaration.Match(text);
-        if(declared.Success&&!(declared.Groups[1].Value.Equals("utf-8",StringComparison.OrdinalIgnoreCase)||declared.Groups[1].Value.Equals("utf-16",StringComparison.OrdinalIgnoreCase)))throw new UserError(Invalid);
+        if(declared.Success&&!(declared.Groups[1].Value.Equals("utf-8",StringComparison.OrdinalIgnoreCase)||declared.Groups[1].Value.Equals("utf-16",StringComparison.OrdinalIgnoreCase)||declared.Groups[1].Value.Equals("us-ascii",StringComparison.OrdinalIgnoreCase)))throw new UserError(Invalid);
         return XmlReader.Create(new StringReader(text),new XmlReaderSettings
         {
             // EPUB 2 XHTML often carries an XHTML 1.1 doctype. Ignore skips it
@@ -147,24 +151,27 @@ public static class DocumentEpub
     {
         try
         {
-            using var reader=Xml(xml,false);bool root=false,manifest=false,spine=false;
+            using var reader=Xml(xml,false);bool root=false,manifest=false,spine=false;string section="";
             var items=new Dictionary<string,(string Path,string MediaType)>(StringComparer.Ordinal);var order=new List<string>();var used=new HashSet<string>(StringComparer.Ordinal);
             while(reader.Read())
             {
                 token.ThrowIfCancellationRequested();Depth(reader);if(reader.NodeType!=XmlNodeType.Element)continue;
                 if(reader.Depth==0){if(root||reader.LocalName!="package"||reader.NamespaceURI!=OpfNs)throw new UserError(Invalid);root=true;continue;}
+                if(reader.Depth==1)section=reader.NamespaceURI==OpfNs&&!reader.IsEmptyElement?reader.LocalName:"";
                 if(reader.NamespaceURI!=OpfNs)continue;
                 if(reader.Depth==1&&reader.LocalName=="manifest"){if(manifest)throw new UserError(Invalid);manifest=true;continue;}
                 if(reader.Depth==1&&reader.LocalName=="spine"){if(spine)throw new UserError(Invalid);spine=true;continue;}
-                if(reader.Depth==2&&reader.LocalName=="item")
+                if(reader.Depth==2&&section=="manifest"&&reader.LocalName=="item")
                 {
                     string id=reader.GetAttribute("id")??"",href=reader.GetAttribute("href")??"",type=reader.GetAttribute("media-type")??"";
                     if(id.Length==0||type.Length==0||items.ContainsKey(id))throw new UserError(Invalid);
                     // Remote resources are legal in EPUB 3 manifests but never
-                    // read; only a spine reference to one is refused below.
-                    items[id]=Scheme.IsMatch(href)?("",type):(Resolve(directory,href),type);
+                    // read. Those and unusable hrefs only refuse the book when
+                    // the spine references them below.
+                    string resolved;try{resolved=Resolve(directory,href);}catch(UserError){resolved="";}
+                    items[id]=(resolved,type);
                 }
-                else if(reader.Depth==2&&reader.LocalName=="itemref")
+                else if(reader.Depth==2&&section=="spine"&&reader.LocalName=="itemref")
                 {
                     string idref=reader.GetAttribute("idref")??"";
                     if(!used.Add(idref)||order.Count>=MaxEntries)throw new UserError(Invalid);order.Add(idref);
@@ -214,7 +221,7 @@ public static class DocumentEpub
     {
         try
         {
-            using var reader=Xml(xml,true);bool root=false,seenBody=false,body=false,space=false,boundary=false;int bodyDepth=-1,excluded=-1;
+            using var reader=Xml(xml,true);bool root=false,hiddenRoot=false,seenBody=false,body=false,space=false,boundary=false;int bodyDepth=-1,excluded=-1;
             var pre=new Stack<int>();
             void Append(char c){if(output.Length>=DocumentText.MaxCharacters)throw new UserError(Limit);output.Append(c);}
             void Flush(char next)
@@ -234,9 +241,13 @@ public static class DocumentEpub
                 if(type==XmlNodeType.DocumentType)continue;
                 if(type==XmlNodeType.EntityReference)throw new UserError(Invalid);
                 if(type==XmlNodeType.Element&&reader.Depth==0)
-                {if(root||reader.LocalName!="html"||reader.NamespaceURI!=Xhtml)throw new UserError(Invalid);root=true;continue;}
+                {if(root||reader.LocalName!="html"||reader.NamespaceURI!=Xhtml)throw new UserError(Invalid);root=true;hiddenRoot=reader.GetAttribute("hidden") is not null;continue;}
                 if(type==XmlNodeType.Element&&reader.Depth==1&&reader.LocalName=="body"&&reader.NamespaceURI==Xhtml)
-                {if(seenBody)throw new UserError(Invalid);seenBody=true;body=!reader.IsEmptyElement;bodyDepth=1;boundary=true;continue;}
+                {
+                    if(seenBody)throw new UserError(Invalid);seenBody=true;body=!reader.IsEmptyElement;bodyDepth=1;boundary=true;
+                    // Like the HTML reader, hidden on html or body suppresses the whole body.
+                    if(body&&(hiddenRoot||reader.GetAttribute("hidden") is not null))excluded=1;continue;
+                }
                 if(!body)continue;
                 if(type==XmlNodeType.EndElement&&reader.Depth==bodyDepth){body=false;continue;}
                 if(excluded>=0){if(type==XmlNodeType.EndElement&&reader.Depth==excluded)excluded=-1;continue;}
