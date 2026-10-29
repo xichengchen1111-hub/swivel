@@ -69,6 +69,7 @@ internal static class VideoEditNativeChecks
                     bool agrees = Agrees(g, data, fw, fh, 1, out var found);
                     check(fw == g.Width && fh == g.Height && agrees, $"The saved {picture?.ToString() ?? "video"} at {speed}% shows the quarters turned, flipped and cropped as planned ({at:0%} through): {found}");
                 }
+                if (number == 1) Console.WriteLine("INFO real turn " + FineGrid(output, g.Width, g.Height));
                 check(RotatedVideoNativeChecks.Straight(output), "The edited video is stored upright with no turn in its header");
                 if (speed != 100)
                 {
@@ -96,6 +97,14 @@ internal static class VideoEditNativeChecks
         }
     }
 
+    private static string FineGrid(string path, int w, int h)
+    {
+        var (fw, fh, d) = RotatedVideoNativeChecks.Frame(path, w, h, 1000);
+        var t = new StringBuilder($"{fw}×{fh} ");
+        for (int j = 0; j < 12; j++) { for (int i = 0; i < 16; i++) t.Append(Colour(d, fw, fw * (2 * i + 1) / 32, fh * (2 * j + 1) / 24)); t.Append('/'); }
+        return t.ToString();
+    }
+
     // Temporary: what MediaTranscoder makes of the test video with no effect, a turn, and a crop.
     private static void Diagnose(string root, string source)
     {
@@ -111,14 +120,12 @@ internal static class VideoEditNativeChecks
         var props = MediaClip.CreateFromFileAsync(file).AsTask().GetAwaiter().GetResult().GetVideoEncodingProperties();
         Console.WriteLine($"INFO source props {props.Width}x{props.Height} par {props.PixelAspectRatio.Numerator}:{props.PixelAspectRatio.Denominator} {props.Subtype}");
         int n = 0;
-        foreach (var (name, effect, w, h) in new (string, Windows.Media.Effects.VideoTransformEffectDefinition?, int, int)[]
+        foreach (var (name, effect, w, h, hd, par) in new (string, Windows.Media.Effects.VideoTransformEffectDefinition?, int, int, bool, bool)[]
         {
-            ("none", null, 320, 240),
-            ("identity effect", new Windows.Media.Effects.VideoTransformEffectDefinition(), 320, 240),
-            ("crop 0,0,160,120", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0, 0, 160, 120), OutputSize = new global::Windows.Foundation.Size(160, 120) }, 160, 120),
-            ("rotate", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees }, 240, 320),
-            ("rotate outsize", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240, 320) }, 240, 320),
-            ("crop full outsize", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0, 0, 320, 240), OutputSize = new global::Windows.Foundation.Size(320, 240) }, 320, 240),
+            ("rotate vga", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240, 320) }, 240, 320, false, false),
+            ("rotate hd1080p", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240, 320) }, 240, 320, true, false),
+            ("rotate hd1080p par", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240, 320) }, 240, 320, true, true),
+            ("none hd1080p", null, 320, 240, true, false),
         })
         {
             try
@@ -127,7 +134,10 @@ internal static class VideoEditNativeChecks
                 var target = folder.CreateFileAsync($"diag{++n}.mp4", CreationCollisionOption.FailIfExists).AsTask().GetAwaiter().GetResult();
                 var transcoder = new global::Windows.Media.Transcoding.MediaTranscoder { AlwaysReencode = true };
                 if (effect is not null) transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
-                var p = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.Vga); p.Video.Width = (uint)w; p.Video.Height = (uint)h; p.Audio = null;
+                var p = MediaEncodingProfile.CreateMp4(hd ? VideoEncodingQuality.HD1080p : VideoEncodingQuality.Vga);
+                Console.WriteLine($"INFO diag {name} preset {p.Video.Width}x{p.Video.Height} par {p.Video.PixelAspectRatio.Numerator}:{p.Video.PixelAspectRatio.Denominator}");
+                p.Video.Width = (uint)w; p.Video.Height = (uint)h; p.Audio = null;
+                if (par) { p.Video.PixelAspectRatio.Numerator = 1; p.Video.PixelAspectRatio.Denominator = 1; }
                 var prepared = transcoder.PrepareFileTranscodeAsync(file, target, p).AsTask().GetAwaiter().GetResult();
                 if (!prepared.CanTranscode) { Console.WriteLine($"INFO diag {name}: {prepared.FailureReason}"); continue; }
                 prepared.TranscodeAsync().AsTask().GetAwaiter().GetResult();
