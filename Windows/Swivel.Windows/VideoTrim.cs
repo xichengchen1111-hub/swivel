@@ -23,6 +23,7 @@ namespace Swivel.Windows;
 public sealed class VideoTrimmer : IDisposable
 {
     public const string Failed = "Windows could not encode the trimmed video. No file was saved.";
+    public const string NoPictureChanges = "This video is stored with a rotation flag (as phones often do). Windows can trim it and change its speed, but not turn, flip or crop it here.";
     private static readonly Guid RotationKey = new("C380465D-2271-428C-9B83-ECEA3B4A85C1"); // MF_MT_VIDEO_ROTATION
     private readonly NativeFiles.Input input;
     private readonly StorageFile file;
@@ -35,6 +36,10 @@ public sealed class VideoTrimmer : IDisposable
     /// Whole milliseconds.
     public long Duration { get; }
     public bool HasSound { get; }
+    /// Windows' transcoder (which applies picture changes) reads the stored frames; a phone video
+    /// stored sideways reports an upright size here but a different stored size, and isn't turned
+    /// upright by the transcoder, so picture changes are refused for it.
+    public bool PictureChanges { get; private init; }
     public bool Hours => Duration >= 3_600_000;
     private readonly uint frameNumerator, frameDenominator, bitrate;
 
@@ -55,12 +60,18 @@ public sealed class VideoTrimmer : IDisposable
         string? workspace = null;
         try
         {
-            StorageFile file; MediaClip clip; VideoEncodingProperties video;
+            StorageFile file; MediaClip clip; VideoEncodingProperties video; bool stored;
             try
             {
                 file = await NativeAsync.Join(StorageFile.GetFileFromPathAsync(path), token).ConfigureAwait(false);
                 clip = await NativeAsync.Join(MediaClip.CreateFromFileAsync(file), token).ConfigureAwait(false);
                 video = clip.GetVideoEncodingProperties();
+                try
+                {
+                    var profile = await NativeAsync.Join(MediaEncodingProfile.CreateFromFileAsync(file), token).ConfigureAwait(false);
+                    stored = profile.Video is { } v && v.Width == video.Width && v.Height == video.Height;
+                }
+                catch (Exception error) when (error is not OperationCanceledException) { stored = false; }
             }
             catch (Exception error) when (error is not OperationCanceledException) { throw new UserError(VideoSubtitles.Unreadable); }
             if (video is null || video.Width == 0 || video.Height == 0) throw new UserError(VideoSubtitles.Unreadable);
@@ -69,7 +80,7 @@ public sealed class VideoTrimmer : IDisposable
             SubtitleBurn.CheckVideo((int)video.Width, (int)video.Height, seconds);
             workspace = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Swivel-trim-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(workspace);
-            return new VideoTrimmer(input, file, clip, workspace, video, VideoTrim.Duration(seconds));
+            return new VideoTrimmer(input, file, clip, workspace, video, VideoTrim.Duration(seconds)) { PictureChanges = stored };
         }
         catch
         {
@@ -118,22 +129,24 @@ public sealed class VideoTrimmer : IDisposable
         finally { frameLock.Release(); }
     }
 
-    /// Windows' transform effect crops in source pixels, turns clockwise, then mirrors (checked on
-    /// the Windows CI runner with a four-colour picture).
-    internal const bool MirrorAfterTurn = true;
-
-    /// The effect for a picture change: crop the upright source, turn clockwise, mirror left–right.
-    internal static VideoTransformEffectDefinition Effect(VideoGeometry g)
+    /// Windows' transform effect, as checked on the Windows CI runner with a four-colour picture:
+    /// a crop alone and a turn (then mirror) alone are exact, but a crop that isn't square
+    /// combined with a turn in one effect comes out letterboxed. So a crop is one effect and the
+    /// turn and mirror are a second one after it.
+    internal static VideoTransformEffectDefinition[] Effects(VideoGeometry g, int width, int height)
     {
-        int turn = MirrorAfterTurn || !g.Mirror ? g.Rotation : (4 - g.Rotation) % 4;
-        return new VideoTransformEffectDefinition
-        {
-            CropRectangle = new global::Windows.Foundation.Rect(g.SourceCrop.X, g.SourceCrop.Y, g.SourceCrop.Width, g.SourceCrop.Height),
-            Rotation = turn switch { 1 => MediaRotation.Clockwise90Degrees, 2 => MediaRotation.Clockwise180Degrees, 3 => MediaRotation.Clockwise270Degrees, _ => MediaRotation.None },
-            Mirror = g.Mirror ? MediaMirroringOptions.Horizontal : MediaMirroringOptions.None,
-            OutputSize = new global::Windows.Foundation.Size(g.Width, g.Height),
-            ProcessingAlgorithm = MediaVideoProcessingAlgorithm.Default,
-        };
+        var list = new System.Collections.Generic.List<VideoTransformEffectDefinition>();
+        var c = g.SourceCrop;
+        if (c != new PixelRect(0, 0, width, height))
+            list.Add(new VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(c.X, c.Y, c.Width, c.Height), OutputSize = new global::Windows.Foundation.Size(c.Width, c.Height) });
+        if (g.Rotation != 0 || g.Mirror)
+            list.Add(new VideoTransformEffectDefinition
+            {
+                Rotation = g.Rotation switch { 1 => MediaRotation.Clockwise90Degrees, 2 => MediaRotation.Clockwise180Degrees, 3 => MediaRotation.Clockwise270Degrees, _ => MediaRotation.None },
+                Mirror = g.Mirror ? MediaMirroringOptions.Horizontal : MediaMirroringOptions.None,
+                OutputSize = new global::Windows.Foundation.Size(g.Width, g.Height),
+            });
+        return list.ToArray();
     }
 
     /// A preview frame (any size, the whole upright picture) as the plan's picture would show it.
@@ -158,6 +171,7 @@ public sealed class VideoTrimmer : IDisposable
     internal async Task<string> TrimAsync(VideoTrimPlan plan, Action<double>? progress, CancellationToken token)
     {
         plan = VideoTrim.Plan(plan.Start, plan.End, Duration, plan.KeepSound, HasSound, plan.Picture, plan.Speed);
+        if (plan.Picture is not null && !PictureChanges) throw new UserError(NoPictureChanges);
         var geometry = plan.Picture is null ? null : VideoEdit.Geometry(Width, Height, plan.Picture);
         int width = geometry?.Width ?? Width, height = geometry?.Height ?? Height;
         if (plan.Speed != 100) VideoEdit.CheckRate(width, height, Fps, plan.Speed);
@@ -190,8 +204,7 @@ public sealed class VideoTrimmer : IDisposable
                 else
                 {
                     var transcoder = new MediaTranscoder { AlwaysReencode = true, TrimStartTime = TimeSpan.FromMilliseconds(plan.Start), TrimStopTime = TimeSpan.FromMilliseconds(plan.End) };
-                    var effect = Effect(geometry);
-                    transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
+                    foreach (var effect in Effects(geometry, Width, Height)) transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
                     var prepared = await NativeAsync.Join(transcoder.PrepareFileTranscodeAsync(file, target, profile), token).ConfigureAwait(false);
                     reason = prepared.CanTranscode ? TranscodeFailureReason.None : prepared.FailureReason;
                     if (prepared.CanTranscode) await NativeAsync.Join(prepared.TranscodeAsync(), value => progress?.Invoke(Math.Clamp(value / 100, 0, 1)), token).ConfigureAwait(false);

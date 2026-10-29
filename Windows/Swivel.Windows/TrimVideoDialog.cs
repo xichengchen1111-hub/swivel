@@ -76,9 +76,9 @@ internal sealed class TrimVideoDialog : Window
             soundNote.Text = video.HasSound && !normal ? app.L("At any speed but 1× the sound is removed: Windows' editing API used here can't change its speed.") : "";
             try
             {
-                position.IsEnabled = shape.SelectedIndex > 0;
+                position.IsEnabled = shape.SelectedIndex > 0 && video.PictureChanges;
                 var geometry = VideoEdit.Geometry(video.Width, video.Height, Chosen());
-                position.IsEnabled = geometry.Seen != VideoEdit.Crop(geometry.SeenWidth, geometry.SeenHeight, VideoAspect.Original, 0);
+                position.IsEnabled = video.PictureChanges && geometry.Seen != VideoEdit.Crop(geometry.SeenWidth, geometry.SeenHeight, VideoAspect.Original, 0);
                 if (!normal) VideoEdit.CheckRate(geometry.Width, geometry.Height, video.Fps, Speed());
                 if (start is null || end is null) throw new UserError(VideoTrim.BadTime);
                 var plan = VideoTrim.Plan(start.Value, end.Value, video.Duration, sound.IsChecked == true, video.HasSound, Chosen(), Speed());
@@ -159,6 +159,7 @@ internal sealed class TrimVideoDialog : Window
         body.Children.Add(sound);
         if (!video.HasSound) body.Children.Add(UI.Text(app.L("This video has no sound track that Windows can decode."), 12));
         body.Children.Add(UI.Text(app.L("Picture"), 16));
+        if (!video.PictureChanges) { foreach (var control in new Control[] { turn, flipH, flipV, shape, position }) control.IsEnabled = false; body.Children.Add(UI.Text(app.L(VideoTrimmer.NoPictureChanges), 12)); }
         body.Children.Add(UI.Text(app.L("Turn"))); body.Children.Add(turn); body.Children.Add(flipH); body.Children.Add(flipV);
         body.Children.Add(UI.Text(app.L("Crop to shape"))); body.Children.Add(shape);
         body.Children.Add(UI.Text(app.L("Crop position (left to right, or top to bottom)"))); body.Children.Add(position);

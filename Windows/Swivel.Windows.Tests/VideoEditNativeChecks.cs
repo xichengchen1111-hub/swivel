@@ -22,10 +22,9 @@ internal static class VideoEditNativeChecks
         string source = Path.Combine(root, "quads.mp4");
         MakeQuarterVideo(root, source, 320, 240, 2);
         byte[] original = SHA256.HashData(File.ReadAllBytes(source));
-        Diagnose(root, source);
         using (var video = VideoTrimmer.OpenAsync(source, default).GetAwaiter().GetResult())
         {
-            check(video.Width == 320 && video.Height == 240 && Math.Abs(video.Duration - 2000) <= 50 && video.HasSound, $"The quarter test video opens: {video.Width}×{video.Height}, {video.Duration} ms");
+            check(video.Width == 320 && video.Height == 240 && Math.Abs(video.Duration - 2000) <= 50 && video.HasSound && video.PictureChanges, $"The quarter test video opens: {video.Width}×{video.Height}, {video.Duration} ms");
 
             // The window's preview draws the same picture change as the saved video.
             var frame = video.FrameAsync(1000, 320, default).GetAwaiter().GetResult();
@@ -69,7 +68,6 @@ internal static class VideoEditNativeChecks
                     bool agrees = Agrees(g, data, fw, fh, 1, out var found);
                     check(fw == g.Width && fh == g.Height && agrees, $"The saved {picture?.ToString() ?? "video"} at {speed}% shows the quarters turned, flipped and cropped as planned ({at:0%} through): {found}");
                 }
-                if (number == 1) Console.WriteLine("INFO real turn " + FineGrid(output, g.Width, g.Height));
                 check(RotatedVideoNativeChecks.Straight(output), "The edited video is stored upright with no turn in its header");
                 if (speed != 100)
                 {
@@ -81,72 +79,23 @@ internal static class VideoEditNativeChecks
         }
         check(SHA256.HashData(File.ReadAllBytes(source)).SequenceEqual(original), "Editing leaves the original byte for byte the same");
 
-        // A phone video stored sideways is edited upright: turning it back a quarter gives the original layout.
+        // A phone video stored sideways: Windows' transcoder doesn't turn it upright, so picture
+        // changes are refused (with the reason); a speed change alone still works, upright.
         string turned = Path.Combine(root, "sideways.mp4");
         var bytes = File.ReadAllBytes(source); RotatedVideoNativeChecks.Turn(bytes, 90, 320, 240); File.WriteAllBytes(turned, bytes);
         using (var video = VideoTrimmer.OpenAsync(turned, default).GetAwaiter().GetResult())
         {
-            var plan = VideoTrim.Plan(0, video.Duration, video.Duration, true, video.HasSound, new VideoPicture(3), 200);
-            string output = video.TrimAsync(plan, null, default).GetAwaiter().GetResult();
+            check(video.Width == 240 && video.Height == 320 && !video.PictureChanges, $"A 90° phone video reads upright ({video.Width}×{video.Height}) and offers no picture changes ({video.PictureChanges})");
+            string? message = null;
+            try { video.TrimAsync(VideoTrim.Plan(0, video.Duration, video.Duration, true, video.HasSound, new VideoPicture(3)), null, default).GetAwaiter().GetResult(); }
+            catch (UserError error) { message = error.Message; }
+            check(message == VideoTrimmer.NoPictureChanges, "A picture change on it is refused with the reason: " + message);
+            string output = video.TrimAsync(VideoTrim.Plan(0, video.Duration, video.Duration, true, video.HasSound, null, 200), null, default).GetAwaiter().GetResult();
             var (w, h) = Size(output);
             var (fw, fh, data) = RotatedVideoNativeChecks.Frame(output, w, h, 500);
-            var g = VideoEdit.Geometry(320, 240, new VideoPicture());
-            bool agrees = Agrees(g, data, fw, fh, 1, out var found);
-            check(video.Width == 240 && w == 320 && h == 240 && RotatedVideoNativeChecks.Straight(output) && agrees,
-                $"A 90° phone video turned back a quarter at 2× is stored upright in its original layout ({w}×{h}): {found}");
-        }
-    }
-
-    private static string FineGrid(string path, int w, int h)
-    {
-        var (fw, fh, d) = RotatedVideoNativeChecks.Frame(path, w, h, 1000);
-        var t = new StringBuilder($"{fw}×{fh} ");
-        for (int j = 0; j < 12; j++) { for (int i = 0; i < 16; i++) t.Append(Colour(d, fw, fw * (2 * i + 1) / 32, fh * (2 * j + 1) / 24)); t.Append('/'); }
-        return t.ToString();
-    }
-
-    // Temporary: what MediaTranscoder makes of the test video with no effect, a turn, and a crop.
-    private static void Diagnose(string root, string source)
-    {
-        string Fine(string path, int w, int h)
-        {
-            var (fw, fh, d) = RotatedVideoNativeChecks.Frame(path, w, h, 1000);
-            var t = new StringBuilder($"{fw}×{fh} ");
-            for (int j = 0; j < 12; j++) { for (int i = 0; i < 16; i++) t.Append(Colour(d, fw, fw * (2 * i + 1) / 32, fh * (2 * j + 1) / 24)); t.Append('/'); }
-            return t.ToString();
-        }
-        Console.WriteLine("INFO source " + Fine(source, 320, 240));
-        var file = StorageFile.GetFileFromPathAsync(source).AsTask().GetAwaiter().GetResult();
-        var props = MediaClip.CreateFromFileAsync(file).AsTask().GetAwaiter().GetResult().GetVideoEncodingProperties();
-        Console.WriteLine($"INFO source props {props.Width}x{props.Height} par {props.PixelAspectRatio.Numerator}:{props.PixelAspectRatio.Denominator} {props.Subtype}");
-        int n = 0;
-        foreach (var (name, effect, w, h, hd, par) in new (string, Windows.Media.Effects.VideoTransformEffectDefinition?, int, int, bool, bool)[]
-        {
-            ("full none", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,320,240), Rotation = MediaRotation.Clockwise90Degrees }, 240, 320, true, false),
-            ("full pre", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,320,240), Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(320,240) }, 240, 320, true, false),
-            ("full post", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,320,240), Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240,320) }, 240, 320, true, false),
-            ("tall none", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,134,240), Rotation = MediaRotation.Clockwise90Degrees }, 240, 134, true, false),
-            ("tall pre", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,134,240), Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(134,240) }, 240, 134, true, false),
-            ("tall post", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0,0,134,240), Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240,134) }, 240, 134, true, false),
-        })
-        {
-            try
-            {
-                var folder = StorageFolder.GetFolderFromPathAsync(root).AsTask().GetAwaiter().GetResult();
-                var target = folder.CreateFileAsync($"diag{++n}.mp4", CreationCollisionOption.FailIfExists).AsTask().GetAwaiter().GetResult();
-                var transcoder = new global::Windows.Media.Transcoding.MediaTranscoder { AlwaysReencode = true };
-                if (effect is not null) transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
-                var p = MediaEncodingProfile.CreateMp4(hd ? VideoEncodingQuality.HD1080p : VideoEncodingQuality.Vga);
-                Console.WriteLine($"INFO diag {name} preset {p.Video.Width}x{p.Video.Height} par {p.Video.PixelAspectRatio.Numerator}:{p.Video.PixelAspectRatio.Denominator}");
-                p.Video.Width = (uint)w; p.Video.Height = (uint)h; p.Audio = null;
-                if (par) { p.Video.PixelAspectRatio.Numerator = 1; p.Video.PixelAspectRatio.Denominator = 1; }
-                var prepared = transcoder.PrepareFileTranscodeAsync(file, target, p).AsTask().GetAwaiter().GetResult();
-                if (!prepared.CanTranscode) { Console.WriteLine($"INFO diag {name}: {prepared.FailureReason}"); continue; }
-                prepared.TranscodeAsync().AsTask().GetAwaiter().GetResult();
-                var (sw, sh) = Size(target.Path);
-                Console.WriteLine($"INFO diag {name}: " + Fine(target.Path, sw, sh));
-            }
-            catch (Exception e) { Console.WriteLine($"INFO diag {name}: {e.GetType().Name} 0x{e.HResult:X8} {e.Message}"); }
+            bool agrees = Agrees(VideoEdit.Geometry(320, 240, new VideoPicture(1)), data, fw, fh, 1, out var found);
+            check(w == 240 && h == 320 && RotatedVideoNativeChecks.Straight(output) && agrees && Math.Abs(VideoTrimNativeChecks.Probe(output).Seconds - 1) < 0.1,
+                $"Its 2× speed change is stored upright at 240×320 and one second: {w}×{h}, {found}");
         }
     }
 
