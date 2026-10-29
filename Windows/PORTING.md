@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.127 合并第二轮并行分支：B08 7z、F08 Store/MSIX、C06 保留方向
+
+分支 `claude/win-b08-7z-376500`（1edb235、6afe198）、`claude/win-f08-msix-7c35ce`（d7bf057、0d659e1）、`claude/win-c06-orientation-d4f1eb`（df1bfd2、5754c41、c59c0c5），Strings.json 三方 JSON 合并无同键冲突。
+
+- B08：按公开格式说明自写 7z 读取：签名与头 CRC、普通/编码头、单链 folder、名称/大小/CRC/时间/属性；原创 LZMA/LZMA2 解码（窗口 min(字典, 输出)、上限 256 MB）与 x86 BCJ；加密、其他方法、分卷、anti 项、链接与特殊文件拒绝；生成与 ZIP/TAR 相同的计划，沿用名称规则、上限与持有的独占 NTFS 发布及 Web 标记。审查修正：编码头的 LZMA 起始损坏转为用户可读拒绝。
+- F08：安装记录窗口的只读 `PackageManager.FindPackagesForUser("")`（工作线程）：显示名、发布者、版本、架构、框架/资源/捆绑/开发标志、安装日期，包系列名默认隐藏；4096 个包、1024 UTF-16、约 10 秒软限、取消、包管理器不可用为状态；明确复制、4 MiB 报告上限。审查修正：单字段 IO 错误、读取失败后重开记录窗口、安装日期未读标记部分。
+- C06：从唯一的源 EXIF 严格读取方向（两种字节序、SHORT×1、1–8；不规范/重复/多个 EXIF 只报告不保留），勾选时（2–8 默认）以只含 IFD0 Orientation 的 26 字节大端 TIFF 作为新的 APP1 或 eXIf 替换原块，其余保留字节不变。审查修正：保留 5–8 方向时按旋转后尺寸校验（以前会拒绝所有竖拍照片），校验失败只撤回该选项。
+
 ## 0.126 合并三个并行分支：F07 辅助进程分组、E03 EPUB、D04 保持音调变速
 
 0.125 之后由三个并行会话在各自工作区完成并推送：`claude/win-f07-helpers-be1291`（bb99f1e、4594f9b）、`claude/win-e03-epub-e6d6ae`（ab6085f、d751671）、`claude/win-d04-timestretch-4d2f75`（fbf93a8、95f4996），主会话依次合并（Strings.json 按三方 JSON 合并，无同键冲突）并统一编号 0.126。

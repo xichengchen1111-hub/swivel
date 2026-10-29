@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.127 — merged B08 7z, F08 Store/MSIX list, C06 keep orientation (2026-10-29)
+
+- Each branch passed its own Windows CI and independent review before merging: B08 40849161556 (core 4,522,042, native 5,606; review P2 fixed), F08 40846559778 (review no P1; P2/P3 fixed), C06 40846684301 (core 4,542,074, native 5,606; no remaining P1/P2). Details are in each branch's commits and session report.
+- After merging all three: core 4,542,343 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch — result below.
+- Not tested: 7z archives made by real 7-Zip, Store packages on a typical home PC, photos from real cameras with Keep orientation.
+
 ## Windows0.126 — merged F07 helper grouping, E03 EPUB, D04 Keep Pitch (2026-10-29)
 
 - Each branch passed its own Windows CI and independent review before merging: F07 40835053646 (core 4,521,231, native 5,560; review P2 fixed), E03 40835350658 (core 4,521,259, native 5,570; review no P1/P2, P3s fixed), D04 40836292295 (core 4,521,783, native 5,552; review no P1, two P2s fixed and rechecked). Details of each branch's checks are in its commits and session report.
