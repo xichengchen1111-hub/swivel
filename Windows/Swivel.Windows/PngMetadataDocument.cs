@@ -43,7 +43,7 @@ internal sealed class PngMetadataDocument : IDisposable
                     bool stored=check.PixelWidth==plan.Width&&check.PixelHeight==plan.Height,oriented=swap&&check.PixelWidth==plan.Height&&check.PixelHeight==plan.Width;
                     if(!stored&&!oriented)kept=null;
                 }
-                catch(UserError){kept=null;}
+                catch(Exception error) when (error is UserError or System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException){kept=null;}
             }
             if(bitmap.PixelWidth!=plan.Width||bitmap.PixelHeight!=plan.Height)throw new UserError(PngMetadata.Invalid);
             token.ThrowIfCancellationRequested();return new(input,plan,cleaned,kept);
