@@ -82,7 +82,8 @@ public static class FolderZip
     public static void Write(FolderZipPlan plan, Func<FolderZipItem, IDuplicateInput> open, Stream output, CancellationToken token, Action<int, int>? progress = null)
     {
         token.ThrowIfCancellationRequested();
-        using var buffered = new BufferedStream(output, 1 << 20);
+        // Not disposed: that would close the caller's output before it is flushed to disk.
+        var buffered = new BufferedStream(output, 1 << 20);
         using (var zip = new ZipArchive(buffered, ZipArchiveMode.Create, true, Encoding.UTF8))
         {
             int done = 0;

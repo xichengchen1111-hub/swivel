@@ -80,6 +80,7 @@ internal static class FolderZipChecks
             check(Math.Abs((time - expected).TotalSeconds) <= 2, $"A file keeps its modified time (to ZIP's two seconds): {time} vs {expected}");
             check(zip.GetEntry("项目 Notes/hidden.txt")!.LastWriteTime.Year == 1980, "An unknown modified time becomes 1 January 1980");
         }
+        check(output.CanWrite, "Writing leaves the caller's output stream open for it to flush and publish");
         check(progress.Select(p => p.Item1).SequenceEqual(new[] { 1, 2, 3 }) && progress.All(p => p.Item2 == 3), "Progress counts the files");
 
         // A file that changes while being read, or no longer has its planned length, stops the whole ZIP.
