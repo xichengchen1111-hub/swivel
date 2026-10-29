@@ -19,7 +19,7 @@ public static class WaveNoiseInput
         token.ThrowIfCancellationRequested();
         if (!input.CanRead || !input.CanSeek) throw new ArgumentException("A seekable readable stream is required.");
         int tag = 0;
-        if (input.Length >= 12 && input.Length <= PcmWave.MaxBytes)
+        if (input.Length >= 12)
         {
             input.Position = 0; Span<byte> head = stackalloc byte[12]; input.ReadExactly(head);
             if (head[..4].SequenceEqual("FORM"u8)) tag = -1;
