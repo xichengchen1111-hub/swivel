@@ -11,9 +11,11 @@ namespace Swivel.Core;
 internal static class WebPLossless
 {
     // Prefix-code tables of all groups together may hold at most this many entries (4 bytes
-    // each); a file that needs more is refused rather than allocating without limit.
+    // each, plus a fixed allowance per code for its own arrays); a file that needs more is
+    // refused rather than allocating without limit.
     internal const long MaxTableEntries = 16_000_000;
     private const int RootBits = 8;
+    private const int CodeOverhead = 64;
     private static readonly int[] CodeLengthOrder = { 17, 18, 0, 1, 2, 3, 4, 5, 16, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
     private static readonly sbyte[] DistanceMap =
     {
@@ -248,6 +250,8 @@ internal static class WebPLossless
                 for (int i = 0; i < repeat; i++) lengths[symbol++] = fill;
             }
         }
+        // Each kept code also costs its own arrays, single-symbol codes included.
+        if (keep && (budget.Entries += CodeOverhead) > MaxTableEntries) throw new UserError(WebPImage.TooComplex);
         return Build(lengths, keep ? budget : new Budget(), keep);
     }
 

@@ -133,6 +133,15 @@ internal static class WebPChecks
         }
         check(Message(() => WebPImage.Read(Riff("VP8L", bits.ToArray()), default)) == WebPImage.TooComplex, "A lossless WebP needing more prefix-code tables than the budget is refused");
 
+        // Even codes with a single symbol count: 65,536 used groups of them are refused too.
+        bits = new Bits();
+        foreach (byte b in LosslessHeader(2048, 512)) bits.Write(b, 8);
+        bits.Write(0, 1); bits.Write(0, 1); bits.Write(1, 1); bits.Write(0, 3); bits.Write(0, 1);
+        EightBitCode(bits, true); EightBitCode(bits, false); SingleSymbol(bits); SingleSymbol(bits); SingleSymbol(bits);
+        for (int i = 0; i < 65536; i++) { bits.Code(i & 255, 8); bits.Code(i >> 8, 8); }
+        for (int group = 0; group < 65536; group++) for (int code = 0; code < 5; code++) SingleSymbol(bits);
+        check(Message(() => WebPImage.Read(Riff("VP8L", bits.ToArray()), default)) == WebPImage.TooComplex, "65,536 used groups of single-symbol codes are refused, not allocated");
+
         // ---- Wiring ----
         check(Catalog.IsImage(@"C:\p\photo.WEBP"), "WebP is an image for the wheel");
         foreach (string text in new[] { WebPImage.Invalid, WebPImage.Animated, WebPImage.TooComplex, WebPImage.ReadNotice, GifImage.InputHint })

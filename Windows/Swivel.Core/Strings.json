@@ -3904,10 +3904,10 @@
     "圖片仍是像素影像，透明部分填白。產生的 PDF 僅包含圖片，沒有可搜尋文字、原圖中繼資料或附件。",
     "画像はラスター画像のままで、透明部分は白になります。新しい PDF には画像のみが含まれ、検索可能な文字、元のメタデータ、添付ファイルは含みません。"
   ],
-  "Images smaller than 9-by-8 pixels, grid brightness ranges below 16, or signatures with fewer than 4 or more than 60 set bits are skipped. These heuristics can miss valid images, including flat pictures and directional gradients. Animation, HDR, high bit depth, CMYK and unsupported formats are refused. HEIC, WebP and AVIF remain pending.": [
-    "小于 9×8 像素、网格亮度范围不足 16、或签名中置位比特不足 4 或超过 60 的图片会跳过。这些启发式条件会漏掉有效图片，包括平坦图和单向渐变。动画、HDR、高位深、CMYK 和不支持的格式会拒绝。HEIC、WebP 和 AVIF 仍待实现。",
-    "小於 9×8 像素、網格亮度範圍不足 16、或簽章中設為 1 的位元不足 4 或超過 60 的圖片會略過。這些啟發式條件會漏掉有效圖片，包括平坦圖及單向漸層。動畫、HDR、高位元深度、CMYK 和不支援的格式會拒絕。HEIC、WebP 和 AVIF 仍待實作。",
-    "9×8画素未満、グリッド輝度範囲が16未満、またはシグネチャの1のビットが4未満か60超の画像はスキップします。この経験則は平坦な画像や一方向のグラデーションなど有効な画像も見逃します。アニメーション、HDR、高ビット深度、CMYK、未対応形式は拒否します。HEIC、WebP、AVIFは未実装です。"
+  "Images smaller than 9-by-8 pixels, grid brightness ranges below 16, or signatures with fewer than 4 or more than 60 set bits are skipped. These heuristics can miss valid images, including flat pictures and directional gradients. Animation, HDR, high bit depth, CMYK and unsupported formats are refused. HEIC and AVIF remain pending.": [
+    "小于 9×8 像素、网格亮度范围不足 16、或签名中置位比特不足 4 或超过 60 的图片会跳过。这些启发式条件会漏掉有效图片，包括平坦图和单向渐变。动画、HDR、高位深、CMYK 和不支持的格式会拒绝。HEIC 和 AVIF 仍待实现。",
+    "小於 9×8 像素、網格亮度範圍不足 16、或簽章中設為 1 的位元不足 4 或超過 60 的圖片會略過。這些啟發式條件會漏掉有效圖片，包括平坦圖及單向漸層。動畫、HDR、高位元深度、CMYK 和不支援的格式會拒絕。HEIC 和 AVIF 仍待實作。",
+    "9×8画素未満、グリッド輝度範囲が16未満、またはシグネチャの1のビットが4未満か60超の画像はスキップします。この経験則は平坦な画像や一方向のグラデーションなど有効な画像も見逃します。アニメーション、HDR、高ビット深度、CMYK、未対応形式は拒否します。HEIC、AVIFは未実装です。"
   ],
   "Images to PDF…": [
     "图片合成 PDF…",
