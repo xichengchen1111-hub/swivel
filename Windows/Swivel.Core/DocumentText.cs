@@ -11,7 +11,7 @@ using System.Xml;
 
 namespace Swivel.Core;
 
-public sealed record TextDocument(string Text,string Encoding,bool Docx,bool Odt=false,bool Rtf=false,bool Html=false,bool Epub=false);
+public sealed record TextDocument(string Text,string Encoding,bool Docx,bool Odt=false,bool Rtf=false,bool Html=false,bool Epub=false,bool Doc=false);
 public sealed record TextStatistics(int Words,int TextElements,int Scalars,int Lines,int Utf8Bytes);
 public enum TextExport { Utf8, Rtf, Docx, Html, Odt }
 
@@ -20,8 +20,8 @@ public enum TextExport { Utf8, Rtf, Docx, Html, Odt }
 public static class DocumentText
 {
     public const int MaxInputBytes=8*1024*1024, MaxCharacters=2_000_000, MaxXmlBytes=8*1024*1024;
-    public static readonly string[] Extensions={"txt","text","md","markdown","csv","tsv","log","srt","docx","odt","rtf","html","htm","epub"};
-    private const string Invalid="Choose a valid UTF-8 text file, BOM-marked UTF-16 text file, DOCX, ODT, RTF, EPUB or supported static HTML document. At most 8 MiB input and 2,000,000 UTF-16 units of extracted text are supported.";
+    public static readonly string[] Extensions={"txt","text","md","markdown","csv","tsv","log","srt","docx","odt","rtf","html","htm","epub","doc"};
+    private const string Invalid="Choose a valid UTF-8 text file, BOM-marked UTF-16 text file, DOC, DOCX, ODT, RTF, EPUB or supported static HTML document. At most 8 MiB input and 2,000,000 UTF-16 units of extracted text are supported.";
     private static readonly Encoding Utf8=new UTF8Encoding(false,true), Little=new UnicodeEncoding(false,false,true), Big=new UnicodeEncoding(true,false,true);
     public static TextDocument Read(Stream input,string extension,CancellationToken token)
     {
@@ -31,6 +31,13 @@ public static class DocumentText
         if(extension.Equals("docx",StringComparison.OrdinalIgnoreCase))return new(ReadDocx(bytes,token),"DOCX body text",true);
         if(extension.Equals("odt",StringComparison.OrdinalIgnoreCase))return new(DocumentOdt.Read(bytes,token),"ODT body text",false,true);
         if(extension.Equals("rtf",StringComparison.OrdinalIgnoreCase))return new(DocumentRtf.Read(bytes,token),"RTF body text",false,false,true);
+        if(extension.Equals("doc",StringComparison.OrdinalIgnoreCase))
+        {
+            // Word files are often saved as RTF or DOCX under a .doc name.
+            if(bytes.AsSpan().StartsWith("{\\rtf"u8))return new(DocumentRtf.Read(bytes,token),"RTF body text",false,false,true);
+            if(bytes.AsSpan().StartsWith("PK\u0003\u0004"u8))return new(ReadDocx(bytes,token),"DOCX body text",true);
+            return new(DocumentDoc.Read(bytes,token),"Word 97-2003 main document text",false,Doc:true);
+        }
         if(extension.Equals("epub",StringComparison.OrdinalIgnoreCase))return new(DocumentEpub.Read(bytes,token),"EPUB spine body text",false,Epub:true);
         if(extension.Equals("html",StringComparison.OrdinalIgnoreCase)||extension.Equals("htm",StringComparison.OrdinalIgnoreCase))return new(DocumentHtml.Read(bytes,token),"HTML source body text",false,Html:true);
         Encoding encoding=Utf8; int skip=0; string label="UTF-8";

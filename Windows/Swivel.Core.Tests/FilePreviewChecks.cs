@@ -14,7 +14,7 @@ internal static class FilePreviewChecks
             check(Catalog.Available(prefs,new[]{"chosen."+suffix}).Any(x=>x.Id==action.Id),"Supported explicit preview extension is offered");
             check(!Catalog.Available(prefs,new[]{"a."+suffix,"b."+suffix}).Any(x=>x.Id==action.Id),"Multiple references never trigger bulk preview reads");
         }
-        foreach(string extension in new[]{"png","jpg","gif","pdf","exe","doc","mp3","flac","aac","zip","lnk",""})
+        foreach(string extension in new[]{"png","jpg","gif","pdf","exe","ppt","mp3","flac","aac","zip","lnk",""})
             check(!Catalog.Available(prefs,new[]{"chosen."+extension}).Any(x=>x.Id==action.Id),"Unsupported/non-document types have no generic non-image preview");
         check(!Catalog.Available(prefs,Array.Empty<string>()).Any(x=>x.Id==action.Id),"No-file preview cannot be offered");
         prefs.SetCustomActions(new[]{action.Id});prefs.Set(Feature.MyWheel,true);var restored=Prefs.Parse(prefs.Serialize());

@@ -35,7 +35,7 @@ public interface IMcpHost
     /// most maxBytes, and returns that file; a UserError, and no file, when it can't get there.
     /// Refused when the file, once held, no longer matches its planned stamp.
     string Compress(string path, long maxBytes, FileStamp expected, CancellationToken token);
-    /// The body text of a document DocumentText reads (plain text, DOCX, ODT, RTF, static HTML, EPUB).
+    /// The body text of a document DocumentText reads (plain text, DOC, DOCX, ODT, RTF, static HTML, EPUB).
     string ReadDocumentText(string path, CancellationToken token);
     /// Whether a file, folder or link has this name; only "not found" counts as free.
     bool NameTaken(string path);
@@ -138,7 +138,7 @@ public sealed class McpSession
     private const string SubtitleInputs = "SRT, WebVTT (VTT), ASS/SSA, LRC or SBV subtitle files in another format than the output, in UTF-8 or UTF-16 with a byte order mark; up to 8 MB";
     private const string FontInputs = "TrueType or OpenType fonts (TTF, OTF) and web fonts (WOFF, WOFF2), not font collections (TTC), in another format than the output; up to 64 MB";
     private const string DataInputs = "JSON, JSON Lines (JSONL/NDJSON), XML or binary property lists (PLIST), CSV or TSV in another format than the output; text in UTF-8 or UTF-16 with a byte order mark; up to 32 MB";
-    private const string DocumentInputs = "Plain text (TXT, TEXT, MD, MARKDOWN, CSV, TSV, LOG, SRT) in strict UTF-8 or UTF-16 with a byte order mark, DOCX, ODT, RTF, static HTML/HTM without scripts, or unencrypted EPUB 2/3 (spine XHTML body text); up to 8 MiB and 2,000,000 characters of text";
+    private const string DocumentInputs = "Plain text (TXT, TEXT, MD, MARKDOWN, CSV, TSV, LOG, SRT) in strict UTF-8 or UTF-16 with a byte order mark, unencrypted Word 97-2003 DOC (main document text), DOCX, ODT, RTF, static HTML/HTM without scripts, or unencrypted EPUB 2/3 (spine XHTML body text); up to 8 MiB and 2,000,000 characters of text";
     /// plan_compress's work, logged like an action; not offered through plan_action.
     private static readonly McpAction Compression = new("compress", "Compress to a size", " compressed");
     private static readonly McpAction FolderZipAction = new("archive.zipfolder", "Compress Folder to ZIP", "");
@@ -217,7 +217,7 @@ public sealed class McpSession
         return new JsonArray(
             Tool("list_actions", "List actions", "Lists the actions plan_action accepts and what each one writes.", new JsonObject(), Array.Empty<string>(), true, false),
             Tool("inspect_files", "Inspect files", "Checks that paths are local regular files Swivel can read and lists the plan_action actions and other tools available for each (extract_text for images only where Windows OCR can run). Reads metadata only.", new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
-            Tool("extract_text", "Extract text", "Returns the text of images (Windows OCR on this PC with an installed language; needs Swivel's MSIX package) and of plain-text, DOCX, ODT, RTF, static HTML or EPUB documents (body text only). Read-only; Swivel uses no network. A file's text over " + MaxFileText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " UTF-16 units, or text past " + MaxReplyText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " in one reply, is refused rather than cut. Hosts may still shorten long tool replies, so ask for a few files at a time.",
+            Tool("extract_text", "Extract text", "Returns the text of images (Windows OCR on this PC with an installed language; needs Swivel's MSIX package) and of plain-text, DOC, DOCX, ODT, RTF, static HTML or EPUB documents (body text only). Read-only; Swivel uses no network. A file's text over " + MaxFileText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " UTF-16 units, or text past " + MaxReplyText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " in one reply, is refused rather than cut. Hosts may still shorten long tool replies, so ask for a few files at a time.",
                 new JsonObject { ["paths"] = Paths(), ["language"] = new JsonObject { ["type"] = "string", ["description"] = "Optional OCR language tag such as en-US or zh-Hans-CN, matched to the installed OCR languages ignoring case. Default: the user's Windows language settings. Ignored for documents." } }, new[] { "paths" }, true, false),
             Tool("read_codes", "Read QR codes", "Reads one clean, flat QR code per image, such as a saved or generated QR image: square, upright or turned in 90° steps, an exact four-module white border and sharp pixels (whole-number scaling is fine). Photos, damaged or cropped codes, smoothly resized images and barcodes are not read. Read-only.",
                 new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
@@ -344,7 +344,7 @@ public sealed class McpSession
         }
         var paths = PathsArgument(arguments);
         if (paths.FirstOrDefault(p => !Catalog.IsImage(p) && !IsDocument(p)) is { } other)
-            throw new McpToolError("extract_text takes images or plain-text, DOCX, ODT, RTF, HTML or EPUB documents; " + other + " is neither.");
+            throw new McpToolError("extract_text takes images or plain-text, DOC, DOCX, ODT, RTF, HTML or EPUB documents; " + other + " is neither.");
         // The OCR languages are read once; a tag is checked before any image is decoded and passed
         // on as Windows spells it.
         var languages = paths.Any(Catalog.IsImage) ? host.TextLanguages : Array.Empty<string>();
@@ -403,7 +403,7 @@ public sealed class McpSession
         foreach (string path in paths)
         {
             token.ThrowIfCancellationRequested();
-            if (!action.Accepts(path)) throw new McpToolError(path + (action.Font ? (action.Id == "font.desktop" ? ": this action needs a WOFF or WOFF2 web font." : ": this action needs a font file (TTF, OTF, WOFF or WOFF2) in another format.") : action.Data ? ": this action needs a data file (JSON, JSONL, NDJSON, PLIST, CSV or TSV) in another format." : action.Subtitle ? ": this action needs a subtitle file (SRT, VTT, ASS, SSA, LRC or SBV) in another format." : action.Document ? ": this action needs a plain-text, DOCX, ODT, RTF, HTML or EPUB document." : ": this action needs a PNG, JPEG, BMP, TIFF, GIF, TGA, PSD or WebP image."));
+            if (!action.Accepts(path)) throw new McpToolError(path + (action.Font ? (action.Id == "font.desktop" ? ": this action needs a WOFF or WOFF2 web font." : ": this action needs a font file (TTF, OTF, WOFF or WOFF2) in another format.") : action.Data ? ": this action needs a data file (JSON, JSONL, NDJSON, PLIST, CSV or TSV) in another format." : action.Subtitle ? ": this action needs a subtitle file (SRT, VTT, ASS, SSA, LRC or SBV) in another format." : action.Document ? ": this action needs a plain-text, DOC, DOCX, ODT, RTF, HTML or EPUB document." : ": this action needs a PNG, JPEG, BMP, TIFF, GIF, TGA, PSD or WebP image."));
             FileStamp stamp;
             try { stamp = host.Inspect(path); }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }

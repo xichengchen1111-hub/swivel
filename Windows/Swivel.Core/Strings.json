@@ -15123,5 +15123,40 @@
     "小于 9×8 像素、网格亮度范围不足 16、或签名中置位比特不足 4 或超过 60 的图片会跳过。这些启发式条件会漏掉有效图片，包括平坦图和单向渐变。动画、HDR、高位深、CMYK 和不支持的格式会拒绝。HEIC 和 AVIF 仍待实现。",
     "小於 9×8 像素、網格亮度範圍不足 16、或簽章中設為 1 的位元不足 4 或超過 60 的圖片會略過。這些啟發式條件會漏掉有效圖片，包括平坦圖及單向漸層。動畫、HDR、高位元深度、CMYK 和不支援的格式會拒絕。HEIC 和 AVIF 仍待實作。",
     "9×8画素未満、グリッド輝度範囲が16未満、またはシグネチャの1のビットが4未満か60超の画像はスキップします。この経験則は平坦な画像や一方向のグラデーションなど有効な画像も見逃します。アニメーション、HDR、高ビット深度、CMYK、未対応形式は拒否します。HEIC、AVIFは未実装です。"
+  ],
+  "Word 97-2003 DOC reads the main document text from the piece table, not Word's rendered view. Headers, footers, footnotes, comments, text boxes, field codes, Insert-Symbol characters, pictures, OLE objects and macros are omitted; field results are kept. Paragraph marks become line breaks, table cells tabs and table rows line breaks. Directly formatted hidden text and tracked deletions are skipped; hidden text from styles and piece-level property changes are not evaluated. Encrypted or obfuscated files and Word 6/95 or older are refused; a .doc that is really RTF or DOCX is read as that format. Limits: 16,384 compound-file directory entries and 128 nested fields. Nothing is extracted to disk or executed.": [
+    "Word 97-2003 DOC 从片段表读取主文档文字，不是 Word 的排版视图。页眉、页脚、脚注、批注、文本框、域代码、插入的符号、图片、OLE 对象和宏都会省略；保留域结果。段落标记变为换行，表格单元格变为制表符，表格行变为换行。直接设置格式的隐藏文字和修订中的删除内容会跳过；来自样式的隐藏文字和片段级属性更改不会计算。已加密或混淆的文件以及 Word 6/95 或更早版本会被拒绝；实为 RTF 或 DOCX 的 .doc 按对应格式读取。限制：复合文件目录 16,384 项、嵌套域 128 层。不会解压到磁盘，也不会执行任何内容。",
+    "Word 97-2003 DOC 從片段表讀取主文件文字，不是 Word 的版面檢視。頁首、頁尾、註腳、註解、文字方塊、功能變數代碼、插入的符號、圖片、OLE 物件和巨集都會省略；保留功能變數結果。段落標記變為換行，表格儲存格變為定位字元，表格列變為換行。直接設定格式的隱藏文字和追蹤修訂中的刪除內容會略過；來自樣式的隱藏文字和片段層級屬性變更不會計算。已加密或混淆的檔案以及 Word 6/95 或更早版本會被拒絕；實為 RTF 或 DOCX 的 .doc 依對應格式讀取。限制：複合檔案目錄 16,384 項、巢狀功能變數 128 層。不會解壓縮到磁碟，也不會執行任何內容。",
+    "Word 97-2003 DOC はピーステーブルからメイン文書のテキストを読み取ります。Word の表示レイアウトではありません。ヘッダー、フッター、脚注、コメント、テキストボックス、フィールドコード、記号の挿入で入れた文字、画像、OLE オブジェクト、マクロは省き、フィールドの結果は残します。段落記号は改行、表のセルはタブ、表の行は改行になります。直接書式の隠し文字と変更履歴の削除は飛ばしますが、スタイル由来の隠し文字とピース単位のプロパティ変更は評価しません。暗号化・難読化されたファイルと Word 6/95 以前は拒否し、中身が RTF または DOCX の .doc はその形式として読みます。上限：複合ファイルのディレクトリ 16,384 項目、入れ子のフィールド 128 段。ディスクへの展開や実行は一切行いません。"
+  ],
+  "Choose a valid UTF-8 text file, BOM-marked UTF-16 text file, DOC, DOCX, ODT, RTF, EPUB or supported static HTML document. At most 8 MiB input and 2,000,000 UTF-16 units of extracted text are supported.": [
+    "请选择有效的 UTF-8 文字、带 BOM 的 UTF-16 文字、DOC、DOCX、ODT、RTF、EPUB 或支持的静态 HTML 文档。输入最多 8 MiB，提取文字最多 2,000,000 个 UTF-16 单元。",
+    "請選擇有效的 UTF-8 文字、帶 BOM 的 UTF-16 文字、DOC、DOCX、ODT、RTF、EPUB 或支援的靜態 HTML 文件。輸入最多 8 MiB，擷取文字最多 2,000,000 個 UTF-16 單元。",
+    "有効な UTF-8 テキスト、BOM 付き UTF-16 テキスト、DOC、DOCX、ODT、RTF、EPUB、対応する静的 HTML を選んでください。入力 8 MiB、抽出文字 2,000,000 UTF-16 単位までです。"
+  ],
+  "Choose a well-formed Word 97-2003 DOC document. Limits: 8 MiB input, 2,000,000 extracted UTF-16 units, 16,384 compound-file directory entries and 128 nested fields. Damaged, truncated or inconsistent files are refused.": [
+    "请选择格式正确的 Word 97-2003 DOC 文档。限制：输入 8 MiB、提取 2,000,000 个 UTF-16 单元、复合文件目录 16,384 项、嵌套域 128 层。损坏、截断或内部不一致的文件会被拒绝。",
+    "請選擇格式正確的 Word 97-2003 DOC 文件。限制：輸入 8 MiB、擷取 2,000,000 個 UTF-16 單元、複合檔案目錄 16,384 項、巢狀功能變數 128 層。損毀、截斷或內部不一致的檔案會被拒絕。",
+    "正しい形式の Word 97-2003 DOC 文書を選んでください。上限：入力 8 MiB、抽出 2,000,000 UTF-16 単位、複合ファイルのディレクトリ 16,384 項目、入れ子のフィールド 128 段。破損・切り詰め・不整合のあるファイルは拒否します。"
+  ],
+  "This Word document is password-protected (encrypted or obfuscated). Swivel does not decrypt documents; save an unprotected copy in Word first.": [
+    "此 Word 文档受密码保护（已加密或混淆）。Swivel 不会解密文档；请先在 Word 中另存一份未保护的副本。",
+    "此 Word 文件受密碼保護（已加密或混淆）。Swivel 不會解密文件；請先在 Word 中另存一份未保護的副本。",
+    "この Word 文書はパスワードで保護されています（暗号化または難読化）。Swivel は文書を復号しません。先に Word で保護なしのコピーを保存してください。"
+  ],
+  "Inspect strict UTF-8/BOM UTF-16 text, bounded RTF or UTF-8 static HTML source body text, DOCX/ODT body XML, EPUB spine XHTML and the main text of unencrypted Word 97-2003 DOC files. Count whitespace segments and Unicode text elements; save plain TXT, RTF, DOCX, ODT or HTML beside the source. HTML requires explicit balanced markup and refuses scripts; browser rendering, formatting fidelity and full Office/PDF conversion remain pending.": [
+    "检查严格 UTF-8/带 BOM 的 UTF-16 文字、有限的 RTF 或 UTF-8 静态 HTML 源码正文、DOCX/ODT 正文 XML、EPUB 阅读顺序中的 XHTML，以及未加密 Word 97-2003 DOC 文件的主文档文字。统计以空白分隔的片段和 Unicode 文本元素；在原件旁另存纯 TXT、RTF、DOCX、ODT 或 HTML。HTML 需要显式成对的标记并拒绝脚本；浏览器渲染、格式保真和完整的 Office/PDF 转换仍待完成。",
+    "檢查嚴格 UTF-8/帶 BOM 的 UTF-16 文字、有限的 RTF 或 UTF-8 靜態 HTML 原始碼正文、DOCX/ODT 正文 XML、EPUB 閱讀順序中的 XHTML，以及未加密 Word 97-2003 DOC 檔案的主文件文字。統計以空白分隔的片段和 Unicode 文字元素；在原件旁另存純 TXT、RTF、DOCX、ODT 或 HTML。HTML 需要明確成對的標記並拒絕指令碼；瀏覽器轉譯、格式保真和完整的 Office/PDF 轉換仍待完成。",
+    "厳密な UTF-8／BOM 付き UTF-16 テキスト、限定的な RTF または UTF-8 静的 HTML ソース本文、DOCX/ODT 本文 XML、EPUB の読み順の XHTML、暗号化されていない Word 97-2003 DOC ファイルのメイン文書テキストを調べます。空白区切りの区間と Unicode テキスト要素を数え、プレーンな TXT・RTF・DOCX・ODT・HTML を元ファイルの横に保存します。HTML は明示的に対応したタグが必要でスクリプトは拒否します。ブラウザー表示、書式の再現、完全な Office/PDF 変換は今後の予定です。"
+  ],
+  "This is a Word 6, Word 95 or older document. Only Word 97-2003 DOC files are read; open and save it in a newer format first.": [
+    "这是 Word 6、Word 95 或更早版本的文档。仅读取 Word 97-2003 DOC 文件；请先打开并另存为较新的格式。",
+    "這是 Word 6、Word 95 或更早版本的文件。僅讀取 Word 97-2003 DOC 檔案；請先開啟並另存為較新的格式。",
+    "これは Word 6、Word 95 またはそれ以前の文書です。読み取れるのは Word 97-2003 DOC ファイルのみです。先に開いて新しい形式で保存してください。"
+  ],
+  "Word 97-2003 main document text": [
+    "Word 97-2003 主文档文字",
+    "Word 97-2003 主文件文字",
+    "Word 97-2003 メイン文書テキスト"
   ]
 }
