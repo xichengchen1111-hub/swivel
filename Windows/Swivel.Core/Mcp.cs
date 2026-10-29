@@ -58,6 +58,12 @@ public interface IMcpHost
     /// the others back. With `folder`, the destination must still be that folder. The outcome
     /// says where each file is afterwards.
     RenameOutcome Move(IReadOnlyList<RenamePair> plan, IReadOnlyList<FileStamp> expected, MoveIdentity? folder, CancellationToken token);
+    /// What Compress Folder to ZIP would put in a ZIP of this folder (FolderZip's rules), read
+    /// through held folders. Throws when it is not a local folder Swivel can read.
+    FolderZipPlan PlanFolderZip(string folder, CancellationToken token);
+    /// Writes "<folder>.zip" (or the next free numbered name) beside the folder only if a fresh
+    /// plan still has this fingerprint, and returns the new file.
+    string ZipFolder(string folder, string fingerprint, CancellationToken token);
     /// The identity of a file Swivel created, or null when it no longer exists.
     FileStamp? Stamp(string path);
     /// Moves a file Swivel created to the Recycle Bin only if it is still exactly that file.
@@ -135,6 +141,9 @@ public sealed class McpSession
     private const string DocumentInputs = "Plain text (TXT, TEXT, MD, MARKDOWN, CSV, TSV, LOG, SRT) in strict UTF-8 or UTF-16 with a byte order mark, DOCX, ODT, RTF, or static HTML/HTM without scripts; up to 8 MiB and 2,000,000 characters of text";
     /// plan_compress's work, logged like an action; not offered through plan_action.
     private static readonly McpAction Compression = new("compress", "Compress to a size", " compressed");
+    private static readonly McpAction FolderZipAction = new("archive.zipfolder", "Compress Folder to ZIP", "");
+    public const string FolderChanged = "The folder's contents changed since planning. No ZIP was made; plan again.";
+    public const int MaxSkippedRows = 200;
     public const long MinTarget = 1_000, MaxTarget = 1_000_000_000_000;
 
     private readonly IMcpHost host;
@@ -143,7 +152,7 @@ public sealed class McpSession
 
     /// An action plan has Action; a rename plan has Renames and a move plan Moves (one pair per
     /// input, in order).
-    private sealed record Plan(string Id, McpAction? Action, IReadOnlyList<RenamePair>? Renames, IReadOnlyList<(string Path, FileStamp Stamp)> Inputs, DateTime Expires, IReadOnlyList<RenamePair>? Moves = null, MoveIdentity? Folder = null, long? Target = null);
+    private sealed record Plan(string Id, McpAction? Action, IReadOnlyList<RenamePair>? Renames, IReadOnlyList<(string Path, FileStamp Stamp)> Inputs, DateTime Expires, IReadOnlyList<RenamePair>? Moves = null, MoveIdentity? Folder = null, long? Target = null, (string Path, string Fingerprint)? Zip = null);
 
     public McpSession(IMcpHost host, string version) { this.host = host; this.version = version; }
 
@@ -234,7 +243,9 @@ public sealed class McpSession
                 }, new[] { "paths" }, true, false),
             Tool("plan_move", "Plan moving files", "Plans moving 1–100 files into an existing folder on the same NTFS drive, keeping their names. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Files already in that folder, names already taken there (nothing is overwritten or renumbered), two files with one name, and files on another drive, read-only or hard-linked are reported on their rows; folders are not moved. Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
                 new JsonObject { ["paths"] = Paths(), ["destination"] = new JsonObject { ["type"] = "string", ["description"] = "Absolute path of an existing local folder" } }, new[] { "paths", "destination" }, true, false),
-            Tool("apply_plan", "Apply plan", "Runs a plan from plan_action, plan_compress, plan_rename or plan_move. Refused if any input changed since planning. Creates new files beside the originals, renames files within their folders, or moves files into the planned folder; never overwrites. Logged for undo.",
+            Tool("plan_zip_folder", "Plan zipping a folder", "Plans compressing one folder and everything inside it (sub-folders, empty folders, hidden files, each file's modified time) into a new ZIP beside the folder, named '<folder>.zip' or the next free numbered name. Links, junctions, cloud-only files, system files, names Windows cannot hold, paths over 240 characters and names differing only in case are left out and listed. Up to 10,000 items, 32 levels and 2 GB. Applied only if the folder's contents (names, sizes, modified times) are unchanged since planning. Nothing changes until apply_plan.",
+                new JsonObject { ["path"] = new JsonObject { ["type"] = "string", ["description"] = "Absolute path of an existing local folder (not a whole drive)" } }, new[] { "path" }, true, false),
+            Tool("apply_plan", "Apply plan", "Runs a plan from plan_action, plan_compress, plan_rename, plan_move or plan_zip_folder. Refused if any input changed since planning. Creates new files beside the originals, renames files within their folders, or moves files into the planned folder; never overwrites. Logged for undo.",
                 new JsonObject { ["plan_id"] = new JsonObject { ["type"] = "string" } }, new[] { "plan_id" }, false, false),
             Tool("undo", "Undo", "Moves the files created by one logged apply to the Recycle Bin, only if each is unchanged; for a rename, renames all its files back together, only if none changed and every old name is free; for a move, moves each unchanged file back to its old folder if its old name is free, leaving the others where they are. Without entry_id it takes the newest apply that is not fully undone; to reach an older one, pass its entry_id from history. dry_run reports without changing anything.",
                 new JsonObject { ["entry_id"] = new JsonObject { ["type"] = "string" }, ["dry_run"] = new JsonObject { ["type"] = "boolean" } }, Array.Empty<string>(), false, true),
@@ -250,7 +261,7 @@ public sealed class McpSession
         if (parameters["arguments"] is not null and not JsonObject) throw new McpInvalidParams("Tool arguments must be an object.");
         Func<JsonObject, CancellationToken, JsonObject> tool = name switch
         {
-            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction, "plan_compress" => PlanCompress, "plan_rename" => PlanRename, "plan_move" => PlanMove,
+            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction, "plan_compress" => PlanCompress, "plan_rename" => PlanRename, "plan_move" => PlanMove, "plan_zip_folder" => PlanZipFolder,
             "apply_plan" => ApplyPlan, "undo" => Undo, "history" => History,
             _ => throw new McpInvalidParams("Unknown tool: " + name),
         };
@@ -469,12 +480,12 @@ public sealed class McpSession
         };
     }
 
-    private Plan Store(McpAction? action, IReadOnlyList<RenamePair>? renames, IReadOnlyList<(string, FileStamp)> inputs, IReadOnlyList<RenamePair>? moves = null, MoveIdentity? folder = null, long? target = null)
+    private Plan Store(McpAction? action, IReadOnlyList<RenamePair>? renames, IReadOnlyList<(string, FileStamp)> inputs, IReadOnlyList<RenamePair>? moves = null, MoveIdentity? folder = null, long? target = null, (string, string)? zip = null)
     {
         DateTime now = host.UtcNow;
         foreach (var stale in plans.Values.Where(p => p.Expires <= now).ToArray()) plans.Remove(stale.Id);
         if (plans.Count >= MaxPlans) throw new McpToolError("Too many unused plans. Apply or let some expire first.");
-        var plan = new Plan(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(), action, renames, inputs, now + PlanLifetime, moves, folder, target);
+        var plan = new Plan(Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant(), action, renames, inputs, now + PlanLifetime, moves, folder, target, zip);
         plans[plan.Id] = plan;
         return plan;
     }
@@ -668,6 +679,7 @@ public sealed class McpSession
             if (!now.SameObjectAndContent(stamp)) throw new McpToolError(path + " changed since planning. Nothing was applied; plan again.");
         }
         if (plan.Renames is not null || plan.Moves is not null) return ApplyRename(plan, token);
+        if (plan.Zip is { } zip) return ApplyZip(zip.Path, zip.Fingerprint, token);
         var action = plan.Action!;
         var outputs = new JsonArray();
         var entry = new JsonObject
@@ -712,6 +724,56 @@ public sealed class McpSession
         }
         if (failure is null) return body;
         body["error"] = failure + " Files already created were kept and logged for undo.";
+        throw new McpPartial(body);
+    }
+
+    private JsonObject PlanZipFolder(JsonObject arguments, CancellationToken token)
+    {
+        foreach (var (key, _) in arguments)
+            if (key != "path") throw new McpToolError("Unknown argument " + key + ". plan_zip_folder takes path.");
+        string folder = arguments["path"] is JsonValue v && v.GetValueKind() == JsonValueKind.String ? (string)v! : throw new McpToolError("path must be the absolute path of a folder.");
+        if (!IsWellFormed(folder)) throw new McpToolError("path must be valid Unicode text.");
+        FolderZipPlan zip;
+        try { zip = host.PlanFolderZip(folder, token); }
+        catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(folder + ": " + error.Message); }
+        var plan = Store(FolderZipAction, null, Array.Empty<(string, FileStamp)>(), zip: (folder, FolderZip.Fingerprint(zip)));
+        var body = new JsonObject
+        {
+            ["plan_id"] = plan.Id, ["action"] = FolderZipAction.Id, ["expires"] = plan.Expires.ToString("O"), ["folder"] = folder,
+            ["will_create"] = WindowsParent(folder) + "\\" + zip.Name + ".zip (or the next free numbered name)",
+            ["files"] = zip.Files, ["folders"] = zip.Folders, ["bytes"] = zip.Bytes, ["skipped_count"] = zip.Skipped.Count,
+            ["skipped"] = new JsonArray(zip.Skipped.Take(MaxSkippedRows).Select(s => (JsonNode)new JsonObject { ["path"] = s.RelativePath, ["reason"] = s.Reason }).ToArray()),
+            ["note"] = "The folder itself is not changed. File attributes, permissions and alternate data streams are not kept in the ZIP.",
+        };
+        if (zip.Skipped.Count > MaxSkippedRows) body["skipped_note"] = "Only the first " + MaxSkippedRows + " skipped items are listed.";
+        return body;
+    }
+
+    /// A Windows path's parent folder, spelt the same on any platform the checks run on.
+    private static string WindowsParent(string path)
+    {
+        string trimmed = path.TrimEnd('\\');
+        int cut = trimmed.LastIndexOf('\\');
+        return cut > 0 ? trimmed[..cut] : trimmed;
+    }
+
+    private JsonObject ApplyZip(string folder, string fingerprint, CancellationToken token)
+    {
+        string output;
+        try { output = host.ZipFolder(folder, fingerprint, token); }
+        catch (Exception error) when (McpToolError.Expected(error)) { throw new McpToolError(folder + ": " + (error is OperationCanceledException ? "Cancelled." : error.Message) + (error is McpToolError ? "" : " No ZIP was made.")); }
+        var stamp = host.Stamp(output) ?? throw new McpToolError("The new ZIP disappeared.");
+        var entry = new JsonObject
+        {
+            ["id"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), ["time"] = host.UtcNow.ToString("O"),
+            ["action"] = FolderZipAction.Id, ["outputs"] = new JsonArray(StampNode(output, stamp)),
+        };
+        string? unlogged = null;
+        try { using (host.LockHistory()) Record(LoadHistory(), entry); }
+        catch (Exception error) when (McpToolError.Expected(error)) { unlogged = error.Message; }
+        var body = new JsonObject { ["entry_id"] = unlogged is null ? (string)entry["id"]! : null, ["action"] = FolderZipAction.Id, ["outputs"] = new JsonArray((JsonNode)output), ["completed"] = 1, ["total"] = 1 };
+        if (unlogged is null) return body;
+        body["error"] = "The ZIP was kept but could not be logged for undo (" + unlogged + "); remove it yourself if it is not wanted.";
         throw new McpPartial(body);
     }
 

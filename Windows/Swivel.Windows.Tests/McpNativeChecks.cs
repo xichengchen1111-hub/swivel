@@ -180,6 +180,22 @@ internal static class McpNativeChecks
             blocked = Call("undo", new JsonObject())["structuredContent"]!;
             check((string?)blocked["results"]![1]!["result"] == "changed since the rename; left alone" && File.Exists(Path.Combine(names, "e r-001.txt")), "Native MCP undo refuses every file when one was edited: " + blocked.ToJsonString());
 
+            // plan_zip_folder on a real folder: plan, apply, a refused stale plan, undo.
+            string zipping = Path.Combine(root, "zip me"); Directory.CreateDirectory(Path.Combine(zipping, "inner"));
+            File.WriteAllText(Path.Combine(zipping, "one.txt"), "1"); File.WriteAllText(Path.Combine(zipping, "inner", "two.txt"), "22");
+            var zipPlan = Call("plan_zip_folder", new JsonObject { ["path"] = zipping })["structuredContent"]!;
+            check(zipPlan["files"]!.GetValue<int>() == 2 && (string?)zipPlan["will_create"] == Path.Combine(root, "zip me.zip") + " (or the next free numbered name)", "Native MCP plan_zip_folder plans a real folder: " + zipPlan.ToJsonString());
+            var zipDone = Call("apply_plan", new JsonObject { ["plan_id"] = (string)zipPlan["plan_id"]! })["structuredContent"]!;
+            string zipFile = Path.Combine(root, "zip me.zip");
+            using (var archive = System.IO.Compression.ZipFile.OpenRead(zipFile))
+                check((string?)zipDone["outputs"]![0] == zipFile && archive.Entries.Select(e => e.FullName).SequenceEqual(new[] { "zip me/", "zip me/inner/", "zip me/inner/two.txt", "zip me/one.txt" }), "Native MCP apply writes the folder's ZIP: " + zipDone.ToJsonString());
+            var stalePlan = Call("plan_zip_folder", new JsonObject { ["path"] = zipping })["structuredContent"]!;
+            File.AppendAllText(Path.Combine(zipping, "one.txt"), "+");
+            var staleApply = Call("apply_plan", new JsonObject { ["plan_id"] = (string)stalePlan["plan_id"]! });
+            check(staleApply["isError"]!.GetValue<bool>() && !File.Exists(Path.Combine(root, "zip me 2.zip")), "Native MCP refuses a folder ZIP after a file in it changed: " + staleApply.ToJsonString());
+            var zipUndone = Call("undo", new JsonObject())["structuredContent"]!;
+            check(zipUndone["complete"]!.GetValue<bool>() && !File.Exists(zipFile) && File.Exists(Path.Combine(zipping, "one.txt")), "Native MCP undo moves the folder ZIP to the Recycle Bin: " + zipUndone.ToJsonString());
+
             // plan_move on real files: two folders into a third, row issues, refusals, apply and undo.
             string moves = Path.Combine(root, "move"), in1 = Path.Combine(moves, "in1"), in2 = Path.Combine(moves, "in2"), dest = Path.Combine(moves, "out");
             foreach (string folder in new[] { in1, in2, dest }) Directory.CreateDirectory(folder);

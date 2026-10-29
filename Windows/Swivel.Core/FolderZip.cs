@@ -149,6 +149,17 @@ public static class FolderZip
         token.ThrowIfCancellationRequested();
     }
 
+    /// What a plan would put in the ZIP and leave out, as one hash: names, lengths and modified
+    /// times of every item and every skipped path. An agent's plan is applied only while it matches.
+    public static string Fingerprint(FolderZipPlan plan)
+    {
+        var text = new StringBuilder();
+        foreach (var item in plan.Items)
+            text.Append(item.Directory ? 'D' : 'F').Append('\0').Append(item.EntryName).Append('\0').Append(item.Length).Append('\0').Append(item.LastWrite).Append('\n');
+        foreach (var skip in plan.Skipped) text.Append('S').Append('\0').Append(skip.RelativePath).Append('\0').Append(skip.Reason).Append('\n');
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))).ToLowerInvariant();
+    }
+
     /// ZIP stores local DOS times from 1980 to 2107; anything outside (or unknown) becomes 1 January 1980.
     public static DateTimeOffset Time(long fileTime)
     {

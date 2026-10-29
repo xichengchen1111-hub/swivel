@@ -200,6 +200,21 @@ public sealed class McpHost : IMcpHost
         }
     }
 
+    public FolderZipPlan PlanFolderZip(string folder, CancellationToken token)
+    {
+        using var work = FolderZipWork.Open(folder, token);
+        return work.Plan;
+    }
+
+    // Re-read through held folders and compared with the plan the agent saw; the same session
+    // then writes the ZIP, so what was compared is what is compressed.
+    public string ZipFolder(string folder, string fingerprint, CancellationToken token)
+    {
+        using var work = FolderZipWork.Open(folder, token);
+        if (FolderZip.Fingerprint(work.Plan) != fingerprint) throw new McpToolError(McpSession.FolderChanged);
+        return work.Save(token, null);
+    }
+
     public FileStamp? Stamp(string path)
     {
         try { return NativeFiles.InspectStamp(path); }

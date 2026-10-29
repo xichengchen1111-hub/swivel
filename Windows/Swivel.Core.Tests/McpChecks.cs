@@ -41,6 +41,15 @@ internal static class McpChecks
             while (Files.ContainsKey(output)) output = allowed.Subtitle || allowed.Data || allowed.Font ? System.IO.Path.ChangeExtension(output, null) + " 2." + allowed.Extension : output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
             Add(output); return output;
         }
+        public readonly Dictionary<string, FolderZipPlan> ZipFolders = new(StringComparer.OrdinalIgnoreCase);
+        public FolderZipPlan PlanFolderZip(string folder, CancellationToken token) => ZipFolders.TryGetValue(folder, out var plan) ? plan : throw new UserError("Choose a local folder without links, system attributes or cloud placeholders.");
+        public string ZipFolder(string folder, string fingerprint, CancellationToken token)
+        {
+            if (FolderZip.Fingerprint(PlanFolderZip(folder, token)) != fingerprint) throw new McpToolError(McpSession.FolderChanged);
+            string output = folder[..folder.LastIndexOf('\\')] + "\\" + ZipFolders[folder].Name + ".zip";
+            for (int n = 2; Files.ContainsKey(output); n++) output = folder[..folder.LastIndexOf('\\')] + "\\" + ZipFolders[folder].Name + " " + n + ".zip";
+            Add(output); return output;
+        }
         public readonly Dictionary<string, VideoProbe> Videos = new(StringComparer.OrdinalIgnoreCase);
         public readonly List<(string Path, long Bytes)> Compressed = new();
         public VideoProbe ProbeVideo(string path, CancellationToken token) => Videos.TryGetValue(path, out var video) ? video : throw new UserError("Windows could not open this video.");
@@ -206,9 +215,9 @@ internal static class McpChecks
         check((int)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/list\"}")["error"]!["code"]! == -32601, "MCP unknown method");
         check((int)Rpc(session, new string(' ', McpSession.MaxLineChars + 1))["error"]!["code"]! == -32600, "MCP oversized message refused");
         var tools = ((JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!).Select(t => (string)t!["name"]!).ToArray();
-        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "plan_compress", "plan_rename", "plan_move", "apply_plan", "undo", "history" }), "MCP tool list");
+        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "plan_compress", "plan_rename", "plan_move", "plan_zip_folder", "apply_plan", "undo", "history" }), "MCP tool list");
         var listed = (JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!;
-        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes" or "plan_compress" or "plan_rename" or "plan_move").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
+        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes" or "plan_compress" or "plan_rename" or "plan_move" or "plan_zip_folder").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
             "MCP extract_text, read_codes and the plan tools are marked read-only");
         BundleChecks(tools, check);
         check((int)Call(session, "format_disk", new JsonObject())["error"]!["code"]! == -32602, "MCP unknown tool is an invalid-params error");
@@ -253,6 +262,22 @@ internal static class McpChecks
         var docApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)docPlan["plan_id"]! }));
         check((string?)docApplied["outputs"]![0] == @"C:\Users\me\notes text.docx" && paper.Ran[^1] == ("document.docx", doc) && (string?)docApplied["action"] == "document.docx", "MCP apply runs the document action");
         check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\notes text.docx") && paper.Files.ContainsKey(doc), "MCP undo recycles a document conversion");
+        // plan_zip_folder: one folder, applied only while its contents match the plan; undo recycles the ZIP.
+        string photos = @"C:\Users\me\Photos";
+        FolderZipPlan PhotosPlan(long length) => new("Photos", new[] { new FolderZipItem("Photos/", "", true, 0, 0), new FolderZipItem("Photos/a.jpg", "a.jpg", false, length, 5) }, new[] { new FolderZipSkip("link", "Link or junction (not followed)") }, 1, 0, length);
+        paper.ZipFolders[photos] = PhotosPlan(10);
+        int zipSaves = paper.Saves;
+        var zipPlan = Body(Call(papers, "plan_zip_folder", new JsonObject { ["path"] = photos }));
+        check((string?)zipPlan["will_create"] == @"C:\Users\me\Photos.zip (or the next free numbered name)" && zipPlan["files"]!.GetValue<int>() == 1 && zipPlan["skipped_count"]!.GetValue<int>() == 1
+            && (string?)zipPlan["skipped"]![0]!["reason"] == "Link or junction (not followed)" && paper.Saves == zipSaves, "MCP plan_zip_folder lists what goes in, what is left out and the ZIP's name, writing nothing");
+        var zipApplied = Body(Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)zipPlan["plan_id"]! }));
+        check((string?)zipApplied["outputs"]![0] == @"C:\Users\me\Photos.zip" && (string?)zipApplied["action"] == "archive.zipfolder" && zipApplied["entry_id"] is not null, "MCP apply writes the folder's ZIP and logs it");
+        var stale = Body(Call(papers, "plan_zip_folder", new JsonObject { ["path"] = photos }));
+        paper.ZipFolders[photos] = PhotosPlan(11);
+        var zipRefused = Call(papers, "apply_plan", new JsonObject { ["plan_id"] = (string)stale["plan_id"]! });
+        check(IsError(zipRefused) && ((string)Body(zipRefused)["error"]!).Contains(McpSession.FolderChanged) && !paper.Files.ContainsKey(@"C:\Users\me\Photos 2.zip"), "MCP refuses a folder ZIP whose contents changed since planning");
+        check(IsError(Call(papers, "plan_zip_folder", new JsonObject { ["path"] = @"C:\Users\me\Nowhere" })) && IsError(Call(papers, "plan_zip_folder", new JsonObject { ["paths"] = Paths(photos) })), "MCP plan_zip_folder refuses an unknown folder and wrong arguments");
+        check(Body(Call(papers, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !paper.Files.ContainsKey(@"C:\Users\me\Photos.zip"), "MCP undo recycles the folder ZIP");
         // Subtitle conversions: every other format is offered, named like the original.
         string captions = @"C:\Users\me\talk.vtt"; paper.Add(captions);
         var subtitleInspect = (JsonArray)Body(Call(papers, "inspect_files", new JsonObject { ["paths"] = Paths(captions) }))["files"]!;
