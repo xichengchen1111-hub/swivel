@@ -14318,5 +14318,75 @@
     "Windows 先把这个文件解码为 16 位 PCM（解码器可能改变精度、起始静音或尾部填充；上限 128 MiB、两小时）。降噪结果另存为旁边的新 WAV 文件。",
     "Windows 先把這個檔案解碼為 16 位元 PCM（解碼器可能改變精度、起始靜音或尾端填補；上限 128 MiB、兩小時）。降噪結果另存為旁邊的新 WAV 檔案。",
     "Windows がこのファイルをまず 16 ビット PCM にデコードします（コーデックにより精度、先頭の無音、末尾の埋め込みが変わることがあります。128 MiB・2 時間まで）。ノイズ軽減の結果は隣に新しい WAV ファイルとして保存されます。"
+  ],
+  "Optional helper grouping attaches a process to the app that started it only when the parent process identifier from a process snapshot was the same before and after the check, the parent is in this snapshot with a known executable path and start time, the helper did not start earlier than the parent, and the helper's executable folder is the parent's folder or inside it (compared case-sensitively). Parents in the Windows folder or directly at a drive or share root are never used. Chains follow the same rules; cycles and unknown or unqueried processes stay separate. Helpers started through a launcher or broker, or installed in another folder, are not attached, and a reused process identifier can still be misattributed when its times happen to fit. This is not proof of app ownership.": [
+    "可选的辅助进程分组仅在以下条件全部满足时，才把一个进程归入启动它的应用：检查前后两次进程快照报告的父进程标识符相同；父进程在本次快照中且可执行路径和启动时间已知；辅助进程的启动时间不早于父进程；辅助进程的可执行文件夹与父进程相同或位于其中（区分大小写比较）。位于 Windows 文件夹中、或直接位于驱动器或共享根目录的父进程永远不会被使用。链式关系遵循相同规则；循环以及未知或未查询的进程保持独立。通过启动器或代理启动、或安装在其他文件夹中的辅助进程不会被归入；若被重用的进程标识符恰好时间吻合，仍可能被错误归属。这不能证明应用归属。",
+    "可選的輔助處理程序分組僅在以下條件全部滿足時，才把一個處理程序歸入啟動它的 App：檢查前後兩次處理程序快照報告的父處理程序識別碼相同；父處理程序在本次快照中且執行檔路徑和啟動時間已知；輔助處理程序的啟動時間不早於父處理程序；輔助處理程序的執行檔資料夾與父處理程序相同或位於其中（區分大小寫比較）。位於 Windows 資料夾中、或直接位於磁碟機或共用根目錄的父處理程序永遠不會被使用。鏈式關係遵循相同規則；循環以及未知或未查詢的處理程序保持獨立。透過啟動器或代理啟動、或安裝在其他資料夾中的輔助處理程序不會被歸入；若被重複使用的處理程序識別碼恰好時間吻合，仍可能被錯誤歸屬。這不能證明 App 歸屬。",
+    "オプションのヘルパーのグループ化は、次の条件をすべて満たす場合にのみ、プロセスを起動元のアプリにまとめます：チェックの前後に取得したプロセススナップショットで親プロセス ID が同じであること、親がこのスナップショットに含まれ実行ファイルのパスと開始時刻が判明していること、ヘルパーの開始が親より早くないこと、ヘルパーの実行ファイルのフォルダーが親のフォルダーと同じかその中にあること（大文字と小文字を区別して比較）。Windows フォルダー内、またはドライブや共有のルート直下にある親は使用しません。連鎖も同じ規則に従い、循環や不明・未照会のプロセスは個別のままです。ランチャーやブローカー経由で起動されたヘルパーや別のフォルダーにインストールされたヘルパーはまとめられず、再利用されたプロセス ID が時刻の条件を偶然満たすと誤って割り当てられることがあります。アプリの所有関係を証明するものではありません。"
+  ],
+  "Parent process identifiers were not read because of the time limit; helper grouping is unavailable.": [
+    "由于时间限制未读取父进程标识符；辅助进程分组不可用。",
+    "由於時間限制未讀取父處理程序識別碼；輔助處理程序分組無法使用。",
+    "時間制限のため親プロセス ID を読み取れませんでした。ヘルパーのグループ化は利用できません。"
+  ],
+  "Parent process identifiers were not read; helper grouping is unavailable.": [
+    "未读取父进程标识符；辅助进程分组不可用。",
+    "未讀取父處理程序識別碼；輔助處理程序分組無法使用。",
+    "親プロセス ID を読み取れませんでした。ヘルパーのグループ化は利用できません。"
+  ],
+  "Parent process identifiers were read before and after the check.": [
+    "已在检查前后读取父进程标识符。",
+    "已在檢查前後讀取父處理程序識別碼。",
+    "チェックの前後に親プロセス ID を読み取りました。"
+  ],
+  "Parent process identifiers are partial.": [
+    "父进程标识符不完整。",
+    "父處理程序識別碼不完整。",
+    "親プロセス ID は一部のみです。"
+  ],
+  "The parent process snapshot is unavailable.": [
+    "父进程快照不可用。",
+    "父處理程序快照無法使用。",
+    "親プロセスのスナップショットを利用できません。"
+  ],
+  "The parent process list may be incomplete.": [
+    "父进程列表可能不完整。",
+    "父處理程序清單可能不完整。",
+    "親プロセスの一覧は不完全な可能性があります。"
+  ],
+  "Some parent process identifiers were missing or changed during the check and are not used.": [
+    "部分父进程标识符在检查期间缺失或发生变化，未被使用。",
+    "部分父處理程序識別碼在檢查期間缺失或改變，未被使用。",
+    "一部の親プロセス ID はチェック中に見つからないか変化したため、使用していません。"
+  ],
+  "Reported parent process identifier: {0}": [
+    "报告的父进程标识符：{0}",
+    "回報的父處理程序識別碼：{0}",
+    "報告された親プロセス ID：{0}"
+  ],
+  "Attached helper processes": [
+    "归入的辅助进程",
+    "歸入的輔助處理程序",
+    "まとめられたヘルパープロセス"
+  ],
+  "{0} {1} (started by {2})": [
+    "{0} {1}（由 {2} 启动）",
+    "{0} {1}（由 {2} 啟動）",
+    "{0} {1}（{2} が起動）"
+  ],
+  "Helper grouping is on.": [
+    "辅助进程分组已开启。",
+    "輔助處理程序分組已開啟。",
+    "ヘルパーのグループ化はオンです。"
+  ],
+  "Helper Process Groups": [
+    "辅助进程分组",
+    "輔助處理程序分組",
+    "ヘルパーを含むグループ"
+  ],
+  "Group Helper Processes With the App That Started Them": [
+    "将辅助进程归入启动它们的应用",
+    "將輔助處理程序歸入啟動它們的 App",
+    "ヘルパープロセスを起動元のアプリにまとめる"
   ]
 }

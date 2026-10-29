@@ -36,6 +36,7 @@ internal static class AppMemoryReader
             }
             catch(Exception e)when(Unavailable(e)){return null;}
         }
+        public AppMemoryParentIds ParentIds()=>ProcessParentReader.Read();
     }
     private sealed class Process(SafeProcessHandle handle) : IAppMemoryProcess
     {
