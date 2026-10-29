@@ -1049,7 +1049,7 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 ## 0.122 Agent 工具 plan_zip_folder（G02 增强）
 
-Mac 的 MCP 可把文件夹交给 ZIP 动作。Windows MCP 的计划按单个文件印记核对，所以新增独立工具 `plan_zip_folder { path }`：宿主 `PlanFolderZip` 用 `FolderZipWork` 持有并规划，计划只存文件夹路径和 `FolderZip.Fingerprint`（每个条目的类型、ZIP 名称、长度、修改时间与每个跳过项的路径和原因的 SHA-256）；`apply_plan` 由宿主 `ZipFolder` 在同一个持有会话里重新规划、比较指纹再写出，指纹不同则拒绝；写出的 ZIP 以 `archive.zipfolder` 记入历史（outputs 与其他新建文件相同，`undo` 移到回收站）。返回内容列出最多 200 个跳过项及总数。已知限制：同长度且修改时间不变的内容改动无法从目录信息察觉（写入时仍逐文件核对打开前后的印记）。
+Mac 的 MCP 可把文件夹交给 ZIP 动作。Windows MCP 的计划按单个文件印记核对，所以新增独立工具 `plan_zip_folder { path }`：宿主 `PlanFolderZip` 用 `FolderZipWork` 持有并规划，计划只存文件夹路径和 `FolderZip.Fingerprint`（每个条目的类型、ZIP 名称、长度、修改时间与每个跳过项的路径和原因的 SHA-256）；`apply_plan` 由宿主 `ZipFolder` 在同一个持有会话里重新规划、比较指纹再写出，指纹不同则拒绝；写出的 ZIP 以 `archive.zipfolder` 记入历史（outputs 与其他新建文件相同，`undo` 移到回收站）。返回内容列出最多 200 个跳过项及总数。文件夹名必须与存储的拼写一致（大小写、非 8.3 短名），否则 ZIP 及其顶层文件夹会按另一拼写命名，故拒绝（图形界面同样适用）。已知限制：同长度且修改时间不变的内容改动无法从目录信息察觉（写入时仍逐文件核对打开前后的印记）；指纹不含根文件夹身份，同一路径换成内容列表完全相同的另一个文件夹不会被发现。
 
 ## 0.121 复制文件夹到…（B06 增强）
 

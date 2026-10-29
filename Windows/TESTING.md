@@ -1329,9 +1329,10 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 ## Windows0.122 — Agent tool plan_zip_folder (G02, 2026-10-29)
 
-- Core 4,521,166 on Mac; native compiled 0 warnings/errors there. Windows CI: 40824852576 (first version) — result below.
+- Core 4,521,168 on Mac; native compiled 0 warnings/errors there. Windows CI: 40824852576 failed (McpNativeChecks opened the agent's ZIP before checking the reply and found no file; the reply was not printed, so the cause is unknown); after the review fixes the check prints both replies — 40825427148 failed to compile a nullable cast (pushed without rebuilding), 40825710691 passed (core 4,521,168, native 5,529) with the ZIP written and its entries exact.
 - `McpChecks` (core, fake host): tool list and annotations include plan_zip_folder; the plan lists the ZIP name, counts and skipped items and writes nothing; apply writes and logs the ZIP; a plan whose folder contents changed is refused with no ZIP; unknown folders and wrong arguments refused; undo recycles the ZIP; the MCPB manifest lists the tool.
-- Native, `McpNativeChecks`: a real folder planned, zipped with the expected entries, a stale plan refused after a file grew, and the ZIP recycled by undo.
+- Native, `McpNativeChecks`: a real folder planned, zipped with the expected entries, a stale plan refused after a file grew, and the ZIP recycled by undo. Another letter case of the folder name, a whole drive and a trailing separator refused.
+- Independent agent review: no P1/P2. P3s fixed: the folder must be named as stored (another case or an 8.3 name would have named the ZIP and its top folder that way), server instructions list plan_zip_folder, no doubled "nothing saved" wording, the description says inspect_files takes files only. Not fixed: the root folder's identity is not in the fingerprint (a different folder with an identical listing put at the same path would be zipped).
 
 ## Windows0.121 — Copy Folder to… (B06, 2026-10-29)
 
