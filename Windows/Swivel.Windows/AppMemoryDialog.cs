@@ -19,7 +19,7 @@ namespace Swivel.Windows;
 
 internal sealed class AppMemoryDialog : Window
 {
-    internal const string LiveNotice="Refresh Every 2 Seconds reads the same process metadata again about every 2 seconds while this window is visible and not minimized, and adds a CPU column. It pauses while the pointer is over a list, while any app is ticked and during a quit request. Closing waits for any read in progress. Nothing is saved or sent.";
+    internal const string LiveNotice="Refresh Every 2 Seconds reads the same process metadata again about every 2 seconds while this window is visible and not minimized, and adds a CPU column. It pauses while the pointer is over a list, while any app is ticked and during a quit request. Closing waits for any read in progress. Nothing is saved or sent. An assistant explanation describes the snapshot recorded when this window opened.";
     private readonly App app;
     private AppMemorySnapshot snapshot;
     private AppMemorySnapshot? previous;
@@ -36,7 +36,8 @@ internal sealed class AppMemoryDialog : Window
     private readonly ListView groups=NativeList(),processes=NativeList();
     private readonly TextBox groupDetails=Details(),processDetails=Details();
     private readonly TextBox outcomes=new(){IsReadOnly=true,TextWrapping=TextWrapping.Wrap,MinHeight=80,MaxHeight=220,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,Visibility=Visibility.Collapsed,Margin=new Thickness(0,8,0,0)};
-    private readonly TextBlock status,counts,subtotal,liveStatus;
+    private readonly TextBlock recorded,status,counts,subtotal,liveStatus;
+    private bool readFailed;
     private readonly GridViewColumn cpuColumn;
     private readonly Button copySelected,quit;
     private Task pending=Task.CompletedTask,reading=Task.CompletedTask;
@@ -75,7 +76,7 @@ internal sealed class AppMemoryDialog : Window
         quit=UI.Button(app.L(AppQuit.Title),()=>{});quit.IsEnabled=false;quit.Click+=(_,_)=>{if(!closed&&!quitting&&pending.IsCompleted)pending=QuitAsync();};footer.Children.Add(quit);
         var close=UI.Button(app.L("Close"),()=>DialogResult=false);close.IsCancel=true;footer.Children.Add(close);
         var body=new StackPanel();root.Children.Add(UI.Scroll(body));Content=root;
-        body.Children.Add(UI.Text(snapshot.RecordedUtc.ToString("O",CultureInfo.InvariantCulture),12));
+        recorded=UI.Text("",12);body.Children.Add(recorded);
         status=UI.Text("",14);counts=UI.Text("",14);subtotal=UI.Text("",14);body.Children.Add(status);body.Children.Add(counts);body.Children.Add(subtotal);
         foreach(string notice in new[]{AppMemory.Scope,AppMemory.Grouping,AppMemory.Measurement,AppMemory.Privacy})body.Children.Add(UI.Text(app.L(notice),12));
         if(snapshot.Processes.Count==0)body.Children.Add(UI.Text(app.L("No process information was returned."),14));
@@ -113,6 +114,7 @@ internal sealed class AppMemoryDialog : Window
     }
     private void FillHeader()
     {
+        recorded.Text=snapshot.RecordedUtc.ToString("O",CultureInfo.InvariantCulture);
         status.Text=AppMemory.Status(snapshot,app.L);
         counts.Text=string.Format(app.L("Recorded processes: {0} · groups: {1} · unavailable working sets: {2}"),snapshot.Processes.Count,snapshot.Groups.Count,snapshot.Unmeasured);
         subtotal.Text=app.L("Known Working Set Subtotal (MB)")+": "+Megabytes(snapshot.KnownBytes,snapshot.Unmeasured==snapshot.Processes.Count);
@@ -132,7 +134,7 @@ internal sealed class AppMemoryDialog : Window
     private bool SetTick(GroupRow row,bool value)
     {
         // Ticks only count on rows that are still offered and current.
-        row.Ticked=value&&row.Offered&&!quitting&&!closed&&ReferenceEquals(row.Source,CurrentGroups);
+        row.Ticked=value&&row.Offered&&!quitting&&!closed&&ReferenceEquals(row.Source,CurrentGroups)&&(row.Ticked||Ticked<AppQuit.MaxApps);
         UpdateQuit();UpdateLiveStatus();return row.Ticked;
     }
     internal IReadOnlyList<bool> OfferedRows=>Rows.Select(x=>x.Offered).ToArray();
@@ -142,14 +144,15 @@ internal sealed class AppMemoryDialog : Window
     /// The same path as clicking a row's tick box.
     internal bool Tick(int index,bool value)=>SetTick(Rows.ElementAt(index),value);
     private void UpdateQuit()=>quit.IsEnabled=!closed&&!quitting&&Ticked>0;
-    private void FillGroups()
+    private void FillGroups(bool keepSelection=false)
     {
         // A new grouping or snapshot replaces the rows: no selection or tick survives it.
         string title=app.L(GroupHelpers?"Helper Process Groups":"Executable Path Groups");groupTab.Header=title;AutomationProperties.SetName(groups,title);
-        string? selected=(groups.SelectedItem as GroupRow)?.Key;groups.SelectedItem=null;var current=CurrentGroups;
+        string? selected=keepSelection?(groups.SelectedItem as GroupRow)?.Key:null;groups.SelectedItem=null;var current=CurrentGroups;
+        var before=previous is null?null:AppCpu.Index(previous);
         groups.ItemsSource=current.Select((g,i)=>
         {
-            string name=ListName(g.Processes[0]);var (cpu,_)=AppCpu.Group(g,previous,cpuElapsed);
+            string name=ListName(g.Processes[0]);var (cpu,_)=AppCpu.Group(g,before,cpuElapsed);
             return new GroupRow(i,current,Key(g),name,g.Count.ToString(CultureInfo.CurrentCulture),Megabytes(g.KnownBytes,g.Unmeasured==g.Count),g.Unmeasured.ToString(CultureInfo.CurrentCulture),
                 cpu is double value?value.ToString("N1",CultureInfo.CurrentCulture):app.L("Unknown"),AppQuit.Eligibility(g,self,session,windowsFolder)==AppQuitBlock.None,string.Format(app.L("Quit {0}"),name));
         }).ToArray();
@@ -177,12 +180,14 @@ internal sealed class AppMemoryDialog : Window
     {
         reason=quitting?"Live refresh is paused during the quit request.":Ticked>0?"Live refresh is paused while apps are ticked."
             :groups.IsMouseOver||processes.IsMouseOver?"Live refresh is paused while the pointer is over a list."
+            :groups.IsKeyboardFocusWithin||processes.IsKeyboardFocusWithin||groupDetails.IsKeyboardFocusWithin||processDetails.IsKeyboardFocusWithin||outcomes.IsKeyboardFocusWithin?"Live refresh is paused while a list or details box has keyboard focus."
             :!IsVisible||WindowState==WindowState.Minimized?"Live refresh is paused while this window is hidden or minimized.":"";
         return reason.Length>0;
     }
     private void UpdateLiveStatus()
     {
         if(!Live){liveStatus.Text=app.L("Live refresh is off. The list shows the recorded snapshot.");return;}
+        if(readFailed&&!Paused(out _)){liveStatus.Text=app.L("Live refresh could not read process metadata. The last list is kept.");return;}
         liveStatus.Text=Paused(out string reason)?app.L(reason):string.Format(app.L("Live refresh is on. Last updated {0}."),snapshot.RecordedUtc.ToLocalTime().ToString("T",CultureInfo.CurrentCulture));
     }
     private void SetLive(bool on)
@@ -207,11 +212,11 @@ internal sealed class AppMemoryDialog : Window
             var next=await Task.Run(()=>read(token),token);
             // A tick, hover, quit or switch that arrived during the read discards it.
             if(closed||version!=readVersion||!Live||Paused(out _))return;
-            Apply(next,started);
+            readFailed=false;Apply(next,started);
         }
         catch(OperationCanceledException){}
         catch(Exception error)when(error is not OutOfMemoryException)
-        {if(!closed)liveStatus.Text=app.L("Live refresh could not read process metadata. The last list is kept.");return;}
+        {if(!closed){readFailed=true;UpdateLiveStatus();}return;}
         if(!closed)UpdateLiveStatus();
     }
     /// Replaces the list with a newer snapshot read at `started` (time since this window opened).
@@ -221,7 +226,7 @@ internal sealed class AppMemoryDialog : Window
         // The first live reading is the CPU baseline: the recorded snapshot has no known read time.
         previous=lastRead is TimeSpan before&&started>before?snapshot:null;cpuElapsed=previous is null?TimeSpan.Zero:started-lastRead!.Value;lastRead=started;
         snapshot=next;helpers.IsEnabled=snapshot.HelperGroups is not null&&!quitting;
-        FillGroups();FillProcesses();FillHeader();RefreshDetails();
+        FillGroups(keepSelection:true);FillProcesses();FillHeader();RefreshDetails();
     }
     // Quit.
     private async Task QuitAsync()
@@ -236,6 +241,7 @@ internal sealed class AppMemoryDialog : Window
             liveStatus.Text=app.L("Reading listed desktop windows…");
             windows=await AppQuitReader.ReadWindowsAsync(token);token.ThrowIfCancellationRequested();
             var plan=AppQuitReader.Plan(chosen,windows,token);string details=AppQuit.Details(plan,windows.Windows,app.L);
+            if(windows.Limited||windows.TimeLimited||windows.Unavailable)details+=Environment.NewLine+app.L(CloseWindows.Partial);
             if(plan.Windows.Count==0){Show(app.L(AppQuit.Nothing)+Environment.NewLine+details);return;}
             var confirm=new AppQuitConfirmDialog(app,details){Owner=this};confirmation=confirm;bool accepted;
             try{accepted=confirm.ShowDialog()==true;}finally{confirmation=null;}
@@ -244,7 +250,7 @@ internal sealed class AppMemoryDialog : Window
             Asked=true;
             var outcome=await AppQuitReader.RunAsync(windows,plan,new AppQuitReader.Probe(),token);
             if(!closed)Show(CloseWindows.Summary(outcome.Results,app.L)+Environment.NewLine+CloseWindows.ResultLines(outcome.Windows.Select(i=>windows.Windows[i]).ToArray(),outcome.Results,app.L)
-                +Environment.NewLine+AppQuit.Outcome(outcome.Targets,outcome.States,app.L));
+                +Environment.NewLine+AppQuit.Outcome(outcome.Targets,outcome.States,app.L,outcome.Asked));
         }
         catch(OperationCanceledException){}
         catch(Exception error)when(error is not OutOfMemoryException){if(!closed)app.ShowError(error);}

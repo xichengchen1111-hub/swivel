@@ -15574,16 +15574,6 @@
     "結束所選 App…",
     "選択したアプリを終了…"
   ],
-  "Tick apps in the group list to ask them to quit. Swivel sends the same normal Close request as Request Window Close… to every listed desktop window of the app's process and, with helper grouping on, of its attached helpers. It never ends a process by force: an app can ask to save, refuse, or keep running in the background or notification area. Windows, the shell, system processes, services, other sessions, elevated apps and Swivel itself are never offered.": [
-    "在分组列表中勾选应用即可请求它们退出。Swivel 会向应用进程的每个已列出桌面窗口（开启辅助进程分组时也包括其附属辅助进程）发送与“请求关闭窗口…”相同的正常关闭请求。它从不强制结束进程：应用可能询问是否保存、拒绝，或在后台或通知区域继续运行。Windows、外壳、系统进程、服务、其他会话、提升权限的应用以及 Swivel 自身永远不会列为可选。",
-    "在分組清單中勾選 App 即可請求它們結束。Swivel 會向 App 處理程序的每個已列出桌面視窗（開啟輔助處理程序分組時也包括其附屬輔助處理程序）傳送與「要求關閉視窗…」相同的正常關閉要求。它絕不強制結束處理程序：App 可能詢問是否儲存、拒絕，或在背景或通知區域繼續執行。Windows、殼層、系統處理程序、服務、其他工作階段、提高權限的 App 以及 Swivel 本身永遠不會列為可選。",
-    "グループ一覧でアプリにチェックを付けると終了を依頼できます。Swivel は「ウィンドウを閉じる要求…」と同じ通常の閉じる要求を、アプリのプロセス（ヘルパーのグループ化がオンの場合は付属ヘルパーも）の一覧にあるデスクトップウィンドウすべてに送ります。プロセスを強制終了することはありません。アプリは保存を確認したり、拒否したり、バックグラウンドや通知領域で動作を続けたりできます。Windows、シェル、システムプロセス、サービス、他のセッション、管理者権限のアプリ、Swivel 自身は選択肢になりません。"
-  ],
-  "Ask these apps to quit? Swivel sends the normal Close request to each listed window below, one after another. Save your work first: an app may close without asking. Each window's process is checked again right before sending; a process that was replaced or has changed is skipped. Processes without a listed window are not asked and may keep running. After a short wait Swivel reports which processes are still running and does not force anything.": [
-    "请求这些应用退出？Swivel 会依次向下面列出的每个窗口发送正常关闭请求。请先保存工作：应用可能不经询问直接关闭。发送前会再次检查每个窗口的进程；已被替换或已变化的进程会被跳过。没有已列出窗口的进程不会收到请求，可能继续运行。稍等片刻后，Swivel 会报告哪些进程仍在运行，且不会强制结束任何进程。",
-    "要求這些 App 結束？Swivel 會依序向下方列出的每個視窗傳送正常關閉要求。請先儲存工作：App 可能不經詢問直接關閉。傳送前會再次檢查每個視窗的處理程序；已被取代或已變更的處理程序會被略過。沒有已列出視窗的處理程序不會收到要求，可能繼續執行。稍候片刻後，Swivel 會報告哪些處理程序仍在執行，且不會強制結束任何處理程序。",
-    "これらのアプリに終了を依頼しますか？Swivel は下に一覧表示された各ウィンドウに通常の閉じる要求を順番に送ります。先に作業を保存してください。アプリは確認なしで閉じることがあります。送信直前に各ウィンドウのプロセスを再確認し、置き換えられたり変化したりしたプロセスはスキップします。一覧にウィンドウのないプロセスには依頼せず、動作を続ける場合があります。少し待った後、まだ実行中のプロセスを報告します。強制終了は行いません。"
-  ],
   "None of the selected apps has a listed desktop window that can be asked to close. No close request was sent.": [
     "所选应用都没有可请求关闭的已列出桌面窗口。未发送任何关闭请求。",
     "所選 App 都沒有可要求關閉的已列出桌面視窗。未傳送任何關閉要求。",
@@ -15664,11 +15654,6 @@
     "即時重新整理已關閉。清單顯示已記錄的快照。",
     "ライブ更新はオフです。一覧は記録したスナップショットを表示しています。"
   ],
-  "Refresh Every 2 Seconds reads the same process metadata again about every 2 seconds while this window is visible and not minimized, and adds a CPU column. It pauses while the pointer is over a list, while any app is ticked and during a quit request. Closing waits for any read in progress. Nothing is saved or sent.": [
-    "“每 2 秒刷新”会在此窗口可见且未最小化时，大约每 2 秒重新读取相同的进程元数据，并增加 CPU 列。指针位于列表上、有应用被勾选或正在请求退出时会暂停。关闭时会等待正在进行的读取。不会保存或发送任何内容。",
-    "「每 2 秒重新整理」會在此視窗可見且未最小化時，大約每 2 秒重新讀取相同的處理程序中繼資料，並增加 CPU 欄。指標位於清單上、有 App 被勾選或正在要求結束時會暫停。關閉時會等待正在進行的讀取。不會儲存或傳送任何內容。",
-    "「2 秒ごとに更新」は、このウィンドウが表示され最小化されていない間、約 2 秒ごとに同じプロセスのメタデータを読み直し、CPU 列を追加します。ポインターが一覧の上にある間、アプリにチェックが付いている間、終了要求の実行中は一時停止します。閉じるときは実行中の読み取りを待ちます。保存や送信は行いません。"
-  ],
   "Live refresh is paused during the quit request.": [
     "正在请求退出，实时刷新已暂停。",
     "正在要求結束，即時重新整理已暫停。",
@@ -15738,5 +15723,30 @@
     "应用内存已关闭。已发送的关闭请求可能仍在由对应应用处理。",
     "App 記憶體已關閉。已傳送的關閉要求可能仍在由對應 App 處理。",
     "アプリのメモリを閉じました。送信済みの閉じる要求は、まだアプリが処理している場合があります。"
+  ],
+  "Tick apps in the group list to ask them to quit. Swivel sends the same normal Close request as Request Window Close… to every listed desktop window of the app's process and, with helper grouping on, of its attached helpers. It never ends a process by force: an app can ask to save, refuse, or keep running in the background or notification area. Windows, the shell, system processes, services, other sessions and Swivel itself are never offered; windows of apps running as administrator are not asked unless Swivel itself runs as administrator. Window titles in the review and results may contain private document names; nothing is copied or saved automatically.": [
+    "在分组列表中勾选应用即可请求它们退出。Swivel 会向应用进程的每个已列出桌面窗口（开启辅助进程分组时也包括其附属辅助进程）发送与“请求关闭窗口…”相同的正常关闭请求。它从不强制结束进程：应用可能询问是否保存、拒绝，或在后台或通知区域继续运行。Windows、外壳、系统进程、服务、其他会话以及 Swivel 自身永远不会列为可选；以管理员身份运行的应用的窗口不会收到请求，除非 Swivel 自身也以管理员身份运行。审阅和结果中的窗口标题可能包含私人文档名称；不会自动复制或保存任何内容。",
+    "在分組清單中勾選 App 即可請求它們結束。Swivel 會向 App 處理程序的每個已列出桌面視窗（開啟輔助處理程序分組時也包括其附屬輔助處理程序）傳送與「要求關閉視窗…」相同的正常關閉要求。它絕不強制結束處理程序：App 可能詢問是否儲存、拒絕，或在背景或通知區域繼續執行。Windows、殼層、系統處理程序、服務、其他工作階段以及 Swivel 本身永遠不會列為可選；以系統管理員身分執行的 App 的視窗不會收到要求，除非 Swivel 本身也以系統管理員身分執行。審閱和結果中的視窗標題可能包含私人文件名稱；不會自動複製或儲存任何內容。",
+    "グループ一覧でアプリにチェックを付けると終了を依頼できます。Swivel は「ウィンドウを閉じる要求…」と同じ通常の閉じる要求を、アプリのプロセス（ヘルパーのグループ化がオンの場合は付属ヘルパーも）の一覧にあるデスクトップウィンドウすべてに送ります。プロセスを強制終了することはありません。アプリは保存を確認したり、拒否したり、バックグラウンドや通知領域で動作を続けたりできます。Windows、シェル、システムプロセス、サービス、他のセッション、Swivel 自身は選択肢になりません。管理者として実行中のアプリのウィンドウには、Swivel 自身も管理者として実行していない限り依頼しません。確認画面と結果のウィンドウタイトルには非公開の文書名が含まれる場合があります。自動でコピーや保存はしません。"
+  ],
+  "Ask these apps to quit? Swivel sends the normal Close request to each listed window below, one after another. Save your work first: an app may close without asking. Each window's process is checked again right before sending; a process that was replaced or has changed is skipped. Processes without a listed window are not asked and may keep running. Closing windows one by one is not always the same as quitting: an app with several windows may restore only the last one next time. After a short wait Swivel reports which processes are still running and does not force anything.": [
+    "请求这些应用退出？Swivel 会依次向下面列出的每个窗口发送正常关闭请求。请先保存工作：应用可能不经询问直接关闭。发送前会再次检查每个窗口的进程；已被替换或已变化的进程会被跳过。没有已列出窗口的进程不会收到请求，可能继续运行。逐个关闭窗口不一定等同于退出：有多个窗口的应用下次可能只恢复最后一个窗口。稍等片刻后，Swivel 会报告哪些进程仍在运行，且不会强制结束任何进程。",
+    "要求這些 App 結束？Swivel 會依序向下方列出的每個視窗傳送正常關閉要求。請先儲存工作：App 可能不經詢問直接關閉。傳送前會再次檢查每個視窗的處理程序；已被取代或已變更的處理程序會被略過。沒有已列出視窗的處理程序不會收到要求，可能繼續執行。逐一關閉視窗不一定等同於結束：有多個視窗的 App 下次可能只還原最後一個視窗。稍候片刻後，Swivel 會報告哪些處理程序仍在執行，且不會強制結束任何處理程序。",
+    "これらのアプリに終了を依頼しますか？Swivel は下に一覧表示された各ウィンドウに通常の閉じる要求を順番に送ります。先に作業を保存してください。アプリは確認なしで閉じることがあります。送信直前に各ウィンドウのプロセスを再確認し、置き換えられたり変化したりしたプロセスはスキップします。一覧にウィンドウのないプロセスには依頼せず、動作を続ける場合があります。ウィンドウを 1 つずつ閉じることは終了と同じとは限りません。複数のウィンドウを持つアプリは、次回最後のウィンドウだけを復元する場合があります。少し待った後、まだ実行中のプロセスを報告します。強制終了は行いません。"
+  ],
+  "Refresh Every 2 Seconds reads the same process metadata again about every 2 seconds while this window is visible and not minimized, and adds a CPU column. It pauses while the pointer is over a list, while any app is ticked and during a quit request. Closing waits for any read in progress. Nothing is saved or sent. An assistant explanation describes the snapshot recorded when this window opened.": [
+    "“每 2 秒刷新”会在此窗口可见且未最小化时，大约每 2 秒重新读取相同的进程元数据，并增加 CPU 列。指针位于列表上、有应用被勾选或正在请求退出时会暂停。关闭时会等待正在进行的读取。不会保存或发送任何内容。助手解释描述的是此窗口打开时记录的快照。",
+    "「每 2 秒重新整理」會在此視窗可見且未最小化時，大約每 2 秒重新讀取相同的處理程序中繼資料，並增加 CPU 欄。指標位於清單上、有 App 被勾選或正在要求結束時會暫停。關閉時會等待正在進行的讀取。不會儲存或傳送任何內容。助理說明描述的是此視窗開啟時記錄的快照。",
+    "「2 秒ごとに更新」は、このウィンドウが表示され最小化されていない間、約 2 秒ごとに同じプロセスのメタデータを読み直し、CPU 列を追加します。ポインターが一覧の上にある間、アプリにチェックが付いている間、終了要求の実行中は一時停止します。閉じるときは実行中の読み取りを待ちます。保存や送信は行いません。アシスタントの説明は、このウィンドウを開いたときに記録したスナップショットについてのものです。"
+  ],
+  "Not asked, still running": [
+    "未请求，仍在运行",
+    "未要求，仍在執行",
+    "依頼なし・実行中のまま"
+  ],
+  "Live refresh is paused while a list or details box has keyboard focus.": [
+    "列表或详细信息框拥有键盘焦点，实时刷新已暂停。",
+    "清單或詳細資料方塊擁有鍵盤焦點，即時重新整理已暫停。",
+    "一覧または詳細欄にキーボードフォーカスがあるため、ライブ更新を一時停止しています。"
   ]
 }

@@ -9,7 +9,7 @@ using Swivel.Core;
 
 namespace Swivel.Windows;
 
-internal sealed record AppQuitOutcome(IReadOnlyList<int> Windows,IReadOnlyList<CloseWindowsResult?> Results,IReadOnlyList<AppQuitTarget> Targets,IReadOnlyList<AppQuitState> States);
+internal sealed record AppQuitOutcome(IReadOnlyList<int> Windows,IReadOnlyList<CloseWindowsResult?> Results,IReadOnlyList<AppQuitTarget> Targets,IReadOnlyList<AppQuitState> States,IReadOnlySet<uint> Asked);
 
 /// The App Memory quit flow: listed windows, then the existing normal close requests, then a
 /// read-only check of which processes still run. Nothing here ends a process.
@@ -27,15 +27,18 @@ internal static class AppQuitReader
         var windows=plan.Windows;var targets=plan.Targets;
         var results=await CloseWindowsReader.RequestEachAsync(session,windows,token);
         token.ThrowIfCancellationRequested();
+        // Only processes that were sent a request (processed or uncertain) are waited for.
+        var asked=new HashSet<uint>();
+        for(int i=0;i<windows.Count;i++)if(results[i] is CloseWindowsResult.Processed or CloseWindowsResult.Unknown)asked.Add(session.Windows[windows[i]].ProcessId);
         var deadline=DateTime.UtcNow+AppQuit.Wait;IReadOnlyList<AppQuitState> states;
         while(true)
         {
             states=await Task.Run(()=>AppQuit.Check(targets,probe,token),token);
-            bool waiting=false;foreach(var state in states)waiting|=state==AppQuitState.Running;
+            bool waiting=false;for(int i=0;i<states.Count;i++)waiting|=states[i]==AppQuitState.Running&&asked.Contains(targets[i].Pid);
             if(!waiting||DateTime.UtcNow>=deadline)break;
             await Task.Delay(250,token);
         }
-        return new(windows,results,targets,states);
+        return new(windows,results,targets,states,asked);
     }
     internal sealed class Probe : IAppQuitProbe
     {

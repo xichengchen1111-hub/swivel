@@ -30,8 +30,8 @@ public static class AppQuit
 {
     public const int MaxApps=32;
     public const string Title="Quit Selected Apps…";
-    public const string Scope="Tick apps in the group list to ask them to quit. Swivel sends the same normal Close request as Request Window Close… to every listed desktop window of the app's process and, with helper grouping on, of its attached helpers. It never ends a process by force: an app can ask to save, refuse, or keep running in the background or notification area. Windows, the shell, system processes, services, other sessions, elevated apps and Swivel itself are never offered.";
-    public const string Confirmation="Ask these apps to quit? Swivel sends the normal Close request to each listed window below, one after another. Save your work first: an app may close without asking. Each window's process is checked again right before sending; a process that was replaced or has changed is skipped. Processes without a listed window are not asked and may keep running. After a short wait Swivel reports which processes are still running and does not force anything.";
+    public const string Scope="Tick apps in the group list to ask them to quit. Swivel sends the same normal Close request as Request Window Close… to every listed desktop window of the app's process and, with helper grouping on, of its attached helpers. It never ends a process by force: an app can ask to save, refuse, or keep running in the background or notification area. Windows, the shell, system processes, services, other sessions and Swivel itself are never offered; windows of apps running as administrator are not asked unless Swivel itself runs as administrator. Window titles in the review and results may contain private document names; nothing is copied or saved automatically.";
+    public const string Confirmation="Ask these apps to quit? Swivel sends the normal Close request to each listed window below, one after another. Save your work first: an app may close without asking. Each window's process is checked again right before sending; a process that was replaced or has changed is skipped. Processes without a listed window are not asked and may keep running. Closing windows one by one is not always the same as quitting: an app with several windows may restore only the last one next time. After a short wait Swivel reports which processes are still running and does not force anything.";
     public const string Nothing="None of the selected apps has a listed desktop window that can be asked to close. No close request was sent.";
     public static readonly TimeSpan Wait=TimeSpan.FromSeconds(5);
     // Compared case-insensitively by file name, in addition to every executable in the Windows folder.
@@ -131,7 +131,8 @@ public static class AppQuit
         return Array.AsReadOnly(states);
     }
     /// The final report: how many processes exited, and every one still running or unknown by name.
-    public static string Outcome(IReadOnlyList<AppQuitTarget> targets,IReadOnlyList<AppQuitState> states,Func<string,string> localize)
+    /// `asked` holds the identifiers that were sent a request; others still running are listed as not asked.
+    public static string Outcome(IReadOnlyList<AppQuitTarget> targets,IReadOnlyList<AppQuitState> states,Func<string,string> localize,IReadOnlySet<uint>? asked=null)
     {
         ArgumentNullException.ThrowIfNull(targets);ArgumentNullException.ThrowIfNull(states);
         if(targets.Count!=states.Count)throw new ArgumentException("Each process needs one state.",nameof(states));
@@ -141,7 +142,7 @@ public static class AppQuit
         {
             if(states[i]==AppQuitState.Exited)continue;
             var target=targets[i];
-            lines.Add(localize(states[i]==AppQuitState.Running?"Still running":"Unknown")+" · "+AppMemory.Visible(target.Path[(target.Path.LastIndexOf('\\')+1)..])+" · "+target.Pid.ToString(CultureInfo.InvariantCulture));
+            lines.Add(localize(states[i]==AppQuitState.Unknown?"Unknown":asked is null||asked.Contains(target.Pid)?"Still running":"Not asked, still running")+" · "+AppMemory.Visible(target.Path[(target.Path.LastIndexOf('\\')+1)..])+" · "+target.Pid.ToString(CultureInfo.InvariantCulture));
         }
         return string.Join(Environment.NewLine,lines);
     }
@@ -160,11 +161,17 @@ public static class AppCpu
     }
     /// Sum over the group's processes found in the previous snapshot with the same identifier and
     /// start time. Unmeasured counts the rest.
-    public static (double? Percent,int Unmeasured) Group(AppMemoryGroup group,AppMemorySnapshot? previous,TimeSpan elapsed)
+    public static (double? Percent,int Unmeasured) Group(AppMemoryGroup group,AppMemorySnapshot? previous,TimeSpan elapsed)=>Group(group,previous is null?null:Index(previous),elapsed);
+    /// Previous processes by identifier, built once per refresh for Group.
+    public static IReadOnlyDictionary<uint,AppMemoryProcess> Index(AppMemorySnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var before=new Dictionary<uint,AppMemoryProcess>();foreach(var process in snapshot.Processes)before.TryAdd(process.Pid,process);return before;
+    }
+    public static (double? Percent,int Unmeasured) Group(AppMemoryGroup group,IReadOnlyDictionary<uint,AppMemoryProcess>? before,TimeSpan elapsed)
     {
         ArgumentNullException.ThrowIfNull(group);
-        if(previous is null)return (null,group.Count);
-        var before=new Dictionary<uint,AppMemoryProcess>();foreach(var process in previous.Processes)before.TryAdd(process.Pid,process);
+        if(before is null)return (null,group.Count);
         double sum=0;int measured=0;
         foreach(var process in group.Processes)
         {

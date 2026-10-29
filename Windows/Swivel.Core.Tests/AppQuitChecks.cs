@@ -115,6 +115,8 @@ internal static class AppQuitChecks
         check(states.SequenceEqual(new[]{AppQuitState.Exited,AppQuitState.Running,AppQuitState.Unknown}),"Exit check reads each process; a failing probe is Unknown, never Exited");
         string outcome=AppQuit.Outcome(all,states,L);
         check(outcome.Contains("exited: 1")&&outcome.Contains("Still running: 1")&&outcome.Contains("Still running · helper.exe · 31")&&outcome.Contains("Unknown · z.exe · 99")&&!outcome.Contains("app.exe"),"Outcome names every process still running and forces nothing");
+        string partial=AppQuit.Outcome(all,states,L,new HashSet<uint>{30});
+        check(partial.Contains("Not asked, still running · helper.exe · 31")&&partial.Contains("Unknown · z.exe · 99"),"Processes that were never sent a request are listed apart from those asked");
         reject(()=>AppQuit.Check(all,probe,new CancellationToken(true)),"Exit check honours cancellation");
         reject(()=>AppQuit.Outcome(all,states.Take(2).ToArray(),L),"Outcome requires one state per process");
 
@@ -130,7 +132,7 @@ internal static class AppQuitChecks
         var group=G(P(60,App,cpu:3_000_000),P(61,App,cpu:1_000_000),P(62,App,cpu:5_000_000),P(63,App,cpu:9_000_000),P(64,App,cpu:5));
         var cpu=AppCpu.Group(group,before,second);
         check(cpu.Percent is double v&&Math.Abs(v-30)<1e-9&&cpu.Unmeasured==3,"Group CPU sums only processes with two readings of the same start time");
-        check(AppCpu.Group(group,null,second)==(null,5),"No previous snapshot gives Unknown");
+        check(AppCpu.Group(group,(AppMemorySnapshot?)null,second)==(null,5),"No previous snapshot gives Unknown");
         check(AppCpu.Group(G(P(62,App,cpu:5_000_000)),before,second).Percent is null,"A replaced process identifier is not measured");
 
         // Scan reads the optional values; sources without them keep the old records.
