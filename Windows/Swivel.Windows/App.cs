@@ -1558,6 +1558,8 @@ public sealed partial class App : Application
         // Also after a cancelled copy, when the partial folder most needs undoing (not after Quit or turning the feature off).
         if (exiting || !Prefs.IsOn(Feature.FileMoves)) return;
         // The results window shows any problem and can undo the copy while it is open.
+        // Closing the window that started the copy cancels it; its results then belong to Home.
+        if (!owner.IsLoaded) { if (!Home.IsLoaded) return; owner = Home; }
         var results = new FolderCopyResultDialog(this, outcome, summary);
         ShowOperationDialog(results, owner, CancellationToken.None);
         if (!results.Moved) return;
