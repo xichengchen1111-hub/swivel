@@ -17,7 +17,8 @@ namespace Swivel.Windows;
 /// start and end, then encodes the kept part (optionally without sound) as a new H.264/AAC MP4 in
 /// a private temporary folder, which is published beside the original as `name trimmed.mp4`.
 /// Picture changes go through Windows' built-in video transform effect (crop, quarter turns,
-/// mirror); another speed rewrites the encoded file's timescales (Mp4Retime) before publishing,
+/// mirror), which the media editing API refuses (0xC00DA7FC on the CI runner), so those are
+/// encoded with MediaTranscoder and its trim times instead; another speed rewrites the encoded file's timescales (Mp4Retime) before publishing,
 /// without the sound. Either is saved as `name edited.mp4`.
 public sealed class VideoTrimmer : IDisposable
 {
@@ -117,7 +118,8 @@ public sealed class VideoTrimmer : IDisposable
         finally { frameLock.Release(); }
     }
 
-    /// Windows' transform effect turns, then mirrors (checked on the Windows CI runner).
+    /// Windows' transform effect crops in source pixels, turns clockwise, then mirrors (checked on
+    /// the Windows CI runner with a four-colour picture).
     internal const bool MirrorAfterTurn = true;
 
     /// The effect for a picture change: crop the upright source, turn clockwise, mirror left–right.
@@ -166,7 +168,6 @@ public sealed class VideoTrimmer : IDisposable
             clip.TrimTimeFromStart = TimeSpan.FromMilliseconds(plan.Start);
             var tail = clip.OriginalDuration - TimeSpan.FromMilliseconds(plan.End);
             clip.TrimTimeFromEnd = tail > TimeSpan.Zero ? tail : TimeSpan.Zero;
-            if (geometry is not null) clip.VideoEffectDefinitions.Add(Effect(geometry));
             // Without sound the profile has no audio stream at all.
             bool sound = plan.KeepSound && HasSound;
             var composition = new MediaComposition();
@@ -183,7 +184,19 @@ public sealed class VideoTrimmer : IDisposable
             var output = await NativeAsync.Join(StorageFolder.GetFolderFromPathAsync(workspace), token).ConfigureAwait(false);
             var target = await NativeAsync.Join(output.CreateFileAsync("trimmed.mp4", CreationCollisionOption.FailIfExists), token).ConfigureAwait(false);
             TranscodeFailureReason reason;
-            try { reason = await NativeAsync.Join(composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, profile), value => progress?.Invoke(value / 100), token).ConfigureAwait(false); }
+            try
+            {
+                if (geometry is null) reason = await NativeAsync.Join(composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, profile), value => progress?.Invoke(value / 100), token).ConfigureAwait(false);
+                else
+                {
+                    var transcoder = new MediaTranscoder { AlwaysReencode = true, TrimStartTime = TimeSpan.FromMilliseconds(plan.Start), TrimStopTime = TimeSpan.FromMilliseconds(plan.End) };
+                    var effect = Effect(geometry);
+                    transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
+                    var prepared = await NativeAsync.Join(transcoder.PrepareFileTranscodeAsync(file, target, profile), token).ConfigureAwait(false);
+                    reason = prepared.CanTranscode ? TranscodeFailureReason.None : prepared.FailureReason;
+                    if (prepared.CanTranscode) await NativeAsync.Join(prepared.TranscodeAsync(), value => progress?.Invoke(Math.Clamp(value / 100, 0, 1)), token).ConfigureAwait(false);
+                }
+            }
             catch (Exception error) when (error is not OperationCanceledException) { throw new UserError(Failed); }
             if (reason != TranscodeFailureReason.None) throw new UserError(Failed);
             token.ThrowIfCancellationRequested();

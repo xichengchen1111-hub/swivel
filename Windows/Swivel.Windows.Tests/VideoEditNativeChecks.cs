@@ -22,7 +22,6 @@ internal static class VideoEditNativeChecks
         string source = Path.Combine(root, "quads.mp4");
         MakeQuarterVideo(root, source, 320, 240, 2);
         byte[] original = SHA256.HashData(File.ReadAllBytes(source));
-        Probe(root, source);
         using (var video = VideoTrimmer.OpenAsync(source, default).GetAwaiter().GetResult())
         {
             check(video.Width == 320 && video.Height == 240 && Math.Abs(video.Duration - 2000) <= 50 && video.HasSound, $"The quarter test video opens: {video.Width}×{video.Height}, {video.Duration} ms");
@@ -94,54 +93,6 @@ internal static class VideoEditNativeChecks
             check(video.Width == 240 && w == 320 && h == 240 && RotatedVideoNativeChecks.Straight(output) && agrees,
                 $"A 90° phone video turned back a quarter at 2× is stored upright in its original layout ({w}×{h}): {found}");
         }
-    }
-
-    // Temporary: which ways of applying Windows' transform effect render at all, and what they produce.
-    private static void Probe(string root, string source)
-    {
-        var g = VideoEdit.Geometry(320, 240, new VideoPicture(1, false, false, VideoAspect.Square, 0));
-        int n = 0;
-        void Try(string name, Func<global::Windows.Storage.StorageFile, global::Windows.Media.Transcoding.TranscodeFailureReason> render, int w, int h)
-        {
-            string path = Path.Combine(root, $"probe{++n}.mp4");
-            try
-            {
-                var folder = StorageFolder.GetFolderFromPathAsync(root).AsTask().GetAwaiter().GetResult();
-                var target = folder.CreateFileAsync(Path.GetFileName(path), CreationCollisionOption.FailIfExists).AsTask().GetAwaiter().GetResult();
-                var reason = render(target);
-                string grid = "";
-                if (reason == global::Windows.Media.Transcoding.TranscodeFailureReason.None) { var (fw, fh) = Size(path); var (_, _, d) = RotatedVideoNativeChecks.Frame(path, fw, fh, 500); grid = $"{fw}×{fh} {Grid(d, fw, fh)}"; }
-                Console.WriteLine($"INFO probe {name}: {reason} {grid}");
-            }
-            catch (Exception e) { Console.WriteLine($"INFO probe {name}: {e.GetType().Name} 0x{e.HResult:X8} {e.Message}"); }
-        }
-        var file = StorageFile.GetFileFromPathAsync(source).AsTask().GetAwaiter().GetResult();
-        MediaEncodingProfile Profile(int w, int h) { var p = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.Vga); p.Video.Width = (uint)w; p.Video.Height = (uint)h; p.Audio = null; return p; }
-        global::Windows.Media.Transcoding.TranscodeFailureReason Compose(global::Windows.Storage.StorageFile target, Windows.Media.Effects.VideoTransformEffectDefinition effect, int w, int h)
-        {
-            var clip = MediaClip.CreateFromFileAsync(file).AsTask().GetAwaiter().GetResult();
-            clip.VideoEffectDefinitions.Add(effect);
-            var composition = new MediaComposition(); composition.Clips.Add(clip);
-            return composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, Profile(w, h)).AsTask().GetAwaiter().GetResult();
-        }
-        global::Windows.Media.Transcoding.TranscodeFailureReason Transcode(global::Windows.Storage.StorageFile target, Windows.Media.Effects.VideoTransformEffectDefinition effect, int w, int h)
-        {
-            var transcoder = new global::Windows.Media.Transcoding.MediaTranscoder();
-            transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
-            var prepared = transcoder.PrepareFileTranscodeAsync(file, target, Profile(w, h)).AsTask().GetAwaiter().GetResult();
-            if (!prepared.CanTranscode) return prepared.FailureReason;
-            prepared.TranscodeAsync().AsTask().GetAwaiter().GetResult(); return global::Windows.Media.Transcoding.TranscodeFailureReason.None;
-        }
-        var full = VideoTrimmer.Effect(g);
-        Console.WriteLine($"INFO probe effect {full.ActivatableClassId} crop {g.SourceCrop} rot {g.Rotation} out {g.Width}x{g.Height}");
-        Try("composition full", t => Compose(t, VideoTrimmer.Effect(g), g.Width, g.Height), g.Width, g.Height);
-        Try("composition rotation only", t => Compose(t, new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees }, 240, 320), 240, 320);
-        Try("composition mirror only same size", t => Compose(t, new Windows.Media.Effects.VideoTransformEffectDefinition { Mirror = MediaMirroringOptions.Horizontal }, 320, 240), 320, 240);
-        Try("composition crop only", t => Compose(t, new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0, 0, 240, 240), OutputSize = new global::Windows.Foundation.Size(240, 240) }, 240, 240), 240, 240);
-        Try("transcoder full", t => Transcode(t, VideoTrimmer.Effect(g), g.Width, g.Height), g.Width, g.Height);
-        Try("transcoder rotation only", t => Transcode(t, new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees }, 240, 320), 240, 320);
-        Try("transcoder mirror only", t => Transcode(t, new Windows.Media.Effects.VideoTransformEffectDefinition { Mirror = MediaMirroringOptions.Horizontal }, 320, 240), 320, 240);
-        Try("transcoder crop+rot+mirror", t => Transcode(t, new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0, 0, 240, 240), Rotation = MediaRotation.Clockwise90Degrees, Mirror = MediaMirroringOptions.Horizontal, OutputSize = new global::Windows.Foundation.Size(240, 240) }, 240, 240), 240, 240);
     }
 
     private static readonly (double X, double Y, char Colour)[] Points =
