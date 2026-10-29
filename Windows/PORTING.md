@@ -1047,6 +1047,10 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.125 压缩音频降噪（D03 增强）
+
+`WaveDocument` 改为从 `source` 读取：WAV 时就是持有的文件流（行为与字节结果不变），压缩格式时是 `SystemAudioDocument`（MediaTranscoder，128 MiB/2 h）完整解码出的规范 PCM16 WAV 内存流；`SystemAudioDocument.Detach()` 把持有的原文件交给 `WaveDocument`，原文件在整个窗口和保存期间保持持有，输出仍经 `WriteBeside` 放在原文件旁。`audio.noise` 接受 wav/mp3/aac/flac，标题改为 Reduce Audio Noise…，解码后的文件在窗口中注明。M4A/MP4、视频降噪仍未做。
+
 ## 0.124 移动文件接受只读文件与硬链接（B06 增强）
 
 `ReadMoveStamp` 只在链接数为 0 时拒绝；撤销收据接受链接数 ≥1。移动路径唯一的修改是句柄相对的 FileRenameInformation（回滚同样），不删除、不改属性；改名引起的 ChangeTime 变化已由移动后重读印记和 `SameRenameMetadata` 处理。链接数仍在 `MoveFileStamp` 中，其他名称在预览后增删链接会使移动或撤销拒绝；撤销按记录的当前路径打开，只移回该名称。同一文件的两个名称：窗口给出专门提示，MCP plan_move 在计划时逐行标出（与 plan_rename 相同）。

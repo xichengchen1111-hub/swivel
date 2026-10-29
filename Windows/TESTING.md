@@ -1327,6 +1327,13 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.125 — Reduce Audio Noise for MP3/AAC/FLAC (D03, 2026-10-29)
+
+- Core 4,521,175 on Mac; native compiled 0 warnings/errors there. Windows CI 40833690811 passed (core 4,521,175, native 5,545).
+- Core: the noise action takes one WAV, MP3, AAC or FLAC file, not M4A or two files.
+- Native, `SystemAudioNativeChecks`: a WAV opened through the Windows decoder path has the same PCM facts and waveform as the plain document, keeps the original held, gives the identical noise preview and saves "… clean.wav" with the plain WAV's exact bytes; the original stays intact. (The CI machine's MP3/AAC/FLAC decoders were not exercised: no compressed fixture is generated there.)
+- Independent agent review: no P1/P2; P3s (explicit decoded flag, dispose the memory stream on failure) fixed.
+
 ## Windows0.124 — Move Files read-only files and hard links (B06, 2026-10-29)
 
 - Core 4,521,173 on Mac; native compiled 0 warnings/errors there. Windows CI: 40831750253 failed (McpNativeChecks still used a read-only file as the example of a file that can't be moved), 40832200441 passed after the review fixes (core 4,521,173, native 5,540).

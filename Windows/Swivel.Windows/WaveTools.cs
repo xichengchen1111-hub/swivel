@@ -18,22 +18,22 @@ public sealed class WaveDocument : IDisposable
     // The PCM read and processed: the held file itself, or audio Windows decoded from it (the
     // file stays held either way, and outputs go beside it).
     private readonly Stream source;
-    public bool Decoded => !ReferenceEquals(source, input.Stream);
+    public bool Decoded { get; }
     public const string DecodedNotice = "Windows decoded this file to 16-bit PCM first (its codec can change precision, priming or padding; up to 128 MiB and two hours). The cleaned result is saved as a new WAV file beside it.";
-    private WaveDocument(NativeFiles.Input input,WaveInfo info,double[] peaks,Stream? decoded = null) { this.input = input; source = decoded ?? input.Stream; Info = info; Peaks = peaks; }
+    private WaveDocument(NativeFiles.Input input,WaveInfo info,double[] peaks,Stream? decoded = null) { this.input = input; source = decoded ?? input.Stream; Decoded = decoded is not null; Info = info; Peaks = peaks; }
     /// A compressed file (MP3, AAC, FLAC) decoded completely by Windows into PCM16 first, within
     /// the system decoder's own limits; the original stays held until the document is disposed.
     public static async Task<WaveDocument> OpenDecodedAsync(string path,CancellationToken token)
     {
         var decoded = await SystemAudioDocument.OpenAsync(path, token).ConfigureAwait(false);
         var (input, wav) = decoded.Detach();
+        var stream = new MemoryStream(wav, false);
         try
         {
-            var stream = new MemoryStream(wav, false);
             var info = PcmWave.Read(stream, token);
             return new(input, info, PcmWave.Peaks(stream, 600, token), stream);
         }
-        catch { input.Dispose(); throw; }
+        catch { stream.Dispose(); input.Dispose(); throw; }
     }
     public static WaveDocument Open(string path,CancellationToken token, bool scanPeaks = true)
     {
