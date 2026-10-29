@@ -1047,6 +1047,12 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.123 批量改名接受只读文件与硬链接（B05 增强）；文件夹 ZIP 指纹修正
+
+`NativeFiles.OpenRename` 不再拒绝只读属性和多链接文件：改名用 DELETE|READ_ATTRIBUTES 句柄经 FileRenameInformation（不替换），只读属性不阻止改名；暂存、回滚、大小写两步改名和撤销都只做改名，从不设删除标记或改属性。`FileStamp`（卷、索引、大小、写入/创建时间）不受改名或其他链接增删影响；撤销按记录的当前路径重新打开，只改那一个链接名。仍拒绝零标识；同一批中同一文件的两个名称仍由 `RenameSession` 拒绝，MCP `plan_rename` 在计划时就在后一行标出。被其他程序以不共享删除方式打开的文件仍无法取得租约。移动文件、回收与撤销输出仍保留各自的单链接/非只读要求。
+
+文件夹 ZIP：`FolderZipPlan.Root` 记录根文件夹的 FILE_ID_INFO 身份并计入指纹。CI 显示刚建好的文件夹在规划与执行之间指纹会变：NTFS 父目录索引中的子文件夹时间是延迟更新的。指纹改为文件夹只计名称（文件仍计长度与修改时间），0.122 首次 CI 失败与 0.123 首次 CI 失败均由此引起。
+
 ## 0.122 Agent 工具 plan_zip_folder（G02 增强）
 
 Mac 的 MCP 可把文件夹交给 ZIP 动作。Windows MCP 的计划按单个文件印记核对，所以新增独立工具 `plan_zip_folder { path }`：宿主 `PlanFolderZip` 用 `FolderZipWork` 持有并规划，计划只存文件夹路径和 `FolderZip.Fingerprint`（每个条目的类型、ZIP 名称、长度、修改时间与每个跳过项的路径和原因的 SHA-256）；`apply_plan` 由宿主 `ZipFolder` 在同一个持有会话里重新规划、比较指纹再写出，指纹不同则拒绝；写出的 ZIP 以 `archive.zipfolder` 记入历史（outputs 与其他新建文件相同，`undo` 移到回收站）。返回内容列出最多 200 个跳过项及总数。文件夹名必须与存储的拼写一致（大小写、非 8.3 短名），否则 ZIP 及其顶层文件夹会按另一拼写命名，故拒绝（图形界面同样适用）。已知限制：同长度且修改时间不变的内容改动无法从目录信息察觉（写入时仍逐文件核对打开前后的印记）；指纹不含根文件夹身份，同一路径换成内容列表完全相同的另一个文件夹不会被发现。
