@@ -8,7 +8,8 @@ using System.Threading;
 
 namespace Swivel.Core;
 
-public sealed record PdfPageChoice(int Source,int Page);
+/// Turn (0, 90, 180 or 270) is added to this page only, on top of the whole-document turn.
+public sealed record PdfPageChoice(int Source,int Page,int Turn=0);
 public sealed record PdfCopyReport(int Pages,int Objects,int DroppedAnnotations,int ClearedReferences,long Bytes);
 
 /// Writes a new PDF from chosen pages of one or more parsed sources. Every page keeps its
@@ -55,7 +56,7 @@ public static class PdfPageCopy
     public static byte[] Write(IReadOnlyList<PdfStructure> sources,IReadOnlyList<PdfPageChoice> order,int turn,CancellationToken token,out PdfCopyReport report)
     {
         if(sources.Count is <1 or >10||order.Count is <1 or >MaxSelected||turn is not 0 and not 90 and not 180 and not 270)throw new UserError(Selection);
-        foreach(var choice in order)if(choice.Source<0||choice.Source>=sources.Count||choice.Page<0||choice.Page>=sources[choice.Source].Pages.Count)throw new UserError(Selection);
+        foreach(var choice in order)if(choice is null||choice.Turn is not 0 and not 90 and not 180 and not 270||choice.Source<0||choice.Source>=sources.Count||choice.Page<0||choice.Page>=sources[choice.Source].Pages.Count)throw new UserError(Selection);
         var numbers=new Dictionary<(int,int),int>();var queue=new Queue<(int Source,int Number)>();
         int next=3+order.Count;var pending=new List<(int Number,Func<PdfValue> Build)>();
         int dropped=0,cleared=0;
@@ -114,7 +115,7 @@ public static class PdfPageCopy
             if(page.CropBox is not null)entries.Add(("/CropBox"u8.ToArray(),"CropBox",Copy(source,page.CropBox,1)));
             // A page without Resources inherits none; an empty dictionary says the same explicitly.
             entries.Add(("/Resources"u8.ToArray(),"Resources",page.Resources is null?PdfValue.Dict(new()):Copy(source,page.Resources,1)));
-            int rotate=(page.Rotate+turn)%360;if(rotate!=0)entries.Add(("/Rotate"u8.ToArray(),"Rotate",PdfValue.Int(rotate)));
+            int rotate=(page.Rotate+turn+order[i].Turn)%360;if(rotate!=0)entries.Add(("/Rotate"u8.ToArray(),"Rotate",PdfValue.Int(rotate)));
             var annots=sources[source].Resolve(page.Node.Get("Annots"));
             if(annots.Kind==PdfKind.Array)
             {
@@ -183,7 +184,7 @@ public static class PdfPageCopy
         for(int i=0;i<order.Count;i++)
         {
             var source=sources[order[i].Source].Pages[order[i].Page];var page=check.Pages[i];
-            if(!page.MediaBox.SequenceEqual(source.MediaBox)||page.Rotate!=(source.Rotate+turn)%360)throw new UserError(PdfStructure.Damaged);
+            if(!page.MediaBox.SequenceEqual(source.MediaBox)||page.Rotate!=(source.Rotate+turn+order[i].Turn)%360)throw new UserError(PdfStructure.Damaged);
         }
     }
 }

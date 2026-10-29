@@ -24,6 +24,7 @@ public sealed class FolderMoveSession : IDisposable
     /// claims the name, so the result may take a later number if this one is taken meanwhile.
     public string Planned { get; }
     public MoveIdentity Identity { get; }
+    public MoveIdentity DestinationIdentity => destination.Snapshot.LeafIdentity;
 
     private FolderMoveSession(string source, string planned, NativeFiles.MoveDirectoryLease start, NativeFiles.MoveDirectoryLease destination, SafeFileHandle folder, MoveIdentity identity, bool undo)
     { Source = source; Planned = planned; this.start = start; this.destination = destination; this.folder = folder; Identity = identity; this.undo = undo; }
@@ -142,6 +143,34 @@ public static partial class NativeFiles
     }
 
     internal static MoveIdentity FolderMoveIdentity(SafeFileHandle handle) => ReadMoveIdentity(handle);
+
+    /// For agents: whether a plain local path names a folder (or a link to one) itself, without
+    /// following it. Anything else, including a network drive, is "not a folder".
+    internal static bool IsLocalFolder(string path)
+    {
+        try
+        {
+            path = MoveRules.DirectoryPath(path);
+            if (GetDriveType(path[..3]) is not 2 and not 3 and not 6) return false;
+            uint attributes = GetAttributes(path);
+            return attributes != uint.MaxValue && (attributes & 0x10) != 0;
+        }
+        catch (UserError) { return false; }
+    }
+
+    /// The identity of the plain local folder at this path (not a link or junction), or null.
+    internal static MoveIdentity? FolderIdentityAt(string path)
+    {
+        try
+        {
+            path = MoveRules.DirectoryPath(path);
+            if (path.Length == 3 || GetDriveType(path[..3]) is not 2 and not 3 and not 6) return null;
+            using var handle = Open(path, ReadAttributes, 7, 3, OpenReparse | BackupSemantics);
+            if (GetFileType(handle) != 1 || !GetFileInformationByHandle(handle, out var info) || (info.Attributes & 0x10) == 0 || (info.Attributes & UnsafeAttributes) != 0) return null;
+            return ReadMoveIdentity(handle);
+        }
+        catch (Exception error) when (error is Win32Exception or UserError or System.IO.IOException or UnauthorizedAccessException) { return null; }
+    }
     internal static string StoredLeaf(SafeFileHandle handle) => Leaf(FinalPath(handle));
 
     internal static void CheckFolderMoveTarget(SafeFileHandle folder, string destination)

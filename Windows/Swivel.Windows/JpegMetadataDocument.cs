@@ -16,7 +16,8 @@ internal sealed class JpegMetadataDocument : IDisposable
     internal bool CanKeepOrientation => kept is not null;
     private JpegMetadataDocument(NativeFiles.Input input,JpegMetadata.Plan plan,byte[] cleaned,byte[]? kept)
     {this.input=input;Plan=plan;this.cleaned=cleaned;this.kept=kept;}
-    internal static JpegMetadataDocument Open(string path,CancellationToken token)
+    /// With `expected` (an agent's plan), a file that is no longer the planned one is refused before it is read.
+    internal static JpegMetadataDocument Open(string path,CancellationToken token,FileStamp? expected=null)
     {
         token.ThrowIfCancellationRequested();
         string extension=System.IO.Path.GetExtension(path);
@@ -24,6 +25,7 @@ internal sealed class JpegMetadataDocument : IDisposable
         var input=NativeFiles.OpenRead(path);
         try
         {
+            if(expected is FileStamp planned&&!input.Stamp.SameObjectAndContent(planned))throw new McpToolError(McpSession.Changed);
             var plan=JpegMetadata.Read(input.Stream,token);
             using var output=new MemoryStream(checked((int)plan.OutputBytes));plan.Write(output,token);var cleaned=output.ToArray();
             // Validate only the cleaned, bounded snapshot through the established

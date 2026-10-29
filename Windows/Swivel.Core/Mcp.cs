@@ -64,6 +64,28 @@ public interface IMcpHost
     /// Writes "<folder>.zip" (or the next free numbered name) beside the folder only if a fresh
     /// plan still has this fingerprint, and returns the new file.
     string ZipFolder(string folder, string fingerprint, CancellationToken token);
+    /// The number of pages in each PDF, read as PDF Pages reads them (1–10 files, their limits
+    /// together); a UserError when one can't be read.
+    IReadOnlyList<int> PdfPageCounts(IReadOnlyList<string> paths, CancellationToken token);
+    /// Writes "<first> pages.pdf" (or the next free numbered name) beside the first PDF from the
+    /// chosen pages, only if every PDF, once held, still matches its planned stamp; returns it.
+    string WritePdfPages(IReadOnlyList<string> paths, IReadOnlyList<FileStamp> expected, IReadOnlyList<PdfPageChoice> pages, CancellationToken token);
+    /// Whether this path names a folder itself (a link or junction counts as one, and is refused later).
+    bool IsFolder(string path);
+    /// What Move Folder would do now with this folder and destination: its stored name, the path
+    /// it would take and both identities. Throws when it can't be moved there (another drive,
+    /// inside itself, already there, held open, not a plain local folder).
+    FolderMovePlan PlanFolderMove(string folder, string destination, CancellationToken token);
+    /// Moves the folder by one rename of its held handle, only while it, its name and the
+    /// destination are still the planned ones and the planned name is free; returns the receipt.
+    FolderMoveReceipt MoveFolder(FolderMovePlan plan, CancellationToken token);
+    /// Throws unless Move Folder's undo could put this folder back now (the same checks, nothing moved).
+    void CheckFolderUndo(FolderMoveReceipt receipt, CancellationToken token);
+    /// Move Folder's undo: back to its original path only while it is the same folder, both
+    /// parent folders are unchanged and the original name is free.
+    void UndoFolderMove(FolderMoveReceipt receipt, CancellationToken token);
+    /// The identity of the plain folder at this path, or null when there is none.
+    MoveIdentity? FolderIdentity(string path);
     /// The identity of a file Swivel created, or null when it no longer exists.
     FileStamp? Stamp(string path);
     /// Moves a file Swivel created to the Recycle Bin only if it is still exactly that file.
@@ -74,6 +96,10 @@ public interface IMcpHost
     void SaveHistory(string json);
 }
 
+/// A folder Move Folder would move: Source spelt with its stored name, Planned the path it
+/// takes in Destination (its own name), and the identities of the folder and the destination.
+public sealed record FolderMovePlan(string Source, string Destination, string Planned, MoveIdentity Identity, MoveIdentity DestinationIdentity);
+
 /// Agent-facing errors: for models, so they stay English like the Mac server's.
 public sealed class McpToolError(string message) : Exception(message)
 {
@@ -82,12 +108,14 @@ public sealed class McpToolError(string message) : Exception(message)
     public static bool Expected(Exception error) => error is not (OutOfMemoryException or StackOverflowException or AccessViolationException);
 }
 
-public sealed record McpAction(string Id, string Title, string Suffix, bool Document = false, bool Subtitle = false, bool Data = false, bool Font = false)
+public sealed record McpAction(string Id, string Title, string Suffix, bool Document = false, bool Subtitle = false, bool Data = false, bool Font = false, bool Metadata = false)
 {
+    /// The extensions a metadata removal takes; its copy keeps the original's extension.
+    public string[] MetadataInputs => Id switch { "image.jpegmetadata" => new[] { "jpg", "jpeg" }, "image.pngmetadata" => new[] { "png" }, "image.tiffmetadata" => new[] { "tif", "tiff" }, _ => Array.Empty<string>() };
     /// The new file's extension; unpacking a web font gives ttf or otf, whichever its outlines are.
-    public string Extension => Font ? (Id == "font.desktop" ? "ttf" : Id["font.".Length..]) : Subtitle ? Id["subtitle.".Length..] : Data ? Id["data.".Length..] : Document ? Id["document.".Length..] : ImageOutputInfo.Format(Id);
+    public string Extension => Metadata ? MetadataInputs[0] : Font ? (Id == "font.desktop" ? "ttf" : Id["font.".Length..]) : Subtitle ? Id["subtitle.".Length..] : Data ? Id["data.".Length..] : Document ? Id["document.".Length..] : ImageOutputInfo.Format(Id);
     /// A subtitle or data file is offered every other format of its kind, not its own.
-    public bool Accepts(string path) => Font ? FontFileFormats.Offers(path, FontFileFormats.ForId(Id)!) : Subtitle
+    public bool Accepts(string path) => Metadata ? MetadataInputs.Contains(System.IO.Path.GetExtension(path).TrimStart('.'), StringComparer.OrdinalIgnoreCase) : Font ? FontFileFormats.Offers(path, FontFileFormats.ForId(Id)!) : Subtitle
         ? SubtitleFormats.IsInput(path) && !System.IO.Path.GetExtension(path).TrimStart('.').Equals(Extension, StringComparison.OrdinalIgnoreCase)
         : Data ? DataFileFormats.IsInput(path) && !DataFileFormats.IsSame(path, DataFileFormats.ForId(Id)!)
         : Document ? McpSession.IsDocument(path) : Catalog.IsImage(path);
@@ -118,6 +146,10 @@ public sealed class McpSession
         new("image.gray", "Grayscale", " grayscale"),
         // Run on this PC with the pinned U²-Net model; the result is a PNG either way.
         new("image.removebg", "Remove Background", " cutout"), new("image.blurbg", "Blur Background", " blurred"),
+        // Metadata removal keeps every pixel byte: only named blocks are left out of a new copy.
+        new("image.jpegmetadata", "Remove JPEG EXIF and Comments", " exif-comments removed", Metadata: true),
+        new("image.pngmetadata", "Remove PNG Text and EXIF", " text-exif removed", Metadata: true),
+        new("image.tiffmetadata", "Remove TIFF Metadata", " metadata removed", Metadata: true),
         // A document's text only, as Inspect Document Text saves it.
         new("document.txt", "Save Text as TXT", " text", true), new("document.rtf", "Save Text as RTF", " text", true),
         new("document.docx", "Save Text as DOCX", " text", true), new("document.html", "Save Text as HTML", " text", true),
@@ -152,7 +184,14 @@ public sealed class McpSession
 
     /// An action plan has Action; a rename plan has Renames and a move plan Moves (one pair per
     /// input, in order).
-    private sealed record Plan(string Id, McpAction? Action, IReadOnlyList<RenamePair>? Renames, IReadOnlyList<(string Path, FileStamp Stamp)> Inputs, DateTime Expires, IReadOnlyList<RenamePair>? Moves = null, MoveIdentity? Folder = null, long? Target = null, (string Path, string Fingerprint)? Zip = null);
+    private sealed record Plan(string Id, McpAction? Action, IReadOnlyList<RenamePair>? Renames, IReadOnlyList<(string Path, FileStamp Stamp)> Inputs, DateTime Expires, IReadOnlyList<RenamePair>? Moves = null, MoveIdentity? Folder = null, long? Target = null, (string Path, string Fingerprint)? Zip = null)
+    {
+        public IReadOnlyList<PdfPageChoice>? PdfPages { get; init; }
+        public IReadOnlyList<FolderMovePlan>? Folders { get; init; }
+    }
+    private static readonly McpAction PdfPagesAction = new("pdf.pages", "Select PDF Pages", " pages");
+    public const int MaxPdfInputs = 10;
+    public const long MaxPdfTotal = 128L * 1024 * 1024;
 
     public McpSession(IMcpHost host, string version) { this.host = host; this.version = version; }
 
@@ -200,7 +239,7 @@ public sealed class McpSession
             ["protocolVersion"] = Versions.Contains(requested) ? requested : Versions[0],
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false } },
             ["serverInfo"] = new JsonObject { ["name"] = "swivel-windows", ["title"] = "Swivel (Windows preview)", ["version"] = version },
-            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action, plan_compress, plan_rename, plan_move or plan_zip_folder (for a folder), then apply_plan with the returned plan_id; outputs (including compressed copies) are new files beside the originals, renames stay in each file's folder, moves stay on one drive and keep names, and nothing is overwritten. undo moves the files an apply created to the Recycle Bin, or renames or moves files back, if they are unchanged.",
+            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action, plan_compress, plan_rename, plan_move, plan_zip_folder (for a folder) or plan_pdf_pages, then apply_plan with the returned plan_id; outputs (including compressed copies) are new files beside the originals, renames stay in each file's folder, moves (of files or whole folders) stay on one drive and keep names, and nothing is overwritten. undo moves the files an apply created to the Recycle Bin, or renames or moves files and folders back, if they are unchanged.",
         };
     }
 
@@ -221,7 +260,7 @@ public sealed class McpSession
                 new JsonObject { ["paths"] = Paths(), ["language"] = new JsonObject { ["type"] = "string", ["description"] = "Optional OCR language tag such as en-US or zh-Hans-CN, matched to the installed OCR languages ignoring case. Default: the user's Windows language settings. Ignored for documents." } }, new[] { "paths" }, true, false),
             Tool("read_codes", "Read QR codes", "Reads one QR code per image: exact flat QR images first, then photos and screenshots of a dark-on-light Model 2 code (any rotation, mild perspective, moderate blur, noise and uneven light; up to 16 megapixels), using the code's error correction. When an image holds several codes only one is returned. Mirrored, light-on-dark, curved or heavily damaged codes, codes with covered corner squares, and barcodes are not read. \"photo\": true marks a code read by the photo reader, with corrected_bytes counting the encoded bytes error correction changed. Read-only.",
                 new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
-            Tool("plan_action", "Plan action", "Prepares one action for 1–100 files without writing anything. Returns a plan_id that apply_plan uses within one hour, once.",
+            Tool("plan_action", "Plan action", "Prepares one action for 1–100 files without writing anything. Returns a plan_id that apply_plan uses within one hour, once. Only actions that need no choices are offered; Swivel's editors and windows (crop, resize, adjust, annotate, redact, collage, ID photo, upscale, palette reduction, QR making), audio, video and subtitle editing, archives (ZIP, TAR and GZip of files, extraction of ZIP, TAR, GZip and 7z), PDF rendering to images and OCR to a file are not, and image presets are not offered here.",
                 new JsonObject { ["action"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(Actions.Select(a => (JsonNode)a.Id).ToArray()) }, ["paths"] = Paths() }, new[] { "action", "paths" }, true, false),
             Tool("plan_compress", "Plan compressing to a size", "Plans compressing 1–100 images or videos so each new file is at most target_bytes (e.g. 500000 for under 500 KB). Images (PNG, JPEG, BMP, TIFF, static GIF, TGA, PSD, still WebP; up to 16 megapixels and 16384 pixels per side) become JPEG without their metadata, transparent areas on white: quality is lowered only as far as needed, and if even the lowest quality is too big the long edge shrinks in 15% steps down to 320 pixels. Videos (MP4, MOV, M4V, WMV, up to 2 hours) become H.264/AAC MP4 at a bit rate worked out from their length, never above the original's, at most 1920 pixels on the long edge and smaller at low rates; videos saved with a rotation flag (as phones often record) come out upright, and encoding can take minutes. Originals are kept; new files go beside them. Nothing changes until apply_plan.",
                 new JsonObject
@@ -241,13 +280,32 @@ public sealed class McpSession
                     ["start"] = new JsonObject { ["type"] = "integer", ["minimum"] = 0, ["maximum"] = 99_999_999, ["description"] = "First number (default 1)" },
                     ["digits"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 8, ["description"] = "Digits in each number (default 3)" },
                 }, new[] { "paths" }, true, false),
-            Tool("plan_move", "Plan moving files", "Plans moving 1–100 files into an existing folder on the same NTFS drive, keeping their names. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Files already in that folder, names already taken there (nothing is overwritten or renumbered), two files with one name, and files on another drive are reported on their rows (read-only files stay read-only, and moving a hard link moves only that name); folders are not moved. Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
+            Tool("plan_move", "Plan moving files", "Plans moving 1–100 files into an existing folder on the same NTFS drive, keeping their names. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Files already in that folder, names already taken there (nothing is overwritten or renumbered), two files with one name, and files on another drive are reported on their rows (read-only files stay read-only, and moving a hard link moves only that name). paths may instead list 1–100 folders (not files and folders together): each folder and everything inside it moves by one rename of the folder on the same NTFS drive, so nothing is copied and contents, permissions and times stay as they are; folders inside one another, a destination inside a folder, links, junctions, system or cloud folders, a whole drive and a folder with a file open in another app are refused, and contents are not checked again at apply (the folder must still be the same folder by its NTFS file ID, under the same name). Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
                 new JsonObject { ["paths"] = Paths(), ["destination"] = new JsonObject { ["type"] = "string", ["description"] = "Absolute path of an existing local folder" } }, new[] { "paths", "destination" }, true, false),
             Tool("plan_zip_folder", "Plan zipping a folder", "Plans compressing one folder and everything inside it (sub-folders, empty folders, hidden files, each file's modified time) into a new ZIP beside the folder, named '<folder>.zip' or the next free numbered name. Links, junctions, cloud-only files, system files, names Windows cannot hold, paths over 240 characters and names differing only in case are left out and listed. Up to 10,000 items, 32 levels and 2 GB. Pass the folder's exact name as stored (same case, not an 8.3 short name); inspect_files takes files only. Applied only if the folder's contents (names, sizes, modified times) are unchanged since planning. Nothing changes until apply_plan.",
                 new JsonObject { ["path"] = new JsonObject { ["type"] = "string", ["description"] = "Absolute path of an existing local folder (not a whole drive)" } }, new[] { "path" }, true, false),
-            Tool("apply_plan", "Apply plan", "Runs a plan from plan_action, plan_compress, plan_rename, plan_move or plan_zip_folder. Refused if any input changed since planning. Creates new files beside the originals, renames files within their folders, or moves files into the planned folder; never overwrites. Logged for undo.",
+            Tool("plan_pdf_pages", "Plan PDF pages", "Plans a new PDF from chosen pages of 1–" + MaxPdfInputs + " PDFs, beside the first one, named '<first PDF> pages.pdf' or the next free numbered name. pages lists 1–" + PdfPageCopy.MaxSelected.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " pages in output order; a page may repeat, and each may be turned clockwise by 90, 180 or 270 degrees on top of its own rotation. Pages are copied without re-rendering: their text, vector drawings, images, fonts and appearance-only annotations (comments, highlights, stamps, drawings, web links) stay as they are. Bookmarks, links to pages, form fields, JavaScript, attachments, tags, page labels, layers, document information, XMP metadata and digital signatures are not carried over. Unencrypted PDFs only, up to 32 MiB each, 128 MiB together and 1,000 pages in all. The PDFs are read now to count pages and again at apply_plan; nothing changes until then.",
+                new JsonObject
+                {
+                    ["paths"] = new JsonObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = MaxPdfInputs, ["items"] = new JsonObject { ["type"] = "string" }, ["description"] = "Absolute Windows paths to local PDF files; file numbers in pages count from 1 in this order." },
+                    ["pages"] = new JsonObject
+                    {
+                        ["type"] = "array", ["minItems"] = 1, ["maxItems"] = PdfPageCopy.MaxSelected, ["description"] = "The new PDF's pages, in order.",
+                        ["items"] = new JsonObject
+                        {
+                            ["type"] = "object", ["additionalProperties"] = false, ["required"] = new JsonArray("page"),
+                            ["properties"] = new JsonObject
+                            {
+                                ["file"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = MaxPdfInputs, ["description"] = "Which of paths, counting from 1 (default 1)" },
+                                ["page"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["description"] = "Page number in that PDF, counting from 1" },
+                                ["turn"] = new JsonObject { ["type"] = "integer", ["enum"] = new JsonArray(0, 90, 180, 270), ["description"] = "Clockwise degrees added to this page's rotation (default 0)" },
+                            },
+                        },
+                    },
+                }, new[] { "paths", "pages" }, true, false),
+            Tool("apply_plan", "Apply plan", "Runs a plan from plan_action, plan_compress, plan_rename, plan_move, plan_zip_folder or plan_pdf_pages. Refused if any input changed since planning. Creates new files beside the originals, renames files within their folders, or moves files or folders into the planned folder; never overwrites. Logged for undo.",
                 new JsonObject { ["plan_id"] = new JsonObject { ["type"] = "string" } }, new[] { "plan_id" }, false, false),
-            Tool("undo", "Undo", "Moves the files created by one logged apply to the Recycle Bin, only if each is unchanged; for a rename, renames all its files back together, only if none changed and every old name is free; for a move, moves each unchanged file back to its old folder if its old name is free, leaving the others where they are. Without entry_id it takes the newest apply that is not fully undone; to reach an older one, pass its entry_id from history. dry_run reports without changing anything.",
+            Tool("undo", "Undo", "Moves the files created by one logged apply to the Recycle Bin, only if each is unchanged; for a rename, renames all its files back together, only if none changed and every old name is free; for a move, moves each unchanged file back to its old folder if its old name is free, leaving the others where they are; for a folder move, renames each folder back only while it is the same folder (NTFS file ID), its old and new parent folders are unchanged and its old name is free, leaving the others where they are. Without entry_id it takes the newest apply that is not fully undone; to reach an older one, pass its entry_id from history. dry_run reports without changing anything.",
                 new JsonObject { ["entry_id"] = new JsonObject { ["type"] = "string" }, ["dry_run"] = new JsonObject { ["type"] = "boolean" } }, Array.Empty<string>(), false, true),
             Tool("history", "History", "Lists logged applies, newest first, with their outputs, renames or moves and whether they were undone.",
                 new JsonObject { ["limit"] = new JsonObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = MaxHistory } }, Array.Empty<string>(), true, false));
@@ -261,7 +319,7 @@ public sealed class McpSession
         if (parameters["arguments"] is not null and not JsonObject) throw new McpInvalidParams("Tool arguments must be an object.");
         Func<JsonObject, CancellationToken, JsonObject> tool = name switch
         {
-            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction, "plan_compress" => PlanCompress, "plan_rename" => PlanRename, "plan_move" => PlanMove, "plan_zip_folder" => PlanZipFolder,
+            "list_actions" => (_, _) => ListActions(), "inspect_files" => InspectFiles, "extract_text" => ExtractText, "read_codes" => ReadCodes, "plan_action" => PlanAction, "plan_compress" => PlanCompress, "plan_rename" => PlanRename, "plan_move" => PlanMove, "plan_zip_folder" => PlanZipFolder, "plan_pdf_pages" => PlanPdfPages,
             "apply_plan" => ApplyPlan, "undo" => Undo, "history" => History,
             _ => throw new McpInvalidParams("Unknown tool: " + name),
         };
@@ -287,8 +345,8 @@ public sealed class McpSession
     {
         ["actions"] = new JsonArray(Actions.Select(a => (JsonNode)new JsonObject
         {
-            ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = a.Font ? (a.Id == "font.desktop" ? "Web fonts (WOFF, WOFF2) up to 64 MB" : FontInputs) : a.Subtitle ? SubtitleInputs : a.Data ? DataInputs : a.Document ? DocumentInputs : "PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture), still WebP or static GIF images",
-            ["writes"] = a.Id == "font.desktop" ? "A new TTF file (TrueType outlines) or OTF file (PostScript outlines) with the same tables beside each original, named '<name>.ttf' or '<name>.otf' or the next free numbered name." : "A new " + a.Extension.ToUpperInvariant() + " file" + (a.Font ? " with the font's tables copied as they are (outlines unchanged)" : a.Subtitle ? (a.Extension == "txt" ? " holding only the subtitle text, one cue per line" : " with each cue's text and timing (styling, colours and positions are dropped)")
+            ["id"] = a.Id, ["title"] = a.Title, ["inputs"] = a.Metadata ? MetadataInputsText(a.Id) : a.Font ? (a.Id == "font.desktop" ? "Web fonts (WOFF, WOFF2) up to 64 MB" : FontInputs) : a.Subtitle ? SubtitleInputs : a.Data ? DataInputs : a.Document ? DocumentInputs : "PNG, JPEG, BMP, TIFF, TGA, PSD (flattened picture), still WebP or static GIF images",
+            ["writes"] = a.Metadata ? MetadataWrites(a) : a.Id == "font.desktop" ? "A new TTF file (TrueType outlines) or OTF file (PostScript outlines) with the same tables beside each original, named '<name>.ttf' or '<name>.otf' or the next free numbered name." : "A new " + a.Extension.ToUpperInvariant() + " file" + (a.Font ? " with the font's tables copied as they are (outlines unchanged)" : a.Subtitle ? (a.Extension == "txt" ? " holding only the subtitle text, one cue per line" : " with each cue's text and timing (styling, colours and positions are dropped)")
                 : a.Data ? (a.Extension is "csv" or "tsv" ? " with a header row and one row per record (nested values as JSON text, UTF-8 with a byte order mark)" : " with the same values (keys sorted; CSV/TSV cells become text; plist dates and data become ISO 8601 and Base64 text where the format has no such type)")
                 : a.Document ? " holding only the document's text (no formatting, images, table layout or objects)"
                 : a.Id == "convert.ico" ? " holding the picture at 16, 32, 48, 64, 128 and 256 pixels up to its longer side (one enlarged 16-pixel image for smaller pictures), each centred on a transparent square"
@@ -296,6 +354,20 @@ public sealed class McpSession
                 : a.Id == "convert.psd" ? " holding one flattened 8-bit RGB picture (plus one layer when it has transparency)" : "") + " beside each original, named '<name>" + a.Suffix + "." + a.Extension + "' or the next free numbered name.",
         }).ToArray()),
     };
+
+    private static string MetadataInputsText(string id) => id switch
+    {
+        "image.jpegmetadata" => "8-bit baseline or progressive JPEG (JPG, JPEG) up to 32 MiB, 16 megapixels and 16384 pixels per side; other APP2 than ICC, APP11 (HDR) and damaged framing are refused",
+        "image.pngmetadata" => "Static PNG up to 32 MiB, 16 megapixels and 16384 pixels per side, 8-bit or lower; APNG, 16-bit, damaged CRCs and unknown critical chunks are refused",
+        _ => "Classic TIFF (TIF, TIFF) up to 32 MiB and 64 pages, 16 megapixels in all, uncompressed, LZW, Deflate or PackBits; BigTIFF, JPEG-compressed, YCbCr and unknown structural tags are refused",
+    };
+
+    private static string MetadataWrites(McpAction action) => "A new copy beside each original, named '<name>" + action.Suffix + "." + (action.Id == "image.tiffmetadata" ? "<the original's tif or tiff>" : action.Extension) + "' or the next free numbered name, " + action.Id switch
+    {
+        "image.jpegmetadata" => "without APP1 (EXIF, XMP), APP13 (IPTC/Photoshop) and comment segments; every other segment and the compressed picture are copied byte for byte, nothing is recompressed.",
+        "image.pngmetadata" => "without tEXt, zTXt, iTXt, eXIf and tIME chunks; every other chunk, including the compressed picture, colour profile and unknown private chunks, is copied byte for byte.",
+        _ => "rebuilt with every page's strips or tiles copied byte for byte, without descriptive, date, software, GPS, EXIF, XMP, IPTC and private tags (the ICC colour profile is kept).",
+    } + " The orientation tag is kept as a new minimal EXIF (TIFF: the tag itself) when the original has one Swivel can keep, so the picture still shows the right way up; other private blocks the format doesn't name may remain.";
 
     private static string[] PathsArgument(JsonObject arguments)
     {
@@ -405,13 +477,14 @@ public sealed class McpSession
         foreach (string path in paths)
         {
             token.ThrowIfCancellationRequested();
-            if (!action.Accepts(path)) throw new McpToolError(path + (action.Font ? (action.Id == "font.desktop" ? ": this action needs a WOFF or WOFF2 web font." : ": this action needs a font file (TTF, OTF, WOFF or WOFF2) in another format.") : action.Data ? ": this action needs a data file (JSON, JSONL, NDJSON, PLIST, CSV or TSV) in another format." : action.Subtitle ? ": this action needs a subtitle file (SRT, VTT, ASS, SSA, LRC or SBV) in another format." : action.Document ? ": this action needs a plain-text, DOC, DOCX, ODT, RTF, HTML or EPUB document." : ": this action needs a PNG, JPEG, BMP, TIFF, GIF, TGA, PSD or WebP image."));
+            if (!action.Accepts(path)) throw new McpToolError(path + (action.Metadata ? ": this action needs a " + string.Join(" or ", action.MetadataInputs.Select(e => e.ToUpperInvariant())) + " file." : action.Font ? (action.Id == "font.desktop" ? ": this action needs a WOFF or WOFF2 web font." : ": this action needs a font file (TTF, OTF, WOFF or WOFF2) in another format.") : action.Data ? ": this action needs a data file (JSON, JSONL, NDJSON, PLIST, CSV or TSV) in another format." : action.Subtitle ? ": this action needs a subtitle file (SRT, VTT, ASS, SSA, LRC or SBV) in another format." : action.Document ? ": this action needs a plain-text, DOC, DOCX, ODT, RTF, HTML or EPUB document." : ": this action needs a PNG, JPEG, BMP, TIFF, GIF, TGA, PSD or WebP image."));
             FileStamp stamp;
             try { stamp = host.Inspect(path); }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }
             if (action.Document && stamp.Size > DocumentText.MaxInputBytes) throw new McpToolError(path + ": documents are limited to 8 MiB (8,388,608 bytes).");
             if (action.Subtitle && stamp.Size > SubtitleFormats.MaxBytes) throw new McpToolError(path + ": subtitle files are limited to 8 MiB (8,388,608 bytes).");
             if (action.Font && stamp.Size > FontFileFormats.MaxBytes) throw new McpToolError(path + ": font files are limited to 64 MiB (67,108,864 bytes).");
+            if (action.Metadata && stamp.Size > JpegMetadata.MaxBytes) throw new McpToolError(path + ": metadata removal is limited to 32 MiB (33,554,432 bytes).");
             if (action.Data && stamp.Size > DataFileFormats.MaxBytes) throw new McpToolError(path + ": data files are limited to 32 MiB (33,554,432 bytes).");
             inputs.Add((path, stamp));
         }
@@ -422,11 +495,12 @@ public sealed class McpSession
             ["inputs"] = new JsonArray(inputs.Select(i => (JsonNode)new JsonObject
             {
                 ["path"] = i.Item1,
-                ["output"] = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(i.Item1) ?? "", System.IO.Path.GetFileNameWithoutExtension(i.Item1) + action.Suffix + "." + action.Extension)
+                ["output"] = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(i.Item1) ?? "", System.IO.Path.GetFileNameWithoutExtension(i.Item1) + action.Suffix + "." + (action.Id == "image.tiffmetadata" ? System.IO.Path.GetExtension(i.Item1).TrimStart('.').ToLowerInvariant() : action.Extension))
                     + (action.Id == "font.desktop" ? " or .otf, whichever its outlines are (or the next free numbered name)" : " (or the next free numbered name)"),
             }).ToArray()),
         };
         // The document is read only at apply: one it can't read (too large, an unsupported encoding) fails there.
+        if (action.Metadata) body["note"] = "The orientation is kept when Swivel can keep it, so the picture still shows the right way up; otherwise the copy has none and may show turned. Files are read at apply_plan; one Swivel can't read (an unsupported layout, damaged data) or with nothing to remove fails there and stops the rest. This is not a full privacy guarantee: blocks the action doesn't name, such as the ICC profile or a thumbnail in APP0, may remain.";
         if (action.Font) body["note"] = "Tables are copied as they are, so the outlines don't change; WOFF2 is written without glyph transforms. Font collections (TTC) are refused. Files are read at apply_plan; one Swivel can't read fails there and stops the rest.";
         if (action.Data) body["note"] = "Values are never guessed: CSV/TSV cells stay text, a value the output can't hold (null in a plist, NaN in JSON, a tab inside a TSV cell) stops the conversion. Files are read at apply_plan; one Swivel can't read fails there and stops the rest.";
         if (action.Subtitle) body["note"] = "Each cue's text and timing are kept; styling, colours and positions are dropped. Files are read at apply_plan; one Swivel can't read (another text encoding, no timed cues) fails there and stops the rest.";
@@ -606,6 +680,12 @@ public sealed class McpSession
         string folder; MoveIdentity folderIdentity;
         try { folder = MoveRules.DirectoryPath((string)d!); folderIdentity = host.CheckFolder(folder); }
         catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError("destination: " + error.Message); }
+        var kinds = paths.Select(p => { token.ThrowIfCancellationRequested(); try { return host.IsFolder(p); } catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { return false; } }).ToArray();
+        if (kinds.Any(k => k))
+        {
+            if (!kinds.All(k => k)) throw new McpToolError("plan_move moves files or folders, not both in one plan. Plan the folders and the files separately.");
+            return PlanFolderMoves(paths, folder, folderIdentity, token);
+        }
         var inputs = SpeltInputs(paths, token);
         // Names are kept, so the moved file is named as the path spells it.
         var destinations = paths.Select(p => folder.TrimEnd('\\') + p[p.LastIndexOf('\\')..]).ToArray();
@@ -644,6 +724,52 @@ public sealed class McpSession
         if (problems) return new JsonObject { ["can_apply"] = false, ["destination"] = folder, ["moves"] = rows, ["next"] = "Resolve the issues (or leave those files out) and plan again." };
         var plan = Store(null, null, inputs, paths.Select((p, i) => new RenamePair(p, destinations[i])).ToArray(), folderIdentity);
         return new JsonObject { ["plan_id"] = plan.Id, ["action"] = "move", ["expires"] = plan.Expires.ToString("O"), ["can_apply"] = true, ["destination"] = folder, ["moves"] = rows };
+    }
+
+    /// Each folder moves by one rename of its own, keeping its name: one whose name is taken in
+    /// the destination is reported, never renumbered.
+    private JsonObject PlanFolderMoves(string[] paths, string folder, MoveIdentity folderIdentity, CancellationToken token)
+    {
+        var sources = new string?[paths.Length]; var plans = new FolderMovePlan?[paths.Length]; var issues = new string?[paths.Length];
+        for (int i = 0; i < paths.Length; i++)
+        {
+            token.ThrowIfCancellationRequested();
+            try { sources[i] = MoveRules.DirectoryPath(paths[i]); }
+            catch (UserError error) { issues[i] = error.Message; continue; }
+            try
+            {
+                var planned = host.PlanFolderMove(sources[i]!, folder, token);
+                if (planned.DestinationIdentity != folderIdentity) issues[i] = "The destination folder changed while planning; plan again.";
+                else if (MoveRules.FileName(planned.Source) != MoveRules.FileName(sources[i]!)) issues[i] = "On disk this folder is named " + MoveRules.FileName(planned.Source) + ". Pass the path with that exact name.";
+                else if (!string.Equals(planned.Planned, FolderMove.Candidate(planned.Source, folder, 1), StringComparison.Ordinal)) issues[i] = "A file or folder with this name is already in the destination; nothing is overwritten.";
+                else plans[i] = planned;
+            }
+            catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { issues[i] = "Swivel can't move this folder there: " + error.Message; }
+        }
+        string Inside(string path) => path.TrimEnd('\\') + "\\";
+        var rows = new JsonArray(); bool problems = false;
+        for (int i = 0; i < paths.Length; i++)
+        {
+            string from = sources[i] ?? paths[i], to = sources[i] is null ? "" : folder.TrimEnd('\\') + from[from.LastIndexOf('\\')..];
+            string? issue = issues[i];
+            if (issue is null && sources.Where((s, j) => j != i && s is not null && (Inside(from).StartsWith(Inside(s), StringComparison.OrdinalIgnoreCase) || Inside(s).StartsWith(Inside(from), StringComparison.OrdinalIgnoreCase))).Any())
+                issue = "Another folder in this plan holds this one or is inside it; move them in separate plans.";
+            if (issue is null && plans.Where((p, j) => j < i && p is not null && p.Identity == plans[i]!.Identity).Any())
+                issue = "Another path in this plan names the same folder.";
+            if (issue is null && sources.Where((s, j) => j != i && s is not null && string.Equals(MoveRules.FileName(s), MoveRules.FileName(from), StringComparison.OrdinalIgnoreCase)).Any())
+                issue = "Another folder in this plan has the same name; Swivel keeps names, so only one could go there.";
+            var row = new JsonObject { ["from"] = from, ["to"] = to, ["folder"] = true };
+            if (issue is not null) { row["issue"] = issue; problems = true; }
+            rows.Add(row);
+        }
+        if (problems) return new JsonObject { ["can_apply"] = false, ["destination"] = folder, ["moves"] = rows, ["next"] = "Resolve the issues (or leave those folders out) and plan again." };
+        var plan = Store(null, null, Array.Empty<(string, FileStamp)>(), folder: folderIdentity) with { Folders = plans.Select(p => p!).ToArray() };
+        this.plans[plan.Id] = plan;
+        return new JsonObject
+        {
+            ["plan_id"] = plan.Id, ["action"] = "move_folder", ["expires"] = plan.Expires.ToString("O"), ["can_apply"] = true, ["destination"] = folder, ["moves"] = rows,
+            ["note"] = FolderMove.Notice.Replace(" If the destination already has an item with this name, the folder takes the next free numbered name; nothing is overwritten.", " Nothing is overwritten.") + " Each folder must still be the same folder, under the same name, at apply_plan; what is inside it is not checked again.",
+        };
     }
 
     private bool IsItself(string path, FileStamp stamp)
@@ -685,6 +811,8 @@ public sealed class McpSession
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message + " Nothing was applied."); }
             if (!now.SameObjectAndContent(stamp)) throw new McpToolError(path + " changed since planning. Nothing was applied; plan again.");
         }
+        if (plan.Folders is not null) return ApplyFolders(plan.Folders, token);
+        if (plan.PdfPages is not null) return ApplyPdfPages(plan, token);
         if (plan.Renames is not null || plan.Moves is not null) return ApplyRename(plan, token);
         if (plan.Zip is { } zip) return ApplyZip(zip.Path, zip.Fingerprint, token);
         var action = plan.Action!;
@@ -756,6 +884,65 @@ public sealed class McpSession
         return body;
     }
 
+    private JsonObject PlanPdfPages(JsonObject arguments, CancellationToken token)
+    {
+        foreach (var (key, _) in arguments)
+            if (key is not ("paths" or "pages")) throw new McpToolError("Unknown argument " + key + ". plan_pdf_pages takes paths and pages.");
+        var paths = PathsArgument(arguments);
+        if (paths.Length > MaxPdfInputs) throw new McpToolError("plan_pdf_pages takes 1–" + MaxPdfInputs + " PDFs.");
+        if (paths.FirstOrDefault(p => !System.IO.Path.GetExtension(p).Equals(".pdf", StringComparison.OrdinalIgnoreCase)) is { } other) throw new McpToolError(other + ": plan_pdf_pages takes PDF files.");
+        if (arguments["pages"] is not JsonArray list || list.Count is < 1 or > PdfPageCopy.MaxSelected)
+            throw new McpToolError("pages must be a list of 1–1,000 pages such as {\"page\": 2} or {\"file\": 2, \"page\": 1, \"turn\": 90}.");
+        // Read first, so a page number past the end is named before anything is opened.
+        var wanted = new List<(int File, int Page, int Turn)>();
+        foreach (var item in list)
+        {
+            if (item is not JsonObject page || page.Any(e => e.Key is not ("file" or "page" or "turn")))
+                throw new McpToolError("Each page is an object with page, and optionally file and turn.");
+            int Whole(string name, int fallback, int min, int max)
+            {
+                if (page[name] is null) return fallback;
+                if (page[name] is not JsonValue v || v.GetValueKind() != JsonValueKind.Number || !v.TryGetValue(out double n) || n != Math.Floor(n) || n < min || n > max)
+                    throw new McpToolError(name + " must be a whole number from " + min + " to " + max + ".");
+                return (int)n;
+            }
+            if (page["page"] is null) throw new McpToolError("Each page needs page, its number counting from 1.");
+            int file = Whole("file", 1, 1, paths.Length), number = Whole("page", 0, 1, PdfRasterPlan.MaxPages), turn = Whole("turn", 0, 0, 270);
+            if (turn % 90 != 0) throw new McpToolError("turn must be 0, 90, 180 or 270.");
+            wanted.Add((file, number, turn));
+        }
+        var inputs = new List<(string, FileStamp)>(); long total = 0;
+        foreach (string path in paths)
+        {
+            token.ThrowIfCancellationRequested();
+            FileStamp stamp;
+            try { stamp = host.Inspect(path); }
+            catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(path + ": " + error.Message); }
+            total += (long)Math.Min(stamp.Size, long.MaxValue / 4);
+            if (stamp.Size > PdfStructure.MaxBytes) throw new McpToolError(path + ": PDFs are limited to 32 MiB (33,554,432 bytes) each.");
+            if (total > MaxPdfTotal) throw new McpToolError("The PDFs are limited to 128 MiB (134,217,728 bytes) together.");
+            inputs.Add((path, stamp));
+        }
+        IReadOnlyList<int> counts;
+        try { counts = host.PdfPageCounts(paths, token); }
+        catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { throw new McpToolError(error.Message); }
+        if (counts.Count != paths.Length) throw new McpToolError("Swivel could not count the pages.");
+        foreach (var (file, number, _) in wanted)
+            if (number > counts[file - 1]) throw new McpToolError(paths[file - 1] + " has " + counts[file - 1] + " page" + (counts[file - 1] == 1 ? "" : "s") + "; there is no page " + number + ".");
+        var choices = wanted.Select(w => new PdfPageChoice(w.File - 1, w.Page - 1, w.Turn)).ToArray();
+        var plan = Store(PdfPagesAction, null, inputs) with { PdfPages = choices };
+        plans[plan.Id] = plan;
+        string first = paths[0];
+        return new JsonObject
+        {
+            ["plan_id"] = plan.Id, ["action"] = PdfPagesAction.Id, ["expires"] = plan.Expires.ToString("O"),
+            ["will_create"] = WindowsParent(first) + "\\" + System.IO.Path.GetFileNameWithoutExtension(first[(first.LastIndexOf('\\') + 1)..]) + PdfPagesAction.Suffix + ".pdf (or the next free numbered name)",
+            ["inputs"] = new JsonArray(paths.Select((p, i) => (JsonNode)new JsonObject { ["file"] = i + 1, ["path"] = p, ["pages"] = counts[i] }).ToArray()),
+            ["pages"] = choices.Length, ["turned"] = choices.Count(c => c.Turn != 0),
+            ["note"] = PdfPageCopy.Fidelity + " The new PDF is read back before it is kept. Applied only if every PDF is unchanged since planning.",
+        };
+    }
+
     /// A Windows path's parent folder, spelt the same on any platform the checks run on.
     private static string WindowsParent(string path)
     {
@@ -770,18 +957,111 @@ public sealed class McpSession
         try { output = host.ZipFolder(folder, fingerprint, token); }
         catch (Exception error) when (McpToolError.Expected(error)) { throw new McpToolError(folder + ": " + (error is OperationCanceledException ? "Cancelled." : error.Message) + (error is McpToolError or UserError ? "" : " No ZIP was made.")); }
         var stamp = host.Stamp(output) ?? throw new McpToolError("The new ZIP disappeared.");
+        return Logged(FolderZipAction.Id, output, stamp, "ZIP");
+    }
+
+    private JsonObject ApplyPdfPages(Plan plan, CancellationToken token)
+    {
+        string output;
+        try { output = host.WritePdfPages(plan.Inputs.Select(i => i.Path).ToArray(), plan.Inputs.Select(i => i.Stamp).ToArray(), plan.PdfPages!, token); }
+        catch (Exception error) when (McpToolError.Expected(error)) { throw new McpToolError((error is OperationCanceledException ? "Cancelled." : error.Message) + (error is McpToolError ? "" : " No PDF was made.")); }
+        var stamp = host.Stamp(output) ?? throw new McpToolError("The new PDF disappeared.");
+        return Logged(PdfPagesAction.Id, output, stamp, "PDF");
+    }
+
+    /// One created file, logged so undo can move it to the Recycle Bin.
+    private JsonObject Logged(string action, string output, FileStamp stamp, string kind)
+    {
         var entry = new JsonObject
         {
             ["id"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), ["time"] = host.UtcNow.ToString("O"),
-            ["action"] = FolderZipAction.Id, ["outputs"] = new JsonArray(StampNode(output, stamp)),
+            ["action"] = action, ["outputs"] = new JsonArray(StampNode(output, stamp)),
         };
         string? unlogged = null;
         try { using (host.LockHistory()) Record(LoadHistory(), entry); }
         catch (Exception error) when (McpToolError.Expected(error)) { unlogged = error.Message; }
-        var body = new JsonObject { ["entry_id"] = unlogged is null ? (string)entry["id"]! : null, ["action"] = FolderZipAction.Id, ["outputs"] = new JsonArray((JsonNode)output), ["completed"] = 1, ["total"] = 1 };
+        var body = new JsonObject { ["entry_id"] = unlogged is null ? (string)entry["id"]! : null, ["action"] = action, ["outputs"] = new JsonArray((JsonNode)output), ["completed"] = 1, ["total"] = 1 };
         if (unlogged is null) return body;
-        body["error"] = "The ZIP was kept but could not be logged for undo (" + unlogged + "); remove it yourself if it is not wanted.";
+        body["error"] = "The " + kind + " was kept but could not be logged for undo (" + unlogged + "); remove it yourself if it is not wanted.";
         throw new McpPartial(body);
+    }
+
+    /// Folders move one at a time; one that fails stops the rest, and those already moved stay
+    /// moved and logged.
+    private JsonObject ApplyFolders(IReadOnlyList<FolderMovePlan> folders, CancellationToken token)
+    {
+        var rows = new JsonArray(); var moved = new JsonArray(); string? failure = null;
+        foreach (var folder in folders)
+        {
+            if (token.IsCancellationRequested) { failure = "Cancelled."; break; }
+            try
+            {
+                var receipt = host.MoveFolder(folder, token);
+                rows.Add(ReceiptNode(receipt));
+                moved.Add(new JsonObject { ["from"] = receipt.Original, ["to"] = receipt.Current });
+            }
+            catch (Exception error) when (McpToolError.Expected(error))
+            {
+                failure = folder.Source + ": " + (error is OperationCanceledException ? "Cancelled." : error.Message);
+                break;
+            }
+        }
+        var entry = new JsonObject
+        {
+            ["id"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant(), ["time"] = host.UtcNow.ToString("O"),
+            ["action"] = "move_folder", ["outputs"] = new JsonArray(), ["folders"] = rows,
+        };
+        string? unlogged = null;
+        if (rows.Count > 0)
+        {
+            try { using (host.LockHistory()) Record(LoadHistory(), entry); }
+            catch (Exception error) when (McpToolError.Expected(error)) { unlogged = error.Message; }
+        }
+        if (failure is not null && rows.Count == 0) throw new McpToolError(failure + " Nothing was moved.");
+        var body = new JsonObject
+        {
+            ["entry_id"] = rows.Count > 0 && unlogged is null ? (string)entry["id"]! : null, ["action"] = "move_folder",
+            ["moves"] = moved, ["completed"] = rows.Count, ["total"] = folders.Count,
+        };
+        if (unlogged is not null)
+        {
+            body["error"] = (failure is null ? "" : failure + " ") + "The folders were moved but could not be logged for undo (" + unlogged + "); move them back yourself if that is not wanted.";
+            throw new McpPartial(body);
+        }
+        if (failure is null) return body;
+        body["error"] = failure + " Folders already moved stay where they are now and are logged for undo.";
+        throw new McpPartial(body);
+    }
+
+    private static JsonObject ReceiptNode(FolderMoveReceipt receipt)
+    {
+        static JsonObject Folder(MoveDirectorySnapshot snapshot) => new()
+        {
+            ["path"] = snapshot.Path,
+            ["ancestors"] = new JsonArray(snapshot.Ancestors.Select(a => (JsonNode)new JsonObject { ["path"] = a.Path, ["volume"] = a.Identity.Volume, ["low"] = a.Identity.Low, ["high"] = a.Identity.High }).ToArray()),
+        };
+        return new JsonObject
+        {
+            ["path"] = receipt.Current, ["from"] = receipt.Original, ["volume"] = receipt.Identity.Volume, ["low"] = receipt.Identity.Low, ["high"] = receipt.Identity.High,
+            ["from_parent"] = Folder(receipt.OriginalParent), ["parent"] = Folder(receipt.CurrentParent), ["undone"] = false,
+        };
+    }
+
+    /// A logged folder move, checked as Move Folder's undo checks its own receipts.
+    private static FolderMoveReceipt ReadReceipt(JsonObject row)
+    {
+        static MoveIdentity Identity(JsonNode? node) => new(node!["volume"]!.GetValue<ulong>(), node["low"]!.GetValue<ulong>(), node["high"]!.GetValue<ulong>());
+        static MoveDirectorySnapshot Folder(JsonNode? node)
+        {
+            if (node is not JsonObject folder || !IsString(folder["path"]) || folder["ancestors"] is not JsonArray { Count: >= 1 and <= 128 } ancestors) throw new FormatException();
+            return new((string)folder["path"]!, ancestors.Select(a => a is JsonObject entry && IsString(entry["path"]) ? new MoveDirectoryEntry((string)entry["path"]!, Identity(entry)) : throw new FormatException()).ToArray());
+        }
+        try
+        {
+            var receipt = FolderMove.ForUndo(new FolderMoveReceipt((string)row["from"]!, (string)row["path"]!, Identity(row), Folder(row["from_parent"]), Folder(row["parent"])));
+            return receipt;
+        }
+        catch (UserError) { throw new FormatException(); }
     }
 
     /// A rename or move plan: both log where each file went, under "renames" or "moves".
@@ -832,7 +1112,8 @@ public sealed class McpSession
     private static bool Pending(JsonObject entry)
         => ((JsonArray)entry["outputs"]!).Any(o => o!["undone"]?.GetValue<bool>() != true)
         || entry["renames"] is JsonArray renames && renames.Any(r => r!["undone"]?.GetValue<bool>() != true)
-        || entry["moves"] is JsonArray moves && moves.Any(m => m!["undone"]?.GetValue<bool>() != true);
+        || entry["moves"] is JsonArray moves && moves.Any(m => m!["undone"]?.GetValue<bool>() != true)
+        || entry["folders"] is JsonArray folders && folders.Any(f => f!["undone"]?.GetValue<bool>() != true);
 
     private JsonObject Undo(JsonObject arguments, CancellationToken token)
     {
@@ -847,6 +1128,7 @@ public sealed class McpSession
             ?? throw new McpToolError(wanted is null ? "Nothing to undo." : "Unknown entry_id. Use history.");
         if (entry["renames"] is JsonArray { Count: > 0 } renames) return UndoRename(history, entry, renames, dryRun, token);
         if (entry["moves"] is JsonArray { Count: > 0 } moves) return UndoMove(history, entry, moves, dryRun, token);
+        if (entry["folders"] is JsonArray { Count: > 0 } folders) return UndoFolders(history, entry, folders, dryRun, token);
         var results = new JsonArray();
         bool changed = false;
         try
@@ -1018,6 +1300,54 @@ public sealed class McpSession
         }
     }
 
+    /// Each moved folder goes back on its own, through Move Folder's undo: one that was renamed,
+    /// replaced, whose parents changed or whose old name is taken stays where it is.
+    private JsonObject UndoFolders(JsonObject history, JsonObject entry, JsonArray folders, bool dryRun, CancellationToken token)
+    {
+        var results = new JsonArray();
+        bool changed = false, cancelled = false;
+        foreach (var row in folders.OfType<JsonObject>())
+        {
+            string path = (string)row["path"]!, from = (string)row["from"]!, result;
+            if (row["undone"]?.GetValue<bool>() == true) { results.Add(new JsonObject { ["path"] = path, ["from"] = from, ["result"] = "already undone" }); continue; }
+            if (cancelled || token.IsCancellationRequested) { cancelled = true; results.Add(new JsonObject { ["path"] = path, ["from"] = from, ["result"] = "not moved back: Cancelled." }); continue; }
+            try
+            {
+                var receipt = ReadReceipt(row);
+                // An earlier undo whose log could not be saved, or by hand: the same folder is at its old path and not at the new one.
+                if (host.FolderIdentity(from) == receipt.Identity && host.FolderIdentity(path) != receipt.Identity)
+                {
+                    result = "already back at its old place";
+                    if (!dryRun) { row["undone"] = true; changed = true; }
+                }
+                else if (dryRun)
+                {
+                    try { host.CheckFolderUndo(receipt, token); result = "would be moved back"; }
+                    catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { result = "would not be moved back: " + error.Message; }
+                }
+                else
+                {
+                    host.UndoFolderMove(receipt, token);
+                    row["undone"] = true; changed = true; result = "moved back";
+                }
+            }
+            catch (Exception error) when (McpToolError.Expected(error))
+            {
+                if (error is OperationCanceledException) cancelled = true;
+                result = "not moved back: " + (error is OperationCanceledException ? "Cancelled." : error.Message);
+            }
+            results.Add(new JsonObject { ["path"] = path, ["from"] = from, ["result"] = result });
+        }
+        var body = new JsonObject { ["entry_id"] = (string?)entry["id"], ["dry_run"] = dryRun, ["complete"] = folders.All(f => f!["undone"]?.GetValue<bool>() == true), ["results"] = results };
+        if (!changed) return body;
+        try { Save(history); return body; }
+        catch (Exception error) when (McpToolError.Expected(error))
+        {
+            body["error"] = "The folders in results are where it says, but the history could not be updated (" + error.Message + "). A later undo finds folders already back at their old places and marks them done.";
+            throw new McpPartial(body);
+        }
+    }
+
     /// Why a file can't go back into this folder (deleted, or no longer a plain local folder), or null.
     private string? FolderProblem(string folder)
     {
@@ -1045,7 +1375,7 @@ public sealed class McpSession
                     ["entry_id"] = (string?)e["id"], ["time"] = (string?)e["time"], ["action"] = (string?)e["action"],
                     ["outputs"] = new JsonArray(((JsonArray)e["outputs"]!).OfType<JsonObject>().Select(o => (JsonNode)new JsonObject { ["path"] = (string?)o["path"], ["undone"] = o["undone"]?.GetValue<bool>() == true }).ToArray()),
                 };
-                foreach (string list in new[] { "renames", "moves" })
+                foreach (string list in new[] { "renames", "moves", "folders" })
                     if (e[list] is JsonArray rows)
                         item[list] = new JsonArray(rows.OfType<JsonObject>().Select(r => (JsonNode)new JsonObject { ["from"] = (string?)r["from"], ["path"] = (string?)r["path"], ["undone"] = r["undone"]?.GetValue<bool>() == true }).ToArray());
                 return (JsonNode)item;
@@ -1074,7 +1404,17 @@ public sealed class McpSession
             foreach (var entry in entries)
             {
                 if (entry is not JsonObject e || !IsString(e["id"]) || !IsString(e["action"]) || e["time"] is not null && !IsString(e["time"]) || e["outputs"] is not JsonArray outputs) throw new FormatException();
-                if (e["renames"] is not null and not JsonArray || e["moves"] is not null and not JsonArray) throw new FormatException();
+                if (e["renames"] is not null and not JsonArray || e["moves"] is not null and not JsonArray || e["folders"] is not null and not JsonArray) throw new FormatException();
+                if (e["folders"] is JsonArray { Count: > 0 } folders)
+                {
+                    // A folder move is logged alone, by its receipts.
+                    if (outputs.Count > 0 || e["renames"] is JsonArray { Count: > 0 } || e["moves"] is JsonArray { Count: > 0 } || (string)e["action"]! != "move_folder") throw new FormatException();
+                    foreach (var row in folders)
+                    {
+                        if (row is not JsonObject f || !IsString(f["path"]) || !IsString(f["from"]) || f["undone"] is not null && f["undone"]!.GetValueKind() is not (JsonValueKind.True or JsonValueKind.False)) throw new FormatException();
+                        ReadReceipt(f);
+                    }
+                }
                 var renames = e["renames"] as JsonArray ?? new JsonArray();
                 var moves = e["moves"] as JsonArray ?? new JsonArray();
                 foreach (var output in outputs.Concat(renames).Concat(moves))

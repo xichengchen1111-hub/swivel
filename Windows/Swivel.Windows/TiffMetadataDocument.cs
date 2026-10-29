@@ -18,7 +18,8 @@ internal sealed class TiffMetadataDocument : IDisposable
     internal bool CanKeepOrientation => kept is not null;
     private TiffMetadataDocument(NativeFiles.Input input,TiffMetadata.Plan plan,byte[] cleaned,byte[]? kept)
     {this.input=input;Plan=plan;this.cleaned=cleaned;this.kept=kept;}
-    internal static TiffMetadataDocument Open(string path,CancellationToken token)
+    /// With `expected` (an agent's plan), a file that is no longer the planned one is refused before it is read.
+    internal static TiffMetadataDocument Open(string path,CancellationToken token,FileStamp? expected=null)
     {
         token.ThrowIfCancellationRequested();
         string extension=System.IO.Path.GetExtension(path);
@@ -26,6 +27,7 @@ internal sealed class TiffMetadataDocument : IDisposable
         var input=NativeFiles.OpenRead(path);
         try
         {
+            if(expected is FileStamp planned&&!input.Stamp.SameObjectAndContent(planned))throw new McpToolError(McpSession.Changed);
             var plan=TiffMetadata.Read(input.Stream,token);
             using var output=new MemoryStream(checked((int)plan.OutputBytes));plan.Write(output,token);var cleaned=output.ToArray();
             // Only the rebuilt snapshot reaches the built-in TIFF decoder, never removed tag payloads.

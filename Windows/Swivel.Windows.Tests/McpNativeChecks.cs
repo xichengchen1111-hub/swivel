@@ -375,6 +375,69 @@ internal static class McpNativeChecks
             GC.Collect(); GC.WaitForPendingFinalizers(); // the probes' WinRT objects may hold the files until collected
             var clipsBack = Call("undo", new JsonObject())["structuredContent"]!;
             check(clipsBack["complete"]!.GetValue<bool>() && !File.Exists(quietOut) && !File.Exists(toneOut) && File.Exists(quietClip) && File.Exists(toneClip), "Native MCP undo of plan_compress recycles the videos, originals kept: " + clipsBack.ToJsonString());
+
+            // plan_pdf_pages on real PDFs: pages of two files reordered and turned, read back by
+            // the structure reader; a PDF changed after planning makes nothing; undo recycles.
+            string pdfDir = Path.Combine(root, "pdf pages"); Directory.CreateDirectory(pdfDir);
+            string pdfA = Path.Combine(pdfDir, "report.pdf"), pdfB = Path.Combine(pdfDir, "extra.pdf"), pdfMade = Path.Combine(pdfDir, "report pages.pdf");
+            var pdfBytes = PdfPagesNativeChecks.Build(); File.WriteAllBytes(pdfA, pdfBytes); File.WriteAllBytes(pdfB, pdfBytes);
+            JsonObject PdfPages() => (JsonObject)Call("plan_pdf_pages", new JsonObject
+            {
+                ["paths"] = new JsonArray(pdfA, pdfB),
+                ["pages"] = new JsonArray(new JsonObject { ["page"] = 2 }, new JsonObject { ["file"] = 2, ["page"] = 1, ["turn"] = 90 }, new JsonObject { ["page"] = 2, ["turn"] = 270 }),
+            })["structuredContent"]!;
+            var pagesPlan = PdfPages();
+            check((int?)pagesPlan["inputs"]?[1]?["pages"] == 2 && (int?)pagesPlan["pages"] == 3 && (string?)pagesPlan["will_create"] == pdfMade + " (or the next free numbered name)" && !File.Exists(pdfMade),
+                "Native MCP plan_pdf_pages counts real PDF pages and writes nothing: " + pagesPlan.ToJsonString());
+            var pagesDone = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)pagesPlan["plan_id"] ?? "" })["structuredContent"]!;
+            check((string?)pagesDone["outputs"]?[0] == pdfMade && File.Exists(pdfMade), "Native MCP apply writes the new PDF beside the first: " + pagesDone.ToJsonString());
+            if (File.Exists(pdfMade))
+            {
+                var made = PdfStructure.Read(File.ReadAllBytes(pdfMade), default);
+                check(made.Pages.Count == 3 && made.Pages[0].Rotate == 90 && made.Pages[1].Rotate == 90 && made.Pages[2].Rotate == 0 && made.Pages.All(p => p.Width == 595 && p.Height == 842),
+                    "The agent's PDF has the chosen pages in order, each turn added to its own rotation: " + string.Join(",", made.Pages.Select(p => p.Rotate)));
+            }
+            var stalePages = PdfPages();
+            File.AppendAllText(pdfB, "\n");
+            var stalePagesApply = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)stalePages["plan_id"] ?? "" });
+            check(stalePagesApply["isError"]!.GetValue<bool>() && !File.Exists(Path.Combine(pdfDir, "report pages 2.pdf")), "Native MCP refuses a PDF pages plan after a PDF changed: " + stalePagesApply["structuredContent"]!.ToJsonString());
+            check(Refusal(() => new McpHost(() => true, value).WritePdfPages(new[] { pdfA }, new[] { NativeFiles.InspectStamp(pdfA) with { Size = 1 } }, new[] { new PdfPageChoice(0, 0) }, default)) == McpSession.Changed
+                && !File.Exists(Path.Combine(pdfDir, "report pages 2.pdf")), "Native MCP WritePdfPages refuses a PDF whose held stamp no longer matches the plan");
+            var pagesBack = Call("undo", new JsonObject())["structuredContent"]!;
+            check(pagesBack["complete"]?.GetValue<bool>() == true && !File.Exists(pdfMade) && File.ReadAllBytes(pdfA).SequenceEqual(pdfBytes), "Native MCP undo recycles the new PDF, the originals kept: " + pagesBack.ToJsonString());
+
+            // Folders in plan_move on NTFS: one rename of the held folder, refused once replaced, undone by file ID.
+            string folderRoot = Path.Combine(root, "folder moves"), fromDir = Path.Combine(folderRoot, "from"), toDir = Path.Combine(folderRoot, "to");
+            string album = Path.Combine(fromDir, "Album"), moved = Path.Combine(toDir, "Album");
+            Directory.CreateDirectory(Path.Combine(album, "inner")); Directory.CreateDirectory(toDir);
+            File.WriteAllText(Path.Combine(album, "inner", "photo.txt"), "kept");
+            JsonObject PlanFolder(params string[] paths) => (JsonObject)Call("plan_move", new JsonObject { ["paths"] = new JsonArray(paths.Select(x => (JsonNode)x).ToArray()), ["destination"] = toDir })["structuredContent"]!;
+            var mixedKinds = Call("plan_move", new JsonObject { ["paths"] = new JsonArray(album, notes), ["destination"] = toDir });
+            check(mixedKinds["isError"]!.GetValue<bool>(), "Native MCP plan_move refuses files and folders together");
+            var otherCase = PlanFolder(Path.Combine(fromDir, "ALBUM"));
+            check(otherCase["can_apply"]?.GetValue<bool>() == false && ((string?)otherCase["moves"]?[0]?["issue"] ?? "").Contains("named Album"), "Native MCP plan_move asks for the folder's stored name: " + otherCase.ToJsonString());
+            var intoItself = Call("plan_move", new JsonObject { ["paths"] = new JsonArray(album), ["destination"] = Path.Combine(album, "inner") })["structuredContent"]!;
+            check(intoItself["can_apply"]?.GetValue<bool>() == false && ((string?)intoItself["moves"]?[0]?["issue"] ?? "").Contains(FolderMove.Inside), "Native MCP plan_move refuses moving a folder into itself: " + intoItself.ToJsonString());
+            // Another folder put at the planned path is not the planned folder.
+            var swapFolder = PlanFolder(album);
+            Directory.Move(album, album + " old"); Directory.CreateDirectory(album);
+            var swapFolderApply = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)swapFolder["plan_id"] ?? "" });
+            check(swapFolderApply["isError"]!.GetValue<bool>() && ((string?)swapFolderApply["structuredContent"]!["error"] ?? "").Contains("replaced") && !Directory.Exists(moved), "Native MCP refuses a folder move when another folder was put at the planned path: " + swapFolderApply["structuredContent"]!.ToJsonString());
+            Directory.Delete(album); Directory.Move(album + " old", album);
+            var folderPlan = PlanFolder(album);
+            check(folderPlan["can_apply"]?.GetValue<bool>() == true && (string?)folderPlan["action"] == "move_folder" && (string?)folderPlan["moves"]?[0]?["to"] == moved && Directory.Exists(album),
+                "Native MCP plan_move plans a real folder, moving nothing: " + folderPlan.ToJsonString());
+            var folderDone = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)folderPlan["plan_id"] ?? "" })["structuredContent"]!;
+            check((int?)folderDone["completed"] == 1 && !Directory.Exists(album) && File.ReadAllText(Path.Combine(moved, "inner", "photo.txt")) == "kept", "Native MCP apply moves the folder with everything inside: " + folderDone.ToJsonString());
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Swivel\WindowsPreview")) check(key?.GetValue(value) is string json && json.Contains("\"move_folder\"") && json.Contains("from_parent"), "Native MCP logs the folder move with its receipt");
+            var dryFolder = Call("undo", new JsonObject { ["dry_run"] = true })["structuredContent"]!;
+            check((string?)dryFolder["results"]?[0]?["result"] == "would be moved back" && Directory.Exists(moved), "Native MCP undo dry run checks the folder without moving it: " + dryFolder.ToJsonString());
+            Directory.CreateDirectory(album);
+            var folderTaken = Call("undo", new JsonObject())["structuredContent"]!;
+            check(folderTaken["complete"]?.GetValue<bool>() == false && ((string?)folderTaken["results"]?[0]?["result"] ?? "").Contains(FolderMove.OriginalTaken) && Directory.Exists(moved), "Native MCP undo leaves the folder while its old name is taken: " + folderTaken.ToJsonString());
+            Directory.Delete(album);
+            var folderBack = Call("undo", new JsonObject())["structuredContent"]!;
+            check(folderBack["complete"]?.GetValue<bool>() == true && !Directory.Exists(moved) && File.ReadAllText(Path.Combine(album, "inner", "photo.txt")) == "kept", "Native MCP undo renames the folder back: " + folderBack.ToJsonString());
         }
         finally
         {

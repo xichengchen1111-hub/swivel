@@ -71,6 +71,17 @@ public sealed class McpHost : IMcpHost
     public string Run(string action, string path, FileStamp expected, CancellationToken token)
     {
         var allowed = McpSession.Actions.FirstOrDefault(a => a.Id == action) ?? throw new McpToolError("Unknown action.");
+        // Keep orientation is the default, as the windows offer it; a copy without one is made only where it can't be kept.
+        if (allowed.Metadata)
+        {
+            switch (action)
+            {
+                case "image.jpegmetadata": { using var file = JpegMetadataDocument.Open(path, token, expected); return file.Save(file.CanKeepOrientation, token); }
+                case "image.pngmetadata": { using var file = PngMetadataDocument.Open(path, token, expected); return file.Save(file.CanKeepOrientation, token); }
+                case "image.tiffmetadata": { using var file = TiffMetadataDocument.Open(path, token, expected); return file.Save(file.CanKeepOrientation, token); }
+                default: throw new McpToolError("Unknown action.");
+            }
+        }
         if (allowed.Font)
             return SubtitleConvert.Run(path, FontFileFormats.ForId(action) ?? throw new McpToolError("Unknown action."), token, expected);
         if (allowed.Data)
@@ -213,6 +224,53 @@ public sealed class McpHost : IMcpHost
         if (FolderZip.Fingerprint(work.Plan) != fingerprint) throw new McpToolError(McpSession.FolderChanged);
         return work.Save(token, null);
     }
+
+    public IReadOnlyList<int> PdfPageCounts(IReadOnlyList<string> paths, CancellationToken token)
+    {
+        using var document = PdfPagesDocument.Open(paths, token);
+        return document.PageCounts;
+    }
+
+    // Every PDF stays held, and was checked against its planned stamp before it was read, until the new one is published.
+    public string WritePdfPages(IReadOnlyList<string> paths, IReadOnlyList<FileStamp> expected, IReadOnlyList<PdfPageChoice> pages, CancellationToken token)
+    {
+        using var document = PdfPagesDocument.Open(paths, token, expected);
+        return document.Save(pages, 0, token);
+    }
+
+    public bool IsFolder(string path) => NativeFiles.IsLocalFolder(path);
+
+    // Move Folder's own session: the folder and both parent chains held, the planned name checked, then closed again.
+    public FolderMovePlan PlanFolderMove(string folder, string destination, CancellationToken token)
+    {
+        using var session = FolderMoveSession.Open(folder, destination, token);
+        return new FolderMovePlan(session.Source, session.Destination, session.Planned, session.Identity, session.DestinationIdentity);
+    }
+
+    // While the session is open nothing else can rename, move or replace the folder or either
+    // parent, so what is compared here is what the one rename moves.
+    public FolderMoveReceipt MoveFolder(FolderMovePlan plan, CancellationToken token)
+    {
+        using var session = FolderMoveSession.Open(plan.Source, plan.Destination, token);
+        if (session.Identity != plan.Identity) throw new McpToolError("The folder was replaced since planning. Nothing was moved; plan again.");
+        if (session.DestinationIdentity != plan.DestinationIdentity) throw new McpToolError("The destination folder was replaced since planning. Nothing was moved; plan again.");
+        if (session.Source != plan.Source) throw new McpToolError("The folder's name changed since planning. Nothing was moved; plan again.");
+        if (session.Planned != plan.Planned) throw new McpToolError("A file or folder with this name is in the destination now. Nothing was moved or overwritten.");
+        return session.Execute(token);
+    }
+
+    public void CheckFolderUndo(FolderMoveReceipt receipt, CancellationToken token)
+    {
+        using var session = FolderMoveSession.ForUndo(receipt, token);
+    }
+
+    public void UndoFolderMove(FolderMoveReceipt receipt, CancellationToken token)
+    {
+        using var session = FolderMoveSession.ForUndo(receipt, token);
+        session.Execute(token);
+    }
+
+    public MoveIdentity? FolderIdentity(string path) => NativeFiles.FolderIdentityAt(path);
 
     public FileStamp? Stamp(string path)
     {

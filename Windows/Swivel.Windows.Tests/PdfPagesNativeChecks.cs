@@ -14,7 +14,7 @@ internal static class PdfPagesNativeChecks
 {
     private static readonly string[] Contents={"BT /F1 20 Tf 72 700 Td (Native one) Tj ET","BT /F1 20 Tf 72 700 Td (Native two) Tj ET"};
     // Minimal classic-xref PDF: shared font, inherited MediaBox, one link that targets a page.
-    private static byte[] Build()
+    internal static byte[] Build()
     {
         var objects=new List<string>
         {
