@@ -56,7 +56,7 @@ internal static class SpeedSoundProbe
                 var target = folder.CreateFileAsync($"out{rate}.m4a", CreationCollisionOption.ReplaceExisting).AsTask().GetAwaiter().GetResult();
                 var p = new MediaTranscoder().PrepareFileTranscodeAsync(wf, target, m4a).AsTask().GetAwaiter().GetResult();
                 Console.WriteLine($"PROBE m4a{rate} can {p.CanTranscode} {p.FailureReason} bitrate {m4a.Audio.Bitrate}");
-                if (p.CanTranscode) { p.TranscodeAsync().AsTask().GetAwaiter().GetResult(); var b = File.ReadAllBytes(Path.Combine(root, $"out{rate}.m4a")); Console.WriteLine($"PROBE m4a{rate} {b.Length} " + Tree(b)); try { Console.WriteLine("PROBE gate " + M4aAudio.Identify(new MemoryStream(b), default)); } catch (Exception e) { Console.WriteLine("PROBE gate threw " + e.Message); } }
+                if (p.CanTranscode) { p.TranscodeAsync().AsTask().GetAwaiter().GetResult(); var b = File.ReadAllBytes(Path.Combine(root, $"out{rate}.m4a")); Console.WriteLine($"PROBE m4a{rate} {b.Length} " + Tree(b)); try { Console.WriteLine("PROBE gate " + M4aAudio.Inspect(new MemoryStream(b), default)); } catch (Exception e) { Console.WriteLine("PROBE gate threw " + e.Message); } }
             }
             catch (Exception e) { Console.WriteLine($"PROBE m4a threw {e.GetType().Name} {e.Message}"); }
         // 4. silent retimed output layout
