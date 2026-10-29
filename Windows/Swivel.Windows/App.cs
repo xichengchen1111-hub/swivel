@@ -18,6 +18,7 @@ public sealed partial class App : Application
     public ObservableCollection<string> Shelf { get; } = new();
     public List<IReadOnlyList<RenameLocation>> RenameHistory { get; } = new();
     public List<IReadOnlyList<MoveLocation>> MoveHistory { get; } = new();
+    public List<FolderMoveReceipt> FolderMoveHistory { get; } = new();
     internal MoveOutcome? LastMoveOutcome { get; private set; }
     internal bool LastMoveWasUndo { get; private set; }
     public KeepAwake Awake { get; private set; } = null!;
@@ -784,22 +785,28 @@ public sealed partial class App : Application
                 var to = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose Where to Copy It…") };
                 if (to.ShowDialog(owner) != true) return;
                 token.ThrowIfCancellationRequested();
-                string folder = from.FolderName, destination = to.FolderName;
-                report(L("Reading folder…"));
-                using var work = await Task.Run(() => FolderCopyWork.Open(folder, destination, token), token);
-                token.ThrowIfCancellationRequested();
-                if (!ShowOperationDialog(new FolderPlanDialog(this, "Copy Folder to…", work.Plan.Name, new[] { string.Format(L("From: {0}"), work.Folder), string.Format(L("Into: {0}"), work.Destination) }, work.Plan, FolderCopy.Notice, "Copy Folder"), owner, token)) return;
-                report(L("Processing…"));
-                var outcome = await Task.Run(() => work.Execute(token, (done, total) =>
-                    Dispatcher.InvokeAsync(() => report(string.Format(L("Copying file {0} of {1}…"), done, total)))), token);
-                string summary = string.Format(L("Copied {0} of {1} file(s) into a new folder."), outcome.FilesCopied, outcome.FileCount);
-                if (work.Plan.Skipped.Count > 0) summary += " " + string.Format(L("{0} item(s) were skipped."), work.Plan.Skipped.Count);
-                if (outcome.Cancelled) summary += " " + L("Cancelled. Copies already made were kept.");
-                else if (outcome.Error is not null) summary += " " + L("Copying stopped. Copies already made were kept; nothing was overwritten.");
-                report(summary);
-                if (outcome.Folder is not null) Home.ShowResults(new[] { outcome.Folder }, summary);
-                if (outcome.Error is not null && !exiting) ShowError(outcome.Error);
+                await RunCopyFolderAsync(from.FolderName, to.FolderName, owner, report, token, false);
                 return;
+            }
+            if (action.Id == "file.movefolder")
+            {
+                if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
+                workFeature = Feature.FileMoves; token.ThrowIfCancellationRequested();
+                if (FolderMoveHistory.Count >= FolderMove.MaxHistory) throw new UserError(FolderMove.HistoryFull);
+                var from = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose a Folder to Move…") };
+                if (from.ShowDialog(owner) != true) return;
+                token.ThrowIfCancellationRequested();
+                var to = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose Where to Move It…") };
+                if (to.ShowDialog(owner) != true) return;
+                token.ThrowIfCancellationRequested();
+                await RunFolderMoveAsync(from.FolderName, to.FolderName, owner, report, token, false);
+                return;
+            }
+            if (action.Id == "file.undoFolderMove")
+            {
+                if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
+                workFeature = Feature.FileMoves;
+                await RunFolderMoveAsync("", "", owner, report, token, true); return;
             }
             if (action.Id == "file.move")
             {
@@ -1524,6 +1531,93 @@ public sealed partial class App : Application
         if (results.Moved == 0) return;
         summary += " " + string.Format(L("Copies moved to the Recycle Bin or removed: {0}"), results.Moved);
         report(summary); Home.ShowResults(results.Remaining, summary);
+    }
+
+    // `crossDrive` when Move Folder found the destination on another drive: then it copies
+    // instead, keeping the original folder.
+    private async Task RunCopyFolderAsync(string folder, string destination, Window owner, Action<string> report, CancellationToken token, bool crossDrive)
+    {
+        report(L("Reading folder…"));
+        using var work = await Task.Run(() => FolderCopyWork.Open(folder, destination, token), token);
+        token.ThrowIfCancellationRequested();
+        var lines = new System.Collections.Generic.List<string> { string.Format(L("From: {0}"), work.Folder), string.Format(L("Into: {0}"), work.Destination) };
+        if (crossDrive) lines.Insert(0, L("The destination is on another drive, so the folder will be copied instead of moved; the original folder stays."));
+        if (!ShowOperationDialog(new FolderPlanDialog(this, "Copy Folder to…", work.Plan.Name, lines, work.Plan, FolderCopy.Notice, "Copy Folder"), owner, token)) return;
+        if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
+        report(L("Processing…"));
+        var outcome = await Task.Run(() => work.Execute(token, (done, total) =>
+            Dispatcher.InvokeAsync(() => report(string.Format(L("Copying file {0} of {1}…"), done, total)))), token);
+        string summary = string.Format(L("Copied {0} of {1} file(s) into a new folder."), outcome.FilesCopied, outcome.FileCount);
+        if (crossDrive) summary = L("The destination is on another drive, so the folder was copied instead of moved.") + " " + summary;
+        if (work.Plan.Skipped.Count > 0) summary += " " + string.Format(L("{0} item(s) were skipped."), work.Plan.Skipped.Count);
+        if (outcome.Cancelled) summary += " " + L("Cancelled. Copies already made were kept.");
+        else if (outcome.Error is not null) summary += " " + L("Copying stopped. Copies already made were kept; nothing was overwritten.");
+        report(summary);
+        if (outcome.Folder is null) { if (outcome.Error is not null && !exiting) ShowError(outcome.Error); return; }
+        Home.ShowResults(new[] { outcome.Folder }, summary);
+        if (exiting || token.IsCancellationRequested) return;
+        // The results window shows any problem and can undo the copy while it is open.
+        var results = new FolderCopyResultDialog(this, outcome, summary);
+        ShowOperationDialog(results, owner, token);
+        if (!results.Moved) return;
+        summary += " " + L("The new folder was moved to the Recycle Bin or removed.");
+        report(summary); Home.ShowResults(Array.Empty<string>(), summary);
+    }
+
+    private async Task RunFolderMoveAsync(string folder, string directory, Window owner, Action<string> report, CancellationToken token, bool undo)
+    {
+        token.ThrowIfCancellationRequested();
+        if (undo && FolderMoveHistory.Count == 0) throw new UserError(FolderMove.NoHistory);
+        var receipt = undo ? FolderMoveHistory[^1] : null;
+        if (!undo)
+        {
+            // Between drives a move would be a copy followed by deleting the original; Swivel
+            // only offers the copy (as for files).
+            FolderMove.CheckDestination(folder, directory);
+            bool? sameVolume = await OnSta(() => NativeFiles.FolderOnVolumeOf(folder, directory));
+            token.ThrowIfCancellationRequested();
+            if (sameVolume == false) { await RunCopyFolderAsync(folder, directory, owner, report, token, true); return; }
+        }
+        FolderMoveReceipt done;
+        using (var session = await OnSta(() => undo ? FolderMoveSession.ForUndo(receipt!, token) : FolderMoveSession.Open(folder, directory, token)))
+        {
+            token.ThrowIfCancellationRequested();
+            var lines = undo
+                ? new[] { string.Format(L("Current place: {0}"), LibraryJson.Visible(session.Source)), string.Format(L("Back to: {0}"), LibraryJson.Visible(session.Planned)) }
+                : new[] { string.Format(L("From: {0}"), LibraryJson.Visible(session.Source)), string.Format(L("To: {0}"), LibraryJson.Visible(session.Planned)) };
+            string question = string.Join("\n", lines) + "\n\n" + L(undo ? "Undo puts the folder back only while it is still the same folder and its original name is free. Nothing is replaced." : FolderMove.Notice);
+            if (MessageBox.Show(owner, question, L(undo ? "Undo Folder Move" : "Move Folder to…"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            token.ThrowIfCancellationRequested();
+            if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
+            report(L("Processing…"));
+            done = await OnSta(() => session.Execute(token));
+        }
+        if (undo) FolderMoveHistory.RemoveAt(FolderMoveHistory.Count - 1);
+        else FolderMoveHistory.Add(done);
+        // Paths at or below the folder follow it (Undo: back again).
+        string from = done.Original, to = done.Current;
+        string Updated(string path) => FolderMove.UpdatePath(path, from, to);
+        ApplyPathChanges(Updated);
+        string status = string.Format(L(undo ? "Folder move undone: {0}" : "Folder moved: {0}"), LibraryJson.Visible(to));
+        report(status); Home.SetStatus(status); Home.Refresh();
+        Home.ShowResults(new[] { to }, status);
+    }
+
+    /// Updates every remembered path (shelf, prints, panels, Home lists) after a folder moved.
+    private void ApplyPathChanges(Func<string, string> updated)
+    {
+        var floatingSelection = floatingShelf?.SelectedPaths ?? Array.Empty<string>();
+        var homeShelfSelection = Home.ShelfSelection;
+        var before = Shelf.ToArray();
+        var changes = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (string path in before.Concat(Prints.Select(print => print.Path)).Concat(Home.KnownPaths).Concat(panels.SelectMany(panel => panel.KnownPaths)))
+            if (updated(path) is var next && next != path) changes[path] = next;
+        string Updated(string path) => changes.TryGetValue(path, out string? current) ? current : path;
+        for (int i = 0; i < before.Length; i++) Shelf[i] = Updated(before[i]);
+        floatingShelf?.RestoreSelection(floatingSelection.Select(Updated)); Home.RestoreShelfSelection(homeShelfSelection.Select(Updated));
+        Home.ApplyMoves(changes);
+        for (int i = 0; i < Prints.Count; i++) { string path = Updated(Prints[i].Path); if (path != Prints[i].Path) Prints[i] = Prints[i] with { Path = path }; }
+        foreach (var panel in panels.ToArray()) panel.ApplyMoves(changes);
     }
 
     private async Task RunMoveAsync(string[] files, Window owner, Action<string> report, CancellationToken token, bool undo)

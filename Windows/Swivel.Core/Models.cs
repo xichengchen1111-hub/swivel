@@ -214,6 +214,7 @@ public static class Catalog
         new("file.move", "Move to Folder…", Core.Feature.FileMoves),
         new("file.copyto", "Copy to Folder…", Core.Feature.FileMoves),
         new("file.copyfolder", "Copy Folder to…", Core.Feature.FileMoves, RequiresFiles: false),
+        new("file.movefolder", "Move Folder to…", Core.Feature.FileMoves, RequiresFiles: false),
         new("file.paths", "Copy Path"),
         new("file.reveal", "Show in Explorer"),
         new("file.terminal", "Open Command Prompt Here…", SingleFile: true),

@@ -15343,5 +15343,190 @@
     "请选择自包含的 RIFF WAV、FLAC、MP3 Layer III、ADTS AAC 或纯音频 M4A（AAC-LC 或 ALAC）文件。此解码器不接受播放列表、网址、引用影片、视频或其他容器。",
     "請選擇自包含的 RIFF WAV、FLAC、MP3 Layer III、ADTS AAC 或純音訊 M4A（AAC-LC 或 ALAC）檔案。此解碼器不接受播放清單、網址、參照影片、影片或其他容器。",
     "自己完結した RIFF WAV、FLAC、MP3 Layer III、ADTS AAC、または音声のみの M4A（AAC-LC または ALAC）ファイルを選んでください。プレイリスト、URL、参照ムービー、動画、その他のコンテナーは対象外です。"
+  ],
+  "Move Folder to…": [
+    "移动文件夹到…",
+    "移動資料夾到…",
+    "フォルダーを移動…"
+  ],
+  "Undo Folder Move": [
+    "撤销文件夹移动",
+    "還原資料夾移動",
+    "フォルダーの移動を取り消す"
+  ],
+  "The folder and everything inside it move as one, by renaming it into the destination on the same NTFS drive: nothing is copied, and file contents, data streams, permissions and times stay as they are. If the destination already has an item with this name, the folder takes the next free numbered name; nothing is overwritten. Undo puts it back while it is still the same folder and its original name is free.": [
+    "文件夹及其中所有内容作为一个整体移动：在同一个 NTFS 驱动器上把它重命名到目标文件夹中，不复制任何内容，文件内容、数据流、权限和时间都保持不变。如果目标中已有同名项目，文件夹会使用下一个空闲的编号名称；不会覆盖任何内容。只要它仍是同一个文件夹且原名称空闲，撤销即可把它放回原处。",
+    "資料夾及其中所有內容作為一個整體移動：在同一個 NTFS 磁碟機上把它重新命名到目的地資料夾中，不複製任何內容，檔案內容、資料流、權限和時間都保持不變。如果目的地已有同名項目，資料夾會使用下一個空閒的編號名稱；不會覆寫任何內容。只要它仍是同一個資料夾且原名稱空閒，還原即可把它放回原處。",
+    "フォルダーとその中身全体を、同じ NTFS ドライブ上で移動先に名前を変えて移すことで一度に移動します。何もコピーせず、ファイルの内容、データストリーム、アクセス許可、日時はそのままです。移動先に同じ名前の項目がある場合は、次に空いている番号付きの名前になります。上書きはしません。同じフォルダーのままで元の名前が空いていれば、取り消しで元に戻せます。"
+  ],
+  "Choose a destination outside the folder being moved.": [
+    "请选择要移动的文件夹之外的目标位置。",
+    "請選擇要移動的資料夾之外的目的地。",
+    "移動するフォルダーの外にある移動先を選んでください。"
+  ],
+  "The folder is already in that folder.": [
+    "该文件夹已经在那个文件夹中。",
+    "該資料夾已經在那個資料夾中。",
+    "このフォルダーはすでにその場所にあります。"
+  ],
+  "Move Folder requires a destination on the same NTFS drive. Nothing was moved.": [
+    "移动文件夹需要目标位于同一个 NTFS 驱动器上。未移动任何内容。",
+    "移動資料夾需要目的地位於同一個 NTFS 磁碟機上。未移動任何內容。",
+    "フォルダーの移動には同じ NTFS ドライブ上の移動先が必要です。何も移動していません。"
+  ],
+  "Windows did not allow moving the folder; a file inside it may be open in another app. Nothing was moved.": [
+    "Windows 不允许移动该文件夹；其中的某个文件可能正在其他应用中打开。未移动任何内容。",
+    "Windows 不允許移動該資料夾；其中的某個檔案可能正在其他應用程式中開啟。未移動任何內容。",
+    "Windows がフォルダーの移動を許可しませんでした。中のファイルが別のアプリで開かれている可能性があります。何も移動していません。"
+  ],
+  "The moved folder was renamed, moved or replaced since. Undo was refused and nothing was moved.": [
+    "移动后的文件夹之后被重命名、移动或替换了。已拒绝撤销，未移动任何内容。",
+    "移動後的資料夾之後被重新命名、移動或取代了。已拒絕還原，未移動任何內容。",
+    "移動したフォルダーはその後、名前の変更、移動、または置き換えが行われました。取り消しを拒否し、何も移動していません。"
+  ],
+  "Something now exists at the folder's original place. Undo was refused and nothing was replaced.": [
+    "文件夹的原位置现在已有其他项目。已拒绝撤销，未替换任何内容。",
+    "資料夾的原位置現在已有其他項目。已拒絕還原，未取代任何內容。",
+    "フォルダーの元の場所に現在別の項目があります。取り消しを拒否し、何も置き換えていません。"
+  ],
+  "A source or destination folder changed. Undo was refused without moving the folder.": [
+    "源文件夹或目标文件夹已更改。已拒绝撤销，未移动该文件夹。",
+    "來源資料夾或目的地資料夾已變更。已拒絕還原，未移動該資料夾。",
+    "移動元または移動先のフォルダーが変わりました。フォルダーを移動せずに取り消しを拒否しました。"
+  ],
+  "A folder move receipt is incomplete. Undo was refused.": [
+    "文件夹移动记录不完整。已拒绝撤销。",
+    "資料夾移動記錄不完整。已拒絕還原。",
+    "フォルダー移動の記録が不完全です。取り消しを拒否しました。"
+  ],
+  "There is no folder move to undo in this session.": [
+    "本次会话中没有可撤销的文件夹移动。",
+    "本次工作階段中沒有可還原的資料夾移動。",
+    "このセッションには取り消せるフォルダーの移動がありません。"
+  ],
+  "Undo or forget folder move history before moving another folder (20 moves maximum).": [
+    "请先撤销或清除文件夹移动历史，再移动其他文件夹（最多 20 次移动）。",
+    "請先還原或清除資料夾移動歷程，再移動其他資料夾（最多 20 次移動）。",
+    "別のフォルダーを移動する前に、フォルダー移動の履歴を取り消すか消去してください（最大 20 回）。"
+  ],
+  "To undo the copy, Move Copy to Recycle Bin… moves the new folder to the Recycle Bin, after asking. It is moved only while it is still the folder Swivel created and holds exactly what was copied: the same names, file sizes and modified times, with nothing added, removed or renamed. Contents are not read again. The original folder is never opened or changed. Undo Move puts the copy back while this window is open, unless something now exists at its place; afterwards, restore it from the Recycle Bin.": [
+    "要撤销复制，请使用“将副本移到回收站…”，确认后会把新文件夹移到回收站。只有当它仍是 Swivel 创建的文件夹，并且内容与复制时完全一致（名称、文件大小和修改时间相同，没有添加、删除或重命名任何项目）时才会移动。不会再次读取文件内容。原文件夹不会被打开或更改。在此窗口打开期间，“撤销移动”可把副本放回原处，除非该位置现在已有其他项目；之后请从回收站还原。",
+    "要還原複製，請使用「將副本移到資源回收筒…」，確認後會把新資料夾移到資源回收筒。只有當它仍是 Swivel 建立的資料夾，並且內容與複製時完全一致（名稱、檔案大小和修改時間相同，沒有新增、刪除或重新命名任何項目）時才會移動。不會再次讀取檔案內容。原資料夾不會被開啟或變更。在此視窗開啟期間，「還原移動」可把副本放回原處，除非該位置現在已有其他項目；之後請從資源回收筒還原。",
+    "コピーを取り消すには「コピーをごみ箱に移動…」を使います。確認後、新しいフォルダーをごみ箱に移動します。Swivel が作成したフォルダーのままで、コピーした内容と完全に一致する場合（名前、ファイルサイズ、更新日時が同じで、追加・削除・名前の変更がない場合）にのみ移動します。内容は再度読み取りません。元のフォルダーは開いたり変更したりしません。このウィンドウを開いている間は「移動を取り消す」でコピーを元に戻せます（その場所に別の項目がない場合）。その後はごみ箱から復元してください。"
+  ],
+  "The new folder changed since it was copied (an item was added, removed, renamed, resized or modified), so it was left alone.": [
+    "新文件夹在复制后已更改（有项目被添加、删除、重命名、改变大小或修改），因此未作处理。",
+    "新資料夾在複製後已變更（有項目被新增、刪除、重新命名、變更大小或修改），因此未作處理。",
+    "新しいフォルダーはコピー後に変更されました（項目の追加、削除、名前の変更、サイズ変更、または編集）。そのため何もしませんでした。"
+  ],
+  "The new folder was renamed, moved or replaced since it was copied (or is now a link, system or cloud item), so it was left alone.": [
+    "新文件夹在复制后被重命名、移动或替换（或现在是链接、系统或云项目），因此未作处理。",
+    "新資料夾在複製後被重新命名、移動或取代（或現在是連結、系統或雲端項目），因此未作處理。",
+    "新しいフォルダーはコピー後に名前の変更、移動、または置き換えが行われました（またはリンク、システム、クラウドの項目になっています）。そのため何もしませんでした。"
+  ],
+  "Some copies could not be verified, so undoing this copy is not offered. Check the new folder yourself.": [
+    "部分副本无法验证，因此不提供撤销此次复制。请自行检查新文件夹。",
+    "部分副本無法驗證，因此不提供還原此次複製。請自行檢查新資料夾。",
+    "一部のコピーを確認できなかったため、このコピーの取り消しは提供しません。新しいフォルダーをご自身で確認してください。"
+  ],
+  "Choose a Folder to Move…": [
+    "选择要移动的文件夹…",
+    "選擇要移動的資料夾…",
+    "移動するフォルダーを選択…"
+  ],
+  "Choose Where to Move It…": [
+    "选择移动到的位置…",
+    "選擇移動到的位置…",
+    "移動先を選択…"
+  ],
+  "The destination is on another drive, so the folder will be copied instead of moved; the original folder stays.": [
+    "目标位于另一个驱动器上，因此将复制而不是移动该文件夹；原文件夹保留。",
+    "目的地位於另一個磁碟機上，因此將複製而不是移動該資料夾；原資料夾保留。",
+    "移動先が別のドライブにあるため、フォルダーは移動ではなくコピーされます。元のフォルダーは残ります。"
+  ],
+  "The destination is on another drive, so the folder was copied instead of moved.": [
+    "目标位于另一个驱动器上，因此复制而不是移动了该文件夹。",
+    "目的地位於另一個磁碟機上，因此複製而不是移動了該資料夾。",
+    "移動先が別のドライブにあるため、フォルダーは移動ではなくコピーされました。"
+  ],
+  "The new folder was moved to the Recycle Bin or removed.": [
+    "新文件夹已移到回收站或已被删除。",
+    "新資料夾已移到資源回收筒或已被刪除。",
+    "新しいフォルダーはごみ箱に移動されたか、削除されました。"
+  ],
+  "Current place: {0}": [
+    "当前位置：{0}",
+    "目前位置：{0}",
+    "現在の場所: {0}"
+  ],
+  "Back to: {0}": [
+    "放回：{0}",
+    "放回：{0}",
+    "戻す先: {0}"
+  ],
+  "To: {0}": [
+    "移到：{0}",
+    "移到：{0}",
+    "移動先: {0}"
+  ],
+  "Undo puts the folder back only while it is still the same folder and its original name is free. Nothing is replaced.": [
+    "只有当它仍是同一个文件夹且原名称空闲时，撤销才会把它放回原处。不会替换任何内容。",
+    "只有當它仍是同一個資料夾且原名稱空閒時，還原才會把它放回原處。不會取代任何內容。",
+    "同じフォルダーのままで元の名前が空いている場合にのみ、取り消しで元に戻します。何も置き換えません。"
+  ],
+  "Folder move undone: {0}": [
+    "已撤销文件夹移动：{0}",
+    "已還原資料夾移動：{0}",
+    "フォルダーの移動を取り消しました: {0}"
+  ],
+  "Folder moved: {0}": [
+    "已移动文件夹：{0}",
+    "已移動資料夾：{0}",
+    "フォルダーを移動しました: {0}"
+  ],
+  "Move a Folder…": [
+    "移动文件夹…",
+    "移動資料夾…",
+    "フォルダーを移動…"
+  ],
+  "Forget Folder Move History": [
+    "清除文件夹移动历史",
+    "清除資料夾移動歷程",
+    "フォルダー移動の履歴を消去"
+  ],
+  "Move Folder renames the whole folder into another folder on the same NTFS drive (on another drive it is copied instead). Its Undo history lasts only for this session, up to 20 moves, and returns the latest move first.": [
+    "“移动文件夹”会在同一个 NTFS 驱动器上把整个文件夹重命名到另一个文件夹中（在另一个驱动器上则改为复制）。其撤销历史仅在本次会话中保留，最多 20 次移动，并先撤销最近一次移动。",
+    "「移動資料夾」會在同一個 NTFS 磁碟機上把整個資料夾重新命名到另一個資料夾中（在另一個磁碟機上則改為複製）。其還原歷程僅在本次工作階段中保留，最多 20 次移動，並先還原最近一次移動。",
+    "「フォルダーを移動」は、同じ NTFS ドライブ上でフォルダー全体を別のフォルダーへ名前を変えて移します（別のドライブではコピーになります）。取り消しの履歴はこのセッションの間だけ、最大 20 回分保持され、最新の移動から取り消します。"
+  ],
+  "Folder: Original → Current": [
+    "文件夹：原位置 → 当前位置",
+    "資料夾：原位置 → 目前位置",
+    "フォルダー: 元の場所 → 現在の場所"
+  ],
+  "Copy Folder Results": [
+    "复制文件夹结果",
+    "複製資料夾結果",
+    "フォルダーのコピー結果"
+  ],
+  "New Folder": [
+    "新文件夹",
+    "新資料夾",
+    "新しいフォルダー"
+  ],
+  "Move the new copied folder to the Recycle Bin?": [
+    "要把新复制的文件夹移到回收站吗？",
+    "要把新複製的資料夾移到資源回收筒嗎？",
+    "新しくコピーしたフォルダーをごみ箱に移動しますか?"
+  ],
+  "Only the new copy is moved; the original folder stays where it is.": [
+    "只移动新副本；原文件夹保留在原处。",
+    "只移動新副本；原資料夾保留在原處。",
+    "移動するのは新しいコピーだけです。元のフォルダーはそのままです。"
+  ],
+  "Move Copy to Recycle Bin…": [
+    "将副本移到回收站…",
+    "將副本移到資源回收筒…",
+    "コピーをごみ箱に移動…"
   ]
 }
