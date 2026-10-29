@@ -264,6 +264,13 @@ public sealed class MainWindow : Window
         var undo = UI.Button(app.L("Undo File Move"), async () => await app.RunActionAsync(new("file.undoMove", "Undo File Move", Feature.FileMoves), Array.Empty<string>(), this, SetStatus));
         undo.IsEnabled = enabled && app.MoveHistory.Count > 0; row.Children.Add(undo);
         row.Children.Add(UI.Button(app.L("Forget Move History"), () => { if (app.Busy) return; app.MoveHistory.Clear(); Refresh(); })); page.Children.Add(row);
+        var folders = new WrapPanel();
+        var moveFolder = UI.Button(app.L("Move a Folder…"), async () => await app.RunActionAsync(new("file.movefolder", "Move Folder to…", Feature.FileMoves, RequiresFiles: false), Array.Empty<string>(), this, SetStatus));
+        moveFolder.IsEnabled = enabled; folders.Children.Add(moveFolder);
+        var undoFolder = UI.Button(app.L("Undo Folder Move"), async () => await app.RunActionAsync(new("file.undoFolderMove", "Undo Folder Move", Feature.FileMoves, RequiresFiles: false), Array.Empty<string>(), this, SetStatus));
+        undoFolder.IsEnabled = enabled && app.FolderMoveHistory.Count > 0; folders.Children.Add(undoFolder);
+        folders.Children.Add(UI.Button(app.L("Forget Folder Move History"), () => { if (app.Busy) return; app.FolderMoveHistory.Clear(); Refresh(); })); page.Children.Add(folders);
+        page.Children.Add(UI.Text(app.L("Move Folder renames the whole folder into another folder on the same NTFS drive (on another drive it is copied instead). Its Undo history lasts only for this session, up to 20 moves, and returns the latest move first."), 12));
         var results = UI.Button(app.L("Review Last Move Result…"), () =>
         {
             if (app.Busy || app.LastMoveOutcome is not { } outcome) return;
@@ -271,6 +278,11 @@ public sealed class MainWindow : Window
         });
         results.IsEnabled = app.LastMoveOutcome is not null; page.Children.Add(results);
         // Keep recovery paths visible even if the feature was disabled while a move was running.
+        foreach (var moved in app.FolderMoveHistory.AsEnumerable().Reverse())
+        {
+            page.Children.Add(UI.Text(app.L("Folder: Original → Current"), 18));
+            page.Children.Add(UI.Text(LibraryJson.Visible(moved.Original) + "\n→ " + LibraryJson.Visible(moved.Current)));
+        }
         foreach (var batch in app.MoveHistory.AsEnumerable().Reverse())
         {
             page.Children.Add(UI.Text(app.L("Original → Current"), 18));
@@ -278,6 +290,7 @@ public sealed class MainWindow : Window
         }
         return page;
     }
+    internal IEnumerable<string> KnownPaths => files.Concat(outputs).ToArray();
     public void ApplyMoves(IReadOnlyDictionary<string, string> changes)
     {
         var selected = fileList.SelectedItems.Cast<string>().ToArray();
@@ -557,6 +570,7 @@ public sealed class ActionWindow : Window
             files[i] = changes.FirstOrDefault(x => x.Original.Equals(before[i], StringComparison.OrdinalIgnoreCase))?.Current ?? before[i];
         DrawActions();
     }
+    internal IEnumerable<string> KnownPaths => files.ToArray();
     public void ApplyMoves(IReadOnlyDictionary<string, string> changes)
     {
         var before = files.ToArray();

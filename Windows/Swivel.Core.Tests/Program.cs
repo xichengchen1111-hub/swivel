@@ -97,6 +97,7 @@ FolderStyleChecks.Run(Check, Reject);
         WebPChecks.Run(Check, Reject);
         FolderZipChecks.Run(Check, Reject);
         FolderCopyChecks.Run(Check, Reject);
+        FolderMoveChecks.Run(Check, Reject);
         ImageStitchChecks.Run(Check, Reject);
         CleanupFilesChecks.Run(Check, Reject);
 CopyFilesChecks.Run(Check, Reject);

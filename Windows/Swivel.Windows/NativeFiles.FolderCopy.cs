@@ -16,6 +16,13 @@ public sealed class FolderCopyOutcome
     public int FileCount { get; internal set; }
     public bool Cancelled { get; internal set; }
     public Exception? Error { get; internal set; }
+    /// The new folder's own identity (FILE_ID_INFO) and every item this copy created in it, as
+    /// it was right after copying; Undo compares the folder against them.
+    public string? RootIdentity { get; internal set; }
+    public IReadOnlyList<FolderCopyEntry> Entries => entries;
+    /// False when a copy exists but could not be verified (or its stamp read): undo is not offered.
+    public bool Recorded { get; internal set; } = true;
+    internal readonly List<FolderCopyEntry> entries = new();
 }
 
 /// One chosen folder copied into another. The source folder and its ancestors stay held from
@@ -97,6 +104,8 @@ public static partial class NativeFiles
             outcome.Folder = root;
             var top = HoldCreated(root, target.Volume, held);
             CheckCreatedIn(top, parent, root);
+            outcome.RootIdentity = ReadIdentity(top).Identity;
+            outcome.entries.Add(new("", true, 0, 0));
             folders[""] = top;
             int done = 0;
             foreach (var item in plan.Items)
@@ -118,6 +127,7 @@ public static partial class NativeFiles
                     var created = HoldCreated(path, target.Volume, held);
                     CheckCreatedIn(created, folders[container], path);
                     folders[item.RelativePath] = created;
+                    outcome.entries.Add(new(item.RelativePath, true, 0, 0));
                     continue;
                 }
                 Input input;
@@ -127,8 +137,10 @@ public static partial class NativeFiles
                 using (input)
                 {
                     if (input.Stream.Length != item.Length) throw new UserError(FolderCopy.Changed);
-                    var (copy, _, unverified) = CopyInto(input, System.IO.Path.GetDirectoryName(path)!, token, folders[container]);
+                    var (copy, stamp, unverified) = CopyInto(input, System.IO.Path.GetDirectoryName(path)!, token, folders[container]);
                     if (!string.Equals(copy, path, StringComparison.OrdinalIgnoreCase)) throw new UserError(FolderCopy.Interfered);
+                    if (stamp is null) outcome.Recorded = false;
+                    else outcome.entries.Add(new(item.RelativePath, false, stamp.Length, stamp.LastWrite));
                     // An unverified copy exists, so it is counted before stopping.
                     outcome.FilesCopied = ++done;
                     if (unverified is not null) throw unverified;
@@ -140,5 +152,42 @@ public static partial class NativeFiles
         catch (Exception error) when (outcome.Folder is not null && error is not OutOfMemoryException) { outcome.Error = error; }
         finally { for (int i = held.Count - 1; i >= 0; i--) held[i].Dispose(); }
         return outcome;
+    }
+
+    /// Undoes Copy Folder to… by moving the new folder to the Recycle Bin: it must still be the
+    /// folder the copy created (identity) and hold exactly the recorded items, the files with
+    /// their recorded lengths and modified times. The walk's handles are closed before the move.
+    internal static string RecycleCopiedFolder(string folder, string rootIdentity, IReadOnlyList<FolderCopyEntry> entries, IntPtr owner = default)
+    {
+        FolderScanResult? before = null;
+        try
+        {
+            return Recycle(folder, true, held =>
+            {
+                if (ReadIdentity(held).Identity != rootIdentity) throw new UserError(FolderCopyUndo.Replaced);
+                FolderZipPlan now;
+                try
+                {
+                    using var root = MetadataDirectory.Open(folder);
+                    if (root.Identity != rootIdentity) throw new UserError(FolderCopyUndo.Replaced);
+                    now = FolderZip.Plan(root, CancellationToken.None);
+                    before = FolderSizes.Scan(root, CancellationToken.None);
+                }
+                catch (UserError error) when (error.Message == FolderCopyUndo.Replaced) { throw; }
+                catch (Exception error) when (error is Win32Exception or UserError or IOException or UnauthorizedAccessException) { throw new UserError(FolderCopyUndo.Changed); }
+                if (FolderCopyUndo.Compare(entries, now) is string reason) throw new UserError(reason);
+            }, owner, () =>
+            {
+                // A folder the shell could not move whole may have lost some of its contents.
+                if (before is null) return;
+                try
+                {
+                    using var again = MetadataDirectory.Open(folder); var after = FolderSizes.Scan(again, CancellationToken.None);
+                    if (after.Root.Files != before.Root.Files || after.Root.Bytes != before.Root.Bytes || after.Entries != before.Entries) throw new UserError(PartlyRemoved);
+                }
+                catch (Exception error) when (error is Win32Exception or IOException or UnauthorizedAccessException or UserError && error.Message != PartlyRemoved) { throw new UserError(PartlyRemoved); }
+            });
+        }
+        catch (UserError error) when (error.Message == RecycleChanged) { throw new UserError(FolderCopyUndo.Replaced); }
     }
 }
