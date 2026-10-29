@@ -1013,7 +1013,7 @@ public sealed partial class App : Application
             else if (action.Id == "audio.noise")
             {
                 report(L("Loading audio…"));
-                // WAV is read as it is; MP3, AAC and FLAC are decoded by Windows first (see Decode Audio with Windows).
+                // WAV is read as it is; MP3, AAC, FLAC and M4A are decoded by Windows first (see Decode Audio with Windows).
                 bool wav = System.IO.Path.GetExtension(files[0]).Equals(".wav", StringComparison.OrdinalIgnoreCase);
                 if (!wav) report(L("Decoding the complete local audio stream…"));
                 using var document = wav ? await Task.Run(() => WaveDocument.Open(files[0], token), token) : await Task.Run(() => WaveDocument.OpenDecodedAsync(files[0], token), token);

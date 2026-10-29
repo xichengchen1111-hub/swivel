@@ -21,7 +21,7 @@ public sealed class WaveDocument : IDisposable
     public bool Decoded { get; }
     public const string DecodedNotice = "Windows decoded this file to 16-bit PCM first (its codec can change precision, priming or padding; up to 128 MiB and two hours). The cleaned result is saved as a new WAV file beside it.";
     private WaveDocument(NativeFiles.Input input,WaveInfo info,double[] peaks,Stream? decoded = null) { this.input = input; source = decoded ?? input.Stream; Decoded = decoded is not null; Info = info; Peaks = peaks; }
-    /// A compressed file (MP3, AAC, FLAC) decoded completely by Windows into PCM16 first, within
+    /// A compressed file (MP3, AAC, FLAC, M4A) decoded completely by Windows into PCM16 first, within
     /// the system decoder's own limits; the original stays held until the document is disposed.
     public static async Task<WaveDocument> OpenDecodedAsync(string path,CancellationToken token)
     {
