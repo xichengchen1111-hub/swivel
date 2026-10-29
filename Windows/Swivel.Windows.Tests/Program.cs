@@ -169,6 +169,7 @@ internal static class Program
             Group("LargeFileNativeChecks", () => LargeFileNativeChecks.Run(directory,Check,Reject));
             Group("LargeFilesChecks", () => LargeFilesChecks.Run(Check));
             Group("TempCleanupNativeChecks", () => TempCleanupNativeChecks.Run(directory,Check,Reject));
+            Group("CleanupNativeChecks", () => CleanupNativeChecks.Run(directory,Check,Reject));
             Group("AppCacheNativeChecks", () => AppCacheNativeChecks.Run(directory,Check,Reject));
             Group("AppLeftoverNativeChecks", () => AppLeftoverNativeChecks.Run(directory,Check,Reject));
             Group("UsageNativeChecks", () => UsageNativeChecks.Run(Check,Reject));

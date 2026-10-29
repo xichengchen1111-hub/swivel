@@ -45,7 +45,7 @@ internal static class TempCleanupNativeChecks
     }
 
     // Sets creation, last access, last write and change time, as a file left alone for long would have.
-    private static void Backdate(string path,DateTime when,bool directory)
+    internal static void Backdate(string path,DateTime when,bool directory)
     {
         using var handle=CreateFile(path,0x100,7,IntPtr.Zero,3,directory?0x02000000u:0u,IntPtr.Zero); // FILE_WRITE_ATTRIBUTES
         if(handle.IsInvalid)throw new IOException("Could not open "+path);

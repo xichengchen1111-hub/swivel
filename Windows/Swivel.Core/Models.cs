@@ -276,6 +276,7 @@ public static class Catalog
         ,new("doctor.executable", "Inspect EXE Structure…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.installedapps", "Inspect Desktop Installation Records…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.monitor", "Monitor CPU and Memory…", Core.Feature.Doctor, RequiresFiles: false)
+        ,new("doctor.cleanup", "Clean Up Files…", Core.Feature.Doctor, RequiresFiles: false)
     };
     public static bool IsImage(string path) => System.IO.Path.GetExtension(path).ToLowerInvariant() is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".tif" or ".tiff" or ".gif";
     public static IEnumerable<ToolAction> All(Prefs prefs) => Actions.Concat(prefs.Presets.Select(x => new ToolAction("preset." + x.Id, x.Name, Feature.ImagePresets, true))).Concat(prefs.Apps.Select(x => new ToolAction("app." + x.Id, x.Name, Feature.AppRouting, Extensions: x.IsWebPage && !x.CopyToClipboard ? null : x.Types, RequiresFiles: !x.IsWebPage || x.CopyToClipboard, WebPage: x.IsWebPage)));

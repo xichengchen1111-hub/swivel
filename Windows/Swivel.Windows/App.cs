@@ -497,6 +497,15 @@ public sealed partial class App : Application
                 var caches=new AppCacheDialog(this,found,AppCacheReader.RunningNames);ShowOperationDialog(caches,owner,token);
                 report(caches.Moved>0?string.Format(L("Cache review finished. Folders moved to the Recycle Bin or removed: {0}"),caches.Moved):token.IsCancellationRequested?L("Cancelled."):L("Cache review closed. No cache folder from this window is in the Recycle Bin now."));return;
             }
+            if(action.Id=="doctor.cleanup")
+            {
+                if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
+                workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();report(L("Looking for things to clean…"));
+                var found=await AwaitDoctorReadAsync(OnSta(()=>CleanupReader.Find(group=>Dispatcher.BeginInvoke(()=>report(string.Format(L("Looking for things to clean: {0}…"),L(CleanupFiles.Name(group))))),token)),token);
+                token.ThrowIfCancellationRequested();
+                var cleanup=new CleanupFilesDialog(this,found);ShowOperationDialog(cleanup,owner,token);
+                report(cleanup.Moved>0?string.Format(L("Clean Up Files finished. Items moved to the Recycle Bin or removed: {0}"),cleanup.Moved):token.IsCancellationRequested?L("Cancelled."):L("Clean Up Files closed. Nothing from this window is in the Recycle Bin now."));return;
+            }
             if(action.Id=="doctor.power")
             {
                 if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");

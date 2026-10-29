@@ -13918,5 +13918,110 @@
     "这两张图片太大，无法拼接：结果最多 1600 万像素，每边最多 16384 像素。",
     "這兩張圖片太大，無法拼接：結果最多 1600 萬像素，每邊最多 16384 像素。",
     "画像が大きすぎてつなげられません。結果は最大 1600 万ピクセル、一辺 16384 ピクセルまでです。"
+  ],
+  "Clean Up Files": [
+    "清理文件",
+    "清理檔案",
+    "ファイルのクリーンアップ"
+  ],
+  "Clean Up Files…": [
+    "清理文件…",
+    "清理檔案…",
+    "ファイルのクリーンアップ…"
+  ],
+  "Clean Up Files closed. Nothing from this window is in the Recycle Bin now.": [
+    "“清理文件”已关闭。此窗口中没有项目在回收站里。",
+    "「清理檔案」已關閉。此視窗中沒有項目在資源回收筒裡。",
+    "「ファイルのクリーンアップ」を閉じました。このウインドウからごみ箱に入っている項目はありません。"
+  ],
+  "Clean Up Files finished. Items moved to the Recycle Bin or removed: {0}": [
+    "“清理文件”已完成。移到回收站或已删除的项目：{0}",
+    "「清理檔案」已完成。移到資源回收筒或已刪除的項目：{0}",
+    "「ファイルのクリーンアップ」が終わりました。ごみ箱に移動または削除した項目：{0}"
+  ],
+  "Clean Up Files looks in four places Windows Doctor already checks: cache folders of known browsers and apps, items in the temporary folder unchanged for 7 days, installers of 5 MB or more in Downloads, and project build folders in Documents, Desktop and your source folder. Only cache folders of apps that are not running are selected for you; review everything else and tick what you no longer need. Each item is checked again before it moves to the Recycle Bin, and Undo restores the last move while this window is open.": [
+    "“清理文件”会在 Windows 医生已经检查的四个地方查找：已知浏览器和应用的缓存文件夹、临时文件夹中 7 天未改动的项目、“下载”中 5 MB 及以上的安装包，以及“文档”、“桌面”和 source 文件夹里的项目构建文件夹。只有未在运行的应用的缓存文件夹会预先勾选；其他项目请自行查看，勾选不再需要的。每个项目移到回收站前都会再检查一次；此窗口打开期间，“撤销移动”可恢复上一次移动的项目。",
+    "「清理檔案」會在 Windows 醫生已經檢查的四個地方尋找：已知瀏覽器和應用程式的快取資料夾、暫存資料夾中 7 天未變更的項目、「下載」中 5 MB 以上的安裝程式，以及「文件」、「桌面」和 source 資料夾裡的專案建置資料夾。只有未在執行的應用程式的快取資料夾會預先勾選；其他項目請自行檢視，勾選不再需要的。每個項目移到資源回收筒前都會再檢查一次；此視窗開啟期間，「復原移動」可還原上一次移動的項目。",
+    "「ファイルのクリーンアップ」は、Windows 診断がすでに調べている 4 か所を探します：既知のブラウザーとアプリのキャッシュフォルダー、一時フォルダー内で 7 日間変更されていない項目、「ダウンロード」内の 5 MB 以上のインストーラー、「ドキュメント」「デスクトップ」と source フォルダー内のプロジェクトのビルドフォルダーです。実行中でないアプリのキャッシュフォルダーだけがあらかじめ選択されます。ほかの項目は確認して、不要なものにチェックを付けてください。各項目はごみ箱に移す前にもう一度確認され、このウインドウを開いている間は「移動を取り消す」で直前の移動を元に戻せます。"
+  ],
+  "Each place is read within its tool's limits (folders four levels deep, 20,000 entries and about 30 seconds each), so a list can be partial. Sizes are logical and may count shared files twice. Leftovers of removed apps need the installation records from before you uninstalled, so they stay in Inspect Desktop Installation Records; duplicate files stay in Compare Common Folders.": [
+    "每个地方都按其工具的限制读取（各最多四层文件夹、20,000 个条目、约 30 秒），因此列表可能不完整。大小为逻辑大小，共享的文件可能重复计算。已卸载应用的残留需要卸载前的安装记录，所以仍在“检查桌面程序安装记录”中；重复文件仍在“比较常用文件夹”中。",
+    "每個地方都按其工具的限制讀取（各最多四層資料夾、20,000 個項目、約 30 秒），因此清單可能不完整。大小為邏輯大小，共用的檔案可能重複計算。已解除安裝應用程式的殘留需要解除安裝前的安裝記錄，所以仍在「檢查桌面程式安裝記錄」中；重複檔案仍在「比較常用資料夾」中。",
+    "各場所はそのツールの制限内で読み取ります（それぞれ最大 4 階層、20,000 項目、約 30 秒）。そのため一覧が不完全なことがあります。サイズは論理サイズで、共有ファイルを重複して数えることがあります。削除したアプリの残りはアンインストール前のインストール記録が必要なため「デスクトップアプリのインストール記録を確認」に、重複ファイルは「よく使うフォルダーを比較」に残っています。"
+  ],
+  "Each item is checked again first, under the rules of the tool that found it: cache folders only while their app is closed, temporary items only if still unchanged for 7 days, project folders only next to their project file. Installers and project folders may still be wanted; check each one. If an item is too large for the Recycle Bin, Windows asks before deleting it permanently.": [
+    "每个项目都会先按找到它的工具的规则再检查一次：缓存文件夹只在其应用关闭时移动，临时项目只在仍 7 天未改动时移动，项目文件夹只在旁边仍有项目文件时移动。安装包和项目文件夹可能仍有用，请逐个确认。如果项目太大无法放进回收站，Windows 会先询问是否永久删除。",
+    "每個項目都會先按找到它的工具的規則再檢查一次：快取資料夾只在其應用程式關閉時移動，暫存項目只在仍 7 天未變更時移動，專案資料夾只在旁邊仍有專案檔時移動。安裝程式和專案資料夾可能仍有用，請逐一確認。如果項目太大無法放進資源回收筒，Windows 會先詢問是否永久刪除。",
+    "各項目は、それを見つけたツールの規則でもう一度確認されます：キャッシュフォルダーはそのアプリが閉じているときだけ、一時項目は 7 日間変更されていないときだけ、プロジェクトフォルダーは隣にプロジェクトファイルがあるときだけ移動します。インストーラーやプロジェクトフォルダーはまだ必要かもしれないので、1 つずつ確認してください。ごみ箱に入らないほど大きい項目は、完全に削除する前に Windows が確認します。"
+  ],
+  "Find caches, old temporary items, installers and project build folders in one list, tick what you no longer need and move it to the Recycle Bin, with Undo. Or inspect desktop installation records, uninstall through Installed Apps in Windows Settings, then find plain folders named exactly as apps removed since the list was read and move chosen ones to the Recycle Bin, with Undo. A matching name does not prove ownership; registry entries, services, scheduled tasks and Store apps are not cleaned.": [
+    "在一个列表里查找缓存、旧临时项目、安装包和项目构建文件夹，勾选不再需要的移到回收站，可撤销。或者检查桌面程序安装记录，通过 Windows 设置中的“已安装的应用”卸载，然后查找名称与列表读取后被卸载的应用完全相同的普通文件夹，把选中的移到回收站，并可撤销。名称相同不能证明归属；注册表项、服务、计划任务和应用商店应用不会被清理。",
+    "在一個清單裡尋找快取、舊暫存項目、安裝程式和專案建置資料夾，勾選不再需要的移到資源回收筒，可復原。或者檢查桌面程式安裝記錄，透過 Windows 設定中的「已安裝的應用程式」解除安裝，然後尋找名稱與清單讀取後被解除安裝的應用程式完全相同的一般資料夾，把選取的移到資源回收筒，並可復原。名稱相同不能證明歸屬；登錄項目、服務、排程工作和市集應用程式不會被清理。",
+    "キャッシュ、古い一時項目、インストーラー、プロジェクトのビルドフォルダーを 1 つの一覧で探し、不要なものにチェックを付けてごみ箱に移せます（取り消し可）。または、デスクトップアプリのインストール記録を調べ、Windows の設定の「インストールされているアプリ」からアンインストールし、一覧の読み取り後に削除されたアプリと名前が完全に一致する通常のフォルダーを探して、選んだものをごみ箱に移動します（元に戻せます）。名前が一致しても所有の証明にはなりません。レジストリ項目、サービス、タスク、ストアアプリは片付けません。"
+  ],
+  "Found: {0} items · {1} · selected: {2} items · {3}": [
+    "找到：{0} 项 · {1} · 已选：{2} 项 · {3}",
+    "找到：{0} 項 · {1} · 已選：{2} 項 · {3}",
+    "見つかった項目：{0} 件 · {1} · 選択：{2} 件 · {3}"
+  ],
+  "Installer": [
+    "安装包",
+    "安裝程式",
+    "インストーラー"
+  ],
+  "Installers in Downloads": [
+    "“下载”中的安装包",
+    "「下載」中的安裝程式",
+    "「ダウンロード」内のインストーラー"
+  ],
+  "Looking for things to clean: {0}…": [
+    "正在查找可清理的项目：{0}…",
+    "正在尋找可清理的項目：{0}…",
+    "クリーンアップできる項目を探しています：{0}…"
+  ],
+  "Looking for things to clean…": [
+    "正在查找可清理的项目…",
+    "正在尋找可清理的項目…",
+    "クリーンアップできる項目を探しています…"
+  ],
+  "Move 1 item to the Recycle Bin?": [
+    "要把 1 个项目移到回收站吗？",
+    "要把 1 個項目移到資源回收筒嗎？",
+    "1 件の項目をごみ箱に移動しますか？"
+  ],
+  "Move {0} items to the Recycle Bin?": [
+    "要把 {0} 个项目移到回收站吗？",
+    "要把 {0} 個項目移到資源回收筒嗎？",
+    "{0} 件の項目をごみ箱に移動しますか？"
+  ],
+  "Nothing to clean was found in these places.": [
+    "这些地方没有找到可清理的项目。",
+    "這些地方沒有找到可清理的項目。",
+    "これらの場所にクリーンアップできる項目はありませんでした。"
+  ],
+  "Path": [
+    "路径",
+    "路徑",
+    "パス"
+  ],
+  "Select all: {0}": [
+    "全选：{0}",
+    "全選：{0}",
+    "すべて選択：{0}"
+  ],
+  "The search stopped at a limit or skipped some items; the list may be incomplete.": [
+    "查找到达上限或跳过了部分项目；列表可能不完整。",
+    "尋找到達上限或略過了部分項目；清單可能不完整。",
+    "検索が上限に達したか、一部の項目を飛ばしました。一覧が不完全なことがあります。"
+  ],
+  "{0} items · {1}": [
+    "{0} 项 · {1}",
+    "{0} 項 · {1}",
+    "{0} 件 · {1}"
+  ],
+  "This place could not be read.": [
+    "无法读取这个地方。",
+    "無法讀取這個地方。",
+    "この場所を読み取れませんでした。"
   ]
 }
