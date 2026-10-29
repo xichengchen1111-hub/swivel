@@ -43,6 +43,7 @@ internal static class AiffNativeChecks
                 {var info=PcmWave.Read(input,default);check(info.Bits==bits&&info.Rate==8000&&info.Channels==2&&info.Frames==8001,"Native AIFF WAV accepted by existing integer tools");PcmWave.Export(input,expected,new(0,info.Seconds),default,true);check(expected.ToArray().SequenceEqual(preview),"Native AIFF preview matches saved WAV quantized toPCM16");}
                 int count=Directory.GetFiles(folder).Length;reject(()=>document.Save(new CancellationToken(true)),"Precancelled AIFF export refused");check(Directory.GetFiles(folder).Length==count&&!Directory.GetFiles(folder,".swivel-*.tmp").Any(),"Precancelled AIFF creates no stage/output");
             }
+            WaveToolsChecks.CheckNoiseInput(path,(s,o)=>AiffWave.Export(s,o,default),bits,check,reject);
             check(File.ReadAllBytes(path).SequenceEqual(original),"AIFF original unchanged");
         }
         string bad=Path.Combine(folder,"float.aifc");Fixture(bad,32,1,1,"fl32");reject(()=>AiffDocument.Open(bad,default).Dispose(),"Unsupported AIFC refuses without silently interpreting integers");File.Delete(bad);

@@ -45,9 +45,11 @@ internal static class FloatWaveNativeChecks
                 int before=Directory.GetFiles(folder).Length;reject(()=>document.Save(new(8),default),"Invalid float depth before stage");reject(()=>document.Save(options,new CancellationToken(true)),"Precancelled float export");
                 check(Directory.GetFiles(folder).Length==before&&!Directory.GetFiles(folder,".swivel-*.tmp").Any(),"Float invalid/cancelled export creates no stage/output");
             }
+            WaveToolsChecks.CheckNoiseInput(path,(s,o)=>FloatWave.Export(s,o,new(),default),24,check,reject);
             check(File.ReadAllBytes(path).SequenceEqual(original),"Float original unchanged after session");
         }
         string over=Path.Combine(folder,"over.wav");Fixture(over,64,1,8000,true);
+        reject(()=>WaveDocument.OpenNoise(over,default).Dispose(),"Noise rejects float clipping without an implicit permission");
         using(var document=FloatWaveDocument.Open(over,default))
         {
             var dialog=new FloatWaveDialog(app,document);var root=(DockPanel)dialog.Content;var body=(StackPanel)root.Children.OfType<ScrollViewer>().Single().Content;var clipping=body.Children.OfType<CheckBox>().Single();
@@ -55,7 +57,7 @@ internal static class FloatWaveNativeChecks
             int before=Directory.GetFiles(folder).Length;reject(()=>document.Save(new(),default),"Native unapproved clipping refused");reject(()=>document.Preview(new(),default),"Native unapproved preview clipping refused");check(Directory.GetFiles(folder).Length==before,"Clipping refusal publishes nothing");
             dialog.Close();dialog.FinishPreviewAsync().GetAwaiter().GetResult();using var saved=File.OpenRead(document.Save(new(16,true),default));check(PcmWave.Read(saved,default).Frames==8000,"Approved clipping produces complete integer result");
         }
-        string bad=Path.Combine(folder,"nonfinite.wav");Fixture(bad,32,1,80001,nonfinite:true);reject(()=>FloatWaveDocument.Open(bad,default).Dispose(),"Native full scan rejects NaN after preview prefix before dialog");File.Delete(bad);
+        string bad=Path.Combine(folder,"nonfinite.wav");Fixture(bad,32,1,80001,nonfinite:true);reject(()=>FloatWaveDocument.Open(bad,default).Dispose(),"Native full scan rejects NaN after preview prefix before dialog");reject(()=>WaveDocument.OpenNoise(bad,default).Dispose(),"Noise full scan rejects nonfinite samples beyond preview");File.Delete(bad);
         string large=Path.Combine(folder,"cancel.wav");Fixture(large,64,2,2000000);
         using(var document=FloatWaveDocument.Open(large,default))using(var cancellation=new CancellationTokenSource())
         {

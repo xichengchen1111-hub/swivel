@@ -15,12 +15,12 @@ public sealed class WaveDocument : IDisposable
     public WaveInfo Info { get; }
     public string Path => input.Path;
     public double[] Peaks { get; }
-    // The PCM read and processed: the held file itself, or audio Windows decoded from it (the
-    // file stays held either way, and outputs go beside it).
+    // The PCM read and processed: the held file itself, a local conversion, or
+    // audio Windows decoded from it. The original stays held; outputs go beside it.
     private readonly Stream source;
     public bool Decoded { get; }
     public const string DecodedNotice = "Windows decoded this file to 16-bit PCM first (its codec can change precision, priming or padding; up to 128 MiB and two hours). The cleaned result is saved as a new WAV file beside it.";
-    private WaveDocument(NativeFiles.Input input,WaveInfo info,double[] peaks,Stream? decoded = null) { this.input = input; source = decoded ?? input.Stream; Decoded = decoded is not null; Info = info; Peaks = peaks; }
+    private WaveDocument(NativeFiles.Input input,WaveInfo info,double[] peaks,Stream? prepared = null, bool windowsDecoded = false) { this.input = input; source = prepared ?? input.Stream; Decoded = windowsDecoded; Info = info; Peaks = peaks; }
     /// A compressed file (MP3, AAC, FLAC, M4A) decoded completely by Windows into PCM16 first, within
     /// the system decoder's own limits; the original stays held until the document is disposed.
     public static async Task<WaveDocument> OpenDecodedAsync(string path,CancellationToken token)
@@ -31,9 +31,25 @@ public sealed class WaveDocument : IDisposable
         try
         {
             var info = PcmWave.Read(stream, token);
-            return new(input, info, PcmWave.Peaks(stream, 600, token), stream);
+            return new(input, info, PcmWave.Peaks(stream, 600, token), stream, windowsDecoded: true);
         }
         catch { stream.Dispose(); input.Dispose(); throw; }
+    }
+    // Noise-only local preparation leaves all other WAV editors' input contracts intact.
+    public static WaveDocument OpenNoise(string path, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested(); var input = NativeFiles.OpenRead(path);
+        MemoryStream? prepared = null;
+        try
+        {
+            prepared = WaveNoiseInput.Prepare(input.Stream, token);
+            Stream source = prepared ?? (Stream)input.Stream;
+            var info = PcmWave.Read(source, token);
+            var peaks = PcmWave.Peaks(source, 600, token);
+            token.ThrowIfCancellationRequested();
+            return new(input, info, peaks, prepared);
+        }
+        catch { prepared?.Dispose(); input.Dispose(); throw; }
     }
     public static WaveDocument Open(string path,CancellationToken token, bool scanPeaks = true)
     {
@@ -102,5 +118,5 @@ public sealed class WaveDocument : IDisposable
         return NativeFiles.WriteBeside(input, System.IO.Path.GetFileNameWithoutExtension(input.Path) + " clean", "wav",
             output => WaveDenoiser.Export(source, output, settings, token), token);
     }
-    public void Dispose() { try { preparedMusic?.Dispose(); } finally { input.Dispose(); } }
+    public void Dispose() { try { preparedMusic?.Dispose(); } finally { try { if (!ReferenceEquals(source, input.Stream)) source.Dispose(); } finally { input.Dispose(); } } }
 }

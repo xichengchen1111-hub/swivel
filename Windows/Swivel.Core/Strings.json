@@ -15568,5 +15568,15 @@
     "该文件夹已经在那个文件夹中。",
     "該資料夾已經在那個資料夾中。",
     "このフォルダーはすでにその場所にあります。"
+  ],
+  "The float WAV contains samples outside [-1,1]. Use Convert Float WAV to PCM… first and explicitly allow clipping before reducing noise.": [
+    "浮点 WAV 含有超出 [-1,1] 的样本。请先使用“将浮点 WAV 转换为 PCM…”并明确允许削波，再进行降噪。",
+    "浮點 WAV 含有超出 [-1,1] 的樣本。請先使用「將浮點 WAV 轉換為 PCM…」並明確允許削波，再進行降噪。",
+    "浮動小数点 WAV に [-1,1] の範囲外のサンプルがあります。先に「浮動小数点 WAV を PCM に変換…」でクリッピングを明示的に許可して変換し、その後ノイズを低減してください。"
+  ],
+  "Integer PCM WAV is processed directly. Float32/64 WAV is converted to 24-bit PCM first; samples outside [-1,1], NaN and infinity are refused. Supported integer AIFF/AIFC and G.711 WAV are converted to PCM in memory. Local input and complete PCM output are each limited to 512 MiB and two hours, mono/stereo, 8–192 kHz. MP3, AAC, FLAC and M4A use Windows decoding with its separate 128 MiB limit. Save creates an integer PCM WAV beside the original.": [
+    "整数 PCM WAV 直接处理。32/64 位浮点 WAV 先转换为 24 位 PCM；拒绝超出 [-1,1] 的样本、NaN 和无穷值。支持的整数 AIFF/AIFC 和 G.711 WAV 在内存中转换为 PCM。本地输入和完整 PCM 输出各限 512 MiB、两小时、单声道或立体声及 8–192 kHz。MP3、AAC、FLAC 和 M4A 使用 Windows 解码，另限 128 MiB。保存会在原件旁新建整数 PCM WAV。",
+    "整數 PCM WAV 直接處理。32/64 位浮點 WAV 先轉換為 24 位 PCM；拒絕超出 [-1,1] 的樣本、NaN 和無窮值。支援的整數 AIFF/AIFC 和 G.711 WAV 在記憶體中轉換為 PCM。本機輸入和完整 PCM 輸出各限 512 MiB、兩小時、單聲道或立體聲及 8–192 kHz。MP3、AAC、FLAC 和 M4A 使用 Windows 解碼，另限 128 MiB。儲存會在原件旁新增整數 PCM WAV。",
+    "整数 PCM WAV は直接処理します。32/64 ビット浮動小数点 WAV は先に 24 ビット PCM に変換し、[-1,1] の範囲外のサンプル、NaN、無限大を拒否します。対応する整数 AIFF/AIFC と G.711 WAV はメモリ内で PCM に変換します。ローカル入力と完全な PCM 出力はそれぞれ 512 MiB、2 時間、モノラルまたはステレオ、8–192 kHz に制限されます。MP3、AAC、FLAC、M4A は Windows でデコードし、別途 128 MiB の制限が適用されます。保存すると元のファイルの隣に整数 PCM WAV を新規作成します。"
   ]
 }
