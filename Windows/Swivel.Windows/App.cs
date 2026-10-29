@@ -1066,6 +1066,16 @@ public sealed partial class App : Application
                 using var document=await OnSta(()=>TextCaptureDocument.Open(files[0],token));token.ThrowIfCancellationRequested();var dialog=new TextCaptureDialog(this,document);
                 try{ShowOperationDialog(dialog,owner,token);}finally{await dialog.FinishAsync();}report(L("Text Capture closed. The original image was kept."));return;
             }
+            else if(action.Id=="pdf.pages")
+            {
+                if(!Prefs.IsOn(Feature.PdfPages))throw new UserError("Enable PDF Pages in Settings first.");workFeature=Feature.PdfPages;
+                report(L("Reading PDF structure…"));
+                using var document=await Task.Run(()=>PdfPagesDocument.Open(files,token),token);token.ThrowIfCancellationRequested();var dialog=new PdfPagesDialog(this,document);
+                if(!ShowOperationDialog(dialog,owner,token))return;
+                var order=dialog.Order;int turn=dialog.Turn;
+                report(L("Processing…"));result=new BatchResult();
+                result.Outputs.Add(await Task.Run(()=>document.Save(order,turn,token),token));
+            }
             else if(action.Id=="pdf.raster")
             {
                 if(!Prefs.IsOn(Feature.PdfPages))throw new UserError("Enable PDF Pages in Settings first.");workFeature=Feature.PdfPages;
