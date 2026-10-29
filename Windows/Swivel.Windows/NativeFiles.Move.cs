@@ -153,8 +153,10 @@ public static partial class NativeFiles
     {
         Check(handle, false);
         if (!GetFileInformationByHandle(handle, out var info)) ThrowLast();
-        if (info.Links != 1 || (info.Attributes & 1) != 0)
-            throw new UserError("Move Files does not accept read-only files or hard links.");
+        // A same-volume move renames only this name: a read-only file stays read-only and a hard
+        // link's other names stay where they are. The link count is part of the stamp, so a link
+        // added or removed elsewhere since the preview still stops the move or its undo.
+        if (info.Links < 1) throw new UserError("Move Files requires complete Windows file identities.");
         var basic = new byte[40]; if (!GetDirectoryInfo(handle, 0, basic, 40)) ThrowLast();
         return new(ReadMoveIdentity(handle), ((ulong)info.SizeHigh << 32) | info.SizeLow,
             BinaryPrimitives.ReadInt64LittleEndian(basic), BinaryPrimitives.ReadInt64LittleEndian(basic.AsSpan(16)),

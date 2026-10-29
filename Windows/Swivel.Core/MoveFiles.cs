@@ -158,7 +158,7 @@ public static class MoveReceipts
             WindowsPathPolicy.Validate(entry.Original); WindowsPathPolicy.Validate(entry.Current);
             MoveRules.ValidateDirectory(entry.OriginalDirectory); MoveRules.ValidateDirectory(entry.CurrentDirectory);
             if (MoveRules.Parent(entry.Original) != entry.OriginalDirectory.Path || MoveRules.Parent(entry.Current) != entry.CurrentDirectory.Path ||
-                entry.Stamp is not { } stamp || stamp.Links != 1 || (stamp.Identity.Low == 0 && stamp.Identity.High == 0) ||
+                entry.Stamp is not { } stamp || stamp.Links < 1 || (stamp.Identity.Low == 0 && stamp.Identity.High == 0) ||
                 stamp.Identity.Volume != entry.OriginalDirectory.LeafIdentity.Volume || stamp.Identity.Volume != entry.CurrentDirectory.LeafIdentity.Volume)
                 throw new UserError("A move receipt is incomplete. Undo was refused.");
         }

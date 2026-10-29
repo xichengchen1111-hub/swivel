@@ -171,7 +171,6 @@ public sealed class McpHost : IMcpHost
     // Move Files speaks to someone looking at its preview window; an agent gets the facts.
     private static McpToolError ForAgent(Exception error) => new(error.Message switch
     {
-        "Move Files does not accept read-only files or hard links." => "Swivel does not move read-only or hard-linked files.",
         "Move Files currently requires source and destination on the same NTFS volume. Nothing was copied or deleted." => "Swivel moves files only within one NTFS drive.",
         "Move Files requires complete Windows file identities." => "Swivel needs complete Windows file identities to move a file.",
         string message => message.Replace(" Create a new move preview.", "").Replace("; create a new preview.", "."),

@@ -49,10 +49,18 @@ internal static class MoveFilesNativeChecks
         if (Directory.Exists(alias))
             using (var session = MoveSession.Open(selected, alias, default)) check(session.Plan.All(p => !p.Changed), "Native case alias of the same held directory also produces noops");
 
+        // A read-only file moves and stays read-only; undo brings it back.
         File.SetAttributes(third, File.GetAttributes(third) | FileAttributes.ReadOnly);
-        try { reject(() => MoveSession.Open(selected, b, default), "Last native readonly source prevents opening whole move batch"); }
+        try
+        {
+            MoveOutcome ro;
+            using (var session = MoveSession.Open(new[] { third }, b, default)) ro = session.Execute(default);
+            string movedThird = Path.Combine(b, Path.GetFileName(third));
+            check(ro.Error is null && File.Exists(movedThird) && !File.Exists(third) && (File.GetAttributes(movedThird) & FileAttributes.ReadOnly) != 0, "Native move of a read-only file keeps it read-only: " + ro.Error?.Message);
+            using (var session = MoveSession.ForUndo(ro.Remaining, default)) check(session.Execute(default).Error is null && File.Exists(third), "Native undo brings the read-only file back");
+        }
         finally { File.SetAttributes(third, File.GetAttributes(third) & ~FileAttributes.ReadOnly); }
-        check(selected.All(File.Exists) && !Directory.EnumerateFiles(b).Any(), "Native all-source preflight leaves earlier files in place");
+        check(selected.All(File.Exists) && !Directory.EnumerateFiles(b).Any(), "Native read-only move and undo leave the destination empty again");
         string other = Path.Combine(c, "first.dat"); File.WriteAllText(other, "other original");
         reject(() => MoveSession.Open(new[] { first, other }, b, default), "Duplicate target basenames refuse the entire native batch");
         File.Delete(other);
@@ -72,7 +80,16 @@ internal static class MoveFilesNativeChecks
             reject(() => MoveSession.Open(new[] { first }, b, default), "An ADS handle denying delete sharing blocks move before mutation");
         string hardlink = Path.Combine(c, "hardlink.dat");
         check(CreateHardLink(hardlink, first, IntPtr.Zero), "Native NTFS hardlink fixture created");
-        try { reject(() => MoveSession.Open(new[] { first }, b, default), "Native multi-link source refused"); }
+        try
+        {
+            // Only the chosen name moves; the other name stays. Both names of one file in a batch are refused.
+            MoveOutcome linked;
+            using (var session = MoveSession.Open(new[] { hardlink }, b, default)) linked = session.Execute(default);
+            string movedLink = Path.Combine(b, "hardlink.dat");
+            check(linked.Error is null && File.Exists(movedLink) && !File.Exists(hardlink) && File.Exists(first) && File.ReadAllBytes(movedLink).SequenceEqual(File.ReadAllBytes(first)), "Native move of one hard-link name leaves the other: " + linked.Error?.Message);
+            using (var session = MoveSession.ForUndo(linked.Remaining, default)) check(session.Execute(default).Error is null && File.Exists(hardlink), "Native undo brings the moved link name back");
+            reject(() => MoveSession.Open(new[] { first, hardlink }, b, default), "Two names of one file in a move batch are refused");
+        }
         finally { File.Delete(hardlink); }
 
         // Directory replacement at the same spelling must not redirect undo.

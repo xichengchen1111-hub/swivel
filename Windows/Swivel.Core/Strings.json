@@ -1054,11 +1054,6 @@
     "為草稿選擇 1–100 個本機檔案。",
     "下書き用に1～100個のローカルファイルを選択してください。"
   ],
-  "Choose 1–100 ordinary files on the same NTFS volume as the destination. When every selected file is on another drive, Swivel offers to copy them instead and keeps the originals; a mix of drives is refused. Hard links, read-only files, cloud placeholders and linked paths are not supported. Files already in the destination folder stay in place and are marked as unchanged.": [
-    "选择与目标文件夹位于同一 NTFS 卷的 1–100 个普通文件。若所选文件全部位于其他驱动器，Swivel 会改为提供复制并保留原文件；混合多个驱动器的选择会被拒绝。不支持硬链接、只读文件、云占位文件和包含链接的路径。已在目标文件夹中的文件会留在原处，并标记为未改变。",
-    "選擇與目標資料夾位於同一 NTFS 磁碟區的 1–100 個一般檔案。若所選檔案全部位於其他磁碟機，Swivel 會改為提供複製並保留原始檔案；混合多個磁碟機的選擇會被拒絕。不支援硬連結、唯讀檔案、雲端預留位置檔案和包含連結的路徑。已在目標資料夾中的檔案會留在原處，並標記為未變更。",
-    "移動先と同じ NTFS ボリュームにある通常のファイルを 1～100 個選択してください。選択したファイルがすべて別のドライブにある場合は、代わりにコピーを提案し、元のファイルは残します。複数のドライブが混在する選択は拒否されます。ハードリンク、読み取り専用ファイル、クラウドのプレースホルダー、リンクを含むパスには対応していません。既に移動先フォルダーにあるファイルはそのまま残り、変更なしと表示されます。"
-  ],
   "Choose 1–100 ordinary local files. The complete draft is limited to 12,000 UTF-8 bytes; long or escaped paths can fit fewer files. Open Draft additionally requires a complete link of at most 2,048 characters. Longer links disable opening while Copy Draft retains the full text. No folder permission, file attachment or automatic submission is requested.": [
     "选择 1–100 个普通本地文件。完整草稿最多 12,000 个 UTF-8 字节；长路径或转义较多时，能容纳的文件会更少。“打开草稿”另要求完整链接不超过 2,048 个字符。链接过长将禁用打开，但“复制草稿”保留全文。不请求文件夹权限、文件附件或自动提交。",
     "選擇 1–100 個一般本機檔案。完整草稿最多 12,000 個 UTF-8 位元組；長路徑或跳脫較多時，能容納的檔案更少。「開啟草稿」另要求完整連結不超過 2,048 個字元。連結過長將停用開啟，但「複製草稿」保留全文。不請求資料夾權限、檔案附件或自動提交。",
@@ -11649,11 +11644,6 @@
     "副本保留所有資料流，包括下載警告（Web 標記），以及屬性和修改時間；建立時間為新的。權限沿用目標資料夾。每個副本的資料流名稱和大小都會與原始檔案核對（不逐位元組比較）。如果複製中途停止，已完成的副本會保留。",
     "コピーにはダウンロードの警告（Mark of the Web）を含むすべてのデータストリーム、属性、更新日時が残ります。作成日時は新しくなります。アクセス許可はコピー先フォルダーに従います。各コピーのストリーム名とサイズを元のファイルと照合します（全バイトの比較ではありません）。途中で止まった場合、完了したコピーは残ります。"
   ],
-  "Explicitly move ordinary files within one NTFS volume after a full path preview. No overwriting; the same file objects retain attached data and original permissions. Failed moves attempt rollback, with exact recovery paths and up to 20 session Undo records checked against recorded identities and metadata. Content changes are not fully detected. Copy to Folder copies 1–100 files to a local NTFS folder with every data stream, the download warning, attributes and the modified time, never overwriting; each copy's stream names and sizes are checked against the original. Moving across volumes, and moving folders, hard links, read-only files or cloud links, remain unavailable; real Windows acceptance is pending.": [
-    "完整路径预览后，明确在同一 NTFS 卷内移动普通文件。不覆盖，原文件对象保留附带数据及原权限。失败时尝试回滚，记录准确恢复路径，并提供最多 20 批会话撤销，核对已记录的身份及元数据；不能检测所有内容变化。复制到文件夹可把 1–100 个文件复制到本地 NTFS 文件夹，保留所有数据流、下载警告、属性和修改时间，绝不覆盖，并核对每个副本的数据流名称和大小。暂不支持跨卷移动，以及移动文件夹、硬链接、只读文件或云链接；真实 Windows 验收仍待执行。",
-    "完整路徑預覽後，明確在同一 NTFS 磁碟區內移動一般檔案。不覆寫，原檔案物件保留附帶資料及原權限。失敗時嘗試復原，記錄準確恢復路徑，並提供最多 20 批工作階段復原，核對已記錄的身分及中繼資料；不能偵測所有內容變更。複製到資料夾可把 1–100 個檔案複製到本機 NTFS 資料夾，保留所有資料流、下載警告、屬性和修改時間，絕不覆寫，並核對每個副本的資料流名稱和大小。暫不支援跨磁碟區移動，以及移動資料夾、硬連結、唯讀檔案或雲端連結；真實 Windows 驗收仍待執行。",
-    "完全なパスを確認後、同じ NTFS ボリューム内で通常ファイルを明示的に移動します。上書きせず、同じファイルが付随データと元の権限を保持します。失敗時は復元を試み、正確な復旧パスと最大 20 回分のセッション取り消し履歴を記録します。識別情報と記録済みメタデータを照合しますが、すべての内容変更を検出できません。フォルダーへのコピーでは 1～100 個のファイルをローカル NTFS フォルダーにコピーし、すべてのデータストリーム、ダウンロードの警告、属性、更新日時を残し、上書きせず、各コピーのストリーム名とサイズを照合します。ボリューム間の移動や、フォルダー・ハードリンク・読み取り専用ファイル・クラウドリンクの移動は未対応です。Windows 実機検証は未実施です。"
-  ],
   "A copy was made but could not be verified. Check it in the destination folder before relying on it.": [
     "副本已创建，但无法核对。请在使用前到目标文件夹检查它。",
     "副本已建立，但無法核對。請在使用前到目標資料夾檢查它。",
@@ -14313,5 +14303,15 @@
     "预览名称、不覆盖改名，并在身份核验后撤销。仅支持 NTFS 普通文件。仅大小写变化、互换及连锁改名使用同目录临时名称；异常退出可能留下临时文件。只读文件改名后仍为只读；硬链接只改所选的这个名称。暂不支持其他文件系统。",
     "預覽名稱、不覆寫改名，並在身分核驗後復原。僅支援 NTFS 一般檔案。僅大小寫變更、互換及連鎖改名使用同目錄暫存名稱；異常結束可能留下暫存檔案。唯讀檔案改名後仍為唯讀；硬連結只改所選的這個名稱。暫不支援其他檔案系統。",
     "名前を確認し、上書きせず変更し、識別情報を検証して取り消します。NTFS の通常ファイルのみ対応。大文字小文字の変更、交換、連鎖は同じフォルダーの一時名を使用し、異常終了時に残る場合があります。読み取り専用ファイルは名前を変えても読み取り専用のままです。ハードリンクは選んだその名前だけが変わります。他のファイルシステムは未対応です。"
+  ],
+  "Explicitly move ordinary files within one NTFS volume after a full path preview. No overwriting; the same file objects retain attached data and original permissions. Failed moves attempt rollback, with exact recovery paths and up to 20 session Undo records checked against recorded identities and metadata. Content changes are not fully detected. Copy to Folder copies 1–100 files to a local NTFS folder with every data stream, the download warning, attributes and the modified time, never overwriting; each copy's stream names and sizes are checked against the original. Read-only files stay read-only and moving a hard link moves only that name. Moving across volumes, and moving folders or cloud links, remain unavailable; real Windows acceptance is pending.": [
+    "完整路径预览后，明确在同一 NTFS 卷内移动普通文件。不覆盖，原文件对象保留附带数据及原权限。失败时尝试回滚，记录准确恢复路径，并提供最多 20 批会话撤销，核对已记录的身份及元数据；不能检测所有内容变化。复制到文件夹可把 1–100 个文件复制到本地 NTFS 文件夹，保留所有数据流、下载警告、属性和修改时间，绝不覆盖，并核对每个副本的数据流名称和大小。只读文件移动后仍为只读，移动硬链接只移动所选名称。暂不支持跨卷移动，以及移动文件夹或云链接；真实 Windows 验收仍待执行。",
+    "完整路徑預覽後，明確在同一 NTFS 磁碟區內移動一般檔案。不覆寫，原檔案物件保留附帶資料及原權限。失敗時嘗試復原，記錄準確恢復路徑，並提供最多 20 批工作階段復原，核對已記錄的身分及中繼資料；不能偵測所有內容變更。複製到資料夾可把 1–100 個檔案複製到本機 NTFS 資料夾，保留所有資料流、下載警告、屬性和修改時間，絕不覆寫，並核對每個副本的資料流名稱和大小。唯讀檔案移動後仍為唯讀，移動硬連結只移動所選名稱。暫不支援跨磁碟區移動，以及移動資料夾或雲端連結；真實 Windows 驗收仍待執行。",
+    "完全なパスを確認後、同じ NTFS ボリューム内で通常ファイルを明示的に移動します。上書きせず、同じファイルが付随データと元の権限を保持します。失敗時は復元を試み、正確な復旧パスと最大 20 回分のセッション取り消し履歴を記録します。識別情報と記録済みメタデータを照合しますが、すべての内容変更を検出できません。フォルダーへのコピーでは 1～100 個のファイルをローカル NTFS フォルダーにコピーし、すべてのデータストリーム、ダウンロードの警告、属性、更新日時を残し、上書きせず、各コピーのストリーム名とサイズを照合します。読み取り専用ファイルは移動後も読み取り専用のままで、ハードリンクは選んだ名前だけが移動します。ボリューム間の移動や、フォルダー・クラウドリンクの移動は未対応です。Windows 実機検証は未実施です。"
+  ],
+  "Choose 1–100 ordinary files on the same NTFS volume as the destination. When every selected file is on another drive, Swivel offers to copy them instead and keeps the originals; a mix of drives is refused. Read-only files stay read-only; moving a hard link moves only that name, and two names of one file cannot be moved together. Cloud placeholders and linked paths are not supported. Files already in the destination folder stay in place and are marked as unchanged.": [
+    "选择与目标文件夹位于同一 NTFS 卷的 1–100 个普通文件。若所选文件全部位于其他驱动器，Swivel 会改为提供复制并保留原文件；混合多个驱动器的选择会被拒绝。只读文件移动后仍为只读；移动硬链接只移动所选名称，同一文件的两个名称不能一起移动。不支持云占位文件和包含链接的路径。已在目标文件夹中的文件会留在原处，并标记为未改变。",
+    "選擇與目標資料夾位於同一 NTFS 磁碟區的 1–100 個一般檔案。若所選檔案全部位於其他磁碟機，Swivel 會改為提供複製並保留原始檔案；混合多個磁碟機的選擇會被拒絕。唯讀檔案移動後仍為唯讀；移動硬連結只移動所選名稱，同一檔案的兩個名稱不能一起移動。不支援雲端預留位置檔案和包含連結的路徑。已在目標資料夾中的檔案會留在原處，並標記為未變更。",
+    "移動先と同じ NTFS ボリュームにある通常のファイルを 1～100 個選択してください。選択したファイルがすべて別のドライブにある場合は、代わりにコピーを提案し、元のファイルは残します。複数のドライブが混在する選択は拒否されます。読み取り専用ファイルは移動後も読み取り専用のままです。ハードリンクは選んだ名前だけが移動し、同じファイルの 2 つの名前は一緒に移動できません。クラウドのプレースホルダーとリンクを含むパスには対応していません。既に移動先フォルダーにあるファイルはそのまま残り、変更なしと表示されます。"
   ]
 }
