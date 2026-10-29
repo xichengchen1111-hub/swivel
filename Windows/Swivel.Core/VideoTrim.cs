@@ -3,10 +3,15 @@ using System.Globalization;
 
 namespace Swivel.Core;
 
-/// The part of a video to keep, in milliseconds from its start, and whether its sound is kept.
-public sealed record VideoTrimPlan(long Start, long End, bool KeepSound)
+/// The part of a video to keep, in milliseconds from its start, whether its sound is kept, and
+/// optional picture changes and speed (percent). No picture change is null.
+public sealed record VideoTrimPlan(long Start, long End, bool KeepSound, VideoPicture? Picture = null, int Speed = 100)
 {
     public long Length => End - Start;
+    /// Milliseconds of the new video.
+    public long OutputLength => VideoEdit.OutputLength(Length, Speed);
+    /// More than the cut and the sound changed: saved as “name edited.mp4”.
+    public bool Edited => Picture is not null || Speed != 100;
 }
 
 /// Trim Video…: reading and writing the start and end times typed in the window, and checking a
@@ -69,11 +74,15 @@ public static class VideoTrim
     public static long Duration(double seconds) =>
         double.IsFinite(seconds) && seconds > 0 ? (long)Math.Floor(seconds * 1000) : throw new UserError(SubtitleBurn.Unsupported);
 
-    /// A video without sound has nothing to remove, so keeping all of it changes nothing.
-    public static VideoTrimPlan Plan(long start, long end, long duration, bool keepSound, bool hasSound = true)
+    /// A video without sound has nothing to remove, so keeping all of it changes nothing. At any
+    /// speed but 100% the sound is removed (Windows' editing API can't retime it here).
+    public static VideoTrimPlan Plan(long start, long end, long duration, bool keepSound, bool hasSound = true, VideoPicture? picture = null, int speed = 100)
     {
+        VideoEdit.ValidateSpeed(speed);
+        if (picture is not null) { VideoEdit.Validate(picture); if (picture.IsIdentity) picture = null; }
         if (start < 0 || end > duration || end - start < MinLength) throw new UserError(OutOfRange);
-        if (start == 0 && end == duration && (keepSound || !hasSound)) throw new UserError(hasSound ? Unchanged : UnchangedSilent);
-        return new VideoTrimPlan(start, end, keepSound && hasSound);
+        bool edited = picture is not null || speed != 100;
+        if (start == 0 && end == duration && !edited && (keepSound || !hasSound)) throw new UserError(hasSound ? Unchanged : UnchangedSilent);
+        return new VideoTrimPlan(start, end, keepSound && hasSound && speed == 100, picture, speed);
     }
 }

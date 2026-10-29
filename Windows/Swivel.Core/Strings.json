@@ -15343,5 +15343,95 @@
     "请选择自包含的 RIFF WAV、FLAC、MP3 Layer III、ADTS AAC 或纯音频 M4A（AAC-LC 或 ALAC）文件。此解码器不接受播放列表、网址、引用影片、视频或其他容器。",
     "請選擇自包含的 RIFF WAV、FLAC、MP3 Layer III、ADTS AAC 或純音訊 M4A（AAC-LC 或 ALAC）檔案。此解碼器不接受播放清單、網址、參照影片、影片或其他容器。",
     "自己完結した RIFF WAV、FLAC、MP3 Layer III、ADTS AAC、または音声のみの M4A（AAC-LC または ALAC）ファイルを選んでください。プレイリスト、URL、参照ムービー、動画、その他のコンテナーは対象外です。"
+  ],
+  "No turn": [
+    "不旋转",
+    "不旋轉",
+    "回転なし"
+  ],
+  "90° clockwise": [
+    "顺时针 90°",
+    "順時針 90°",
+    "時計回りに 90°"
+  ],
+  "180°": [
+    "180°",
+    "180°",
+    "180°"
+  ],
+  "90° counterclockwise": [
+    "逆时针 90°",
+    "逆時針 90°",
+    "反時計回りに 90°"
+  ],
+  "Flip left to right": [
+    "左右翻转",
+    "左右翻轉",
+    "左右反転"
+  ],
+  "Flip upside down": [
+    "上下翻转",
+    "上下翻轉",
+    "上下反転"
+  ],
+  "Whole picture": [
+    "整个画面",
+    "整個畫面",
+    "画面全体"
+  ],
+  "Turn": [
+    "旋转",
+    "旋轉",
+    "回転"
+  ],
+  "Crop to shape": [
+    "裁剪为比例",
+    "裁剪為比例",
+    "比率で切り抜き"
+  ],
+  "Crop position": [
+    "裁剪位置",
+    "裁剪位置",
+    "切り抜き位置"
+  ],
+  "Picture": [
+    "画面",
+    "畫面",
+    "画面"
+  ],
+  "Crop position (left to right, or top to bottom)": [
+    "裁剪位置（从左到右，或从上到下）",
+    "裁剪位置（從左到右，或從上到下）",
+    "切り抜き位置（左から右、または上から下）"
+  ],
+  "At any speed but 1× the sound is removed: Windows' editing API used here can't change its speed.": [
+    "速度不是 1× 时会去掉声音：这里使用的 Windows 编辑接口无法改变声音的速度。",
+    "速度不是 1× 時會移除聲音：這裡使用的 Windows 編輯介面無法改變聲音的速度。",
+    "1× 以外の速度では音声を削除します。ここで使う Windows の編集 API は音声の速度を変えられません。"
+  ],
+  "The new video is {0} × {1} pixels and {2} long.": [
+    "新视频为 {0} × {1} 像素，长 {2}。",
+    "新影片為 {0} × {1} 像素，長 {2}。",
+    "新しい動画は {0} × {1} ピクセル、長さ {2} です。"
+  ],
+  "Turns and flips apply to the picture as you see it, then the crop takes the largest part of that shape. Sizes are rounded down to even pixels. A crop or turn changes the size of the new video. Another speed keeps every frame and changes how long each one shows (so 4× has four times the frame rate, and 0.25× shows each frame four times as long); nothing is blended or dropped.": [
+    "旋转和翻转作用于你看到的画面，然后裁剪取该比例下最大的部分。尺寸向下取为偶数像素。裁剪或旋转会改变新视频的尺寸。改变速度会保留每一帧，只改变每帧显示的时长（因此 4× 的帧率是原来的四倍，0.25× 每帧显示四倍时长）；不混合也不丢弃帧。",
+    "旋轉和翻轉作用於你看到的畫面，然後裁剪取該比例下最大的部分。尺寸向下取為偶數像素。裁剪或旋轉會改變新影片的尺寸。改變速度會保留每一格，只改變每格顯示的時長（因此 4× 的影格速率是原來的四倍，0.25× 每格顯示四倍時長）；不混合也不捨棄影格。",
+    "回転と反転は見えている画面に適用され、その後その比率で最大の範囲を切り抜きます。サイズは偶数ピクセルに切り捨てます。切り抜きや回転で新しい動画のサイズが変わります。速度を変えてもすべてのフレームを残し、各フレームの表示時間だけを変えます（4× ではフレームレートが 4 倍、0.25× では各フレームを 4 倍の時間表示）。フレームの合成や間引きはしません。"
+  ],
+  "When the picture or speed changes, it is saved as “name edited.mp4” instead.": [
+    "画面或速度有改动时，改为保存为“名称 edited.mp4”。",
+    "畫面或速度有變更時，改為儲存為「名稱 edited.mp4」。",
+    "画面または速度を変えた場合は「名前 edited.mp4」として保存します。"
+  ],
+  "This crop would leave a picture smaller than 16 pixels on a side. Choose another shape.": [
+    "这样裁剪后画面的一边会小于 16 像素。请选择其他比例。",
+    "這樣裁剪後畫面的一邊會小於 16 像素。請選擇其他比例。",
+    "この切り抜きでは画面の一辺が 16 ピクセル未満になります。別の比率を選んでください。"
+  ],
+  "Windows wrote a video whose timing Swivel can't change for this speed. No file was saved.": [
+    "Windows 写出的视频的时间信息无法按此速度修改。未保存文件。",
+    "Windows 寫出的影片的時間資訊無法依此速度修改。未儲存檔案。",
+    "Windows が書き出した動画の時間情報をこの速度に変更できません。ファイルは保存されませんでした。"
   ]
 }

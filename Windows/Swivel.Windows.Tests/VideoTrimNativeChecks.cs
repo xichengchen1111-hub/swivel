@@ -85,7 +85,7 @@ internal static class VideoTrimNativeChecks
         }
     }
 
-    private static (double Seconds, bool Sound) Probe(string path)
+    internal static (double Seconds, bool Sound) Probe(string path)
     {
         var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
         var clip = MediaClip.CreateFromFileAsync(file).AsTask().GetAwaiter().GetResult();
@@ -143,7 +143,7 @@ internal static class VideoTrimNativeChecks
     }
 
     // 16-bit mono PCM WAV with a 440 Hz tone.
-    private static byte[] Tone(int rate, int seconds)
+    internal static byte[] Tone(int rate, int seconds)
     {
         int frames = rate * seconds, data = frames * 2;
         using var stream = new MemoryStream(); using var w = new BinaryWriter(stream);
