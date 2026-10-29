@@ -1327,6 +1327,13 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.124 — Move Files read-only files and hard links (B06, 2026-10-29)
+
+- Core 4,521,173 on Mac; native compiled 0 warnings/errors there. Windows CI: 40831750253 failed (McpNativeChecks still used a read-only file as the example of a file that can't be moved), 40832200441 passed after the review fixes (core 4,521,173, native 5,540).
+- Native, `MoveFilesNativeChecks`: a read-only file moved and still read-only, undo brings it back; one hard-link name moved with the other name kept, undo brings it back; two names of one file in a batch refused. `McpNativeChecks`: a file held open by another app reported on its plan_move row.
+- Core: plan_move flags (or refuses) a second name of the same file; fake-host refusals reworded to a held file.
+- Independent agent review: no P1/P2 (no delete or attribute write on the move path; ChangeTime from the rename already handled; undo cannot move a different link back); P3s (hard-link pair messages in the window and plan_move, stale doc comment and test wording) fixed.
+
 ## Windows0.123 — Batch Rename read-only files and hard links (B05), folder ZIP fingerprint (G02, 2026-10-29)
 
 - Core 4,521,172 on Mac; native compiled 0 warnings/errors there. Windows CI: 40827315407 failed (the first agent ZIP apply was refused as changed: the new folder's time in its parent's listing had been updated lazily by NTFS between plan and apply — the same cause as 0.122's first failure), 40828009293 passed after folder times left the fingerprint (core 4,521,172, native 5,537).

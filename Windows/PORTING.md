@@ -1047,6 +1047,10 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.124 移动文件接受只读文件与硬链接（B06 增强）
+
+`ReadMoveStamp` 只在链接数为 0 时拒绝；撤销收据接受链接数 ≥1。移动路径唯一的修改是句柄相对的 FileRenameInformation（回滚同样），不删除、不改属性；改名引起的 ChangeTime 变化已由移动后重读印记和 `SameRenameMetadata` 处理。链接数仍在 `MoveFileStamp` 中，其他名称在预览后增删链接会使移动或撤销拒绝；撤销按记录的当前路径打开，只移回该名称。同一文件的两个名称：窗口给出专门提示，MCP plan_move 在计划时逐行标出（与 plan_rename 相同）。
+
 ## 0.123 批量改名接受只读文件与硬链接（B05 增强）；文件夹 ZIP 指纹修正
 
 `NativeFiles.OpenRename` 不再拒绝只读属性和多链接文件：改名用 DELETE|READ_ATTRIBUTES 句柄经 FileRenameInformation（不替换），只读属性不阻止改名；暂存、回滚、大小写两步改名和撤销都只做改名，从不设删除标记或改属性。`FileStamp`（卷、索引、大小、写入/创建时间）不受改名或其他链接增删影响；撤销按记录的当前路径重新打开，只改那一个链接名。仍拒绝零标识；同一批中同一文件的两个名称仍由 `RenameSession` 拒绝，MCP `plan_rename` 在计划时就在后一行标出。被其他程序以不共享删除方式打开的文件仍无法取得租约。移动文件、回收与撤销输出仍保留各自的单链接/非只读要求。
