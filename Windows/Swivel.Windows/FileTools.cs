@@ -46,7 +46,13 @@ public sealed class FolderZipWork : IDisposable
         token.ThrowIfCancellationRequested();
         if (Path.GetDirectoryName(folder) is null) throw new UserError("Choose a folder, not a whole drive.");
         var root = NativeFiles.MetadataDirectory.Open(folder);
-        try { return new(folder, root, FolderZip.Plan(root, token, folder.Length)); }
+        try
+        {
+            // The ZIP's top folder and its own name come from this spelling, so it must be the stored name.
+            if (!string.Equals(Path.GetFileName(NativeFiles.FinalDirectoryPath(folder)), Path.GetFileName(folder), StringComparison.Ordinal))
+                throw new UserError("Use the folder's exact name as stored (same letter case, not a short 8.3 name).");
+            return new(folder, root, FolderZip.Plan(root, token, folder.Length));
+        }
         catch { root.Dispose(); throw; }
     }
     public string Save(CancellationToken token, Action<int, int>? progress) =>

@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.122 — Agent tool plan_zip_folder (G02, 2026-10-29)
+
+- Core 4,521,166 on Mac; native compiled 0 warnings/errors there. Windows CI: 40824852576 (first version) — result below.
+- `McpChecks` (core, fake host): tool list and annotations include plan_zip_folder; the plan lists the ZIP name, counts and skipped items and writes nothing; apply writes and logs the ZIP; a plan whose folder contents changed is refused with no ZIP; unknown folders and wrong arguments refused; undo recycles the ZIP; the MCPB manifest lists the tool.
+- Native, `McpNativeChecks`: a real folder planned, zipped with the expected entries, a stale plan refused after a file grew, and the ZIP recycled by undo.
+
 ## Windows0.121 — Copy Folder to… (B06, 2026-10-29)
 
 - Core 4,521,157 on Mac; native compiled 0 warnings/errors there. Windows CI: 40821627204 passed the first version (core 4,521,157, native 5,522); 40822109604 passed after the review fixes (core 4,521,161, native 5,522); 40822731102 passed with the empty-file case (native 5,523).

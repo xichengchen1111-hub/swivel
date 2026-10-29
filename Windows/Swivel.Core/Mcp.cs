@@ -200,7 +200,7 @@ public sealed class McpSession
             ["protocolVersion"] = Versions.Contains(requested) ? requested : Versions[0],
             ["capabilities"] = new JsonObject { ["tools"] = new JsonObject { ["listChanged"] = false } },
             ["serverInfo"] = new JsonObject { ["name"] = "swivel-windows", ["title"] = "Swivel (Windows preview)", ["version"] = version },
-            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action, plan_compress, plan_rename or plan_move, then apply_plan with the returned plan_id; outputs (including compressed copies) are new files beside the originals, renames stay in each file's folder, moves stay on one drive and keep names, and nothing is overwritten. undo moves the files an apply created to the Recycle Bin, or renames or moves files back, if they are unchanged.",
+            ["instructions"] = "Local Windows file tools. Inspect first. extract_text and read_codes only read. Writes need plan_action, plan_compress, plan_rename, plan_move or plan_zip_folder (for a folder), then apply_plan with the returned plan_id; outputs (including compressed copies) are new files beside the originals, renames stay in each file's folder, moves stay on one drive and keep names, and nothing is overwritten. undo moves the files an apply created to the Recycle Bin, or renames or moves files back, if they are unchanged.",
         };
     }
 
@@ -243,7 +243,7 @@ public sealed class McpSession
                 }, new[] { "paths" }, true, false),
             Tool("plan_move", "Plan moving files", "Plans moving 1–100 files into an existing folder on the same NTFS drive, keeping their names. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Files already in that folder, names already taken there (nothing is overwritten or renumbered), two files with one name, and files on another drive, read-only or hard-linked are reported on their rows; folders are not moved. Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
                 new JsonObject { ["paths"] = Paths(), ["destination"] = new JsonObject { ["type"] = "string", ["description"] = "Absolute path of an existing local folder" } }, new[] { "paths", "destination" }, true, false),
-            Tool("plan_zip_folder", "Plan zipping a folder", "Plans compressing one folder and everything inside it (sub-folders, empty folders, hidden files, each file's modified time) into a new ZIP beside the folder, named '<folder>.zip' or the next free numbered name. Links, junctions, cloud-only files, system files, names Windows cannot hold, paths over 240 characters and names differing only in case are left out and listed. Up to 10,000 items, 32 levels and 2 GB. Applied only if the folder's contents (names, sizes, modified times) are unchanged since planning. Nothing changes until apply_plan.",
+            Tool("plan_zip_folder", "Plan zipping a folder", "Plans compressing one folder and everything inside it (sub-folders, empty folders, hidden files, each file's modified time) into a new ZIP beside the folder, named '<folder>.zip' or the next free numbered name. Links, junctions, cloud-only files, system files, names Windows cannot hold, paths over 240 characters and names differing only in case are left out and listed. Up to 10,000 items, 32 levels and 2 GB. Pass the folder's exact name as stored (same case, not an 8.3 short name); inspect_files takes files only. Applied only if the folder's contents (names, sizes, modified times) are unchanged since planning. Nothing changes until apply_plan.",
                 new JsonObject { ["path"] = new JsonObject { ["type"] = "string", ["description"] = "Absolute path of an existing local folder (not a whole drive)" } }, new[] { "path" }, true, false),
             Tool("apply_plan", "Apply plan", "Runs a plan from plan_action, plan_compress, plan_rename, plan_move or plan_zip_folder. Refused if any input changed since planning. Creates new files beside the originals, renames files within their folders, or moves files into the planned folder; never overwrites. Logged for undo.",
                 new JsonObject { ["plan_id"] = new JsonObject { ["type"] = "string" } }, new[] { "plan_id" }, false, false),
@@ -761,7 +761,7 @@ public sealed class McpSession
     {
         string output;
         try { output = host.ZipFolder(folder, fingerprint, token); }
-        catch (Exception error) when (McpToolError.Expected(error)) { throw new McpToolError(folder + ": " + (error is OperationCanceledException ? "Cancelled." : error.Message) + (error is McpToolError ? "" : " No ZIP was made.")); }
+        catch (Exception error) when (McpToolError.Expected(error)) { throw new McpToolError(folder + ": " + (error is OperationCanceledException ? "Cancelled." : error.Message) + (error is McpToolError or UserError ? "" : " No ZIP was made.")); }
         var stamp = host.Stamp(output) ?? throw new McpToolError("The new ZIP disappeared.");
         var entry = new JsonObject
         {

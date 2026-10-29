@@ -1047,6 +1047,10 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.122 Agent 工具 plan_zip_folder（G02 增强）
+
+Mac 的 MCP 可把文件夹交给 ZIP 动作。Windows MCP 的计划按单个文件印记核对，所以新增独立工具 `plan_zip_folder { path }`：宿主 `PlanFolderZip` 用 `FolderZipWork` 持有并规划，计划只存文件夹路径和 `FolderZip.Fingerprint`（每个条目的类型、ZIP 名称、长度、修改时间与每个跳过项的路径和原因的 SHA-256）；`apply_plan` 由宿主 `ZipFolder` 在同一个持有会话里重新规划、比较指纹再写出，指纹不同则拒绝；写出的 ZIP 以 `archive.zipfolder` 记入历史（outputs 与其他新建文件相同，`undo` 移到回收站）。返回内容列出最多 200 个跳过项及总数。已知限制：同长度且修改时间不变的内容改动无法从目录信息察觉（写入时仍逐文件核对打开前后的印记）。
+
 ## 0.121 复制文件夹到…（B06 增强）
 
 批次开始 `git fetch`：origin/main 仍为 `60a3487`（Mac 1.14.6）。
