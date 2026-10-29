@@ -141,15 +141,16 @@ internal static class McpNativeChecks
                 var viaShort = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(shortName), ["prefix"] = "x" });
                 check(viaShort["isError"]!.GetValue<bool>() && ((string)viaShort["structuredContent"]!["error"]!).Contains("named long name 2026.txt"), "Native MCP plan_rename refuses an 8.3 short name: " + viaShort.ToJsonString());
             }
-            // A read-only file can't be renamed (reported on its row) but doesn't block files around it that keep their names.
-            string locked = Path.Combine(names, "locked.txt"); File.WriteAllText(locked, "locked"); File.SetAttributes(locked, FileAttributes.ReadOnly);
+            // A file another app holds open can't be renamed (reported on its row) but doesn't block files around it that keep their names.
+            string locked = Path.Combine(names, "locked.txt"); File.WriteAllText(locked, "locked");
+            var holder = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.Read);
             var lockedRow = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1, locked), ["prefix"] = "y " })["structuredContent"]!;
-            check(!lockedRow["can_apply"]!.GetValue<bool>() && ((string)lockedRow["renames"]![1]!["issue"]!).Contains("can't rename") && lockedRow["renames"]![0]!["issue"] is null, "Native MCP plan_rename reports a read-only file on its row: " + lockedRow.ToJsonString());
+            check(!lockedRow["can_apply"]!.GetValue<bool>() && ((string)lockedRow["renames"]![1]!["issue"]!).Contains("can't rename") && lockedRow["renames"]![0]!["issue"] is null, "Native MCP plan_rename reports a file held open by another app on its row: " + lockedRow.ToJsonString());
             var aroundLocked = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r1, locked), ["find"] = "001", ["replace_with"] = "009" })["structuredContent"]!;
             var renamedAround = Call("apply_plan", new JsonObject { ["plan_id"] = (string)aroundLocked["plan_id"]! })["structuredContent"]!;
-            check((int)renamedAround["total"]! == 1 && File.ReadAllText(Path.Combine(names, "r-009.txt")) == "first" && File.Exists(locked), "Native MCP apply_plan renames around a read-only file that keeps its name: " + renamedAround.ToJsonString());
+            check((int)renamedAround["total"]! == 1 && File.ReadAllText(Path.Combine(names, "r-009.txt")) == "first" && File.Exists(locked), "Native MCP apply_plan renames around a held file that keeps its name: " + renamedAround.ToJsonString());
             check(Call("undo", new JsonObject())["structuredContent"]!["complete"]!.GetValue<bool>() && File.ReadAllText(r1) == "first", "Native MCP undo of that rename");
-            File.SetAttributes(locked, FileAttributes.Normal);
+            holder.Dispose();
 
             // A swap on real files, a dry run of its undo, and the undo.
             var swap = Call("plan_rename", new JsonObject { ["paths"] = new JsonArray(r2, r1), ["base_name"] = "r", ["number"] = true })["structuredContent"]!;
@@ -200,6 +201,14 @@ internal static class McpNativeChecks
             var trailing = Call("plan_zip_folder", new JsonObject { ["path"] = zipping + "\\" });
             check(other["isError"]!.GetValue<bool>() && rootDrive["isError"]!.GetValue<bool>() && trailing["isError"]!.GetValue<bool>(), "Native MCP plan_zip_folder refuses another spelling of the name, a whole drive and a trailing separator: " + other.ToJsonString());
             check(staleApply["isError"]!.GetValue<bool>() && !File.Exists(Path.Combine(root, "zip me 2.zip")), "Native MCP refuses a folder ZIP after a file in it changed: " + staleApply.ToJsonString());
+            // Another folder with the same listing put at the same path is not the planned folder.
+            var swapPlan = Call("plan_zip_folder", new JsonObject { ["path"] = zipping })["structuredContent"]!;
+            string twin = Path.Combine(root, "zip twin"); Directory.CreateDirectory(Path.Combine(twin, "inner"));
+            foreach (string f in new[] { "one.txt", Path.Combine("inner", "two.txt") }) { File.Copy(Path.Combine(zipping, f), Path.Combine(twin, f)); File.SetLastWriteTimeUtc(Path.Combine(twin, f), File.GetLastWriteTimeUtc(Path.Combine(zipping, f))); }
+            Directory.SetLastWriteTimeUtc(Path.Combine(twin, "inner"), Directory.GetLastWriteTimeUtc(Path.Combine(zipping, "inner")));
+            Directory.Move(zipping, zipping + " old"); Directory.Move(twin, zipping);
+            var swapApply = Call("apply_plan", new JsonObject { ["plan_id"] = (string?)swapPlan["plan_id"] ?? "" });
+            check(swapApply["isError"]!.GetValue<bool>() && !File.Exists(Path.Combine(root, "zip me 2.zip")), "Native MCP refuses a folder ZIP when another folder was put at the planned path: " + swapApply.ToJsonString());
             var zipUndone = Call("undo", new JsonObject())["structuredContent"]!;
             check(zipUndone["complete"]?.GetValue<bool>() == true && !File.Exists(zipFile) && File.Exists(Path.Combine(zipping, "one.txt")), "Native MCP undo moves the folder ZIP to the Recycle Bin: " + zipUndone.ToJsonString());
 

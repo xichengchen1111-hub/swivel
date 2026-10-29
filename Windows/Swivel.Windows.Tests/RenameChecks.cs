@@ -54,12 +54,31 @@ internal static class RenameChecks
         check(File.Exists(plan[0].Destination) && File.Exists(plan[1].Destination),"Undo mismatch leaves whole batch in place");
         File.Delete(plan[0].Destination); File.WriteAllText(plan[0].Destination,"replacement");
         reject(()=>RenameSession.ForUndo(result.Remaining,CancellationToken.None).Dispose(),"Undo refuses replaced file");
-        string readonlyFile=Path.Combine(directory,"readonly-rename.txt"); File.WriteAllText(readonlyFile,""); File.SetAttributes(readonlyFile,FileAttributes.ReadOnly);
-        try { reject(()=>NativeFiles.OpenRename(readonlyFile).Dispose(),"Read-only rename refused"); }
-        finally { File.SetAttributes(readonlyFile,FileAttributes.Normal); }
-        string hard=Path.Combine(directory,"hardlink-rename.txt");
+        // A read-only file is renamed and stays read-only; undo puts its name back.
+        string readonlyFile=Path.Combine(directory,"readonly-rename.txt"), readonlyNew=Path.Combine(directory,"ro-renamed.txt");
+        File.WriteAllText(readonlyFile,"ro"); File.SetAttributes(readonlyFile,FileAttributes.ReadOnly);
+        try
+        {
+            RenameOutcome ro;
+            using (var session=RenameSession.Open(new[] { readonlyFile },CancellationToken.None)) ro=session.Execute(new[] { new RenamePair(readonlyFile,readonlyNew) },CancellationToken.None);
+            check(ro.Error is null && File.Exists(readonlyNew) && !File.Exists(readonlyFile) && (File.GetAttributes(readonlyNew)&FileAttributes.ReadOnly)!=0 && File.ReadAllText(readonlyNew)=="ro","A read-only file is renamed and stays read-only: "+ro.Error?.Message);
+            using (var undo=RenameSession.ForUndo(ro.Remaining,CancellationToken.None))
+                check(undo.Execute(ro.Remaining.Select(x=>new RenamePair(x.Current,x.Original)).ToArray(),CancellationToken.None).Error is null && File.Exists(readonlyFile),"Undo restores the read-only file's name");
+        }
+        finally { foreach (string f in new[] { readonlyFile, readonlyNew }) if (File.Exists(f)) File.SetAttributes(f,FileAttributes.Normal); }
+        // A hard link: only this name changes; the other name and the shared content stay.
+        string hard=Path.Combine(directory,"hardlink-rename.txt"), hardNew=Path.Combine(directory,"hardlink-renamed.txt");
         if (!CreateHardLink(hard,readonlyFile,IntPtr.Zero)) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        reject(()=>NativeFiles.OpenRename(hard).Dispose(),"Hard link rename refused"); File.Delete(hard);
+        RenameOutcome linked;
+        using (var session=RenameSession.Open(new[] { hard },CancellationToken.None)) linked=session.Execute(new[] { new RenamePair(hard,hardNew) },CancellationToken.None);
+        check(linked.Error is null && File.Exists(hardNew) && !File.Exists(hard) && File.Exists(readonlyFile) && File.ReadAllText(hardNew)=="ro","A hard link is renamed; its other name stays: "+linked.Error?.Message);
+        using (var undo=RenameSession.ForUndo(linked.Remaining,CancellationToken.None))
+            check(undo.Execute(linked.Remaining.Select(x=>new RenamePair(x.Current,x.Original)).ToArray(),CancellationToken.None).Error is null && File.Exists(hard),"Undo restores the hard link's name");
+        reject(()=>RenameSession.Open(new[] { hard, readonlyFile },CancellationToken.None).Dispose(),"Two names of one file in the same batch are refused");
+        File.Delete(hard);
+        // A file another app holds open without delete sharing cannot be renamed.
+        using (var held=new FileStream(readonlyFile,FileMode.Open,FileAccess.Read,FileShare.Read))
+            reject(()=>NativeFiles.OpenRename(readonlyFile).Dispose(),"A file held open by another app is refused");
         check(!Directory.GetFiles(directory,".swivel-rename-*").Any(),"Rename never leaves staging originals");
     }
     [DllImport("kernel32.dll",EntryPoint="CreateHardLinkW",CharSet=CharSet.Unicode,SetLastError=true)]

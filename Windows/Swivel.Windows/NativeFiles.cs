@@ -182,8 +182,10 @@ public static partial class NativeFiles
             handle = Open(path, DeleteAccess | ReadAttributes, 1, 3, OpenReparse);
             Check(handle, false);
             if (!GetFileInformationByHandle(handle, out var info)) ThrowLast();
-            if (info.Links != 1 || (info.Attributes & 1) != 0 || (info.IndexHigh == 0 && info.IndexLow == 0))
-                throw new UserError("Batch Rename does not accept read-only files, hard links or unavailable file identities.");
+            // Renaming changes only this name: a read-only file stays read-only and unchanged, and
+            // a hard link's other names are left as they are (as Explorer renames them).
+            if (info.IndexHigh == 0 && info.IndexLow == 0)
+                throw new UserError("Batch Rename needs the file identity NTFS reports; this file has none.");
             var result = new RenameLease(path, parent, handle); handle = null; return result;
         }
         catch { handle?.Dispose(); parent.Dispose(); throw; }

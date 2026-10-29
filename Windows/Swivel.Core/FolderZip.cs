@@ -12,7 +12,9 @@ namespace Swivel.Core;
 /// Windows path below the chosen folder.
 public sealed record FolderZipItem(string EntryName, string RelativePath, bool Directory, long Length, long LastWrite);
 public sealed record FolderZipSkip(string RelativePath, string Reason);
-public sealed record FolderZipPlan(string Name, IReadOnlyList<FolderZipItem> Items, IReadOnlyList<FolderZipSkip> Skipped, int Files, int Folders, long Bytes);
+/// Root is the chosen folder's own file-system identity when known, so a different folder put at
+/// the same path is told apart.
+public sealed record FolderZipPlan(string Name, IReadOnlyList<FolderZipItem> Items, IReadOnlyList<FolderZipSkip> Skipped, int Files, int Folders, long Bytes, string? Root = null);
 
 /// Compress Folder to ZIP (as Mac's ZIP of a dropped folder): the whole tree under one folder,
 /// in a ZIP named after it beside it. Links, junctions, cloud placeholders and system items are
@@ -154,6 +156,7 @@ public static class FolderZip
     public static string Fingerprint(FolderZipPlan plan)
     {
         var text = new StringBuilder();
+        if (plan.Root is not null) text.Append('R').Append('\0').Append(plan.Root).Append('\n');
         foreach (var item in plan.Items)
             text.Append(item.Directory ? 'D' : 'F').Append('\0').Append(item.EntryName).Append('\0').Append(item.Length).Append('\0').Append(item.LastWrite).Append('\n');
         foreach (var skip in plan.Skipped) text.Append('S').Append('\0').Append(skip.RelativePath).Append('\0').Append(skip.Reason).Append('\n');

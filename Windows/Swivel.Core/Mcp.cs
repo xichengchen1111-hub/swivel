@@ -41,7 +41,7 @@ public interface IMcpHost
     bool NameTaken(string path);
     /// The file's own name as the file system stores it: its long name, in its exact case.
     string StoredName(string path);
-    /// Throws when Swivel cannot rename this file (another file system, a read-only file, a hard link).
+    /// Throws when Swivel cannot rename this file (another file system, a file another app holds open).
     void CheckRename(string path);
     /// Renames files within their folders (staged for swaps and case changes, never replacing
     /// anything) only if each is still exactly the file expected; a failed step rolls back. The
@@ -230,7 +230,7 @@ public sealed class McpSession
                     ["target_bytes"] = new JsonObject { ["type"] = "integer", ["minimum"] = MinTarget, ["maximum"] = MaxTarget, ["description"] = "Largest size each new file may have, in bytes" },
                     ["format"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray("same", "jpg"), ["description"] = "Optional. Images always become JPEG and videos MP4 here: jpg, or same when every file is already a JPEG image or an MP4 video." },
                 }, new[] { "paths", "target_bytes" }, true, false),
-            Tool("plan_rename", "Plan renaming files", "Plans renaming 1–100 files where they are: replace the whole name (base_name), find/replace_with (case-sensitive), add prefix or suffix (before the extension), and optionally number them (-001, -002… in the order of paths; start and digits need number: true). Extensions are kept; each text is at most 120 characters, and added text can't contain \\, / or invisible, blank-looking or text-direction characters. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Only files on NTFS that are not read-only or hard-linked can be renamed. Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
+            Tool("plan_rename", "Plan renaming files", "Plans renaming 1–100 files where they are: replace the whole name (base_name), find/replace_with (case-sensitive), add prefix or suffix (before the extension), and optionally number them (-001, -002… in the order of paths; start and digits need number: true). Extensions are kept; each text is at most 120 characters, and added text can't contain \\, / or invisible, blank-looking or text-direction characters. Pass each path with the file's exact name as stored (same case, not an 8.3 short name). Only files on NTFS can be renamed; read-only files stay read-only, and renaming a hard link changes only that name. Returns each old and new path with any problem, and a plan_id when nothing conflicts. Nothing changes until apply_plan.",
                 new JsonObject
                 {
                     ["paths"] = Paths(),

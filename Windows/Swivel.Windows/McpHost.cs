@@ -140,7 +140,7 @@ public sealed class McpHost : IMcpHost
     public bool NameTaken(string path) => NativeFiles.NameTaken(path);
     public string StoredName(string path) => NativeFiles.StoredName(path);
 
-    // The same lease the rename takes, so its refusals (file system, read-only, hard links) show at planning.
+    // The same lease the rename takes, so its refusals (file system, a file another app holds open) show at planning.
     public void CheckRename(string path) { using var lease = NativeFiles.OpenRename(path); }
 
     // Leases pin each file and its folder from the stamp check through the last rename; while

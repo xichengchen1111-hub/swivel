@@ -129,6 +129,9 @@ internal static class FolderZipChecks
         check(message == FolderZip.TooLarge, "More than 2 GB of files is refused");
         check(FolderZip.Plan(new SizedFolder(huge, FolderZip.MaxBytes / 2), default).Bytes == FolderZip.MaxBytes, "Exactly 2 GB fits");
 
+        // The fingerprint covers the root folder's identity as well as its listing.
+        check(FolderZip.Fingerprint(plan with { Root = "A" }) != FolderZip.Fingerprint(plan with { Root = "B" }) && FolderZip.Fingerprint(plan) == FolderZip.Fingerprint(FolderZip.Plan(Tree(), default)),
+            "The fingerprint changes with another root folder identity and repeats for an identical listing");
         // ZIP times.
         check(FolderZip.Time(0).Year == 1980 && FolderZip.Time(new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).ToFileTimeUtc()).Year == 1980 && FolderZip.Time(-5).Year == 1980,
             "Unknown or pre-1980 times become 1980");

@@ -51,7 +51,7 @@ public sealed class FolderZipWork : IDisposable
             // The ZIP's top folder and its own name come from this spelling, so it must be the stored name.
             if (!string.Equals(Path.GetFileName(NativeFiles.FinalDirectoryPath(folder)), Path.GetFileName(folder), StringComparison.Ordinal))
                 throw new UserError("Use the folder's exact name as stored (same letter case, not a short 8.3 name).");
-            return new(folder, root, FolderZip.Plan(root, token, folder.Length));
+            return new(folder, root, FolderZip.Plan(root, token, folder.Length) with { Root = root.Identity });
         }
         catch { root.Dispose(); throw; }
     }

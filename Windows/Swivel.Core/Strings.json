@@ -6474,11 +6474,6 @@
     "預覽經過縮小，全尺寸修復效果可能不同。僅修改標準化SDR影像中塗抹的像素；儲存會建立新的PNG。",
     "プレビューは縮小されているため、原寸の修復結果と異なる場合があります。正規化したSDR画像の塗った画素だけを変更し、新しいPNGとして保存します。"
   ],
-  "Preview names, rename without overwriting and undo after identity checks. NTFS regular files only. Case-only changes, swaps and chains use temporary names in the same folder; a crash may leave them behind. Hard links, read-only files and other file systems remain unsupported.": [
-    "预览名称、不覆盖改名，并在身份核验后撤销。仅支持 NTFS 普通文件。仅大小写变化、互换及连锁改名使用同目录临时名称；异常退出可能留下临时文件。暂不支持硬链接、只读文件及其他文件系统。",
-    "預覽名稱、不覆寫改名，並在身分核驗後復原。僅支援 NTFS 一般檔案。僅大小寫變更、互換及連鎖改名使用同目錄暫存名稱；異常結束可能留下暫存檔案。暫不支援硬連結、唯讀檔案及其他檔案系統。",
-    "名前を確認し、上書きせず変更し、識別情報を検証して取り消します。NTFS の通常ファイルのみ対応。大文字小文字の変更、交換、連鎖は同じフォルダーの一時名を使用し、異常終了時に残る場合があります。ハードリンク、読み取り専用ファイル、他のファイルシステムは未対応です。"
-  ],
   "Preview names, rename without overwriting and undo after identity checks. NTFS regular files only; case-only changes, swaps, hard links and exFAT are deferred.": [
     "预览新名称、不覆盖重命名、核验身份后撤销。仅限 NTFS 普通文件；仅改大小写、名称互换、硬链接和 exFAT 仍待处理。",
     "預覽新名稱、不覆寫重新命名、核驗身分後復原。僅限 NTFS 一般檔案；僅改大小寫、名稱互換、硬連結和 exFAT 仍待處理。",
@@ -14308,5 +14303,15 @@
     "请使用文件夹实际存储的名称（大小写一致，不要用 8.3 短名称）。",
     "請使用資料夾實際儲存的名稱（大小寫一致，不要用 8.3 短名稱）。",
     "保存されているとおりのフォルダー名を使ってください（大文字・小文字も同じにし、8.3 形式の短い名前は使わないでください）。"
+  ],
+  "Batch Rename needs the file identity NTFS reports; this file has none.": [
+    "批量重命名需要 NTFS 报告的文件标识，这个文件没有。",
+    "批次重新命名需要 NTFS 回報的檔案識別碼，這個檔案沒有。",
+    "一括名前変更には NTFS が報告するファイル ID が必要ですが、このファイルにはありません。"
+  ],
+  "Preview names, rename without overwriting and undo after identity checks. NTFS regular files only. Case-only changes, swaps and chains use temporary names in the same folder; a crash may leave them behind. Read-only files stay read-only; renaming a hard link changes only that name. Other file systems remain unsupported.": [
+    "预览名称、不覆盖改名，并在身份核验后撤销。仅支持 NTFS 普通文件。仅大小写变化、互换及连锁改名使用同目录临时名称；异常退出可能留下临时文件。只读文件改名后仍为只读；硬链接只改所选的这个名称。暂不支持其他文件系统。",
+    "預覽名稱、不覆寫改名，並在身分核驗後復原。僅支援 NTFS 一般檔案。僅大小寫變更、互換及連鎖改名使用同目錄暫存名稱；異常結束可能留下暫存檔案。唯讀檔案改名後仍為唯讀；硬連結只改所選的這個名稱。暫不支援其他檔案系統。",
+    "名前を確認し、上書きせず変更し、識別情報を検証して取り消します。NTFS の通常ファイルのみ対応。大文字小文字の変更、交換、連鎖は同じフォルダーの一時名を使用し、異常終了時に残る場合があります。読み取り専用ファイルは名前を変えても読み取り専用のままです。ハードリンクは選んだその名前だけが変わります。他のファイルシステムは未対応です。"
   ]
 }

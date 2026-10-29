@@ -11,6 +11,8 @@ public static partial class NativeFiles
 {
     internal sealed partial class MetadataDirectory
     {
+        /// The held folder's 64-bit volume serial and 128-bit file ID.
+        internal string Identity => ReadIdentity(handle).Identity;
         // The caller retains the chosen root throughout both enumeration and
         // comparison. Reopen every descendant through held, rechecked directories.
         internal IDuplicateInput OpenDuplicate(DuplicateCandidate candidate)
