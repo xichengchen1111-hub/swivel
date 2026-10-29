@@ -245,7 +245,7 @@ public sealed class MoveSession : IDisposable
     {
         MoveRules.Validate(Plan);
         if (leases.Select(x => x.VerifiedStamp!.Value.Identity).Distinct().Count() != leases.Count)
-            throw new UserError("Choose 1–100 distinct files to move.");
+            throw new UserError("Two of the chosen paths are names of the same file (hard links). Move them separately.");
         foreach (var lease in leases) { token.ThrowIfCancellationRequested(); lease.Validate(); }
         for (int i = 0; i < leases.Count; i++)
         { token.ThrowIfCancellationRequested(); if (Plan[i].Changed) leases[i].EnsureDestinationFree(Plan[i].Destination); }

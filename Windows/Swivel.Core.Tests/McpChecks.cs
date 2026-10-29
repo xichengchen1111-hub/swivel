@@ -22,7 +22,7 @@ internal static class McpChecks
         public FileStamp Add(string path) => Files[path] = new FileStamp(1, next++, 10, 1000, 2000);
         public FileStamp Inspect(string path) => Files.TryGetValue(Aliases.GetValueOrDefault(path, path), out var s) ? s : throw (path.EndsWith("denied.png") ? new UnauthorizedAccessException("Access is denied.") : new UserError("Choose a local regular file."));
         public readonly Dictionary<string, string> Aliases = new(StringComparer.OrdinalIgnoreCase); // 8.3 short path → long path
-        public readonly HashSet<string> Locked = new(StringComparer.OrdinalIgnoreCase); // read-only or hard-linked
+        public readonly HashSet<string> Locked = new(StringComparer.OrdinalIgnoreCase); // held open by another app
         public string StoredName(string path)
         {
             string key = Files.Keys.First(k => string.Equals(k, Aliases.GetValueOrDefault(path, path), StringComparison.OrdinalIgnoreCase));
@@ -127,7 +127,7 @@ internal static class McpChecks
         }
         public bool CheckMove(string path, string folder)
         {
-            if (Locked.Contains(path)) throw new UserError("Move Files does not accept read-only files or hard links.");
+            if (Locked.Contains(path)) throw new UserError("The process cannot access the file because it is being used by another process.");
             if (OtherDrive.Contains(path)) throw new UserError("Move Files currently requires source and destination on the same NTFS volume. Nothing was copied or deleted.");
             return !string.Equals(MoveRules.Parent(path), Aliases.GetValueOrDefault(folder, folder), StringComparison.OrdinalIgnoreCase);
         }
@@ -268,6 +268,12 @@ internal static class McpChecks
         var linkRows = Body(Call(papers, "plan_rename", new JsonObject { ["paths"] = Paths(linkA, linkB), ["prefix"] = "x " }));
         check(!linkRows["can_apply"]!.GetValue<bool>() && linkRows["renames"]![0]!["issue"] is null && ((string)linkRows["renames"]![1]!["issue"]!).Contains("hard link"), "MCP plan_rename flags a second name of the same file: " + linkRows.ToJsonString());
         paper.Files.Remove(linkA); paper.Files.Remove(linkB);
+        // Two names of one file are flagged by plan_move too.
+        string moveLinkA = @"C:\Users\me\ml a.txt", moveLinkB = @"C:\Users\me\sub\ml b.txt";
+        paper.Files[moveLinkA] = paper.Files[moveLinkB] = new FileStamp(1, 4343, 3, 1000, 2000);
+        var moveLinks = Call(papers, "plan_move", new JsonObject { ["paths"] = Paths(moveLinkA, moveLinkB), ["destination"] = @"C:\Users\me\elsewhere" });
+        check(IsError(moveLinks) || Body(moveLinks)["moves"]?[1]?["issue"]?.ToString().Contains("hard link") == true, "MCP plan_move flags or refuses a second name of the same file: " + moveLinks.ToJsonString());
+        paper.Files.Remove(moveLinkA); paper.Files.Remove(moveLinkB);
         // plan_zip_folder: one folder, applied only while its contents match the plan; undo recycles the ZIP.
         string photos = @"C:\Users\me\Photos";
         FolderZipPlan PhotosPlan(long length) => new("Photos", new[] { new FolderZipItem("Photos/", "", true, 0, 0), new FolderZipItem("Photos/a.jpg", "a.jpg", false, length, 5) }, new[] { new FolderZipSkip("link", "Link or junction (not followed)") }, 1, 0, length);
@@ -756,7 +762,7 @@ internal static class McpChecks
         var viaAlias = Body(Move(new JsonObject { ["paths"] = Paths(ma), ["destination"] = @"C:\m\IN~1" }));
         mover.Locked.Add(ma);
         var lockedViaAlias = Body(Move(new JsonObject { ["paths"] = Paths(ma), ["destination"] = @"C:\m\IN~1" }));
-        check((string?)lockedViaAlias["moves"]![0]!["issue"] == "Already in this folder.", "MCP plan_move says a read-only file reached through the folder's alias is already there: " + lockedViaAlias.ToJsonString());
+        check((string?)lockedViaAlias["moves"]![0]!["issue"] == "Already in this folder.", "MCP plan_move says a held file reached through the folder's alias is already there: " + lockedViaAlias.ToJsonString());
         mover.Locked.Clear();
         check(!already["can_apply"]!.GetValue<bool>() && already["plan_id"] is null && (string?)already["moves"]![0]!["issue"] == "Already in this folder." && already["moves"]![1]!["issue"] is null
             && (string?)viaAlias["moves"]![0]!["issue"] == "Already in this folder.", "MCP plan_move reports a file already in the folder, however the folder is spelt: " + viaAlias.ToJsonString());
@@ -769,8 +775,8 @@ internal static class McpChecks
         mover.Files.Remove(twin); mover.Taken.Clear();
         mover.Locked.Add(mc); mover.OtherDrive.Add(mb);
         var cannot = Body(Move(new JsonObject { ["paths"] = Paths(ma, mb, mc), ["destination"] = outbox }));
-        check(!cannot["can_apply"]!.GetValue<bool>() && cannot["moves"]![0]!["issue"] is null && ((string)cannot["moves"]![1]!["issue"]!).Contains("same NTFS volume") && ((string)cannot["moves"]![2]!["issue"]!).Contains("read-only"),
-            "MCP plan_move reports a file on another drive and a read-only file on their rows: " + cannot.ToJsonString());
+        check(!cannot["can_apply"]!.GetValue<bool>() && cannot["moves"]![0]!["issue"] is null && ((string)cannot["moves"]![1]!["issue"]!).Contains("same NTFS volume") && ((string)cannot["moves"]![2]!["issue"]!).Contains("used by another process"),
+            "MCP plan_move reports a file on another drive and a held file on their rows: " + cannot.ToJsonString());
         mover.Locked.Clear(); mover.OtherDrive.Clear(); mover.NameChecks = 0;
 
         // A move from two folders into a third, logged, listed and undone file by file.

@@ -247,9 +247,10 @@ internal static class McpNativeChecks
             }
             File.Delete(longMove);
 
-            // Row issues: already there (also through the folder's 8.3 spelling), a name taken by a file or a folder, a read-only file.
+            // Row issues: already there (also through the folder's 8.3 spelling), a name taken by a file or a folder, a file another app holds open.
             File.WriteAllText(Path.Combine(dest, "c.txt"), "taken"); Directory.CreateDirectory(Path.Combine(dest, "d.txt"));
-            string md = Path.Combine(in2, "d.txt"), ro = Path.Combine(in2, "ro.txt"); File.WriteAllText(md, "d"); File.WriteAllText(ro, "ro"); File.SetAttributes(ro, FileAttributes.ReadOnly);
+            string md = Path.Combine(in2, "d.txt"), ro = Path.Combine(in2, "ro.txt"); File.WriteAllText(md, "d"); File.WriteAllText(ro, "ro");
+            var roHolder = new FileStream(ro, FileMode.Open, FileAccess.Read, FileShare.Read);
             var rowsMove = Move(ma, here, mc, md, ro);
             check(!rowsMove["can_apply"]!.GetValue<bool>() && rowsMove["plan_id"] is null && rowsMove["moves"]![0]!["issue"] is null && (string?)rowsMove["moves"]![1]!["issue"] == "Already in this folder."
                 && ((string)rowsMove["moves"]![2]!["issue"]!).Contains("already in the destination") && ((string)rowsMove["moves"]![3]!["issue"]!).Contains("already in the destination")
@@ -257,7 +258,7 @@ internal static class McpNativeChecks
             string shortDest = GetShortPathName(dest, shortBuffer, (uint)shortBuffer.Capacity) > 0 ? shortBuffer.ToString() : dest;
             var viaShortDest = (JsonObject)Call("plan_move", new JsonObject { ["paths"] = new JsonArray(here), ["destination"] = shortDest.ToUpperInvariant() == dest.ToUpperInvariant() ? dest : shortDest })["structuredContent"]!;
             check((string?)viaShortDest["moves"]![0]!["issue"] == "Already in this folder.", "Native MCP plan_move sees a file already in the folder however the folder is spelt: " + viaShortDest.ToJsonString());
-            File.SetAttributes(ro, FileAttributes.Normal); File.Delete(ro); File.Delete(md); File.Delete(Path.Combine(dest, "c.txt")); Directory.Delete(Path.Combine(dest, "d.txt"));
+            roHolder.Dispose(); File.Delete(ro); File.Delete(md); File.Delete(Path.Combine(dest, "c.txt")); Directory.Delete(Path.Combine(dest, "d.txt"));
 
             // Apply, a dry run of its undo, and the undo.
             var movePlan = Move(ma, mb);

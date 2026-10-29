@@ -51,7 +51,7 @@ public interface IMcpHost
     /// its identity, so a folder replaced before the move can be told apart.
     MoveIdentity CheckFolder(string folder);
     /// False when the file is already in that folder; throws when Swivel cannot move it there
-    /// (another drive or file system, a read-only file, a hard link).
+    /// (another drive or file system, a file another app holds open).
     bool CheckMove(string path, string folder);
     /// Moves files into the one folder their destinations name, keeping their names and never
     /// replacing anything, only if each is still exactly the file expected; a failed step moves
@@ -621,6 +621,8 @@ public sealed class McpSession
             }
             if (issue is null && destinations.Where((x, j) => j != i && string.Equals(x, to, StringComparison.OrdinalIgnoreCase)).Any())
                 issue = "Another file in this plan has the same name; Swivel keeps names, so only one could go there.";
+            if (issue is null && inputs.Take(i).Any(earlier => earlier.Item2.Volume == inputs[i].Item2.Volume && earlier.Item2.Index == inputs[i].Item2.Index))
+                issue = "Another path in this plan is a name of the same file (a hard link). Move it in a separate plan.";
             if (issue is null)
             {
                 // Through an 8.3 spelling of its own folder, the name a file "takes" is its own.
