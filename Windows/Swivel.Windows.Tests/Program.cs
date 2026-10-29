@@ -198,6 +198,7 @@ internal static class Program
             Group("WaveLoopNativeChecks", () => WaveLoopNativeChecks.Run(directory,Check,Reject));
             Group("DocumentTextNativeChecks", () => DocumentTextNativeChecks.Run(directory,Check,Reject));
             Group("DocumentHtmlNativeChecks", () => DocumentHtmlNativeChecks.Run(directory,Check,Reject));
+            Group("DocumentEpubNativeChecks", () => DocumentEpubNativeChecks.Run(directory,Check,Reject));
             Reject(() => PCDoctor.Run(new CancellationToken(true)), "Doctor cancelled before system reads");
             if (Environment.GetEnvironmentVariable("SWIVEL_DOCTOR_LIVE") == "1")
             {

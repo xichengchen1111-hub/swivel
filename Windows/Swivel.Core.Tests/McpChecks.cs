@@ -255,7 +255,7 @@ internal static class McpChecks
         paper.Files[bigDoc] = paper.Files[bigDoc] with { Size = 8 * 1024 * 1024 };
         check(!IsError(Call(papers, "plan_action", new JsonObject { ["action"] = "document.txt", ["paths"] = Paths(bigDoc) })), "MCP plan_action accepts a document of exactly 8 MiB");
         paper.Files.Remove(bigDoc);
-        check(((string)odtListed["inputs"]!).Contains("DOCX, ODT, RTF, or static HTML/HTM") && ((string)odtListed["writes"]!).Contains("A new ODT file holding only the document's text") && ((string)odtListed["writes"]!).Contains("'<name> text.odt'"), "MCP list_actions describes the document actions");
+        check(((string)odtListed["inputs"]!).Contains("DOCX, ODT, RTF, static HTML/HTM without scripts, or unencrypted EPUB 2/3") && ((string)odtListed["writes"]!).Contains("A new ODT file holding only the document's text") && ((string)odtListed["writes"]!).Contains("'<name> text.odt'"), "MCP list_actions describes the document actions");
         int docSaves = paper.Saves;
         var docPlan = Body(Call(papers, "plan_action", new JsonObject { ["action"] = "document.docx", ["paths"] = Paths(doc) }));
         check((string?)docPlan["inputs"]![0]!["output"] == @"C:\Users\me\notes text.docx (or the next free numbered name)" && ((string)docPlan["note"]!).StartsWith("Only the text is kept") && paper.Saves == docSaves, "MCP plan_action plans a document's text as DOCX: " + docPlan.ToJsonString());

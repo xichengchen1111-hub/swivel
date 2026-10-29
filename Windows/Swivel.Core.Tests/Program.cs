@@ -131,6 +131,7 @@ StartupChecks.Run(Check, Reject);
 DocumentTextChecks.Run(Check, Reject);
 DocumentHtmlChecks.Run(Check, Reject);
 DocumentOdtChecks.Run(Check, Reject);
+DocumentEpubChecks.Run(Check, Reject);
 DocumentRtfChecks.Run(Check, Reject);
 DocumentOdtExportChecks.Run(Check, Reject);
 AppRouteChecks.Run(Check, Reject);
