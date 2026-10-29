@@ -151,6 +151,7 @@ RetouchChecks.Run(Check, Reject);
 QrChecks.Run(Check, Reject);
 QrAllLevelsChecks.Run(Check, Reject);
 QrReadChecks.Run(Check,Reject);
+QrPhotoReadChecks.Run(Check,Reject);
 QrRecoveryIntegrationChecks.Run(Check);
 PaletteAutoChecks.Run(Check, Reject);
 MarkEditChecks.Run(Check, Reject);

@@ -11,6 +11,11 @@ public sealed record QrReadResult(string Text,int Version,QrCorrection Correctio
 {
     // Orientation of the input raster, clockwise relative to the QR's upright grid.
     public int ClockwiseOrientationDegrees { get; init; }
+    // Set only by QrPhotoRead: modules were sampled through a fitted geometry and data blocks
+    // were error-corrected. PixelScale is then the rounded estimated module size.
+    public bool Photo { get; init; }
+    public int CorrectedCodewords { get; init; }
+    public int CorrectedBlocks { get; init; }
 }
 
 /// A deliberately strict local raster reader, not a camera/finder or damage repair engine.
@@ -107,7 +112,25 @@ public sealed partial class QrCode
     // Shares only the original encoder's standard tables/function-bit facts and GF remainder.
     // Encode/Raster and all existing output paths stay unchanged.
     internal static QrReadResult? ReadCleanGrid(bool[,] grid,int scale,CancellationToken token) => ReadGrid(grid,scale,token,false)?.Result;
-    internal static QrDataRecoveryResult? ReadGrid(bool[,] grid,int scale,CancellationToken token,bool recover)
+    internal static QrDataRecoveryResult? ReadGrid(bool[,] grid,int scale,CancellationToken token,bool recover) => DecodeGrid(grid,scale,token,recover,false);
+    // Photo sampling: nearest valid format/version information (BCH distance <=3, unique),
+    // other function and remainder modules are not required to match, and data blocks are
+    // corrected within their parity capacity. The strict path above is unchanged.
+    internal static QrDataRecoveryResult? ReadSampledGrid(bool[,] grid,int scale,CancellationToken token) => DecodeGrid(grid,scale,token,true,true);
+    internal static int? ReadVersionInformation(bool[,] grid,CancellationToken token)
+    {
+        int size=grid.GetLength(0),best=int.MaxValue,count=0,found=0;
+        if(size<45||size>177)return null;
+        for(int version=7;version<=40;version++)
+        {
+            token.ThrowIfCancellationRequested();int index=0,first=0,second=0;
+            VersionInformation((x,y,value)=>{if(x>=0&&y>=0&&x<size&&y<size&&grid[x,y]!=value){if(index%2==0)first++;else second++;}index++;},size,version);
+            int distance=Math.Min(first,second);
+            if(distance<best){best=distance;found=version;count=1;}else if(distance==best)count++;
+        }
+        return best<=3&&count==1?found:null;
+    }
+    private static QrDataRecoveryResult? DecodeGrid(bool[,] grid,int scale,CancellationToken token,bool recover,bool tolerant)
     {
         int size=grid.GetLength(0),version=(size-17)/4;
         var expected=new bool[size,size];var reserved=new bool[size,size];
@@ -126,8 +149,21 @@ public sealed partial class QrCode
         }
         if(version>=7)VersionInformation(Set,size,version);
         QrCorrection? correction=null;int mask=-1;
+        if(tolerant)
+        {
+            Format(Set,size,0,QrCorrection.Low);int best=int.MaxValue,ties=0;
+            foreach(var level in Enum.GetValues<QrCorrection>())for(int candidate=0;candidate<8;candidate++)
+            {
+                token.ThrowIfCancellationRequested();int index=0,first=0,second=0;
+                Format((x,y,value)=>{if(index<30&&grid[x,y]!=value){if(index<15)first++;else second++;}index++;},size,candidate,level);
+                int distance=Math.Min(first,second);
+                if(distance<best){best=distance;correction=level;mask=candidate;ties=1;}else if(distance==best)ties++;
+            }
+            if(best>3||ties!=1)return null;
+            if(version>=7&&ReadVersionInformation(grid,token)!=version)return null;
+        }
         // Both format copies and all other function modules must match exactly: no BCH repair.
-        foreach(var level in Enum.GetValues<QrCorrection>())for(int candidate=0;candidate<8;candidate++)
+        else foreach(var level in Enum.GetValues<QrCorrection>())for(int candidate=0;candidate<8;candidate++)
         {
             token.ThrowIfCancellationRequested();Format(Set,size,candidate,level);bool same=true;
             for(int y=0;y<size&&same;y++)for(int x=0;x<size;x++)if(reserved[x,y]&&grid[x,y]!=expected[x,y]){same=false;break;}
@@ -148,7 +184,7 @@ public sealed partial class QrCode
                 {
                     int x=right-d;if(reserved[x,y])continue;bool value=grid[x,y]^MaskAt(mask,x,y);
                     if(bit<words.Length*8){if(value)words[bit/8]|=(byte)(1<<(7-bit%8));}
-                    else if(value)return null;bit++;
+                    else if(value&&!tolerant)return null;bit++;
                 }
             }
             upward=!upward;

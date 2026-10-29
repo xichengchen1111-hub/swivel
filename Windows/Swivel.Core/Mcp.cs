@@ -20,7 +20,7 @@ public interface IMcpHost
     /// Runs one allowed action on one input and returns the new file it created beside it.
     /// Refused when the file, once held, no longer matches its planned stamp.
     string Run(string action, string path, FileStamp expected, CancellationToken token);
-    /// The one clean flat QR code in an image (QrFlatRead's strict rules); a UserError when none.
+    /// One QR code in an image (QrPhotoRead: exact flat rules first, then the photo reader); a UserError when none.
     QrReadResult ReadCode(string path, CancellationToken token);
     /// The installed Windows OCR language tags; empty when OCR cannot run here (no MSIX package
     /// identity, or no language installed).
@@ -219,7 +219,7 @@ public sealed class McpSession
             Tool("inspect_files", "Inspect files", "Checks that paths are local regular files Swivel can read and lists the plan_action actions and other tools available for each (extract_text for images only where Windows OCR can run). Reads metadata only.", new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
             Tool("extract_text", "Extract text", "Returns the text of images (Windows OCR on this PC with an installed language; needs Swivel's MSIX package) and of plain-text, DOC, DOCX, ODT, RTF, static HTML or EPUB documents (body text only). Read-only; Swivel uses no network. A file's text over " + MaxFileText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " UTF-16 units, or text past " + MaxReplyText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " in one reply, is refused rather than cut. Hosts may still shorten long tool replies, so ask for a few files at a time.",
                 new JsonObject { ["paths"] = Paths(), ["language"] = new JsonObject { ["type"] = "string", ["description"] = "Optional OCR language tag such as en-US or zh-Hans-CN, matched to the installed OCR languages ignoring case. Default: the user's Windows language settings. Ignored for documents." } }, new[] { "paths" }, true, false),
-            Tool("read_codes", "Read QR codes", "Reads one clean, flat QR code per image, such as a saved or generated QR image: square, upright or turned in 90° steps, an exact four-module white border and sharp pixels (whole-number scaling is fine). Photos, damaged or cropped codes, smoothly resized images and barcodes are not read. Read-only.",
+            Tool("read_codes", "Read QR codes", "Reads one QR code per image: exact flat QR images first, then photos and screenshots of a dark-on-light Model 2 code (any rotation, mild perspective, moderate blur, noise and uneven light; up to 16 megapixels), using the code's error correction. When an image holds several codes only one is returned. Mirrored, light-on-dark, curved or heavily damaged codes, codes with covered corner squares, and barcodes are not read. \"photo\": true marks a code read by the photo reader, with corrected_bytes counting the encoded bytes error correction changed. Read-only.",
                 new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
             Tool("plan_action", "Plan action", "Prepares one action for 1–100 files without writing anything. Returns a plan_id that apply_plan uses within one hour, once.",
                 new JsonObject { ["action"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(Actions.Select(a => (JsonNode)a.Id).ToArray()) }, ["paths"] = Paths() }, new[] { "action", "paths" }, true, false),
@@ -387,7 +387,9 @@ public sealed class McpSession
                 var code = host.ReadCode(path, token);
                 token.ThrowIfCancellationRequested();
                 if (!IsWellFormed(code.Text)) throw new McpToolError("The code's text is not valid Unicode.");
-                codes.Add(new JsonObject { ["path"] = path, ["type"] = "QR", ["value"] = code.Text, ["version"] = code.Version, ["correction"] = "LMQH"[(int)code.Correction].ToString() });
+                var entry = new JsonObject { ["path"] = path, ["type"] = "QR", ["value"] = code.Text, ["version"] = code.Version, ["correction"] = "LMQH"[(int)code.Correction].ToString() };
+                if (code.Photo) { entry["photo"] = true; entry["corrected_bytes"] = code.CorrectedCodewords; }
+                codes.Add(entry);
             }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { unread.Add(new JsonObject { ["path"] = path, ["error"] = error.Message }); }
         }

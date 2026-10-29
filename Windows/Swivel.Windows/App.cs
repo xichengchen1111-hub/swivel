@@ -347,10 +347,9 @@ public sealed partial class App : Application
             if(action.Id is "qr.readflat" or "qr.recoverflat")
             {
                 if(!Prefs.IsOn(Feature.QrCodes))throw new UserError("Enable QR & Barcodes in Settings first.");
-                workFeature=Feature.QrCodes;token.ThrowIfCancellationRequested();
-                var picker=new Microsoft.Win32.OpenFileDialog{Title=L("Choose a Flat QR Image…"),Filter=L("QR images (*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.gif"),CheckFileExists=true,Multiselect=false};
+                workFeature=Feature.QrCodes;token.ThrowIfCancellationRequested();bool recover=action.Id=="qr.recoverflat";
+                var picker=new Microsoft.Win32.OpenFileDialog{Title=L(recover?"Choose a Flat QR Image…":"Choose a QR Image…"),Filter=L("QR images (*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.gif"),CheckFileExists=true,Multiselect=false};
                 if(picker.ShowDialog(owner)!=true)return;token.ThrowIfCancellationRequested();string path=picker.FileName;
-                bool recover=action.Id=="qr.recoverflat";
                 report(L(recover?"Recovering flat QR text…":"Reading QR image…"));
                 using var document=await AwaitDoctorReadAsync(OnSta(()=>recover?QrReadDocument.OpenForRecovery(path,token):QrReadDocument.Open(path,token)),token);
                 token.ThrowIfCancellationRequested();ShowOperationDialog(new QrReadDialog(this,document),owner,token);

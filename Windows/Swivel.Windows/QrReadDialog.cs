@@ -19,7 +19,7 @@ internal sealed class QrReadDialog:Window
     // reading an image or changing the real clipboard.
     internal QrReadDialog(App app,string path,QrReadResult result,QrDataRecoveryResult? recovery,Action<string> copyText)
     {
-        Title=app.L(recovery is null?"Read Flat QR Image":"Recover Flat QR Text");Width=800;Height=760;MinWidth=480;MinHeight=360;WindowStartupLocation=WindowStartupLocation.CenterOwner;
+        Title=app.L(recovery is null?"Read QR Image":"Recover Flat QR Text");Width=800;Height=760;MinWidth=480;MinHeight=360;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var root=new DockPanel{Margin=new Thickness(20)};var footer=new WrapPanel();DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
         string text=result.Text;
         bool canCopy=!text.Contains('\0');
@@ -27,8 +27,18 @@ internal sealed class QrReadDialog:Window
         var close=UI.Button(app.L("Close"),()=>DialogResult=false);close.IsCancel=true;footer.Children.Add(close);
         var body=new StackPanel();root.Children.Add(UI.Scroll(body));Content=root;
         body.Children.Add(new TextBox{Text=DoctorFacts.VisibleBounded(path,512),IsReadOnly=true,TextWrapping=TextWrapping.Wrap,MaxHeight=70,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
-        body.Children.Add(UI.Text(string.Format(app.L("QR version {0} · level {1} · {2} pixels/module · {3} UTF-16 units"),result.Version,QrCode.Level(result.Correction),result.PixelScale,text.Length),14));
-        body.Children.Add(UI.Text(string.Format(app.L("Image orientation: {0}° clockwise from upright."),result.ClockwiseOrientationDegrees),12));
+        if(result.Photo)
+        {
+            // Photo results are estimates: module size and angle come from the fitted geometry.
+            body.Children.Add(UI.Text(string.Format(app.L("Read from a photo or screenshot: QR version {0} · level {1} · about {2} pixels/module · {3} UTF-16 units"),result.Version,QrCode.Level(result.Correction),result.PixelScale,text.Length),14));
+            body.Children.Add(UI.Text(string.Format(app.L("Code orientation: about {0}° clockwise from upright."),result.ClockwiseOrientationDegrees),12));
+            body.Children.Add(UI.Text(string.Format(app.L("Error correction changed {0} encoded bytes in {1} blocks. Zero does not prove the photo was perfect, and beyond the correction capacity another valid message could be accepted."),result.CorrectedCodewords,result.CorrectedBlocks),12));
+        }
+        else
+        {
+            body.Children.Add(UI.Text(string.Format(app.L("QR version {0} · level {1} · {2} pixels/module · {3} UTF-16 units"),result.Version,QrCode.Level(result.Correction),result.PixelScale,text.Length),14));
+            body.Children.Add(UI.Text(string.Format(app.L("Image orientation: {0}° clockwise from upright."),result.ClockwiseOrientationDegrees),12));
+        }
         if(recovery is not null)
         {
             body.Children.Add(UI.Text(app.L("Data Recovery Mode"),16));
@@ -38,7 +48,7 @@ internal sealed class QrReadDialog:Window
         var preview=new TextBox{Text=QrFlatRead.VisibleText(text),IsReadOnly=true,TextWrapping=TextWrapping.Wrap,Height=300,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
         AutomationProperties.SetName(preview,app.L(recovery is null?"Decoded QR Text":"Recovered QR Text Candidate"));body.Children.Add(preview);
         body.Children.Add(UI.Text(app.L(canCopy?CopyNotice:NulCopyNotice),12));
-        if(recovery is null)body.Children.Add(UI.Text(app.L(QrFlatRead.Scope),12));
+        if(recovery is null)body.Children.Add(UI.Text(app.L(QrPhotoRead.Scope),12));
         else body.Children.Add(new Expander{Header=app.L("Recovery Scope and Limitations"),Content=UI.Text(app.L(QrFlatRead.RecoveryScope),12),IsExpanded=false,Margin=new Thickness(0,4,0,12)});
         SourceInitialized+=(_,_)=>WebRouteLayout.Fit(this,Owner??this);DpiChanged+=(_,_)=>WebRouteLayout.Fit(this,this);
     }

@@ -73,7 +73,7 @@ internal static class McpChecks
         public QrReadResult ReadCode(string path, CancellationToken token)
         {
             Codes.Add(path);
-            return Texts.TryGetValue(path, out var text) ? new QrReadResult(text, 2, QrCorrection.Quartile, 3, 8) : throw new UserError(QrFlatRead.NoCode);
+            return Texts.TryGetValue(path, out var text) ? new QrReadResult(text, 2, QrCorrection.Quartile, 3, 8) { Photo = path.Contains("photo"), CorrectedCodewords = path.Contains("photo") ? 5 : 0 } : throw new UserError(QrFlatRead.NoCode);
         }
         public string RecognizeText(string path, string? language, CancellationToken token) { Recognized.Add((path, language)); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("No OCR language."); }
         public string ReadDocumentText(string path, CancellationToken token) { Documents.Add(path); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("Not a valid document."); }
@@ -514,6 +514,10 @@ internal static class McpChecks
             "MCP read_codes lists images without a readable code, invalid text or a bad path, with why");
         check(reader.Codes.SequenceEqual(new[] { qr, scan, odd }), "MCP read_codes reads each image only after checking its path");
         check(IsError(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(qr, doc) })) && reader.Codes.Count == 3, "MCP read_codes takes images only, refusing before reading any");
+        string snapshot = @"C:\Users\me\Pictures\photo.jpg"; reader.Add(snapshot); reader.Texts[snapshot] = "from a photo";
+        var photoCodes = (JsonArray)Body(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(snapshot, qr) }))["codes"]!;
+        check((string?)photoCodes[0]!["value"] == "from a photo" && (bool)photoCodes[0]!["photo"]! && (int)photoCodes[0]!["corrected_bytes"]! == 5 && photoCodes[1]!["photo"] is null && photoCodes[1]!["corrected_bytes"] is null,
+            "MCP read_codes marks photo-reader results with their corrected byte count and leaves exact flat results unchanged");
         reader.Enabled = false;
         check(IsError(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(qr) })) && IsError(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(doc) })), "MCP read tools refuse while Agent Tools is off");
         reader.Enabled = true;

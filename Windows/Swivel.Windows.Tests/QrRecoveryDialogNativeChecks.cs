@@ -52,7 +52,7 @@ internal static class QrRecoveryDialogNativeChecks
                         var boxes = body.Children.OfType<TextBox>().ToArray();
                         var preview = boxes.Single(box => AutomationProperties.GetName(box) == app.L(recovery is null ? "Decoded QR Text" : "Recovered QR Text Candidate"));
                         var visible = body.Children.OfType<TextBlock>().Select(block => block.Text).ToArray();
-                        check(dialog.Title == app.L(mode == 0 ? "Read Flat QR Image" : "Recover Flat QR Text"),
+                        check(dialog.Title == app.L(mode == 0 ? "Read QR Image" : "Recover Flat QR Text"),
                             "QR result title distinguishes explicit recovery from unchanged strict reading");
                         check(buttons.Length == 2 && close.IsCancel && buttons.All(button => !button.IsDefault) && copies == 0,
                             "QR result offers only explicit Copy/Close, no default action, implicit copy or launch");
@@ -68,8 +68,8 @@ internal static class QrRecoveryDialogNativeChecks
                         check(visible.Contains(app.L(QrReadDialog.CopyNotice)), "Both QR modes retain the exact original-text copy and no-automatic-actions notice");
                         if (recovery is null)
                         {
-                            check(visible.Contains(app.L(QrFlatRead.Scope)) && !visible.Contains(app.L("Data Recovery Mode")) && !Find<Expander>(dialog).Any(),
-                                "Strict reading keeps its original parity-only scope and has no recovery count or mode claim");
+                            check(visible.Contains(app.L(QrPhotoRead.Scope)) && !visible.Contains(app.L(QrFlatRead.Scope)) && !visible.Contains(app.L("Data Recovery Mode")) && !Find<Expander>(dialog).Any(),
+                                "Reading shows the combined flat-then-photo scope and has no recovery count or mode claim");
                         }
                         else
                         {
@@ -78,7 +78,7 @@ internal static class QrRecoveryDialogNativeChecks
                                 "Recovery shows exact accepted-candidate byte/block differences and explicitly disclaims damage or correctness proof");
                             var scope = Find<Expander>(dialog).Single();
                             check(!scope.IsExpanded && Equals(scope.Header, app.L("Recovery Scope and Limitations")) &&
-                                ((TextBlock)scope.Content).Text == app.L(QrFlatRead.RecoveryScope) && !visible.Contains(app.L(QrFlatRead.Scope)),
+                                ((TextBlock)scope.Content).Text == app.L(QrFlatRead.RecoveryScope) && !visible.Contains(app.L(QrFlatRead.Scope)) && !visible.Contains(app.L(QrPhotoRead.Scope)),
                                 "Recovery keeps its full distinct limits in a native collapsed expander without claiming parity-only reading");
                         }
                         copy.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
@@ -113,6 +113,23 @@ internal static class QrRecoveryDialogNativeChecks
                     }
                     else check(copy.IsEnabled && copies == 1 && received == value,
                         "The UI copy handoff preserves empty, maximum-size and literal-marker non-NUL text; this does not test the system clipboard");
+                }
+                finally { dialog.Close(); }
+            }
+            foreach (string language in new[] { "en", "zh-Hans", "zh-Hant", "ja" })
+            {
+                app.Prefs.SetLanguage(language);
+                var photo = new QrReadResult("photo text", 8, QrCorrection.Medium, 5, 4) { ClockwiseOrientationDegrees = 133, Photo = true, CorrectedCodewords = 6, CorrectedBlocks = 2 };
+                var dialog = new QrReadDialog(app, path, photo, null, _ => { });
+                try
+                {
+                    var visible = Find<TextBlock>(dialog).Select(block => block.Text).ToArray();
+                    check(dialog.Title == app.L("Read QR Image") &&
+                        visible.Contains(string.Format(app.L("Read from a photo or screenshot: QR version {0} · level {1} · about {2} pixels/module · {3} UTF-16 units"), 8, QrCode.Level(QrCorrection.Medium), 4, 10)) &&
+                        visible.Contains(string.Format(app.L("Code orientation: about {0}° clockwise from upright."), 133)) &&
+                        visible.Contains(string.Format(app.L("Error correction changed {0} encoded bytes in {1} blocks. Zero does not prove the photo was perfect, and beyond the correction capacity another valid message could be accepted."), 6, 2)) &&
+                        visible.Contains(app.L(QrPhotoRead.Scope)) && !visible.Contains(string.Format(app.L("Image orientation: {0}° clockwise from upright."), 133)),
+                        "Photo results state estimated size and angle, the corrected-byte count and the combined scope in four languages");
                 }
                 finally { dialog.Close(); }
             }
