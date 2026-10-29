@@ -1047,6 +1047,15 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.131 合并 D04 视频、第六轮 D03/F07/G02（D03 由 Codex 编写）
+
+分支 `claude/win-d04-video-de4eb5`（7e91b9a、2d086d8、42c9c45、da4b789、42e29f4，另有已删除的 CI 诊断提交）、`codex/win-d03-float`（bc1a494 由 Codex 编写，Claude 审查与 P3 修正）、`claude/win-f07-quitapp-334968`（5d3145f、d2c1303）、`claude/win-g02-mcp-0be75b`（94330af、f3b9cc6）。Strings.json 三方 JSON 合并无同键冲突。合并时曾有一次其他工作区并发重新打包引起的 packfile 索引警告，随后仓库读取正常。
+
+- D04：CI 探测表明 MediaComposition 拒绝 VideoTransformEffect（0xC00DA7FC），MediaTranscoder 接受；画面修改改用 MediaTranscoder 带剪切时间，纯剪切与只变速保留合成路径。非正方形裁切与旋转放在一个效果里会加黑边，改为两个效果串联。变速由 Mp4Retime 原地改写编码后 MP4 的时间刻度（不含声音），超过 3840×2160@60 的加速拒绝并限制码率。MediaTranscoder 不会把横存的手机视频转正，tkhd 矩阵非单位（含 180° 与镜像；WMV 等非 ISO 文件未知）时拒绝画面修改。审查修正：预览帧脱离解码线程、盒条目数按自身盒限定、cslg 缩放、各速度下声音复选框状态、裁切被拒时位置状态、重定时 IOException。
+- D03：新 `WaveNoiseInput.Prepare` 嗅探 RIFF fmt（含 Extensible 浮点 GUID）与 FORM，分别用既有 FloatWave（24 位，不削波）、AiffWave、G711Wave 在内存中转换并以 PcmWave 复核；整数 PCM 仍用原持有流且输出字节不变。`WaveDocument.OpenNoise` 只供降噪使用；Dispose 现在释放准备好的流（含以前未释放的 Windows 解码流）。独立审查无 P1/P2；P3 修正：超过 512 MiB 的 AIFF/浮点文件由各自读取器给出自己的限制说明。仍记录的 P3：内存中转换峰值（G.711 接近上限时约 768 MiB）、少数不支持的压缩 WAV 显示的说明与提示不一致、浮点源信息行显示 24 位 PCM。
+- F07：勾选的应用组（含辅助进程）在确认后，对 PID、启动时间与路径仍一致的进程的每个已列窗口发送既有正常 WM_CLOSE；不强制；只等待被请求的进程，未请求的单独列出。可选 2 秒刷新按进程时间差计算组 CPU，悬停、勾选、键盘焦点、退出中暂停。审查（无 P1；1 个 P2、9 个 P3 已修）：重新分组清除选择、截断的窗口扫描会报告、最多 32 个勾选、读取错误可见、说明提权/窗口标题隐私/逐窗口关闭；剩 3 个小 P3。
+- G02：`plan_pdf_pages`（1–10 个 PDF，PdfPageChoice 新增可选 Turn，应用时每个 PDF 未变才执行，撤销移到回收站）；`plan_move` 接受文件夹（不与文件混合，按 Move Folder 持有句柄改名，应用时复核文件 ID、存储名、目标身份与空闲名，撤销用 Move Folder 自己的撤销）；`plan_action` 提供 image.jpegmetadata/pngmetadata/tiffmetadata。审查修正：文件夹撤销收据超过 256K 字符历史时拒绝且日志不超限、Agent 的文件夹移动只用计划的名称（被占用则拒绝而不编号）、文件夹检查前先持有父链（链接拒绝而非跟随）。
+
 ## 0.130 合并第五轮先完成的分支：E02 保留内容的 PDF 页面、B06 移动文件夹及撤销
 
 分支 `claude/win-e02-pdfpages-578061`（4cb6258、55c2d84、e0f2616）、`claude/win-b06-movefolder-538156`（501ed7d、e8e8a9f、f458411）。Strings.json 三方 JSON 合并无同键冲突。D04 视频画面编辑分支仍在 CI 上试探 Windows 媒体管线，未合并。
