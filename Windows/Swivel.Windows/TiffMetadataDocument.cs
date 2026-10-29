@@ -57,19 +57,19 @@ internal sealed class TiffMetadataDocument : IDisposable
                 token.ThrowIfCancellationRequested();
                 var frame=decoder.Frames[i];var (width,height)=plan.PageSizes[i];
                 if(frame.PixelWidth!=width||frame.PixelHeight!=height)throw new UserError(TiffMetadata.Invalid);
-                var pixels=new FormatConvertedBitmap(frame,PixelFormats.Bgra32,null,0);var row=new byte[checked(width*4)];
-                for(int y=0;y<height;y++)
-                {if((y&63)==0)token.ThrowIfCancellationRequested();pixels.CopyPixels(new System.Windows.Int32Rect(0,y,width,1),row,row.Length,0);}
+                // One whole-page copy: per-row copies could make the codec decode a strip once per row.
+                var pixels=new FormatConvertedBitmap(frame,PixelFormats.Bgra32,null,0);var page=new byte[checked(width*height*4)];
+                pixels.CopyPixels(page,width*4,0);
             }
         }
-        catch(Exception error) when (error is System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or FileFormatException or OverflowException){throw new UserError(TiffMetadata.Invalid);}
+        catch(Exception error) when (error is System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or FileFormatException or OverflowException or InvalidOperationException or IOException){throw new UserError(TiffMetadata.Invalid);}
     }
     internal string Save(bool keepOrientation,CancellationToken token)
     {
         ObjectDisposedException.ThrowIf(disposed,this);token.ThrowIfCancellationRequested();
         if(keepOrientation&&kept is null)throw new InvalidOperationException("No source orientation to keep.");
         var rebuilt=keepOrientation?kept!:cleaned;
-        if(Plan.RemovedCount==0)throw new UserError("No removable TIFF metadata tags were found. No copy was saved.");
+        if(Plan.RemovedCountKeeping(keepOrientation)==0)throw new UserError("No removable TIFF metadata tags were found. No copy was saved.");
         string extension=System.IO.Path.GetExtension(Path).TrimStart('.').ToLowerInvariant();
         return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+" metadata removed",extension,output=>{
             for(int at=0;at<rebuilt.Length;)

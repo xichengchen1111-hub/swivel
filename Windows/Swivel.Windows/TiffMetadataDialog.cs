@@ -12,7 +12,7 @@ internal static class TiffMetadataNotices
 {
     internal const string Scope="Remove descriptive and private TIFF tags from every page: document and page names, description, camera make and model, software, date, artist, host computer, copyright, page number and position, rating, XMP, IPTC, Photoshop data, EXIF, GPS and interoperability pointers, and every other private tag except the ICC profile. The file is rebuilt with a new header and new tag tables; strip and tile bytes are copied unchanged and are not recompressed.";
     internal const string Limits="Classic TIFF only (BigTIFF is refused), either byte order: 32 MiB, 64 pages, 16,384 pixels per side and 16 MP in all pages together. Supported pages are 1–16-bit unsigned gray, palette or RGB, uncompressed, LZW, Deflate or PackBits, in strips or tiles. Tags must be sorted and every structural tag known; overlapping or repeated pages, out-of-range data, sub-images, JPEG-in-TIFF, YCbCr and CMYK are refused. These checks and native decoding of every rebuilt page do not prove every compressed bit is valid.";
-    internal const string Retained="Every page is kept, including reduced-resolution pages, which may themselves show private content. The ICC profile, resolution, color and other rendering tags are retained and may still contain private information. Image pixels, the filename and file-system information can also reveal details. This is not complete privacy sanitization.";
+    internal const string Retained="Every page is kept, including reduced-resolution pages, which may themselves show private content. The ICC profile, resolution, color and other rendering tags are retained and may still contain private information. Strip and tile bytes are copied exactly as their byte counts declare, so edge padding, a padded last strip or bytes after a compressed stream are kept too. Image pixels, the filename and file-system information can also reveal details. This is not complete privacy sanitization.";
     internal const string Orientation="Removing the Orientation tag may change how other apps rotate or mirror the image. Pixel samples are not rotated or rewritten. Review the saved copy in your target app.";
     internal const string Export="Save creates a new TIFF beside the original without replacing it. Source file-system timestamps, attributes and alternate streams are not copied. Only the rebuilt snapshot is sent to the built-in TIFF decoder. No network, clipboard access or persistent history is used.";
     internal const string Downgrade="If this action is saved in My Wheel, earlier Windows versions may reject those settings and fall back to defaults. Keep a pre-upgrade settings backup before downgrading.";
@@ -36,9 +36,14 @@ internal sealed class TiffMetadataDialog : Window
         var root=new DockPanel{Margin=new Thickness(20)};var footer=new StackPanel();DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
         keep=new CheckBox{Content=app.L("Keep orientation"),IsChecked=document.CanKeepOrientation,IsEnabled=document.CanKeepOrientation,Margin=new Thickness(0,4,0,8)};
         var summary=UI.Text("");footer.Children.Add(summary);
-        void Summarize()=>summary.Text=plan.RemovedCount==0?app.L("No removable TIFF metadata tags were found. No copy was saved."):string.Format(app.L("Remove {0:N0} tag(s) from {1:N0} page(s); new TIFF: {2:N0} bytes."),plan.RemovedCount-(keep.IsChecked==true?plan.Tags.Where(t=>t.Tag==274).Sum(t=>t.Count):0),plan.PageCount,plan.OutputBytesKeeping(keep.IsChecked==true));
-        Summarize();keep.Checked+=(_,_)=>Summarize();keep.Unchecked+=(_,_)=>Summarize();
-        var buttons=new WrapPanel();footer.Children.Add(buttons);var save=UI.Button(app.L("Save TIFF Copy"),()=>DialogResult=true);save.IsEnabled=plan.RemovedCount>0;buttons.Children.Add(save);var cancel=UI.Button(app.L("Cancel"),()=>DialogResult=false);cancel.IsCancel=true;buttons.Children.Add(cancel);
+        Button? save=null;
+        void Summarize()
+        {
+            int removing=plan.RemovedCountKeeping(keep.IsChecked==true);if(save is not null)save.IsEnabled=removing>0;
+            summary.Text=removing==0?app.L("No removable TIFF metadata tags were found. No copy was saved."):string.Format(app.L("Remove {0:N0} tag(s) from {1:N0} page(s); new TIFF: {2:N0} bytes."),removing,plan.PageCount,plan.OutputBytesKeeping(keep.IsChecked==true));
+        }
+        keep.Checked+=(_,_)=>Summarize();keep.Unchecked+=(_,_)=>Summarize();
+        var buttons=new WrapPanel();footer.Children.Add(buttons);save=UI.Button(app.L("Save TIFF Copy"),()=>DialogResult=true);Summarize();buttons.Children.Add(save);var cancel=UI.Button(app.L("Cancel"),()=>DialogResult=false);cancel.IsCancel=true;buttons.Children.Add(cancel);
         var body=new StackPanel();root.Children.Add(UI.Scroll(body));Content=root;
         body.Children.Add(UI.Text(app.L("Source (JSON path)")));var path=new TextBox{Text=JsonSerializer.Serialize(document.Path),IsReadOnly=true,TextWrapping=TextWrapping.Wrap};AutomationProperties.SetName(path,app.L("Source (JSON path)"));body.Children.Add(path);
         body.Children.Add(UI.Text(string.Format(app.L("{0} × {1} pixels · source: {2:N0} bytes"),plan.Width,plan.Height,plan.SourceBytes)));
@@ -49,7 +54,7 @@ internal sealed class TiffMetadataDialog : Window
         body.Children.Add(UI.Text(app.L(TiffMetadataNotices.Export),12));
         body.Children.Add(UI.Text(app.L("TIFF Tag Summary"),18));var list=new ListView{Height=240,ItemsSource=plan.Tags.Select(t=>new Row(t.Tag.ToString(),t.Name,t.Count,t.Bytes.ToString("N0"),app.L(t.Removed?"Remove":"Keep"))).ToArray()};
         VirtualizingPanel.SetIsVirtualizing(list,true);VirtualizingPanel.SetVirtualizationMode(list,VirtualizationMode.Recycling);ScrollViewer.SetCanContentScroll(list,true);AutomationProperties.SetName(list,app.L("TIFF Tag Summary"));
-        var grid=new GridView();foreach(var col in new[]{("Tag","Tag",70d),("Name","Name",190d),("Pages","Count",70d),("Value bytes","Bytes",130d),("Result","Result",110d)})grid.Columns.Add(new GridViewColumn{Header=app.L(col.Item1),DisplayMemberBinding=new Binding(col.Item2),Width=col.Item3});list.View=grid;body.Children.Add(list);
+        var grid=new GridView();foreach(var col in new[]{("Tag","Tag",70d),("Name","Name",190d),("Pages","Count",70d),("Declared value bytes","Bytes",160d),("Result","Result",110d)})grid.Columns.Add(new GridViewColumn{Header=app.L(col.Item1),DisplayMemberBinding=new Binding(col.Item2),Width=col.Item3});list.View=grid;body.Children.Add(list);
         body.Children.Add(UI.Text(app.L(TiffMetadataNotices.Downgrade),12));
         SourceInitialized+=(_,_)=>WebRouteLayout.Fit(this,Owner??this);DpiChanged+=(_,_)=>WebRouteLayout.Fit(this,this);
     }

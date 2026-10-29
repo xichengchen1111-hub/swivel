@@ -58,6 +58,9 @@ public static class TiffMetadata
         public bool LittleEndian=>little;
         public long SourceBytes=>source.Length;
         public int RemovedCount{get;}
+        // Orientation entries that Keep orientation would retain instead of removing.
+        public int KeptOrientationCount{get;}
+        public int RemovedCountKeeping(bool keepOrientation)=>RemovedCount-(keepOrientation&&Orientation.CanKeep?KeptOrientationCount:0);
         public long RemovedBytes{get;}
         public long ImageDataBytes{get;}
         public IReadOnlyList<TiffMetadataTag> Tags{get;}
@@ -70,7 +73,8 @@ public static class TiffMetadata
         {
             this.source=source;this.pages=pages;this.little=little;Orientation=orientation;
             var all=pages.SelectMany(p=>p.Entries).ToArray();
-            RemovedCount=all.Count(e=>IsRemoved(e.Tag));RemovedBytes=all.Where(e=>IsRemoved(e.Tag)).Sum(e=>12L+(e.ValueBytes>4?e.ValueBytes:0));
+            RemovedCount=all.Count(e=>IsRemoved(e.Tag));RemovedBytes=all.Where(e=>IsRemoved(e.Tag)).Sum(e=>12L+(e.ValueBytes>4?e.ValueBytes:0)); // declared sizes; removed payloads are not read
+            KeptOrientationCount=all.Count(e=>e.Tag==274);
             ImageDataBytes=pages.Sum(p=>p.Blocks.Sum(b=>(long)b.Length));
             Tags=Array.AsReadOnly(all.GroupBy(e=>e.Tag).OrderBy(g=>g.Key).Select(g=>new TiffMetadataTag(g.Key,TagName(g.Key),g.Count(),g.Sum(e=>(long)e.ValueBytes),IsRemoved(g.Key))).ToArray());
         }
@@ -180,8 +184,10 @@ public static class TiffMetadata
                 if(Refused.Contains(tag))throw new UserError(SubImages);
                 bool kept=Kept.ContainsKey(tag);
                 if(!kept&&!Removed.ContainsKey(tag)&&tag<32768)throw new UserError(Invalid);
-                // Removed tags are never read: their type, count and payload are not interpreted.
-                if(!kept){entries[i]=new(tag,type,n,0,0);continue;}
+                // Removed tags are never read: their payload is not interpreted. The size is
+                // recorded for the summary only. A damaged Orientation is removed as malformed.
+                bool damagedTurn=tag==274&&(type!=3||n!=1);
+                if(!kept||damagedTurn){entries[i]=new(tag,type,n,0,(int)Math.Min(type is >=1 and <=12?(long)TypeSize[type]*n:0,bytes.Length));if(damagedTurn)malformedOrientation=true;continue;}
                 if(type is <1 or >12||n==0)throw new UserError(Invalid);
                 long size=(long)TypeSize[type]*n;if(size>bytes.Length)throw new UserError(Invalid);
                 long offset=size<=4?at+8:U32(at+8);
@@ -198,7 +204,7 @@ public static class TiffMetadata
         for(int i=1;i<sorted.Length;i++){if((i&4095)==0)token.ThrowIfCancellationRequested();if(sorted[i].Start<sorted[i-1].End)throw new UserError(Invalid);}
         // Every retained out-of-line value must also stay outside the header and IFD tables.
         foreach(var page in pages)foreach(var e in page.Entries)
-            if(e.ValueBytes>4&&tables.Any(r=>e.ValueOffset<r.End&&e.ValueOffset+e.ValueBytes>r.Start))throw new UserError(Invalid);
+            if(Kept.ContainsKey(e.Tag)&&!(e.Tag==274&&e.ValueOffset==0)&&e.ValueBytes>4&&tables.Any(r=>e.ValueOffset<r.End&&e.ValueOffset+e.ValueBytes>r.Start))throw new UserError(Invalid);
         var orientationInfo=malformedOrientation?ExifOrientationInfo.Malformed:orientations.Count==0?ExifOrientationInfo.None:orientations.Distinct().Count()>1?ExifOrientationInfo.Ambiguous:new(ExifOrientationStatus.Found,orientations[0]);
         var plan=new Plan(bytes,pages.ToArray(),little,orientationInfo);
         if(plan.OutputBytesKeeping(true)>MaxBytes)throw new UserError(Invalid);

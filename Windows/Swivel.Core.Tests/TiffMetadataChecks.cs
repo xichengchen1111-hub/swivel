@@ -154,6 +154,11 @@ internal static class TiffMetadataChecks
         check(TiffMetadata.Read(new MemoryStream(Tiff(true,new[]{malformedTurn})),default).Orientation.Status==ExifOrientationStatus.Malformed,"Orientation 9 is malformed and cannot be kept");
         check(TiffMetadata.Read(new MemoryStream(Tiff(true,new[]{Gray(orientation:6),Gray(orientation:3)})),default).Orientation.Status==ExifOrientationStatus.Ambiguous,"Different page orientations are ambiguous");
 
+        var hugeTurn=Gray(privateTags:false);hugeTurn=hugeTurn with{Entries=Sorted(hugeTurn.Entries.Append(new E(274,4,new long[]{1},null,null,0x40000000u)))};
+        var hugePlan=TiffMetadata.Read(new MemoryStream(Tiff(true,new[]{hugeTurn})),default);check(hugePlan.Orientation.Status==ExifOrientationStatus.Malformed&&hugePlan.RemovedCount==1&&!Parse(Write(hugePlan))[0].Tags.ContainsKey(274),"Damaged Orientation entry with huge count is removed as malformed, not refusing the file");
+        var onlyTurn=TiffMetadata.Read(new MemoryStream(Tiff(true,new[]{Gray(privateTags:false,orientation:6)})),default);
+        check(onlyTurn.RemovedCount==1&&onlyTurn.RemovedCountKeeping(true)==0&&onlyTurn.RemovedCountKeeping(false)==1,"Orientation-only TIFF has nothing to remove while orientation is kept");
+        check(basicPlan.Tags.Single(t=>t.Tag==271).Bytes=="PRIVATE_MAKE\0".Length&&basicPlan.RemovedBytes>12L*basicPlan.RemovedCount,"Removed tags report declared value sizes without reading payloads");
         // Refusals.
         void Refuse(byte[] bytes,string label,string? message=null)
         {

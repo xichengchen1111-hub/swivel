@@ -15214,11 +15214,6 @@
     "僅支援經典 TIFF（拒絕 BigTIFF），兩種位元組順序皆可：32 MiB、64 頁、每邊 16,384 像素、所有頁合計 16 MP。支援的頁面為 1–16 位元無號灰階、調色盤或 RGB，未壓縮、LZW、Deflate 或 PackBits，條帶或圖塊。標籤必須已排序且每個結構標籤都已知；重疊或重複的頁、越界資料、子影像、TIFF 內 JPEG、YCbCr 和 CMYK 都會被拒絕。這些檢查以及對每個重建頁的原生解碼並不能證明每個壓縮位元都有效。",
     "クラシック TIFF のみ（BigTIFF は拒否）、どちらのバイト順も可：32 MiB、64 ページ、各辺 16,384 ピクセル、全ページ合計 16 MP。対応ページは 1〜16 ビット符号なしのグレー・パレット・RGB で、無圧縮・LZW・Deflate・PackBits のストリップまたはタイルです。タグは整列済みで、構造タグはすべて既知である必要があります。重なったり繰り返したりするページ、範囲外データ、サブイメージ、TIFF 内 JPEG、YCbCr、CMYK は拒否されます。これらの確認と再構築した全ページのネイティブデコードでも、圧縮データのすべてのビットが有効とは証明できません。"
   ],
-  "Every page is kept, including reduced-resolution pages, which may themselves show private content. The ICC profile, resolution, color and other rendering tags are retained and may still contain private information. Image pixels, the filename and file-system information can also reveal details. This is not complete privacy sanitization.": [
-    "会保留每一页，包括缩小分辨率的页，它们本身可能显示私密内容。ICC 配置文件、分辨率、颜色和其他渲染标签会保留，仍可能包含私密信息。图像像素、文件名和文件系统信息也可能泄露细节。这不是完整的隐私清理。",
-    "會保留每一頁，包括縮小解析度的頁，它們本身可能顯示私密內容。ICC 設定檔、解析度、色彩和其他算繪標籤會保留，仍可能包含私密資訊。影像像素、檔名和檔案系統資訊也可能洩露細節。這不是完整的隱私清理。",
-    "縮小解像度のページも含めてすべてのページを保持します。それ自体が非公開の内容を表示する場合があります。ICC プロファイル、解像度、色などの描画用タグは保持され、非公開の情報を含む場合があります。画像のピクセル、ファイル名、ファイルシステムの情報からも詳細がわかることがあります。これは完全なプライバシー消去ではありません。"
-  ],
   "Removing the Orientation tag may change how other apps rotate or mirror the image. Pixel samples are not rotated or rewritten. Review the saved copy in your target app.": [
     "移除方向标签可能改变其他应用旋转或镜像图像的方式。像素样本不会被旋转或改写。请在目标应用中检查保存的副本。",
     "移除方向標籤可能改變其他應用程式旋轉或鏡像影像的方式。像素樣本不會被旋轉或改寫。請在目標應用程式中檢查儲存的副本。",
@@ -15274,9 +15269,14 @@
     "頁數",
     "ページ数"
   ],
-  "Value bytes": [
-    "值字节数",
-    "值位元組數",
-    "値のバイト数"
+  "Every page is kept, including reduced-resolution pages, which may themselves show private content. The ICC profile, resolution, color and other rendering tags are retained and may still contain private information. Strip and tile bytes are copied exactly as their byte counts declare, so edge padding, a padded last strip or bytes after a compressed stream are kept too. Image pixels, the filename and file-system information can also reveal details. This is not complete privacy sanitization.": [
+    "会保留每一页，包括缩小分辨率的页，它们本身可能显示私密内容。ICC 配置文件、分辨率、颜色和其他渲染标签会保留，仍可能包含私密信息。条带和图块字节按其字节数声明原样复制，因此边缘填充、填充的最后一个条带或压缩流之后的字节也会保留。图像像素、文件名和文件系统信息也可能泄露细节。这不是完整的隐私清理。",
+    "會保留每一頁，包括縮小解析度的頁，它們本身可能顯示私密內容。ICC 設定檔、解析度、色彩和其他算繪標籤會保留，仍可能包含私密資訊。條帶和圖塊位元組依其位元組數宣告原樣複製，因此邊緣填補、填補的最後一個條帶或壓縮串流之後的位元組也會保留。影像像素、檔名和檔案系統資訊也可能洩露細節。這不是完整的隱私清理。",
+    "縮小解像度のページも含めてすべてのページを保持します。それ自体が非公開の内容を表示する場合があります。ICC プロファイル、解像度、色などの描画用タグは保持され、非公開の情報を含む場合があります。ストリップとタイルのバイトは宣告されたバイト数どおりにそのままコピーされるため、端のパディング、パディングされた最後のストリップ、圧縮データの後ろのバイトも残ります。画像のピクセル、ファイル名、ファイルシステムの情報からも詳細がわかることがあります。これは完全なプライバシー消去ではありません。"
+  ],
+  "Declared value bytes": [
+    "声明的值字节数",
+    "宣告的值位元組數",
+    "宣言された値のバイト数"
   ]
 }
