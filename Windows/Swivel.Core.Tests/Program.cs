@@ -127,6 +127,7 @@ UsageChecks.Run(Check, Reject);
 AppMemoryChecks.Run(Check, Reject);
 AppMemoryHelperChecks.Run(Check, Reject);
 InstalledAppsChecks.Run(Check, Reject);
+StorePackagesChecks.Run(Check, Reject);
 StartupChecks.Run(Check, Reject);
 DocumentTextChecks.Run(Check, Reject);
 DocumentHtmlChecks.Run(Check, Reject);

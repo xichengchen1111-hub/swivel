@@ -14443,5 +14443,225 @@
     "“保持音调”会重复或跳过声音中相互重叠的短片段（40 毫秒，按相似度对齐；自研 WSOLA 方法）。在稳定的测试音上，音调偏差约在 0.3% 以内。减速时咔嗒声和鼓点可能重复成回声，加速时可能变弱或丢失；和弦、音乐和噪声较多的录音可能听起来粗糙或发颤；立体声两个声道一起对齐。短于 40 毫秒的声音无法均匀伸缩。不会分离人声或乐器。",
     "「保持音調」會重複或略過聲音中相互重疊的短片段（40 毫秒，依相似度對齊；自行開發的 WSOLA 方法）。在穩定的測試音上，音調偏差約在 0.3% 以內。減速時喀噠聲和鼓點可能重複成回聲，加速時可能變弱或遺失；和弦、音樂和雜訊較多的錄音可能聽起來粗糙或發顫；立體聲兩個聲道一起對齊。短於 40 毫秒的聲音無法均勻伸縮。不會分離人聲或樂器。",
     "「音程を保持」は、音の短い重なり合った断片（40 ミリ秒、類似度で位置合わせ。独自実装の WSOLA 方式）を繰り返したり飛ばしたりします。安定したテスト音では音程のずれは約 0.3% 以内です。遅くするとクリック音やドラムがエコーのように繰り返され、速くすると弱まったり抜けたりすることがあります。和音、音楽、ノイズの多い録音はざらついたり揺れたりして聞こえることがあります。ステレオの両チャンネルはまとめて位置合わせされます。40 ミリ秒より短い音は均等には伸縮されません。声や楽器の分離は行いません。"
+  ],
+  "Explicit read-only list of MSIX and Microsoft Store packages registered for the current Windows user, read from the system package manager. Up to 4,096 packages, 1,024 UTF-16 units per text field and about 10 seconds. A blocked system call can return after the soft time limit.": [
+    "只读列出当前 Windows 用户已注册的 MSIX 和 Microsoft Store 包，数据来自系统包管理器，需你明确开始。最多 4,096 个包、每个文本字段 1,024 个 UTF-16 单元，约 10 秒。被阻塞的系统调用可能在软时间限制之后才返回。",
+    "唯讀列出目前 Windows 使用者已註冊的 MSIX 和 Microsoft Store 套件，資料來自系統套件管理員，需你明確開始。最多 4,096 個套件、每個文字欄位 1,024 個 UTF-16 單元，約 10 秒。被阻塞的系統呼叫可能在軟性時間限制之後才返回。",
+    "現在の Windows ユーザーに登録された MSIX と Microsoft Store のパッケージを、システムのパッケージ マネージャーから明示的な操作でのみ読み取って一覧表示します。最大 4,096 個、テキスト項目ごとに 1,024 UTF-16 単位、約 10 秒まで。ブロックされたシステム呼び出しはソフト時間制限の後に戻ることがあります。"
+  ],
+  "Only the current user's registered packages are listed: other users' packages and packages provisioned for new users are not read. Reported display names can be unresolved resource references. Framework, resource, bundle and development (sideloaded or registered from a folder) flags are as reported by Windows. Install locations, files, sizes, signatures, Store licences and update state are not inspected. This does not prove app publisher identity, that a package works, or that it is safe to remove.": [
+    "只列出当前用户已注册的包：不读取其他用户的包，也不读取为新用户预配的包。报告的显示名称可能是未解析的资源引用。框架、资源、捆绑和开发（旁加载或从文件夹注册）标记均按 Windows 报告显示。不检查安装位置、文件、大小、签名、应用商店许可证或更新状态。这不能证明发布者身份、包能正常工作或可以安全移除。",
+    "只列出目前使用者已註冊的套件：不讀取其他使用者的套件，也不讀取為新使用者佈建的套件。報告的顯示名稱可能是未解析的資源參照。架構、資源、組合和開發（側載或從資料夾註冊）標記均按 Windows 報告顯示。不檢查安裝位置、檔案、大小、簽章、市集授權或更新狀態。這不能證明發行者身分、套件能正常運作或可以安全移除。",
+    "一覧に含まれるのは現在のユーザーに登録されたパッケージだけです。他のユーザーのパッケージや新規ユーザー向けにプロビジョニングされたパッケージは読み取りません。報告される表示名は未解決のリソース参照の場合があります。フレームワーク、リソース、バンドル、開発（サイドロードまたはフォルダーから登録）のフラグは Windows の報告どおりです。インストール場所、ファイル、サイズ、署名、ストアのライセンス、更新状態は調べません。発行元の身元、パッケージが動作すること、安全に削除できることを示すものではありません。"
+  ],
+  "Reported names, publishers and versions appear in the list and explicit copies. Package family names are hidden by default; select Show Package Family Names to include them in selected details and copies. No automatic refresh, report saving, network, elevation, package removal or settings changes. Copy Report is limited to 4 MiB of UTF-8 text; oversized copies are refused whole.": [
+    "报告的名称、发布者和版本会显示在列表和你明确复制的内容中。包系列名称默认隐藏；勾选“显示包系列名称”才会包含在所选详情和复制内容中。不自动刷新、不保存报告、不联网、不提权、不移除包、不更改设置。“复制报告”最多 4 MiB 的 UTF-8 文本，超出时整体拒绝。",
+    "報告的名稱、發行者和版本會顯示在清單和你明確複製的內容中。套件系列名稱預設隱藏；勾選「顯示套件系列名稱」才會包含在所選詳細資料和複製內容中。不自動重新整理、不儲存報告、不連網、不提升權限、不移除套件、不變更設定。「複製報告」最多 4 MiB 的 UTF-8 文字，超出時整體拒絕。",
+    "報告された名前、発行元、バージョンは一覧と明示的なコピーに表示されます。パッケージ ファミリ名は既定で非表示です。「パッケージ ファミリ名を表示」を選ぶと選択した詳細とコピーに含まれます。自動更新、レポート保存、ネットワーク、昇格、パッケージ削除、設定変更は行いません。「レポートをコピー」は UTF-8 テキスト 4 MiB までで、超える場合は全体を拒否します。"
+  ],
+  "The package report exceeds 4 MiB of UTF-8 text. Copy one selected package instead.": [
+    "包报告超过 4 MiB 的 UTF-8 文本。请改为复制一个所选包。",
+    "套件報告超過 4 MiB 的 UTF-8 文字。請改為複製一個所選套件。",
+    "パッケージ レポートが UTF-8 テキストで 4 MiB を超えています。選択した 1 つのパッケージをコピーしてください。"
+  ],
+  "Store and MSIX apps are not in these records. Choose Read Store and MSIX Packages… to list the current user's packages separately; this list is kept and opens again afterwards.": [
+    "Store 和 MSIX 应用不在这些记录中。选择“读取 Store 和 MSIX 包…”可单独列出当前用户的包；本列表会保留，之后再次打开。",
+    "Store 和 MSIX 應用程式不在這些記錄中。選擇「讀取 Store 和 MSIX 套件…」可另外列出目前使用者的套件；本清單會保留，之後再次開啟。",
+    "Store と MSIX のアプリはこれらの記録に含まれません。「Store と MSIX のパッケージを読み取る…」を選ぶと現在のユーザーのパッケージを別に一覧表示します。この一覧は保持され、その後もう一度開きます。"
+  ],
+  "Store and MSIX Packages (Current User)": [
+    "Store 和 MSIX 包（当前用户）",
+    "Store 和 MSIX 套件（目前使用者）",
+    "Store と MSIX のパッケージ（現在のユーザー）"
+  ],
+  "Package snapshot is partial.": [
+    "包快照不完整。",
+    "套件快照不完整。",
+    "パッケージのスナップショットは一部のみです。"
+  ],
+  "The current user's package list was read within the limits.": [
+    "已在限制内读取当前用户的包列表。",
+    "已在限制內讀取目前使用者的套件清單。",
+    "現在のユーザーのパッケージ一覧を制限内で読み取りました。"
+  ],
+  "Recorded packages: {0} (includes frameworks and resource packages)": [
+    "已记录的包：{0}（包括框架包和资源包）",
+    "已記錄的套件：{0}（包括架構套件和資源套件）",
+    "記録されたパッケージ: {0}（フレームワークとリソース パッケージを含む）"
+  ],
+  "Show Package Family Names": [
+    "显示包系列名称",
+    "顯示套件系列名稱",
+    "パッケージ ファミリ名を表示"
+  ],
+  "Package family names are included.": [
+    "已包含包系列名称。",
+    "已包含套件系列名稱。",
+    "パッケージ ファミリ名を含みます。"
+  ],
+  "Package family names are hidden.": [
+    "包系列名称已隐藏。",
+    "套件系列名稱已隱藏。",
+    "パッケージ ファミリ名は非表示です。"
+  ],
+  "Reported Package Name": [
+    "报告的包名称",
+    "報告的套件名稱",
+    "報告されたパッケージ名"
+  ],
+  "Package Version": [
+    "包版本",
+    "套件版本",
+    "パッケージのバージョン"
+  ],
+  "Package Kind": [
+    "包类型",
+    "套件類型",
+    "パッケージの種類"
+  ],
+  "Package Family Name": [
+    "包系列名称",
+    "套件系列名稱",
+    "パッケージ ファミリ名"
+  ],
+  "Installed": [
+    "安装时间",
+    "安裝時間",
+    "インストール日時"
+  ],
+  "Architecture": [
+    "架构",
+    "架構",
+    "アーキテクチャ"
+  ],
+  "Neutral": [
+    "中性",
+    "中性",
+    "ニュートラル"
+  ],
+  "x86 on ARM64": [
+    "ARM64 上的 x86",
+    "ARM64 上的 x86",
+    "ARM64 上の x86"
+  ],
+  "Unrecognized architecture value {0}": [
+    "无法识别的架构值 {0}",
+    "無法辨識的架構值 {0}",
+    "認識できないアーキテクチャ値 {0}"
+  ],
+  "Framework": [
+    "框架",
+    "架構",
+    "フレームワーク"
+  ],
+  "Resource": [
+    "资源",
+    "資源",
+    "リソース"
+  ],
+  "Bundle": [
+    "捆绑",
+    "組合",
+    "バンドル"
+  ],
+  "Development (sideloaded)": [
+    "开发（旁加载）",
+    "開發（側載）",
+    "開発（サイドロード）"
+  ],
+  "{0}: unknown": [
+    "{0}：未知",
+    "{0}：未知",
+    "{0}: 不明"
+  ],
+  "App package": [
+    "应用包",
+    "應用程式套件",
+    "アプリ パッケージ"
+  ],
+  "Not available from the package manager": [
+    "包管理器未提供",
+    "套件管理員未提供",
+    "パッケージ マネージャーから取得できません"
+  ],
+  "Package text exceeds the length limit": [
+    "包文本超过长度限制",
+    "套件文字超過長度限制",
+    "パッケージのテキストが長さ制限を超えています"
+  ],
+  "Invalid package text": [
+    "无效的包文本",
+    "無效的套件文字",
+    "無効なパッケージ テキスト"
+  ],
+  "The package manager is unavailable in this process; no packages were read": [
+    "此进程中无法使用包管理器；未读取任何包",
+    "此處理程序中無法使用套件管理員；未讀取任何套件",
+    "このプロセスではパッケージ マネージャーを使用できません。パッケージは読み取っていません"
+  ],
+  "Package enumeration stopped with an error; the list may be incomplete": [
+    "包枚举因错误而停止；列表可能不完整",
+    "套件列舉因錯誤而停止；清單可能不完整",
+    "パッケージの列挙がエラーで停止しました。一覧は不完全な可能性があります"
+  ],
+  "Package limit reached; the list may be incomplete": [
+    "已达到包数量上限；列表可能不完整",
+    "已達套件數量上限；清單可能不完整",
+    "パッケージ数の上限に達しました。一覧は不完全な可能性があります"
+  ],
+  "Package list not completed because of the time limit": [
+    "因时间限制，包列表未读取完",
+    "因時間限制，套件清單未讀取完",
+    "時間制限のため、パッケージ一覧を読み取り終えていません"
+  ],
+  "Package enumeration reached the end of the current user's list": [
+    "包枚举已到达当前用户列表的末尾",
+    "套件列舉已到達目前使用者清單的結尾",
+    "パッケージの列挙は現在のユーザーの一覧の最後まで到達しました"
+  ],
+  "Package not completed because of the time limit": [
+    "因时间限制，此包未读取完",
+    "因時間限制，此套件未讀取完",
+    "時間制限のため、このパッケージを読み取り終えていません"
+  ],
+  "No recorded package-read issue; inspect each reported field": [
+    "未记录包读取问题；请检查每个报告的字段",
+    "未記錄套件讀取問題；請檢查每個報告的欄位",
+    "パッケージ読み取りの問題は記録されていません。報告された各項目を確認してください"
+  ],
+  "Packages": [
+    "包",
+    "套件",
+    "パッケージ"
+  ],
+  "Selected Package": [
+    "所选包",
+    "所選套件",
+    "選択したパッケージ"
+  ],
+  "Read Store and MSIX Packages…": [
+    "读取 Store 和 MSIX 包…",
+    "讀取 Store 和 MSIX 套件…",
+    "Store と MSIX のパッケージを読み取る…"
+  ],
+  "Reading the current user's Store and MSIX packages…": [
+    "正在读取当前用户的 Store 和 MSIX 包…",
+    "正在讀取目前使用者的 Store 和 MSIX 套件…",
+    "現在のユーザーの Store と MSIX のパッケージを読み取っています…"
+  ],
+  "List text may be shortened. Select a package for complete reported text. Package family names are never used as a fallback name.": [
+    "列表文本可能被缩短。选择一个包可查看完整的报告文本。包系列名称从不用作替代名称。",
+    "清單文字可能被縮短。選擇一個套件可檢視完整的報告文字。套件系列名稱從不用作替代名稱。",
+    "一覧のテキストは短縮される場合があります。パッケージを選ぶと報告されたテキスト全体を表示します。パッケージ ファミリ名を代わりの名前として使うことはありません。"
+  ],
+  "No packages were returned. This does not prove that no Store or MSIX apps are installed.": [
+    "未返回任何包。这不能证明没有安装 Store 或 MSIX 应用。",
+    "未傳回任何套件。這不能證明沒有安裝 Store 或 MSIX 應用程式。",
+    "パッケージは返されませんでした。Store や MSIX のアプリがインストールされていないことを示すものではありません。"
+  ],
+  "Select a package to inspect its reported fields.": [
+    "选择一个包以查看其报告的字段。",
+    "選擇一個套件以檢視其報告的欄位。",
+    "パッケージを選ぶと報告された項目を確認できます。"
   ]
 }

@@ -554,6 +554,14 @@ public sealed partial class App : Application
                 {
                     var records = new InstalledAppsDialog(this, installed);
                     await ShowDoctorOperationAsync(records,DoctorAssistantSummary.Installed(installed),owner,token,DoctorLabels.Installed(installed));
+                    if (records.PackagesRequested && !token.IsCancellationRequested)
+                    {
+                        report(L("Reading the current user's Store and MSIX packages…"));
+                        var packages = await AwaitDoctorReadAsync(Task.Run(() => StorePackagesReader.Read(token), token),token);
+                        token.ThrowIfCancellationRequested();
+                        ShowOperationDialog(new StorePackagesDialog(this, packages), owner, token);
+                        continue;
+                    }
                     if (!records.LeftoversRequested || token.IsCancellationRequested) break;
                     report(L("Reading installation records again and looking for leftover folders…"));
                     AppLeftoverResult leftovers;
