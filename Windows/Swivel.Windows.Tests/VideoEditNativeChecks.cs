@@ -22,6 +22,7 @@ internal static class VideoEditNativeChecks
         string source = Path.Combine(root, "quads.mp4");
         MakeQuarterVideo(root, source, 320, 240, 2);
         byte[] original = SHA256.HashData(File.ReadAllBytes(source));
+        Diagnose(root, source);
         using (var video = VideoTrimmer.OpenAsync(source, default).GetAwaiter().GetResult())
         {
             check(video.Width == 320 && video.Height == 240 && Math.Abs(video.Duration - 2000) <= 50 && video.HasSound, $"The quarter test video opens: {video.Width}×{video.Height}, {video.Duration} ms");
@@ -92,6 +93,48 @@ internal static class VideoEditNativeChecks
             bool agrees = Agrees(g, data, fw, fh, 1, out var found);
             check(video.Width == 240 && w == 320 && h == 240 && RotatedVideoNativeChecks.Straight(output) && agrees,
                 $"A 90° phone video turned back a quarter at 2× is stored upright in its original layout ({w}×{h}): {found}");
+        }
+    }
+
+    // Temporary: what MediaTranscoder makes of the test video with no effect, a turn, and a crop.
+    private static void Diagnose(string root, string source)
+    {
+        string Fine(string path, int w, int h)
+        {
+            var (fw, fh, d) = RotatedVideoNativeChecks.Frame(path, w, h, 1000);
+            var t = new StringBuilder($"{fw}×{fh} ");
+            for (int j = 0; j < 12; j++) { for (int i = 0; i < 16; i++) t.Append(Colour(d, fw, fw * (2 * i + 1) / 32, fh * (2 * j + 1) / 24)); t.Append('/'); }
+            return t.ToString();
+        }
+        Console.WriteLine("INFO source " + Fine(source, 320, 240));
+        var file = StorageFile.GetFileFromPathAsync(source).AsTask().GetAwaiter().GetResult();
+        var props = MediaClip.CreateFromFileAsync(file).AsTask().GetAwaiter().GetResult().GetVideoEncodingProperties();
+        Console.WriteLine($"INFO source props {props.Width}x{props.Height} par {props.PixelAspectRatio.Numerator}:{props.PixelAspectRatio.Denominator} {props.Subtype}");
+        int n = 0;
+        foreach (var (name, effect, w, h) in new (string, Windows.Media.Effects.VideoTransformEffectDefinition?, int, int)[]
+        {
+            ("none", null, 320, 240),
+            ("identity effect", new Windows.Media.Effects.VideoTransformEffectDefinition(), 320, 240),
+            ("crop 0,0,160,120", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0, 0, 160, 120), OutputSize = new global::Windows.Foundation.Size(160, 120) }, 160, 120),
+            ("rotate", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees }, 240, 320),
+            ("rotate outsize", new Windows.Media.Effects.VideoTransformEffectDefinition { Rotation = MediaRotation.Clockwise90Degrees, OutputSize = new global::Windows.Foundation.Size(240, 320) }, 240, 320),
+            ("crop full outsize", new Windows.Media.Effects.VideoTransformEffectDefinition { CropRectangle = new global::Windows.Foundation.Rect(0, 0, 320, 240), OutputSize = new global::Windows.Foundation.Size(320, 240) }, 320, 240),
+        })
+        {
+            try
+            {
+                var folder = StorageFolder.GetFolderFromPathAsync(root).AsTask().GetAwaiter().GetResult();
+                var target = folder.CreateFileAsync($"diag{++n}.mp4", CreationCollisionOption.FailIfExists).AsTask().GetAwaiter().GetResult();
+                var transcoder = new global::Windows.Media.Transcoding.MediaTranscoder { AlwaysReencode = true };
+                if (effect is not null) transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
+                var p = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.Vga); p.Video.Width = (uint)w; p.Video.Height = (uint)h; p.Audio = null;
+                var prepared = transcoder.PrepareFileTranscodeAsync(file, target, p).AsTask().GetAwaiter().GetResult();
+                if (!prepared.CanTranscode) { Console.WriteLine($"INFO diag {name}: {prepared.FailureReason}"); continue; }
+                prepared.TranscodeAsync().AsTask().GetAwaiter().GetResult();
+                var (sw, sh) = Size(target.Path);
+                Console.WriteLine($"INFO diag {name}: " + Fine(target.Path, sw, sh));
+            }
+            catch (Exception e) { Console.WriteLine($"INFO diag {name}: {e.GetType().Name} 0x{e.HResult:X8} {e.Message}"); }
         }
     }
 
