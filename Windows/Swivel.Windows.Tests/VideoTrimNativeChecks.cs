@@ -125,7 +125,7 @@ internal static class VideoTrimNativeChecks
         return d[i + 2] > 150 && d[i + 1] < 100 && d[i] < 100 ? 'R' : d[i + 1] > 150 && d[i + 2] < 100 && d[i] < 100 ? 'G' : d[i] > 150 && d[i + 1] < 100 && d[i + 2] < 100 ? 'B' : '?';
     }
 
-    private static void MakeColourVideo(string root, string path, int width, int height)
+    internal static void MakeColourVideo(string root, string path, int width, int height)
     {
         var composition = new MediaComposition();
         foreach (var (name, b, g, r) in new[] { ("red", 0, 0, 255), ("green", 0, 255, 0), ("blue", 255, 0, 0) })

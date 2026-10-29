@@ -31,6 +31,7 @@ internal static class Program
         var validationApp=new App(validationHost:true);
         try
         {
+            Group("SpeedSoundProbe", () => SpeedSoundProbe.Run(directory)); if (Environment.GetEnvironmentVariable("CI") == "true") { Console.WriteLine("PROBE done"); return 1; }
             string source = Path.Combine(directory, "图像 🦜.png");
             Save(source, new PngBitmapEncoder(), PixelFormats.Bgra32, 40, 20);
             byte[] original = File.ReadAllBytes(source);
