@@ -1330,7 +1330,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 ## Windows0.127 — merged B08 7z, F08 Store/MSIX list, C06 keep orientation (2026-10-29)
 
 - Each branch passed its own Windows CI and independent review before merging: B08 40849161556 (core 4,522,042, native 5,606; review P2 fixed), F08 40846559778 (review no P1; P2/P3 fixed), C06 40846684301 (core 4,542,074, native 5,606; no remaining P1/P2). Details are in each branch's commits and session report.
-- After merging all three: core 4,542,343 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch — result below.
+- After merging all three: core 4,542,343 on Mac, native compiled 0 warnings/errors there. Windows CI 40854636995 on the merged branch passed (core 4,542,343, native 5,630).
 - Not tested: 7z archives made by real 7-Zip, Store packages on a typical home PC, photos from real cameras with Keep orientation.
 
 ## Windows0.126 — merged F07 helper grouping, E03 EPUB, D04 Keep Pitch (2026-10-29)
