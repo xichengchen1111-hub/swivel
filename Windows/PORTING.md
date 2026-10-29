@@ -1047,6 +1047,13 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.130 合并第五轮先完成的分支：E02 保留内容的 PDF 页面、B06 移动文件夹及撤销
+
+分支 `claude/win-e02-pdfpages-578061`（4cb6258、55c2d84、e0f2616）、`claude/win-b06-movefolder-538156`（501ed7d、e8e8a9f、f458411）。Strings.json 三方 JSON 合并无同键冲突。D04 视频画面编辑分支仍在 CI 上试探 Windows 媒体管线，未合并。
+
+- E02：原创有界 PDF 结构读取（传统 xref、xref 流、带 PNG 预测器的对象流、混合 XRefStm、/Prev 更新、继承的页面属性）与页面复制器：每页自己的对象逐字节保留、重新编号、写新的传统 xref。新动作 `pdf.pages`：选页、顺序/重复、旋转叠加 90°、多个输入、输出在第一个旁边。文档级项目、表单字段、指向页面或运行代码的注释去掉。审查（5 个 P2，已修并复查）：输出用 512 MiB 上限复读验证（合并可超过 32 MiB）、400 万解析值共享预算（复制器生成的值也计入）、线性重复键检查、清除页面树节点别名和 ObjStm/XRef/外部文件流、去掉 /AF 附件、链接只保留 http/https/mailto、清除保留注释之外对注释字典或带 JS 字典的引用。
+- B06：移动文件夹把持有的文件夹改名进持有的目标（同一 NTFS 卷，FileRenameInformation 不替换，下一个编号名）；在自身内、它所在的文件夹和其他驱动器（建议复制文件夹）拒绝。撤销只在文件 ID 相同且原名称空闲时改回。复制文件夹记录新文件夹身份与每个创建项，结果窗口提供移到回收站，任何内容变化即拒绝。审查修正：结果窗口在回收站会话存在前读取它（提供撤销时必抛错）、晚取消不再遗留句柄、保持存储的名称、占用与被替换的副本各有提示、取消的复制也有结果窗口和撤销、关闭发起窗口会取消复制且结果窗口改由主页拥有。
+
 ## 0.129 合并第四轮并行分支：E05 照片二维码、C06 TIFF、D03/D04 M4A
 
 分支 `claude/win-e05-photoqr-326c47`（2e344a7、d4a2b92）、`claude/win-c06-tiff-fd1801`（425da0c、143750f）、`claude/win-d04-m4a-3213f4`（85dc877、ef77560）。Strings.json 三方 JSON 合并无同键冲突。

@@ -1327,6 +1327,13 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.130 — merged E02 content-preserving PDF pages, B06 folder move and copy undo (2026-10-30)
+
+- Each branch passed its own Windows CI and independent review before merging: E02 40890188077 (core 4,552,310, native 5,728; five P2s fixed and rechecked, none left), B06 40889306979 (core 4,552,294, native 5,742; no P1/P2 left after fixes).
+- After merging both: core 4,552,408 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- The D04 video picture-edit branch is not merged yet.
+- Not tested: PDFs from real producers (Office, scanners, browsers) opened afterwards in Acrobat/Edge, folder moves on a real user's disk.
+
 ## Windows0.129 — merged E05 photo QR, C06 TIFF metadata, D03/D04 M4A (2026-10-29)
 
 - Each branch passed its own Windows CI and independent review before merging: E05 40883276324 (core 4,542,786, native 5,677; no P1/P2, four P3s fixed and rechecked), C06 40881612456 (core 4,543,010, native 5,692; no P1, one possible P2 and five P3s fixed), M4A 40881403793 (core 4,551,764, native 5,689; review fixes included).
