@@ -1330,7 +1330,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 ## Windows0.128 — merged F09 Startup Apps, C02 WebP, E03 DOC (2026-10-29)
 
 - Each branch passed its own Windows CI and independent review before merging: F09 40856844750 (core 4,542,520, native 5,642; review P2 fixed and rechecked), C02 40859204170 (review P3 fixed), E03 40858601547 (review findings fixed with fixtures).
-- After merging all three: core 4,542,682 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- After merging all three: core 4,542,682 on Mac, native compiled 0 warnings/errors there. Windows CI 40878363864 on the merged branch passed (core 4,542,682, native 5,673).
 - Not tested: Startup Apps compared item by item with Task Manager on a real PC, WebP files from real cameras/browsers beyond the fixtures, .doc files saved by real Word versions.
 
 ## Windows0.127 — merged B08 7z, F08 Store/MSIX list, C06 keep orientation (2026-10-29)
