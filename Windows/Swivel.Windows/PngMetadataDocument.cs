@@ -16,13 +16,15 @@ internal sealed class PngMetadataDocument : IDisposable
     internal bool CanKeepOrientation => kept is not null;
     private PngMetadataDocument(NativeFiles.Input input,PngMetadata.Plan plan,byte[] cleaned,byte[]? kept)
     {this.input=input;Plan=plan;this.cleaned=cleaned;this.kept=kept;}
-    internal static PngMetadataDocument Open(string path,CancellationToken token)
+    /// With `expected` (an agent's plan), a file that is no longer the planned one is refused before it is read.
+    internal static PngMetadataDocument Open(string path,CancellationToken token,FileStamp? expected=null)
     {
         token.ThrowIfCancellationRequested();
         if(!System.IO.Path.GetExtension(path).Equals(".png",StringComparison.OrdinalIgnoreCase))throw new UserError(PngMetadata.Invalid);
         var input=NativeFiles.OpenRead(path);
         try
         {
+            if(expected is FileStamp planned&&!input.Stamp.SameObjectAndContent(planned))throw new McpToolError(McpSession.Changed);
             var plan=PngMetadata.Read(input.Stream,token);
             using var output=new MemoryStream(checked((int)plan.OutputBytes));plan.Write(output,token);var cleaned=output.ToArray();
             // Validate only the cleaned, bounded snapshot through the established

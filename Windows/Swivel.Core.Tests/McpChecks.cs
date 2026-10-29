@@ -37,6 +37,12 @@ internal static class McpChecks
             if (!Files[path].SameObjectAndContent(expected)) throw new UserError(McpSession.Changed);
             Ran.Add((action, path));
             var allowed = McpSession.Actions.First(a => a.Id == action);
+            if (allowed.Metadata)
+            {
+                string extension = action == "image.tiffmetadata" ? System.IO.Path.GetExtension(path).TrimStart('.').ToLowerInvariant() : allowed.Extension, stem = System.IO.Path.ChangeExtension(path, null) + allowed.Suffix, made = stem + "." + extension;
+                for (int n = 2; Files.ContainsKey(made); n++) made = stem + " " + n + "." + extension;
+                Add(made); return made;
+            }
             string output = System.IO.Path.ChangeExtension(path, null) + (allowed.Subtitle || allowed.Data || allowed.Font ? "." : allowed.Document ? " text." : " converted.") + allowed.Extension;
             while (Files.ContainsKey(output)) output = allowed.Subtitle || allowed.Data || allowed.Font ? System.IO.Path.ChangeExtension(output, null) + " 2." + allowed.Extension : output.Replace(" converted", " converted 2").Replace(" text.", " text 2.");
             Add(output); return output;
@@ -79,7 +85,7 @@ internal static class McpChecks
         public string ReadDocumentText(string path, CancellationToken token) { Documents.Add(path); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("Not a valid document."); }
         public readonly HashSet<string> Taken = new(StringComparer.OrdinalIgnoreCase); // folders and other names
         public int NameChecks;
-        public bool NameTaken(string path) { NameChecks++; string full = Resolve(path); return Files.ContainsKey(full) || Taken.Contains(full); }
+        public bool NameTaken(string path) { NameChecks++; string full = Resolve(path); return Files.ContainsKey(full) || Taken.Contains(full) || Dirs.ContainsKey(full); }
         // A file's 8.3 alias, or a folder spelt by its alias: as on disk, both reach the long path.
         private string Resolve(string path)
         {
@@ -118,12 +124,12 @@ internal static class McpChecks
         public readonly HashSet<string> Folders = new(StringComparer.OrdinalIgnoreCase);
         public readonly HashSet<string> OtherDrive = new(StringComparer.OrdinalIgnoreCase); // files on another drive
         public readonly Dictionary<string, ulong> Replaced = new(StringComparer.OrdinalIgnoreCase); // a folder deleted and made again at its path
-        private MoveIdentity FolderIdentity(string folder) => new(1, (uint)StringComparer.OrdinalIgnoreCase.GetHashCode(folder), Replaced.GetValueOrDefault(folder));
+        private MoveIdentity FolderId(string folder) => new(1, (uint)StringComparer.OrdinalIgnoreCase.GetHashCode(folder) | 1, Replaced.GetValueOrDefault(folder));
         public MoveIdentity CheckFolder(string folder)
         {
             folder = Aliases.GetValueOrDefault(folder, folder);
             if (!Folders.Contains(folder)) throw new UserError("Choose an existing local folder.");
-            return FolderIdentity(folder);
+            return FolderId(folder);
         }
         public bool CheckMove(string path, string folder)
         {
@@ -136,7 +142,7 @@ internal static class McpChecks
         public RenameOutcome Move(IReadOnlyList<RenamePair> plan, IReadOnlyList<FileStamp> expected, MoveIdentity? folder, CancellationToken token)
         {
             if (!Folders.Contains(MoveRules.Parent(plan[0].Destination)) || plan.Any(p => MoveRules.Parent(p.Destination) != MoveRules.Parent(plan[0].Destination))) throw new UserError("A source or destination folder changed.");
-            if (folder is not null && FolderIdentity(MoveRules.Parent(plan[0].Destination)) != folder) throw new McpToolError("The destination folder was replaced since planning.");
+            if (folder is not null && FolderId(MoveRules.Parent(plan[0].Destination)) != folder) throw new McpToolError("The destination folder was replaced since planning.");
             for (int i = 0; i < plan.Count; i++)
                 if (!Files.TryGetValue(plan[i].Source, out var s) || !s.SameObjectAndContent(expected[i])) throw new UserError("A file changed just now.");
             if (plan.Any(p => StoredName(p.Source) != MoveRules.FileName(p.Source))) throw new UserError("A file's name changed just now.");
@@ -153,6 +159,72 @@ internal static class McpChecks
             return new RenameOutcome(plan.Select((p, i) => new RenameLocation(p.Source, at[i], stamps[i])).ToArray(), MoveFails == RenameFailure.Stuck ? error : null, false);
         }
         public FileStamp? Stamp(string path) => Files.TryGetValue(Resolve(path), out var s) ? s : null;
+        // PDF Pages: each PDF's page count; a PDF not listed can't be read.
+        public readonly Dictionary<string, int> Pdfs = new(StringComparer.OrdinalIgnoreCase);
+        public readonly List<(string[] Paths, PdfPageChoice[] Pages)> PdfWrites = new();
+        public IReadOnlyList<int> PdfPageCounts(IReadOnlyList<string> paths, CancellationToken token)
+            => paths.Select(p => Pdfs.TryGetValue(p, out int n) ? n : throw new UserError(PdfStructure.Damaged)).ToArray();
+        public string WritePdfPages(IReadOnlyList<string> paths, IReadOnlyList<FileStamp> expected, IReadOnlyList<PdfPageChoice> pages, CancellationToken token)
+        {
+            DuringRun?.Invoke();
+            for (int i = 0; i < paths.Count; i++) if (!Files.TryGetValue(paths[i], out var s) || !s.SameObjectAndContent(expected[i])) throw new McpToolError(McpSession.Changed);
+            if (paths[0] == FailOn) throw Throw ?? new UserError(PdfStructure.Damaged);
+            PdfWrites.Add((paths.ToArray(), pages.ToArray()));
+            string stem = System.IO.Path.ChangeExtension(paths[0], null) + " pages", output = stem + ".pdf";
+            for (int n = 2; Files.ContainsKey(output); n++) output = stem + " " + n + ".pdf";
+            Add(output); return output;
+        }
+        // Move Folder: movable folders by path, each with its own file ID.
+        public readonly Dictionary<string, ulong> Dirs = new(StringComparer.OrdinalIgnoreCase);
+        public readonly List<FolderMoveReceipt> FolderMoves = new();
+        public bool IsFolder(string path) => Folders.Contains(path) || Dirs.ContainsKey(path.TrimEnd('\\'));
+        private MoveDirectorySnapshot Snapshot(string folder)
+        {
+            var paths = new List<string> { folder[..3] };
+            foreach (string part in folder[3..].Split('\\', StringSplitOptions.RemoveEmptyEntries)) paths.Add(paths[^1].TrimEnd('\\') + "\\" + part);
+            return new(folder, paths.Select(p => new MoveDirectoryEntry(p, FolderId(p))).ToArray());
+        }
+        public FolderMovePlan PlanFolderMove(string folder, string destination, CancellationToken token)
+        {
+            folder = MoveRules.DirectoryPath(folder); destination = MoveRules.DirectoryPath(destination);
+            string stored = Dirs.Keys.FirstOrDefault(k => string.Equals(k, folder, StringComparison.OrdinalIgnoreCase)) ?? throw new UserError(FolderMove.NotPlain);
+            if (Locked.Contains(folder)) throw new UserError(FolderMove.InUse);
+            if (OtherDrive.Contains(folder)) throw new UserError(FolderMove.OtherVolume);
+            FolderMove.CheckDestination(folder, destination);
+            if (!Folders.Contains(destination)) throw new UserError("Choose an existing local folder.");
+            string source = MoveRules.Parent(folder).TrimEnd('\\') + "\\" + MoveRules.FileName(stored);
+            int checks = NameChecks;
+            string planned = FolderMove.Claim(source, destination, p => !NameTaken(p));
+            NameChecks = checks;
+            return new FolderMovePlan(source, destination, planned, new MoveIdentity(1, Dirs[stored], 0), FolderId(destination));
+        }
+        public FolderMoveReceipt MoveFolder(FolderMovePlan plan, CancellationToken token)
+        {
+            DuringRun?.Invoke();
+            if (FailOn == plan.Source) throw Throw ?? new UserError(FolderMove.InUse);
+            var now = PlanFolderMove(plan.Source, plan.Destination, token);
+            if (now.Identity != plan.Identity) throw new McpToolError("The folder was replaced since planning. Nothing was moved; plan again.");
+            if (now.DestinationIdentity != plan.DestinationIdentity) throw new McpToolError("The destination folder was replaced since planning. Nothing was moved; plan again.");
+            if (now.Source != plan.Source) throw new McpToolError("The folder's name changed since planning. Nothing was moved; plan again.");
+            if (now.Planned != plan.Planned) throw new McpToolError("A file or folder with this name is in the destination now. Nothing was moved or overwritten.");
+            Dirs.Remove(now.Source); Dirs[now.Planned] = now.Identity.Low;
+            var receipt = new FolderMoveReceipt(now.Source, now.Planned, now.Identity, Snapshot(MoveRules.Parent(now.Source)), Snapshot(now.Destination));
+            FolderMoves.Add(receipt); return receipt;
+        }
+        public void CheckFolderUndo(FolderMoveReceipt receipt, CancellationToken token)
+        {
+            receipt = FolderMove.ForUndo(receipt);
+            if (!MoveRules.SameDirectory(receipt.CurrentParent, Snapshot(receipt.CurrentParent.Path)) || !MoveRules.SameDirectory(receipt.OriginalParent, Snapshot(receipt.OriginalParent.Path))) throw new UserError(FolderMove.ParentsChanged);
+            if (!Dirs.TryGetValue(receipt.Current, out ulong id) || id != receipt.Identity.Low) throw new UserError(FolderMove.Replaced);
+            if (Locked.Contains(receipt.Current)) throw new UserError(FolderMove.InUse);
+            if (Files.ContainsKey(receipt.Original) || Taken.Contains(receipt.Original) || Dirs.ContainsKey(receipt.Original)) throw new UserError(FolderMove.OriginalTaken);
+        }
+        public void UndoFolderMove(FolderMoveReceipt receipt, CancellationToken token)
+        {
+            CheckFolderUndo(receipt, token);
+            Dirs.Remove(receipt.Current); Dirs[receipt.Original] = receipt.Identity.Low;
+        }
+        public MoveIdentity? FolderIdentity(string path) => Dirs.TryGetValue(path, out ulong id) ? new MoveIdentity(1, id, 0) : null;
         public void Recycle(string path, FileStamp expected)
         {
             if (!Files[path].SameObjectAndContent(expected)) throw new UserError("The file changed.");
@@ -215,9 +287,9 @@ internal static class McpChecks
         check((int)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/list\"}")["error"]!["code"]! == -32601, "MCP unknown method");
         check((int)Rpc(session, new string(' ', McpSession.MaxLineChars + 1))["error"]!["code"]! == -32600, "MCP oversized message refused");
         var tools = ((JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!).Select(t => (string)t!["name"]!).ToArray();
-        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "plan_compress", "plan_rename", "plan_move", "plan_zip_folder", "apply_plan", "undo", "history" }), "MCP tool list");
+        check(tools.SequenceEqual(new[] { "list_actions", "inspect_files", "extract_text", "read_codes", "plan_action", "plan_compress", "plan_rename", "plan_move", "plan_zip_folder", "plan_pdf_pages", "apply_plan", "undo", "history" }), "MCP tool list");
         var listed = (JsonArray)Rpc(session, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!;
-        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes" or "plan_compress" or "plan_rename" or "plan_move" or "plan_zip_folder").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
+        check(listed.Where(t => (string)t!["name"]! is "extract_text" or "read_codes" or "plan_compress" or "plan_rename" or "plan_move" or "plan_zip_folder" or "plan_pdf_pages").All(t => t!["annotations"]!["readOnlyHint"]!.GetValue<bool>() && !t!["annotations"]!["destructiveHint"]!.GetValue<bool>()),
             "MCP extract_text, read_codes and the plan tools are marked read-only");
         BundleChecks(tools, check);
         check((int)Call(session, "format_disk", new JsonObject())["error"]!["code"]! == -32602, "MCP unknown tool is an invalid-params error");
@@ -230,7 +302,7 @@ internal static class McpChecks
         string photo = @"C:\Users\me\Pictures\photo.jpg", doc = @"C:\Users\me\notes.txt";
         host.Add(photo); host.Add(doc);
         var inspected = (JsonArray)Body(Call(session, "inspect_files", new JsonObject { ["paths"] = Paths(photo, doc, @"C:\missing.png") }))["files"]!;
-        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document && !a.Subtitle && !a.Data && !a.Font).Select(a => a.Id))
+        check(inspected[0]!["ok"]!.GetValue<bool>() && ((JsonArray)inspected[0]!["actions"]!).Select(a => (string)a!).SequenceEqual(McpSession.Actions.Where(a => !a.Document && !a.Subtitle && !a.Data && !a.Font && (!a.Metadata || a.Id == "image.jpegmetadata")).Select(a => a.Id))
             && ((JsonArray)inspected[1]!["actions"]!).Select(a => (string)a!).SequenceEqual(new[] { "document.txt", "document.rtf", "document.docx", "document.html", "document.odt" }) && !inspected[2]!["ok"]!.GetValue<bool>(), "MCP inspect_files reports each path with the actions for its kind");
         check(((JsonArray)inspected[0]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "read_codes", "plan_compress", "plan_rename", "plan_move" }) && ((JsonArray)inspected[1]!["tools"]!).Select(t => (string)t!).SequenceEqual(new[] { "extract_text", "plan_rename", "plan_move" }),
             "MCP inspect_files names the read-only tools for images and documents");
@@ -971,6 +1043,8 @@ internal static class McpChecks
         check(IsError(Compress(new JsonObject { ["paths"] = Paths(pic), ["target_bytes"] = 5000 })) && IsError(Call(shrinking, "apply_plan", new JsonObject { ["plan_id"] = (string)offPlan["plan_id"]! })), "MCP plan_compress and its apply refused while Agent Tools is off");
         shrinker.Enabled = true;
 
+        NewTools(check);
+
         // Plans are bounded.
         string any = @"C:\h\0.png";
         for (int i = 0; i < McpSession.MaxPlans; i++) Call(session, "plan_action", new JsonObject { ["action"] = "image.rotate", ["paths"] = Paths(any) });
@@ -980,5 +1054,222 @@ internal static class McpChecks
         string setup = McpSetup.Text(@"C:\Apps\Swivel\Swivel.exe");
         check(setup.Contains("claude mcp add --scope user swivel-windows -- \"C:\\Apps\\Swivel\\Swivel.exe\" --mcp", StringComparison.Ordinal)
             && setup.Contains("\"command\":\"C:\\\\Apps\\\\Swivel\\\\Swivel.exe\",\"args\":[\"--mcp\"]", StringComparison.Ordinal), "MCP setup text for Claude Code and Claude Desktop");
+    }
+
+    /// plan_pdf_pages, folders in plan_move and the metadata actions, each on its own host.
+    private static void NewTools(Action<bool, string> check)
+    {
+        // Metadata removal: offered by extension, named like the windows name them, logged and undone like any action.
+        var meta = new FakeHost(); var metas = new McpSession(meta, "0.131.0");
+        string jpeg = @"C:\p\shot.JPEG", png = @"C:\p\icon.png", tif = @"C:\p\scan.TIF", gif = @"C:\p\anim.gif";
+        foreach (string file in new[] { jpeg, png, tif, gif }) meta.Add(file);
+        var offered = ((JsonArray)Body(Call(metas, "inspect_files", new JsonObject { ["paths"] = Paths(jpeg, png, tif, gif) }))["files"]!).Select(f => ((JsonArray)f!["actions"]!).Select(a => (string)a!).Where(a => a.EndsWith("metadata", StringComparison.Ordinal)).ToArray()).ToArray();
+        check(offered[0].SequenceEqual(new[] { "image.jpegmetadata" }) && offered[1].SequenceEqual(new[] { "image.pngmetadata" }) && offered[2].SequenceEqual(new[] { "image.tiffmetadata" }) && offered[3].Length == 0,
+            "MCP inspect_files offers each metadata removal only for its own format");
+        var listedMeta = ((JsonArray)Body(Call(metas, "list_actions", new JsonObject()))["actions"]!).Where(a => ((string)a!["id"]!).EndsWith("metadata", StringComparison.Ordinal)).ToArray();
+        check(listedMeta.Length == 3 && ((string)listedMeta[0]!["writes"]!).Contains("without APP1 (EXIF, XMP), APP13") && ((string)listedMeta[0]!["writes"]!).Contains("orientation tag is kept")
+            && ((string)listedMeta[2]!["writes"]!).Contains("<the original's tif or tiff>") && ((string)listedMeta[1]!["inputs"]!).StartsWith("Static PNG"), "MCP list_actions describes the metadata removals");
+        var wrongKind = Call(metas, "plan_action", new JsonObject { ["action"] = "image.jpegmetadata", ["paths"] = Paths(png) });
+        check(IsError(wrongKind) && ((string)Body(wrongKind)["error"]!) == png + ": this action needs a JPG or JPEG file.", "MCP plan_action refuses a PNG for JPEG metadata removal: " + Body(wrongKind).ToJsonString());
+        string huge = @"C:\p\huge.png"; meta.Files[huge] = new FileStamp(1, 77, 32 * 1024 * 1024 + 1, 1000, 2000);
+        check(((string)Body(Call(metas, "plan_action", new JsonObject { ["action"] = "image.pngmetadata", ["paths"] = Paths(huge) }))["error"]!).Contains("limited to 32 MiB"), "MCP plan_action refuses metadata removal over 32 MiB");
+        meta.Files.Remove(huge);
+        var tifPlan = Body(Call(metas, "plan_action", new JsonObject { ["action"] = "image.tiffmetadata", ["paths"] = Paths(tif) }));
+        var jpegPlan = Body(Call(metas, "plan_action", new JsonObject { ["action"] = "image.jpegmetadata", ["paths"] = Paths(jpeg) }));
+        check((string?)tifPlan["inputs"]![0]!["output"] == @"C:\p\scan metadata removed.tif (or the next free numbered name)" && (string?)jpegPlan["inputs"]![0]!["output"] == @"C:\p\shot exif-comments removed.jpg (or the next free numbered name)"
+            && ((string)tifPlan["note"]!).StartsWith("The orientation is kept"), "MCP plans metadata removal beside the original, TIFF keeping its own extension: " + tifPlan.ToJsonString());
+        var tifDone = Body(Call(metas, "apply_plan", new JsonObject { ["plan_id"] = (string)tifPlan["plan_id"]! }));
+        check((string?)tifDone["outputs"]![0] == @"C:\p\scan metadata removed.tif" && meta.Ran[^1] == ("image.tiffmetadata", tif), "MCP apply runs TIFF metadata removal");
+        meta.Files[jpeg] = meta.Files[jpeg] with { WriteTime = 5555 };
+        var jpegRefused = Call(metas, "apply_plan", new JsonObject { ["plan_id"] = (string)jpegPlan["plan_id"]! });
+        check(IsError(jpegRefused) && ((string)Body(jpegRefused)["error"]!).Contains("changed since planning") && meta.Ran.Count == 1, "MCP metadata removal refused when the file changed since planning");
+        check(Body(Call(metas, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && !meta.Files.ContainsKey(@"C:\p\scan metadata removed.tif") && meta.Files.ContainsKey(tif), "MCP undo recycles the metadata-free copy");
+
+        // plan_pdf_pages: pages in order with repeats and per-page turns, a new PDF beside the first, undone to the Recycle Bin.
+        var pdf = new FakeHost(); var pdfs = new McpSession(pdf, "0.131.0");
+        string first = @"C:\d\report.pdf", second = @"C:\d\more\appendix.PDF", broken = @"C:\d\broken.pdf", text = @"C:\d\notes.txt";
+        foreach (string file in new[] { first, second, broken, text }) pdf.Add(file);
+        pdf.Pdfs[first] = 3; pdf.Pdfs[second] = 2;
+        JsonObject Page(int page, int? file = null, int? turn = null) { var o = new JsonObject { ["page"] = page }; if (file is int f) o["file"] = f; if (turn is int t) o["turn"] = t; return o; }
+        JsonObject Pages(params JsonObject[] pages) => Call(pdfs, "plan_pdf_pages", new JsonObject { ["paths"] = Paths(first, second), ["pages"] = new JsonArray(pages) });
+        var pdfTool = ((JsonArray)Rpc(pdfs, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!).Single(t => (string?)t!["name"] == "plan_pdf_pages")!;
+        var pageItem = pdfTool["inputSchema"]!["properties"]!["pages"]!["items"]!;
+        check(((JsonArray)pdfTool["inputSchema"]!["required"]!).Select(x => (string)x!).SequenceEqual(new[] { "paths", "pages" }) && (int)pdfTool["inputSchema"]!["properties"]!["paths"]!["maxItems"]! == 10
+            && ((JsonArray)pageItem["properties"]!["turn"]!["enum"]!).Select(x => (int)x!).SequenceEqual(new[] { 0, 90, 180, 270 }) && pageItem["additionalProperties"]!.GetValue<bool>() == false
+            && ((string)pdfTool["description"]!).Contains("digital signatures are not carried over"), "MCP plan_pdf_pages schema: paths, pages with file, page and turn");
+        int saves = pdf.Saves;
+        foreach (var (arguments, expected, why) in new (JsonObject, string, string)[]
+        {
+            (new JsonObject { ["paths"] = Paths(first, text), ["pages"] = new JsonArray(Page(1)) }, text + ": plan_pdf_pages takes PDF files.", "a text file"),
+            (new JsonObject { ["paths"] = Paths(Enumerable.Range(0, 11).Select(i => @"C:\d\" + i + ".pdf").ToArray()), ["pages"] = new JsonArray(Page(1)) }, "takes 1–10 PDFs", "eleven PDFs"),
+            (new JsonObject { ["paths"] = Paths(first) }, "pages must be a list", "no pages"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray() }, "pages must be a list", "an empty page list"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(Enumerable.Range(0, 1001).Select(_ => (JsonNode)Page(1)).ToArray()) }, "pages must be a list", "1,001 pages"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(Page(4)) }, first + " has 3 pages; there is no page 4.", "a page past the end"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(Page(0)) }, "page must be a whole number from 1", "page 0"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(Page(1, 2)) }, "file must be a whole number from 1 to 1.", "a file number past paths"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(Page(1, turn: 45)) }, "turn must be 0, 90, 180 or 270.", "a 45-degree turn"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(Page(1, turn: -90)) }, "turn must be a whole number from 0 to 270.", "a negative turn"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(new JsonObject { ["page"] = 1, ["rotate"] = 90 }) }, "Each page is an object", "an unknown page key"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(new JsonObject { ["turn"] = 90 }) }, "Each page needs page", "a page without its number"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(2) }, "Each page is an object", "a bare number"),
+            (new JsonObject { ["paths"] = Paths(first), ["pages"] = new JsonArray(Page(1)), ["turn"] = 90 }, "Unknown argument turn", "an unknown argument"),
+            (new JsonObject { ["paths"] = Paths(@"C:\d\gone.pdf"), ["pages"] = new JsonArray(Page(1)) }, @"C:\d\gone.pdf: ", "a missing PDF"),
+            (new JsonObject { ["paths"] = Paths(first, broken), ["pages"] = new JsonArray(Page(1)) }, PdfStructure.Damaged, "a PDF Swivel can't read"),
+            (new JsonObject { ["paths"] = Paths(first, first.ToUpperInvariant()), ["pages"] = new JsonArray(Page(1)) }, "only once", "one PDF twice"),
+        })
+        {
+            var refusal = Call(pdfs, "plan_pdf_pages", arguments);
+            check(IsError(refusal) && ((string)Body(refusal)["error"]!).Contains(expected, StringComparison.Ordinal), "MCP plan_pdf_pages refuses " + why + ": " + Body(refusal).ToJsonString());
+        }
+        string big = @"C:\d\big.pdf"; pdf.Files[big] = new FileStamp(1, 4000, 32 * 1024 * 1024 + 1, 1000, 2000); pdf.Pdfs[big] = 1;
+        check(((string)Body(Call(pdfs, "plan_pdf_pages", new JsonObject { ["paths"] = Paths(big), ["pages"] = new JsonArray(Page(1)) }))["error"]!).Contains("32 MiB"), "MCP plan_pdf_pages refuses a PDF over 32 MiB");
+        var five = Enumerable.Range(0, 5).Select(i => @"C:\d\part" + i + ".pdf").ToArray();
+        foreach (string part in five) { pdf.Files[part] = new FileStamp(1, 4100 + (ulong)part.Length, 30 * 1024 * 1024, 1000, 2000); pdf.Pdfs[part] = 1; }
+        check(((string)Body(Call(pdfs, "plan_pdf_pages", new JsonObject { ["paths"] = Paths(five), ["pages"] = new JsonArray(Page(1)) }))["error"]!).Contains("128 MiB"), "MCP plan_pdf_pages refuses PDFs over 128 MiB together");
+        check(pdf.PdfWrites.Count == 0 && pdf.Saves == saves, "MCP refused PDF plans write nothing");
+
+        var pdfPlan = Body(Pages(Page(3), Page(1, 2, 90), Page(3, turn: 180), Page(2, 1, 270)));
+        check((string?)pdfPlan["action"] == "pdf.pages" && (string?)pdfPlan["will_create"] == @"C:\d\report pages.pdf (or the next free numbered name)" && (int)pdfPlan["pages"]! == 4 && (int)pdfPlan["turned"]! == 3
+            && (int)pdfPlan["inputs"]![1]!["pages"]! == 2 && (string?)pdfPlan["inputs"]![1]!["path"] == second && ((string)pdfPlan["note"]!).Contains("Rotation is added to each page's own rotation") && pdf.PdfWrites.Count == 0 && pdf.Saves == saves,
+            "MCP plan_pdf_pages lists the inputs, page count and new PDF, writing nothing: " + pdfPlan.ToJsonString());
+        var pdfDone = Body(Call(pdfs, "apply_plan", new JsonObject { ["plan_id"] = (string)pdfPlan["plan_id"]! }));
+        var written = pdf.PdfWrites.Single();
+        check((string?)pdfDone["outputs"]![0] == @"C:\d\report pages.pdf" && (string?)pdfDone["action"] == "pdf.pages" && pdfDone["entry_id"] is JsonValue && written.Paths.SequenceEqual(new[] { first, second })
+            && written.Pages.SequenceEqual(new[] { new PdfPageChoice(0, 2, 0), new PdfPageChoice(1, 0, 90), new PdfPageChoice(0, 2, 180), new PdfPageChoice(0, 1, 270) }), "MCP apply writes the chosen pages in order with their turns: " + pdfDone.ToJsonString());
+        check(IsError(Call(pdfs, "apply_plan", new JsonObject { ["plan_id"] = (string)pdfPlan["plan_id"]! })), "MCP a PDF pages plan is single use");
+        var pdfLog = (JsonObject)JsonNode.Parse(pdf.History!)!["entries"]![0]!;
+        check((string?)pdfLog["action"] == "pdf.pages" && (string?)pdfLog["outputs"]![0]!["path"] == @"C:\d\report pages.pdf", "MCP the new PDF is logged as an output");
+        var stalePdf = Body(Pages(Page(1)));
+        pdf.Files[second] = pdf.Files[second] with { Size = 99 };
+        var pdfRefused = Call(pdfs, "apply_plan", new JsonObject { ["plan_id"] = (string)stalePdf["plan_id"]! });
+        check(IsError(pdfRefused) && ((string)Body(pdfRefused)["error"]!).StartsWith(second + " changed since planning", StringComparison.Ordinal) && pdf.PdfWrites.Count == 1, "MCP refuses a PDF pages plan whose second PDF changed, writing nothing");
+        pdf.Files[second] = pdf.Files[second] with { Size = 10 };
+        var racingPdf = Body(Pages(Page(2)));
+        pdf.DuringRun = () => pdf.Files[first] = pdf.Files[first] with { WriteTime = 7777 };
+        var racedPdf = Call(pdfs, "apply_plan", new JsonObject { ["plan_id"] = (string)racingPdf["plan_id"]! });
+        pdf.DuringRun = null;
+        check(IsError(racedPdf) && ((string)Body(racedPdf)["error"]!).StartsWith(McpSession.Changed, StringComparison.Ordinal) && pdf.PdfWrites.Count == 1, "MCP a PDF edited once held is refused at apply: " + Body(racedPdf).ToJsonString());
+        pdf.Files[first] = pdf.Files[first] with { WriteTime = 1000 };
+        var dryPdf = Body(Call(pdfs, "undo", new JsonObject { ["dry_run"] = true }));
+        check((string?)dryPdf["results"]![0]!["result"] == "would move to the Recycle Bin" && pdf.Files.ContainsKey(@"C:\d\report pages.pdf"), "MCP undo dry run names the new PDF");
+        check(Body(Call(pdfs, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && pdf.Recycled.SequenceEqual(new[] { @"C:\d\report pages.pdf" }) && pdf.Files.ContainsKey(first) && pdf.Files.ContainsKey(second), "MCP undo recycles the new PDF and keeps the originals");
+        pdf.Enabled = false;
+        check(IsError(Pages(Page(1))), "MCP plan_pdf_pages refused while Agent Tools is off");
+        pdf.Enabled = true;
+
+        // Folders in plan_move: each moved by one rename, logged by Move Folder's receipt, undone by file ID.
+        var dirs = new FakeHost(); var folders = new McpSession(dirs, "0.131.0");
+        string src = @"C:\f\src", dst = @"C:\f\dst", album = src + @"\Album", docs = src + @"\Docs", loose = src + @"\note.txt";
+        foreach (string folder in new[] { src, dst }) dirs.Folders.Add(folder);
+        dirs.Dirs[album] = 0x1_0000_0001; dirs.Dirs[docs] = 0x1_0000_0002; dirs.Add(loose);
+        JsonObject MoveFolders(params string[] paths) => Call(folders, "plan_move", new JsonObject { ["paths"] = Paths(paths), ["destination"] = dst });
+        var mixed = MoveFolders(album, loose);
+        check(IsError(mixed) && ((string)Body(mixed)["error"]!).Contains("files or folders, not both"), "MCP plan_move refuses files and folders together");
+        var moveTool = ((JsonArray)Rpc(folders, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}")["result"]!["tools"]!).Single(t => (string?)t!["name"] == "plan_move")!;
+        check(((string)moveTool["description"]!).Contains("paths may instead list 1–100 folders") && ((string)moveTool["description"]!).Contains("NTFS file ID"), "MCP plan_move describes moving folders");
+
+        // Row issues: a name taken there, nested folders, two folders with one name, a destination inside, a held folder, another drive, another spelling.
+        dirs.Taken.Add(dst + @"\Album");
+        var taken = Body(MoveFolders(album, docs));
+        check(!taken["can_apply"]!.GetValue<bool>() && ((string)taken["moves"]![0]!["issue"]!).Contains("already in the destination") && taken["moves"]![1]!["issue"] is null && taken["moves"]![0]!["folder"]!.GetValue<bool>(),
+            "MCP plan_move reports a folder whose name is taken in the destination, never renumbering it: " + taken.ToJsonString());
+        dirs.Taken.Clear();
+        string inner = album + @"\2024", twinDocs = @"C:\f\other\Docs";
+        dirs.Dirs[inner] = 0x1_0000_0003; dirs.Dirs[twinDocs] = 0x1_0000_0004;
+        var nested = Body(MoveFolders(album, inner, docs, twinDocs));
+        check(((string)nested["moves"]![0]!["issue"]!).Contains("holds this one or is inside it") && ((string)nested["moves"]![1]!["issue"]!).Contains("holds this one or is inside it")
+            && ((string)nested["moves"]![2]!["issue"]!).Contains("same name") && ((string)nested["moves"]![3]!["issue"]!).Contains("same name"), "MCP plan_move reports nested folders and two folders with one name: " + nested.ToJsonString());
+        dirs.Dirs.Remove(inner); dirs.Dirs.Remove(twinDocs);
+        dirs.Folders.Add(album + @"\inside");
+        var intoItself = Body(Call(folders, "plan_move", new JsonObject { ["paths"] = Paths(album), ["destination"] = album + @"\inside" }));
+        check(((string)intoItself["moves"]![0]!["issue"]!).Contains(FolderMove.Inside), "MCP plan_move refuses a destination inside the folder: " + intoItself.ToJsonString());
+        dirs.Locked.Add(album); dirs.OtherDrive.Add(docs);
+        var cannot = Body(MoveFolders(album, docs));
+        check(((string)cannot["moves"]![0]!["issue"]!).Contains("open in another app") && ((string)cannot["moves"]![1]!["issue"]!).Contains("same NTFS drive"), "MCP plan_move reports a held folder and one on another drive: " + cannot.ToJsonString());
+        dirs.Locked.Clear(); dirs.OtherDrive.Clear();
+        var spelt = Body(MoveFolders(@"C:\f\src\album"));
+        check(((string)spelt["moves"]![0]!["issue"]!).Contains("named Album"), "MCP plan_move asks for a folder's stored name: " + spelt.ToJsonString());
+
+        int folderSaves = dirs.Saves;
+        var folderPlan = Body(MoveFolders(album, docs + @"\"));
+        check(folderPlan["can_apply"]!.GetValue<bool>() && (string?)folderPlan["action"] == "move_folder" && (string?)folderPlan["moves"]![0]!["to"] == dst + @"\Album" && (string?)folderPlan["moves"]![1]!["from"] == docs
+            && ((string)folderPlan["note"]!).Contains("nothing is copied") && dirs.Dirs.ContainsKey(album) && dirs.FolderMoves.Count == 0 && dirs.Saves == folderSaves, "MCP plan_move plans folders, moving nothing: " + folderPlan.ToJsonString());
+        var folderDone = Body(Call(folders, "apply_plan", new JsonObject { ["plan_id"] = (string)folderPlan["plan_id"]! }));
+        check((string?)folderDone["action"] == "move_folder" && (int)folderDone["completed"]! == 2 && folderDone["entry_id"] is JsonValue && (string?)folderDone["moves"]![1]!["to"] == dst + @"\Docs"
+            && dirs.Dirs.ContainsKey(dst + @"\Album") && !dirs.Dirs.ContainsKey(album), "MCP apply moves the folders: " + folderDone.ToJsonString());
+        var folderLog = (JsonObject)JsonNode.Parse(dirs.History!)!["entries"]![0]!;
+        check((string?)folderLog["action"] == "move_folder" && folderLog["outputs"] is JsonArray { Count: 0 } && (string?)folderLog["folders"]![0]!["from"] == album && folderLog["folders"]![0]!["from_parent"]!["ancestors"] is JsonArray { Count: 3 }
+            && folderLog["folders"]![0]!["low"]!.GetValue<ulong>() == 0x1_0000_0001, "MCP a folder move is logged with its receipt");
+        var listedFolders = (JsonObject)Body(Call(folders, "history", new JsonObject()))["entries"]![0]!;
+        check((string?)listedFolders["folders"]![1]!["path"] == dst + @"\Docs" && (string?)listedFolders["folders"]![1]!["from"] == docs, "MCP history lists moved folders");
+
+        // Undo: dry run, an old name taken, then each folder back on its own.
+        dirs.Taken.Add(docs);
+        var dryFolders = Body(Call(folders, "undo", new JsonObject { ["dry_run"] = true }));
+        check((string?)dryFolders["results"]![0]!["result"] == "would be moved back" && ((string)dryFolders["results"]![1]!["result"]!).Contains(FolderMove.OriginalTaken) && dirs.Dirs.ContainsKey(dst + @"\Album"),
+            "MCP undo dry run checks each folder: " + dryFolders.ToJsonString());
+        var halfBack = Body(Call(folders, "undo", new JsonObject()));
+        check(!halfBack["complete"]!.GetValue<bool>() && (string?)halfBack["results"]![0]!["result"] == "moved back" && ((string)halfBack["results"]![1]!["result"]!).StartsWith("not moved back: ", StringComparison.Ordinal)
+            && dirs.Dirs.ContainsKey(album) && dirs.Dirs.ContainsKey(dst + @"\Docs"), "MCP undo moves back the folder it can and leaves the one whose old name is taken: " + halfBack.ToJsonString());
+        dirs.Taken.Clear();
+        // Moved back by hand meanwhile: found already back by its file ID and marked done.
+        dirs.Dirs.Remove(dst + @"\Docs"); dirs.Dirs[docs] = 0x1_0000_0002;
+        var byHand = Body(Call(folders, "undo", new JsonObject()));
+        check(byHand["complete"]!.GetValue<bool>() && (string?)byHand["results"]![0]!["result"] == "already undone" && (string?)byHand["results"]![1]!["result"] == "already back at its old place", "MCP undo finds a folder already back by its file ID: " + byHand.ToJsonString());
+        check(IsError(Call(folders, "undo", new JsonObject())), "MCP nothing left to undo after the folders are back");
+
+        // Changed since planning: the folder replaced, its name taken, the destination replaced.
+        foreach (var (change, restore, expected, why) in new (Action, Action, string, string)[]
+        {
+            (() => dirs.Dirs[album] = 0x2_0000_0000, () => dirs.Dirs[album] = 0x1_0000_0001, "The folder was replaced since planning", "a folder replaced"),
+            (() => dirs.Taken.Add(dst + @"\Album"), () => dirs.Taken.Clear(), "is in the destination now", "a name taken since"),
+            (() => dirs.Replaced[dst] = 9, () => dirs.Replaced.Remove(dst), "The destination folder was replaced", "the destination replaced"),
+        })
+        {
+            var stalePlan = Body(MoveFolders(album));
+            change();
+            var refused = Call(folders, "apply_plan", new JsonObject { ["plan_id"] = (string)stalePlan["plan_id"]! });
+            restore();
+            check(IsError(refused) && ((string)Body(refused)["error"]!).Contains(expected) && ((string)Body(refused)["error"]!).EndsWith("Nothing was moved.", StringComparison.Ordinal) && dirs.Dirs.ContainsKey(album) && dirs.FolderMoves.Count == 2,
+                "MCP refuses a folder move when " + why + ": " + Body(refused).ToJsonString());
+        }
+        // One folder fails partway: the one before stays moved and logged.
+        dirs.FailOn = docs;
+        var partial = Call(folders, "apply_plan", new JsonObject { ["plan_id"] = (string)Body(MoveFolders(album, docs))["plan_id"]! });
+        dirs.FailOn = null;
+        check(IsError(partial) && (int)Body(partial)["completed"]! == 1 && Body(partial)["entry_id"] is JsonValue && ((string)Body(partial)["error"]!).StartsWith(docs + ": ", StringComparison.Ordinal) && dirs.Dirs.ContainsKey(dst + @"\Album") && dirs.Dirs.ContainsKey(docs),
+            "MCP a folder move that fails partway keeps and logs the folders already moved: " + Body(partial).ToJsonString());
+        // A parent folder replaced since: undo refuses, the folder stays.
+        dirs.Replaced[src] = 5;
+        var parentGone = Body(Call(folders, "undo", new JsonObject()));
+        check(!parentGone["complete"]!.GetValue<bool>() && ((string)parentGone["results"]![0]!["result"]!).Contains(FolderMove.ParentsChanged) && dirs.Dirs.ContainsKey(dst + @"\Album"), "MCP undo refuses a folder whose old parent was replaced: " + parentGone.ToJsonString());
+        dirs.Replaced.Remove(src);
+        check(Body(Call(folders, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && dirs.Dirs.ContainsKey(album), "MCP undo moves the folder back once its parent is the same again");
+
+        // Receipts of many deep, non-ASCII folders would crowd the log: refused at planning, one alone still fits.
+        string deep = @"C:\" + string.Join(@"\", Enumerable.Repeat("文件夹文件夹文件夹文", 20));
+        var deepFolders = Enumerable.Range(10, 30).Select(i => deep + @"\相册" + i).ToArray();
+        dirs.Folders.Add(deep); foreach (var (path, i) in deepFolders.Select((p, i) => (p, i))) dirs.Dirs[path] = 0x3_0000_0000 + (ulong)i;
+        var crowded = MoveFolders(deepFolders);
+        check(IsError(crowded) && ((string)Body(crowded)["error"]!).Contains("Move fewer folders at a time") && dirs.Dirs.ContainsKey(deepFolders[0]), "MCP plan_move refuses folders whose undo records would crowd the history: " + Body(crowded).ToJsonString());
+        var oneDeep = Body(MoveFolders(deepFolders[0]));
+        check(oneDeep["can_apply"]!.GetValue<bool>(), "MCP plan_move accepts one deep folder");
+        Body(Call(folders, "apply_plan", new JsonObject { ["plan_id"] = (string)oneDeep["plan_id"]! }));
+        check(dirs.History!.Length < McpSession.MaxFolderEntryChars + 4096 && Body(Call(folders, "undo", new JsonObject()))["complete"]!.GetValue<bool>() && dirs.Dirs.ContainsKey(deepFolders[0]),
+            "MCP a deep folder's receipt stays within its estimate and undoes: " + dirs.History!.Length);
+
+        // A damaged receipt makes the whole log unreadable, never half trusted.
+        string goodLog = dirs.History!;
+        var tampered = (JsonObject)JsonNode.Parse(goodLog)!;
+        ((JsonArray)tampered["entries"]![0]!["folders"]![0]!["parent"]!["ancestors"]!).RemoveAt(0);
+        dirs.History = tampered.ToJsonString();
+        check(IsError(Call(folders, "history", new JsonObject())) && IsError(Call(folders, "undo", new JsonObject())) && dirs.History == tampered.ToJsonString(), "MCP a folder log with a broken receipt is refused and kept");
+        var mixedLog = (JsonObject)JsonNode.Parse(goodLog)!;
+        ((JsonArray)mixedLog["entries"]![0]!["outputs"]!).Add(new JsonObject { ["path"] = @"C:\x.png", ["volume"] = 1, ["index"] = 1, ["size"] = 1, ["write"] = 1, ["creation"] = 1 });
+        dirs.History = mixedLog.ToJsonString();
+        check(IsError(Call(folders, "history", new JsonObject())), "MCP a folder log entry with outputs too is refused");
+        dirs.History = goodLog;
+        check(!IsError(Call(folders, "history", new JsonObject())), "MCP the folder log reads again once restored");
     }
 }

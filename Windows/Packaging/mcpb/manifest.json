@@ -32,10 +32,11 @@
     { "name": "plan_action", "description": "Plan a conversion or tool (e.g. convert.png, image.rotate, document.docx) and see what it would create." },
     { "name": "plan_compress", "description": "Plan compressing images to JPEG or videos to MP4 under a file size." },
     { "name": "plan_rename", "description": "Plan renaming files in place: base name, find and replace, prefix, suffix, numbering." },
-    { "name": "plan_move", "description": "Plan moving files into a folder on the same drive." },
+    { "name": "plan_move", "description": "Plan moving files, or whole folders, into a folder on the same drive." },
     { "name": "plan_zip_folder", "description": "Plan zipping one folder and everything in it into a new ZIP beside it." },
+    { "name": "plan_pdf_pages", "description": "Plan a new PDF from chosen pages of PDFs, in any order, each optionally turned." },
     { "name": "apply_plan", "description": "Carry out a plan once; records it in the undo log." },
-    { "name": "undo", "description": "Undo an applied plan: created files go to the Recycle Bin, renames and moves go back." },
+    { "name": "undo", "description": "Undo an applied plan: created files go to the Recycle Bin, renames and moves of files and folders go back." },
     { "name": "history", "description": "List recently applied plans from the undo log." }
   ],
   "keywords": ["files", "convert", "images", "documents", "video", "rename", "compress", "ocr", "windows"],

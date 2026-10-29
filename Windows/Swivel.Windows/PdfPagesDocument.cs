@@ -19,8 +19,10 @@ public sealed class PdfPagesDocument:IDisposable
     public IReadOnlyList<PdfPagesRow> Pages=>rows.AsReadOnly();
     private PdfPagesDocument(){}
 
-    public static PdfPagesDocument Open(IReadOnlyList<string> paths,CancellationToken token)
+    /// With `expected` (an agent's plan, one stamp per path), a PDF that is no longer the planned one is refused before it is read.
+    public static PdfPagesDocument Open(IReadOnlyList<string> paths,CancellationToken token,IReadOnlyList<FileStamp>? expected=null)
     {
+        if(expected is not null&&expected.Count!=paths.Count)throw new ArgumentException("One stamp per PDF.");
         token.ThrowIfCancellationRequested();if(paths.Count is <1 or >10)throw new UserError(PdfStructure.Limit);
         var work=new PdfPagesDocument();long total=0;var budget=new PdfBudget();
         try
@@ -28,6 +30,7 @@ public sealed class PdfPagesDocument:IDisposable
             foreach(string path in paths)
             {
                 token.ThrowIfCancellationRequested();var input=NativeFiles.OpenRead(path);work.inputs.Add(input);
+                if(expected is not null&&!input.Stamp.SameObjectAndContent(expected[work.inputs.Count-1]))throw new McpToolError(McpSession.Changed);
                 long length=input.Stream.Length;total+=length;
                 if(length>PdfStructure.MaxBytes||total>128L*1024*1024)throw new UserError(PdfStructure.Limit);
                 var bytes=new byte[length];input.Stream.Position=0;
@@ -41,6 +44,9 @@ public sealed class PdfPagesDocument:IDisposable
         }
         catch{work.Dispose();throw;}
     }
+
+    /// The page count of each PDF, in the order they were opened.
+    public int[] PageCounts=>sources.Select(s=>s.Pages.Count).ToArray();
 
     public PdfPageChoice[] Plan(string selection)=>PdfPageCopy.Parse(selection,rows.Count).Select(i=>choices[i]).ToArray();
 
