@@ -103,11 +103,14 @@ internal static class WaveToolsChecks
             check(document.Peaks.Length==0,"Speed loading skips unnecessary peak scan");
             var app=System.Windows.Application.Current as App??new App();var dialog=new WaveSpeedDialog(app,document);
             var root=(System.Windows.Controls.DockPanel)dialog.Content;
-            check(dialog.Speed==new WaveSpeed(100)&&root.Children.OfType<System.Windows.Controls.StackPanel>().Any(x=>System.Windows.Controls.DockPanel.GetDock(x)==System.Windows.Controls.Dock.Bottom),"Speed defaults neutral with fixed native footer");
+            check(dialog.Speed==new WaveSpeed(100,true)&&root.Children.OfType<System.Windows.Controls.StackPanel>().Any(x=>System.Windows.Controls.DockPanel.GetDock(x)==System.Windows.Controls.Dock.Bottom),"Speed defaults neutral with fixed native footer");
             var scroll=root.Children.OfType<System.Windows.Controls.ScrollViewer>().Single();var panel=(System.Windows.Controls.StackPanel)scroll.Content;
             var field=panel.Children.OfType<System.Windows.Controls.TextBox>().Single();
             check(field.Text=="100"&&System.Windows.Automation.AutomationProperties.GetName(field)==app.L("Playback Speed (%)"),"Speed field has explicit automation name and neutral value");
-            field.Text="201";check(dialog.Speed==new WaveSpeed(100),"Invalid editing cannot mutate committed speed");
+            var keep=panel.Children.OfType<System.Windows.Controls.CheckBox>().Single();
+            check(keep.IsChecked==true&&System.Windows.Automation.AutomationProperties.GetName(keep)==app.L("Keep Pitch (time-stretch)"),"Keep Pitch is on by default with an explicit automation name");
+            field.Text="201";check(dialog.Speed==new WaveSpeed(100,true),"Invalid editing cannot mutate committed speed");
+            keep.IsChecked=false;check(dialog.Speed==new WaveSpeed(100,true),"Toggling Keep Pitch alone does not commit a speed");
             dialog.Close();dialog.FinishPreviewAsync().GetAwaiter().GetResult();
             var speed=new WaveSpeed(73);byte[] preview=document.SpeedPreview(speed,default);
             string first=document.SaveSpeed(speed,default),second=document.SaveSpeed(speed,default);
@@ -115,10 +118,15 @@ internal static class WaveToolsChecks
             check(File.ReadAllBytes(first).SequenceEqual(File.ReadAllBytes(second))&&preview.SequenceEqual(File.ReadAllBytes(first)),"Short PCM16 speed preview matches both deterministic collision outputs");
             using(var read=File.OpenRead(first))
             {var info=PcmWave.Read(read,default);check(info.Rate==8000&&info.Bits==16&&info.Channels==1&&info.Frames==(8000L*100+73/2)/73,"Speed output has rounded duration with original format");}
+            var stretch=new WaveSpeed(37,true);byte[] stretchPreview=document.SpeedPreview(stretch,default);string third=document.SaveSpeed(stretch,default);
+            check(third.EndsWith("声音 speed 3.wav")&&Path.GetDirectoryName(third)==folder&&stretchPreview.SequenceEqual(File.ReadAllBytes(third))&&!File.ReadAllBytes(third).SequenceEqual(File.ReadAllBytes(first)),"Keep-pitch preview equals its exclusive beside-original save");
+            using(var read=File.OpenRead(third))
+            {var info=PcmWave.Read(read,default);check(info.Rate==8000&&info.Bits==16&&info.Channels==1&&info.Frames==(8000L*100+37/2)/37,"Keep-pitch output has rounded duration with original format");}
             reject(()=>File.WriteAllBytes(source,new byte[1]),"Speed retains source lease through preview and save");
             reject(()=>Directory.Move(folder,folder+" moved"),"Speed retains ancestor lease");
             int count=Directory.GetFiles(folder).Length;
             reject(()=>document.SaveSpeed(new(49),default),"Invalid speed refused before staging");
+            reject(()=>document.SaveSpeed(new(401,true),default),"Invalid keep-pitch speed refused before staging");
             reject(()=>document.SaveSpeed(speed,new CancellationToken(true)),"Pre-cancelled speed saves nothing");
             check(Directory.GetFiles(folder).Length==count&&!Directory.GetFiles(folder,".swivel-*.tmp").Any(),"Speed invalid/cancelled saves leave no stage/output");
         }
@@ -197,6 +205,14 @@ internal static class WaveToolsChecks
             cancellation.Cancel();bool cancelled=false;try{saving.GetAwaiter().GetResult();}catch(OperationCanceledException){cancelled=true;}
             check(staging&&cancelled,"Speed can cancel during exclusive staging export");
             check(!Directory.GetFiles(folder,".swivel-*.tmp").Any()&&!Directory.GetFiles(folder,"cancel-during-export speed*.wav").Any(),"Mid-speed cancellation removes owned stage and publishes nothing");
+        }
+        using(var document=WaveDocument.Open(large,default,scanPeaks:false))using(var cancellation=new CancellationTokenSource())
+        {
+            var saving=Task.Run(()=>document.SaveSpeed(new(29,true),cancellation.Token));
+            bool staging=SpinWait.SpinUntil(()=>Directory.GetFiles(folder,".swivel-*.tmp").Length>0||saving.IsCompleted,TimeSpan.FromSeconds(5))&&!saving.IsCompleted;
+            cancellation.Cancel();bool cancelled=false;try{saving.GetAwaiter().GetResult();}catch(OperationCanceledException){cancelled=true;}
+            check(staging&&cancelled,"Keep-pitch speed can cancel during exclusive staging export");
+            check(!Directory.GetFiles(folder,".swivel-*.tmp").Any()&&!Directory.GetFiles(folder,"cancel-during-export speed*.wav").Any(),"Mid-keep-pitch cancellation removes owned stage and publishes nothing");
         }
         using(var document=WaveDocument.Open(large,default)) using(var cancellation=new CancellationTokenSource())
         {

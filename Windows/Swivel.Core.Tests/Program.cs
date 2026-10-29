@@ -153,6 +153,7 @@ WaveDuckingChecks.Run(Check, Reject);
 WaveLoopChecks.Run(Check, Reject);
 WaveFormatChecks.Run(Check, Reject);
 WaveSpeedChecks.Run(Check, Reject);
+WaveStretchChecks.Run(Check, Reject);
 WinRtBoundaryChecks.Run(Check, Reject);
 G711Checks.Run(Check, Reject);
 FloatWaveChecks.Run(Check, Reject);

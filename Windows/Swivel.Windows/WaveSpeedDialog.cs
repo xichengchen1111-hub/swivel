@@ -13,7 +13,7 @@ namespace Swivel.Windows;
 
 internal sealed class WaveSpeedDialog : Window
 {
-    public WaveSpeed Speed { get; private set; } = new();
+    public WaveSpeed Speed { get; private set; } = new(KeepPitch: true);
     private Task pending = Task.CompletedTask;
     private CancellationTokenSource? cancellation;
     private WaveDialog.PreviewSound? sound;
@@ -26,21 +26,25 @@ internal sealed class WaveSpeedDialog : Window
         var root = new DockPanel { Margin = new Thickness(20) }; var panel = new StackPanel();
         panel.Children.Add(UI.Text(document.Path, 12));
         panel.Children.Add(UI.Text(string.Format(app.L("{0:0.###} seconds · {1} Hz · {2} channel(s) · {3}-bit PCM"), info.Seconds, info.Rate, info.Channels, info.Bits), 18));
-        panel.Children.Add(UI.Text(app.L("Change playback speed from 50–200%. Pitch changes too: faster is higher, slower is lower. This does not preserve voice pitch or perform time-stretching.")));
+        panel.Children.Add(UI.Text(app.L("Change playback speed. With Keep Pitch on (25–400%), sounds keep their original pitch. With it off (50–200%), pitch changes with speed: faster is higher, slower is lower.")));
+        var keep = new CheckBox { Content = app.L("Keep Pitch (time-stretch)"), IsChecked = true, Margin = new Thickness(0, 4, 0, 8) };
+        AutomationProperties.SetName(keep, app.L("Keep Pitch (time-stretch)")); panel.Children.Add(keep);
         panel.Children.Add(UI.Text(app.L("Playback Speed (%)")));
         var percent = new TextBox { Text = "100", MinHeight = 32, MaxLength = 8, Margin = new Thickness(0, 4, 0, 12) };
         AutomationProperties.SetName(percent, app.L("Playback Speed (%)")); panel.Children.Add(percent);
         var duration = UI.Text(""); panel.Children.Add(duration);
         panel.Children.Add(UI.Text(app.L("Save keeps the original sample rate, channels and integer bit depth, removes metadata, and creates a new WAV beside the original. Duration rounds to the nearest output frame; 100% preserves sample values."), 12));
-        panel.Children.Add(UI.Text(app.L("Speed changes use a finite low-pass filter. Faster playback removes frequencies that would exceed the output Nyquist limit; slower playback cannot restore detail. Peaks may clip and reduction rounds without dither."), 12));
-        panel.Children.Add(UI.Text(app.L("Preview plays the first 10 output seconds as 16-bit PCM using the same full-source filter and target quantization as Save. Output is limited to 512 MB and two hours; long processing can be cancelled."), 12));
+        panel.Children.Add(UI.Text(app.L("Keep Pitch repeats or skips short overlapping pieces of the sound (40 ms, lined up by similarity; an original WSOLA method). On steady test tones pitch stays within about 0.3%. Clicks and drum hits can repeat as echoes when slower, or soften and drop out when faster; chords, music and noisy recordings can sound rough or wavering; both stereo channels are lined up together. It does not separate voices or instruments."), 12));
+        panel.Children.Add(UI.Text(app.L("Without Keep Pitch, speed changes use a finite low-pass filter. Faster playback removes frequencies that would exceed the output Nyquist limit; slower playback cannot restore detail. Either way, peaks may clip and reduction rounds without dither."), 12));
+        panel.Children.Add(UI.Text(app.L("Preview plays the first 10 output seconds as 16-bit PCM using the same processing and target quantization as Save. Output is limited to 512 MB and two hours; long processing can be cancelled."), 12));
         var footer = new StackPanel(); var status = UI.Text(""); footer.Children.Add(status); var buttons = new WrapPanel(); footer.Children.Add(buttons);
         DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); root.Children.Add(UI.Scroll(panel)); Content = root;
         WaveSpeed Read()
         {
+            bool pitch = keep.IsChecked == true;
             if (!int.TryParse(percent.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out int value))
-                throw new UserError("Choose a whole-number speed from 50–200%.");
-            var speed = new WaveSpeed(value); speed.Frames(info); return speed;
+                throw new UserError(pitch ? "Choose a whole-number speed from 25–400%." : "Choose a whole-number speed from 50–200%.");
+            var speed = new WaveSpeed(value, pitch); speed.Frames(info); return speed;
         }
         var preview = UI.Button(app.L("Play Speed Preview"), () => { });
         var save = UI.Button(app.L("Save WAV"), () => { try { Speed = Read(); Stop(); DialogResult = true; } catch (UserError ex) { status.Text = app.L(ex.Message); } });
@@ -58,7 +62,7 @@ internal sealed class WaveSpeedDialog : Window
             }
             catch (UserError ex) { duration.Text = ""; status.Text = app.L(ex.Message); }
         }
-        percent.TextChanged += (_, _) => Changed(); Changed();
+        percent.TextChanged += (_, _) => Changed(); keep.Checked += (_, _) => Changed(); keep.Unchecked += (_, _) => Changed(); Changed();
         SourceInitialized += (_, _) => FitWorkArea(Owner ?? this); DpiChanged += (_, _) => FitWorkArea(this);
         Closed += (_, _) => { closed = true; Stop(); };
         async Task Play()
