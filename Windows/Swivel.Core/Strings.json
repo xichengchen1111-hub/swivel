@@ -15158,5 +15158,65 @@
     "Word 97-2003 主文档文字",
     "Word 97-2003 主文件文字",
     "Word 97-2003 メイン文書テキスト"
+  ],
+  "Read QR Image…": [
+    "读取二维码图片…",
+    "讀取 QR 碼圖片…",
+    "QR 画像を読み取る…"
+  ],
+  "Read QR Image": [
+    "读取二维码图片",
+    "讀取 QR 碼圖片",
+    "QR 画像を読み取る"
+  ],
+  "Choose a QR Image…": [
+    "选择二维码图片…",
+    "選取 QR 碼圖片…",
+    "QR 画像を選択…"
+  ],
+  "Code orientation: about {0}° clockwise from upright.": [
+    "码的方向：约从正向顺时针旋转 {0}°。",
+    "碼的方向：約從正向順時針旋轉 {0}°。",
+    "コードの向き：正立から時計回りに約 {0}°。"
+  ],
+  "Error correction changed {0} encoded bytes in {1} blocks. Zero does not prove the photo was perfect, and beyond the correction capacity another valid message could be accepted.": [
+    "纠错修改了 {1} 个块中的 {0} 个编码字节。为零并不证明照片完美；超出纠错能力时，可能接受另一条合法信息。",
+    "糾錯修改了 {1} 個區塊中的 {0} 個編碼位元組。為零並不證明照片完美；超出糾錯能力時，可能接受另一則有效訊息。",
+    "誤り訂正で {1} ブロックの {0} 個の符号化バイトを変更しました。0 でも写真が完全だった証明にはならず、訂正能力を超えると別の有効なメッセージが受け入れられる可能性があります。"
+  ],
+  "No supported QR code was found. The image may contain no QR code, or one that is too small, blurred, curved, mirrored, light-on-dark, partly covered or damaged beyond its error correction, or text in an unsupported format.": [
+    "未找到支持的二维码。图片中可能没有二维码，或二维码过小、模糊、弯曲、镜像、浅色在深底、被部分遮挡、损坏超出纠错能力，或文字格式不受支持。",
+    "未找到支援的 QR 碼。圖片中可能沒有 QR 碼，或 QR 碼過小、模糊、彎曲、鏡像、淺色在深底、被部分遮擋、損壞超出糾錯能力，或文字格式不受支援。",
+    "対応する QR コードが見つかりませんでした。画像に QR コードがないか、小さすぎる・ぼけている・曲がっている・鏡像・暗い地に明るい・一部隠れている・誤り訂正の能力を超えて損傷している、または対応していないテキスト形式の可能性があります。"
+  ],
+  "Create L/M/Q/H QR codes and keep 32 local entries with optional garden reliefs. Read one QR code from flat images, screenshots or photos (any rotation, mild perspective, blur and uneven light), or explicitly try bounded data-codeword recovery on flat images; excess damage can yield different valid text. For recovery, function modules and borders must remain exact. Export compatible M-level PNGs for Mac image import; names, groups and scenes do not transfer. Other barcodes, several codes per image, mirrored or light-on-dark codes and broader image repair remain pending. Real camera photos, 3D scanning and Windows visual acceptance are unverified.": [
+    "生成 L/M/Q/H 级二维码，保存最多32个本地条目并可选花园浮雕。可从平面图片、截图或照片读取一个二维码（任意旋转、轻微透视、模糊和光照不均），或对平面图片明确尝试有限的数据码字恢复；超量损坏可能得到另一段合法文字。恢复时功能模块和边框必须完整准确。可导出兼容的 M 级 PNG 供 Mac 图片导入，但名称、分组和场景不迁移。其他条码、一图多码、镜像或浅色在深底的码以及更广泛的图像修复仍待实现，真实相机照片、3D 扫码及 Windows 视觉体验尚未验收。",
+    "產生 L/M/Q/H 級 QR 碼，儲存最多32個本機項目並可選花園浮雕。可從平面圖片、截圖或照片讀取一個 QR 碼（任意旋轉、輕微透視、模糊和光照不均），或對平面圖片明確嘗試有限的資料碼字復原；過量損壞可能得到另一段有效文字。復原時功能模組和邊框必須完整準確。可匯出相容的 M 級 PNG 供 Mac 圖片匯入，但名稱、分組和場景不遷移。其他條碼、一圖多碼、鏡像或淺色在深底的碼以及更廣泛的影像修復仍待實作，真實相機照片、3D 掃碼及 Windows 視覺體驗尚未驗收。",
+    "L/M/Q/H の QR コードを作成し、花園レリーフ付きの項目を最大32件ローカルに保存できます。平面画像・スクリーンショット・写真から QR コードを 1 つ読み取れます（任意の回転、軽い遠近、ぼけ、ムラのある照明）。平面画像ではデータコード語の限定的な復元を明示的に試せます。損傷が多すぎる場合、別の有効なテキストを返す可能性があります。復元では機能パターンと余白が正確である必要があります。互換MレベルのPNGをMacに画像として取り込めますが、名前・グループ・シーンは移行しません。他のバーコード、1 画像内の複数コード、鏡像や暗い地に明るいコード、広範な画像修復は未実装です。実際のカメラ写真、3DスキャンとWindowsの表示品質は未検証です。"
+  ],
+  "With Agent Tools on, Swivel.exe --mcp serves local agents over stdin/stdout only (no port or network). Agents can inspect files, read document text, image text (Windows OCR, MSIX package only) and QR codes in images or photos, convert, rotate, flip or grayscale images or remove or blur their background, save a document's text as TXT, RTF, DOCX, HTML or ODT, compress images to JPEG or videos to MP4 under a size, rename files in their folders and move files into another folder on the same drive: every write is planned, applied once within an hour if no input changed, never overwrites anything, and is logged so undo can move unchanged outputs to the Recycle Bin, rename files back or move them back. The Mac's other agent tools are not offered yet.": [
+    "开启“Agent 工具”后，Swivel.exe --mcp 只通过标准输入/输出为本机代理提供服务（不开端口、不联网）。代理可以检查文件，读取文档文字、图片文字（Windows OCR，仅 MSIX 包）和图片或照片中的二维码，转换、旋转、翻转图片、转为灰度或移除/虚化背景，把文档的文字另存为 TXT、RTF、DOCX、HTML 或 ODT，把图片压缩成不超过指定大小的 JPEG、把视频压缩成不超过指定大小的 MP4，在原文件夹内给文件改名，并把文件移到同一驱动器上的另一个文件夹：每次写入都先计划，在一小时内、输入未变时只应用一次，绝不覆盖任何文件，并记入历史，撤销时可把未改动的输出移入回收站、把文件改回原名或移回原文件夹。Mac 版的其他代理工具尚未提供。",
+    "開啟「Agent 工具」後，Swivel.exe --mcp 只透過標準輸入/輸出為本機代理提供服務（不開連接埠、不連網）。代理可以檢查檔案，讀取文件文字、圖片文字（Windows OCR，僅 MSIX 套件）和圖片或照片中的 QR 碼，轉換、旋轉、翻轉圖片、轉為灰階或移除/模糊背景，把文件的文字另存為 TXT、RTF、DOCX、HTML 或 ODT，把圖片壓縮成不超過指定大小的 JPEG、把影片壓縮成不超過指定大小的 MP4，在原資料夾內為檔案重新命名，並把檔案移到同一磁碟機上的另一個資料夾：每次寫入都先規劃，在一小時內、輸入未變時只套用一次，絕不覆寫任何檔案，並記入歷程，復原時可把未變更的輸出移到資源回收筒、把檔案改回原名或移回原資料夾。Mac 版的其他代理工具尚未提供。",
+    "エージェントツールをオンにすると、Swivel.exe --mcp は標準入出力だけでローカルのエージェントに応答します（ポートやネットワークは使いません）。エージェントはファイルの確認、文書のテキスト、画像のテキスト（Windows OCR、MSIX パッケージのみ）と画像や写真内の QR コードの読み取り、画像の変換・回転・反転・グレースケール化と背景の削除やぼかし、文書のテキストを TXT・RTF・DOCX・HTML・ODT として保存、画像を指定サイズ以下の JPEG に、動画を指定サイズ以下の MP4 に圧縮、同じフォルダー内でのファイル名の変更、同じドライブ上の別のフォルダーへのファイルの移動ができます。書き込みはすべて先に計画し、1 時間以内で入力が変わっていない場合に 1 回だけ適用され、何も上書きせず、履歴に記録されるので、取り消すと変更されていない出力をごみ箱へ移したり、ファイル名を元に戻したり、元のフォルダーへ戻したりできます。Mac 版のその他のエージェントツールはまだありません。"
+  ],
+  "With Agent Tools on, an agent host such as Claude Code, Claude Desktop or Codex can start Swivel with --mcp and talk to it over stdin and stdout only. Agents can inspect files, read the text of documents and (in the MSIX package) images, read QR codes in images and photos, convert, rotate, flip or grayscale images or remove or blur their background, save a document's text as TXT, RTF, DOCX, HTML or ODT, compress images to JPEG or videos to MP4 under a size, rename files in their folders, and move files into another folder on the same drive. Reading never changes a file. Every write is planned first, applied once and never overwrites anything; new files can be undone to the Recycle Bin, renames by renaming the files back, and moves by moving the files back.": [
+    "开启“Agent 工具”后，Claude Code、Claude Desktop 或 Codex 等代理程序可以用 --mcp 启动 Swivel，只通过标准输入和输出与它通信。代理可以检查文件，读取文档和（MSIX 包中的）图片文字，读取图片和照片中的二维码，转换、旋转、翻转图片、转为灰度或移除/虚化背景，把文档的文字另存为 TXT、RTF、DOCX、HTML 或 ODT，把图片压缩成不超过指定大小的 JPEG、把视频压缩成不超过指定大小的 MP4，在原文件夹内给文件改名，并把文件移到同一驱动器上的另一个文件夹。读取从不改动文件。每次写入都先计划、只应用一次，绝不覆盖任何文件；新建的文件可撤销到回收站，改名可撤销为改回原名，移动可撤销为移回原处。",
+    "開啟「Agent 工具」後，Claude Code、Claude Desktop 或 Codex 等代理程式可以用 --mcp 啟動 Swivel，只透過標準輸入和輸出與它通訊。代理可以檢查檔案，讀取文件和（MSIX 套件中的）圖片文字，讀取圖片和照片中的 QR 碼，轉換、旋轉、翻轉圖片、轉為灰階或移除/模糊背景，把文件的文字另存為 TXT、RTF、DOCX、HTML 或 ODT，把圖片壓縮成不超過指定大小的 JPEG、把影片壓縮成不超過指定大小的 MP4，在原資料夾內為檔案重新命名，並把檔案移到同一磁碟機上的另一個資料夾。讀取絕不變更檔案。每次寫入都先規劃、只套用一次，絕不覆寫任何檔案；新建的檔案可復原到資源回收筒，重新命名可復原為改回原名，移動可復原為移回原處。",
+    "エージェントツールをオンにすると、Claude Code、Claude Desktop、Codex などのエージェントホストが --mcp で Swivel を起動し、標準入出力だけでやり取りできます。エージェントはファイルの確認、文書と（MSIX パッケージでは）画像のテキストの読み取り、画像や写真内の QR コードの読み取り、画像の変換・回転・反転・グレースケール化と背景の削除やぼかし、文書のテキストを TXT・RTF・DOCX・HTML・ODT として保存、画像を指定サイズ以下の JPEG に、動画を指定サイズ以下の MP4 に圧縮、同じフォルダー内でのファイル名の変更、同じドライブ上の別のフォルダーへのファイルの移動ができます。読み取りでファイルが変わることはありません。書き込みはすべて先に計画し、1 回だけ適用され、何も上書きしません。新しいファイルはごみ箱へ、名前の変更は元の名前に、移動は元の場所に戻して取り消せます。"
+  ],
+  "Create QR codes from text and keep up to 32 in a local library. Read QR codes from images, screenshots and photos with the separate reader.": [
+    "从文字创建二维码，并在本地库保存最多32个条目。使用独立读取器从图片、截图和照片读取二维码。",
+    "從文字建立QR碼，並在本機圖庫儲存最多32個項目。使用獨立讀取器從圖片、截圖和照片讀取QR碼。",
+    "テキストからQRコードを作成し、ローカルライブラリに最大32件保存できます。画像・スクリーンショット・写真のQRコードは専用のリーダーで読み取れます。"
+  ],
+  "Sampled read with error correction: QR version {0} · level {1} · about {2} pixels/module · {3} UTF-16 units": [
+    "采样读取并经纠错：二维码版本 {0} · 级别 {1} · 每模块约 {2} 像素 · {3} 个 UTF-16 单位",
+    "取樣讀取並經糾錯：QR 碼版本 {0} · 等級 {1} · 每模組約 {2} 像素 · {3} 個 UTF-16 單位",
+    "標本化して誤り訂正で読み取り：QR バージョン {0} · レベル {1} · 約 {2} ピクセル/モジュール · UTF-16 {3} 単位"
+  ],
+  "Reading first tries exact flat QR images: square, at 0°, 90°, 180° or 270°, with an exact four-module white border and uniform whole-number pixel scaling, read without error correction. If that does not match, a photo reader looks for one dark-on-light Model 2 QR code anywhere in the image (up to 16 megapixels): any rotation, mild perspective (larger codes need a more head-on view), moderate blur, noise, uneven lighting and colored backgrounds. Flat images that fail the exact rules, such as smoothly resized or slightly damaged ones, are read this way too. It finds the three corner squares, uses the lower-right alignment square when it can, samples the grid and then uses the code's own error correction. Only one code is read per image; when several codes are present, which one is read is not defined. Mirrored, light-on-dark, curved, very small (under about 2 pixels per module) or heavily damaged codes, codes with covered corner squares, and barcodes are not supported. Numeric, alphanumeric, ASCII bytes and explicit UTF-8 ECI 26 only; other byte encodings, Kanji, FNC1 and structured append are not supported. Error correction can in rare cases accept a different valid message. This does not authenticate the text or its source.": [
+    "读取时先尝试精确的平面二维码图片：正方形，0°、90°、180° 或 270°，带精确的四模块白色边框和统一的整数倍像素缩放，不使用纠错。若不符合，照片读取器会在图片中（最多 1600 万像素）寻找一个浅底深色的 Model 2 二维码：可任意旋转，允许轻微透视（较大的码需要更正面的视角）、适度模糊、噪点、光照不均和彩色背景。平面图片若不符合精确规则（例如经平滑缩放或轻微损坏），也会这样读取。它会找到三个角上的定位方块，能找到时使用右下角的校正方块，对网格采样，再使用码自身的纠错。每张图片只读取一个码；有多个码时，读取哪一个不确定。不支持镜像、浅色在深底、弯曲、过小（每模块约少于 2 像素）或严重损坏的码、定位方块被遮挡的码以及条形码。仅支持数字、字母数字、ASCII 字节和明确的 UTF-8 ECI 26；不支持其他字节编码、汉字模式、FNC1 和结构链接。纠错在极少数情况下可能接受另一条合法信息。这不能证明文字或其来源的真实性。",
+    "讀取時先嘗試精確的平面 QR 碼圖片：正方形，0°、90°、180° 或 270°，帶精確的四模組白色邊框和統一的整數倍像素縮放，不使用糾錯。若不符合，照片讀取器會在圖片中（最多 1600 萬像素）尋找一個淺底深色的 Model 2 QR 碼：可任意旋轉，允許輕微透視（較大的碼需要更正面的視角）、適度模糊、雜訊、光照不均和彩色背景。平面圖片若不符合精確規則（例如經平滑縮放或輕微損壞），也會這樣讀取。它會找到三個角上的定位方塊，能找到時使用右下角的校正方塊，對網格取樣，再使用碼本身的糾錯。每張圖片只讀取一個碼；有多個碼時，讀取哪一個不確定。不支援鏡像、淺色在深底、彎曲、過小（每模組約少於 2 像素）或嚴重損壞的碼、定位方塊被遮擋的碼以及條碼。僅支援數字、英數字、ASCII 位元組和明確的 UTF-8 ECI 26；不支援其他位元組編碼、漢字模式、FNC1 和結構連結。糾錯在極少數情況下可能接受另一則有效訊息。這不能證明文字或其來源的真實性。",
+    "読み取りではまず正確な平面 QR 画像を試します：正方形で 0°・90°・180°・270°、正確な 4 モジュールの白い余白と均一な整数倍のピクセル拡大を持つもので、誤り訂正は使いません。一致しない場合、写真リーダーが画像内（最大 1600 万ピクセル）から明るい地に暗い Model 2 QR コードを 1 つ探します：任意の回転、軽い遠近（大きなコードはより正面からの撮影が必要）、適度なぼけ、ノイズ、ムラのある照明、色付きの背景に対応します。正確な規則に合わない平面画像（なめらかに拡大縮小したものや軽く損傷したものなど）もこの方法で読み取ります。3 つの角の位置検出パターンを見つけ、見つかれば右下のアライメントパターンを使い、グリッドを標本化してからコード自身の誤り訂正を使います。読み取るのは 1 画像につき 1 つのコードだけで、複数ある場合にどれを読むかは決まっていません。鏡像、暗い地に明るいコード、曲がったもの、小さすぎるもの（1 モジュール約 2 ピクセル未満）、損傷の大きいもの、位置検出パターンが隠れたもの、バーコードには対応しません。数字・英数字・ASCII バイトと明示的な UTF-8 ECI 26 のみ対応し、その他のバイト符号化、漢字モード、FNC1、構造的連接には対応しません。誤り訂正はまれに別の有効なメッセージを受け入れることがあります。テキストやその出所の真正性は証明しません。"
   ]
 }

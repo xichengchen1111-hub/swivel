@@ -372,11 +372,11 @@ public sealed class MainWindow : Window
     private UIElement QrPage()
     {
         var page = Page(); page.Children.Add(UI.Text(app.L("QR & Barcodes"),22));
-        page.Children.Add(UI.Text(app.L("Create QR codes from text and keep up to 32 in a local library. Read supported flat QR images with the separate reader.")));
+        page.Children.Add(UI.Text(app.L("Create QR codes from text and keep up to 32 in a local library. Read QR codes from images, screenshots and photos with the separate reader.")));
         page.Children.Add(UI.Text(app.L("Open a QR code to choose a garden template and season, then explore the original Windows 3D relief. Flat QR copying and PNG export stay available.")));
         if (!app.Prefs.IsOn(Feature.QrCodes)) { page.Children.Add(UI.Text(app.L("Enable QR & Barcodes in Settings first."))); return page; }
         page.Children.Add(UI.Button(app.L("Create QR Code"),async () => await app.RunActionAsync(new("qr.create","Create QR Code"),Array.Empty<string>(),this,SetStatus)));
-        page.Children.Add(UI.Button(app.L("Read Flat QR Image…"),async()=>await app.RunActionAsync(new("qr.readflat","Read Flat QR Image…"),Array.Empty<string>(),this,SetStatus)));
+        page.Children.Add(UI.Button(app.L("Read QR Image…"),async()=>await app.RunActionAsync(new("qr.readflat","Read QR Image…"),Array.Empty<string>(),this,SetStatus)));
         var backups=new WrapPanel();backups.Children.Add(UI.Button(app.L("Import QR Library…"),async()=>await app.RunActionAsync(new("qr.import","Import QR Library…"),Array.Empty<string>(),this,SetStatus)));backups.Children.Add(UI.Button(app.L("Export QR Library…"),async()=>await app.RunActionAsync(new("qr.export","Export QR Library…"),Array.Empty<string>(),this,SetStatus)));page.Children.Add(backups);
         page.Children.Add(UI.Button(app.L("Import Mac QR Library…"), async () => await app.RunActionAsync(new("qr.importMac", "Import Mac QR Library…"), Array.Empty<string>(), this, SetStatus)));
         page.Children.Add(UI.Button(app.L("Export QR Images for Mac…"), async () => await app.RunActionAsync(new("qr.exportMacImages", "Export QR Images for Mac…"), Array.Empty<string>(), this, SetStatus)));
@@ -419,7 +419,7 @@ public sealed class MainWindow : Window
         page.Children.Add(UI.Text(app.L("Wheel") + ": " + app.Prefs.Shortcuts.Wheel.Label + " · " + app.L("Quick Actions") + ": " + app.Prefs.Shortcuts.Quick.Label + " · " + app.L("My Wheel") + ": " + app.Prefs.Shortcuts.Custom.Label));
         page.Children.Add(UI.Button(app.L("Change Shortcuts…"), () => new ShortcutsDialog(app) { Owner = this }.ShowDialog()));
         page.Children.Add(UI.Text(app.L("Agent Tools (MCP)"), 18));
-        page.Children.Add(UI.Text(app.L("With Agent Tools on, an agent host such as Claude Code, Claude Desktop or Codex can start Swivel with --mcp and talk to it over stdin and stdout only. Agents can inspect files, read the text of documents and (in the MSIX package) images, read clean flat QR images, convert, rotate, flip or grayscale images or remove or blur their background, save a document's text as TXT, RTF, DOCX, HTML or ODT, compress images to JPEG or videos to MP4 under a size, rename files in their folders, and move files into another folder on the same drive. Reading never changes a file. Every write is planned first, applied once and never overwrites anything; new files can be undone to the Recycle Bin, renames by renaming the files back, and moves by moving the files back."), 12));
+        page.Children.Add(UI.Text(app.L("With Agent Tools on, an agent host such as Claude Code, Claude Desktop or Codex can start Swivel with --mcp and talk to it over stdin and stdout only. Agents can inspect files, read the text of documents and (in the MSIX package) images, read QR codes in images and photos, convert, rotate, flip or grayscale images or remove or blur their background, save a document's text as TXT, RTF, DOCX, HTML or ODT, compress images to JPEG or videos to MP4 under a size, rename files in their folders, and move files into another folder on the same drive. Reading never changes a file. Every write is planned first, applied once and never overwrites anything; new files can be undone to the Recycle Bin, renames by renaming the files back, and moves by moving the files back."), 12));
         page.Children.Add(UI.Button(app.L("Copy Agent Tools Setup"), () =>
         {
             string command = NativeIdentity.HasPackage ? McpSetup.Alias : Environment.ProcessPath ?? "Swivel.exe";

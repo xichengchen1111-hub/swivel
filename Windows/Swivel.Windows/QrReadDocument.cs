@@ -18,7 +18,7 @@ internal sealed class QrReadDocument:IDisposable
         var source=ImageTools.OpenForReading(path,token);
         try
         {
-            var result=QrFlatRead.Read(ImageTools.ReadPixels(source.Bitmap,0,token),token);
+            var result=QrPhotoRead.Read(ImageTools.ReadPixels(source.Bitmap,0,token),token);
             token.ThrowIfCancellationRequested();return new(source,result);
         }
         catch{source.Dispose();throw;}
