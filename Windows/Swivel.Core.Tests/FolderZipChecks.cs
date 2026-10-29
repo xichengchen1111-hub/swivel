@@ -98,6 +98,9 @@ internal static class FolderZipChecks
         try { FolderZip.Write(lockedPlan, item => item.RelativePath == "b.txt" ? throw new System.ComponentModel.Win32Exception(32) : new Input(locked.Find(item.RelativePath)), new MemoryStream(), default); }
         catch (UserError error) { message = error.Message; }
         check(message == "\"b.txt\" is in use by another app or could not be read. Nothing was saved.", "A file in use names itself in the message: " + message);
+        var full = new FullDisk(); message = null; Exception? thrown = null;
+        try { FolderZip.Write(FolderZip.Plan(Tree(), default), item => new Input(Tree().Find(item.RelativePath)), full, default); } catch (Exception error) { thrown = error; }
+        check(thrown is IOException && thrown is not UserError, "A full disk while writing the ZIP is not blamed on one of the user's files: " + thrown?.GetType().Name);
         // A file that changes while being read, or no longer has its planned length, stops the whole ZIP.
         var changing = Tree(); var changingPlan = FolderZip.Plan(changing, default);
         message = null;
@@ -139,5 +142,11 @@ internal static class FolderZipChecks
         public IEnumerable<FolderEntry> Entries(CancellationToken token) => inner.Entries(token).Select(e => e.Directory || e.Name is "." or ".." ? e : e with { Bytes = size });
         public IFolderMetadata OpenChild(string name) => inner.OpenChild(name);
         public void Dispose() { }
+    }
+
+    private sealed class FullDisk : MemoryStream
+    {
+        public override void Write(byte[] buffer, int offset, int count) { if (Length + count > 4096) throw new IOException("There is not enough space on the disk."); base.Write(buffer, offset, count); }
+        public override void Write(ReadOnlySpan<byte> buffer) { if (Length + buffer.Length > 4096) throw new IOException("There is not enough space on the disk."); base.Write(buffer); }
     }
 }

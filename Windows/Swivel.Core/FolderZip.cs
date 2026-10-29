@@ -112,19 +112,26 @@ public static class FolderZip
                     zip.CreateEntry(item.EntryName, CompressionLevel.NoCompression).LastWriteTime = Time(item.LastWrite);
                     continue;
                 }
-                try
+                // Only reading the user's file is reported as that file's problem; errors writing the
+                // ZIP itself (a full disk) pass through as they are.
+                T Reading<T>(Func<T> read)
                 {
-                    using var input = open(item);
+                    try { return read(); }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+                    { throw new UserError(Unreadable, item.RelativePath); }
+                }
+                using (var input = Reading(() => open(item)))
+                {
                     var before = input.Stamp;
                     if (before.Length != item.Length) throw new UserError(Changed);
                     // The time of the file as it is read, not as it was listed.
                     var entry = zip.CreateEntry(item.EntryName, CompressionLevel.Fastest);
                     entry.LastWriteTime = Time(before.LastWrite);
-                    input.Stream.Position = 0;
+                    Reading(() => input.Stream.Position = 0);
                     using (var destination = entry.Open())
                     {
                         var copy = new byte[81920]; long total = 0; int read;
-                        while ((read = input.Stream.Read(copy, 0, copy.Length)) > 0)
+                        while ((read = Reading(() => input.Stream.Read(copy, 0, copy.Length))) > 0)
                         {
                             token.ThrowIfCancellationRequested();
                             total += read;
@@ -133,11 +140,7 @@ public static class FolderZip
                         }
                         if (total != item.Length) throw new UserError(Changed);
                     }
-                    if (input.Refresh() != before) throw new UserError(Changed);
-                }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
-                {
-                    throw new UserError(Unreadable, item.RelativePath);
+                    if (Reading(input.Refresh) != before) throw new UserError(Changed);
                 }
                 progress?.Invoke(++done, plan.Files);
             }
