@@ -1330,7 +1330,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 ## Windows0.131 — merged D04 video edits, D03 noise inputs (Codex), F07 quit apps, G02 Agent tools (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: D04 40896894909 (core 4,552,340, native 5,762), D03 40899837787 (core 4,552,658, native 5,971; written by Codex, independent review no P1/P2, one P3 fixed), F07 40901348838 (core 4,552,510, native 5,784; no P1, P2 and nine P3s fixed, three minor P3s left), G02 40901769284 (core 4,552,473, native 5,774; review fixes included).
-- After merging all four: core 4,552,969 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- After merging all four: core 4,552,969 on Mac, native compiled 0 warnings/errors there. Windows CI 40973278196 on the merged branch passed (core 4,552,969, native 6,063).
 - Not tested: video output in real players, real phone and HDR videos, listening quality of denoised float/AIFF/G.711 audio, quitting real apps with many helpers on a home PC, a real Claude Desktop/Codex host using the new Agent tools.
 
 ## Windows0.130 — merged E02 content-preserving PDF pages, B06 folder move and copy undo (2026-10-30)
