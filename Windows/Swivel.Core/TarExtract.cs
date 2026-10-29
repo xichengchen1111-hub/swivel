@@ -301,7 +301,7 @@ public static class TarExtract
     }
 
     // Names, duplicates (case-insensitive and NFC), and file/folder conflicts, like ZIP.
-    private sealed class Names
+    internal sealed class Names
     {
         private readonly Dictionary<string, bool> kinds = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> spellings = new(StringComparer.OrdinalIgnoreCase);

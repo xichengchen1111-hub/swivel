@@ -11739,11 +11739,6 @@
     "無法從此 gzip 檔案的名稱得到可用的輸出名稱。",
     "この gzip ファイルの名前からは使用できる出力名を作れません。"
   ],
-  "Choose a .zip, .tar, .tar.gz, .tgz or .gz file to extract.": [
-    "请选择要解压的 .zip、.tar、.tar.gz、.tgz 或 .gz 文件。",
-    "請選擇要解壓縮的 .zip、.tar、.tar.gz、.tgz 或 .gz 檔案。",
-    "展開する .zip、.tar、.tar.gz、.tgz、.gz ファイルを選んでください。"
-  ],
   "Extract Archive…": [
     "解压压缩包…",
     "解壓縮壓縮檔…",
@@ -14129,11 +14124,6 @@
     "略過了 {0} 個項目。",
     "{0} 個の項目をスキップしました。"
   ],
-  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP and ZIP64 (Store/Deflate), TAR (POSIX ustar/pax or GNU), .tar.gz/.tgz and single-file .gz archives, up to 2 GB and 10,000 entries, into a new folder on NTFS. TAR links, devices and sparse files are refused; macOS ._ attribute files are left out. Compress Folder to ZIP archives one folder tree (up to 10,000 items, 32 levels, 2 GB), skipping links, cloud-only and system files. 7z/RAR extraction and encryption are still planned.": [
-    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP 和 ZIP64（存储/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及单文件 .gz（最多 2 GB、10,000 个条目）解压到新文件夹。TAR 中的链接、设备和稀疏文件会被拒绝；macOS 的 ._ 属性文件不解压。“将文件夹压缩为 ZIP”可归档一个文件夹树（最多 10,000 项、32 层、2 GB），跳过链接、仅云端文件和系统文件。7z/RAR 解压和加密仍待实现。",
-    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP 和 ZIP64（儲存/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz 及單檔 .gz（最多 2 GB、10,000 個項目）解壓縮到新資料夾。TAR 中的連結、裝置和稀疏檔案會被拒絕；macOS 的 ._ 屬性檔案不解壓縮。「將資料夾壓縮為 ZIP」可封存一個資料夾樹（最多 10,000 項、32 層、2 GB），略過連結、僅雲端檔案和系統檔案。7z/RAR 解壓縮和加密仍待實作。",
-    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP と ZIP64（格納/Deflate）、TAR（POSIX ustar/pax または GNU）、.tar.gz/.tgz、単一ファイル .gz（2 GB・10,000 項目まで）を新しいフォルダーに展開できます。TAR 内のリンク、デバイス、スパースファイルは拒否し、macOS の ._ 属性ファイルは展開しません。「フォルダーを ZIP に圧縮」で 1 つのフォルダー構造をアーカイブできます（10,000 項目・32 階層・2 GB まで、リンク・クラウドのみ・システムファイルは除外）。7z/RAR の展開と暗号化は実装予定です。"
-  ],
   "System file or folder": [
     "系统文件或文件夹",
     "系統檔案或資料夾",
@@ -14443,5 +14433,100 @@
     "“保持音调”会重复或跳过声音中相互重叠的短片段（40 毫秒，按相似度对齐；自研 WSOLA 方法）。在稳定的测试音上，音调偏差约在 0.3% 以内。减速时咔嗒声和鼓点可能重复成回声，加速时可能变弱或丢失；和弦、音乐和噪声较多的录音可能听起来粗糙或发颤；立体声两个声道一起对齐。短于 40 毫秒的声音无法均匀伸缩。不会分离人声或乐器。",
     "「保持音調」會重複或略過聲音中相互重疊的短片段（40 毫秒，依相似度對齊；自行開發的 WSOLA 方法）。在穩定的測試音上，音調偏差約在 0.3% 以內。減速時喀噠聲和鼓點可能重複成回聲，加速時可能變弱或遺失；和弦、音樂和雜訊較多的錄音可能聽起來粗糙或發顫；立體聲兩個聲道一起對齊。短於 40 毫秒的聲音無法均勻伸縮。不會分離人聲或樂器。",
     "「音程を保持」は、音の短い重なり合った断片（40 ミリ秒、類似度で位置合わせ。独自実装の WSOLA 方式）を繰り返したり飛ばしたりします。安定したテスト音では音程のずれは約 0.3% 以内です。遅くするとクリック音やドラムがエコーのように繰り返され、速くすると弱まったり抜けたりすることがあります。和音、音楽、ノイズの多い録音はざらついたり揺れたりして聞こえることがあります。ステレオの両チャンネルはまとめて位置合わせされます。40 ミリ秒より短い音は均等には伸縮されません。声や楽器の分離は行いません。"
+  ],
+  "Create ZIP, TAR or single-file GZip from selected regular files, up to 2 GB. Extract ordinary ZIP and ZIP64 (Store/Deflate), TAR (POSIX ustar/pax or GNU), .tar.gz/.tgz and single-file .gz archives, and 7z archives (LZMA, LZMA2, BCJ x86 or Copy; no encryption, split archives or other methods), up to 2 GB and 10,000 entries, into a new folder on NTFS. Links, devices and sparse files are refused; macOS ._ attribute files are left out. Compress Folder to ZIP archives one folder tree (up to 10,000 items, 32 levels, 2 GB), skipping links, cloud-only and system files. RAR extraction, other 7z methods and encryption are still planned.": [
+    "可把选中的普通文件创建为 ZIP、TAR 或单文件 GZip，源数据上限 2 GB；可在 NTFS 上把普通 ZIP 和 ZIP64（存储/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz、单文件 .gz 及 7z（LZMA、LZMA2、BCJ x86 或存储；不含加密、分卷或其他方法）（最多 2 GB、10,000 个条目）解压到新文件夹。链接、设备和稀疏文件会被拒绝；macOS 的 ._ 属性文件不解压。“将文件夹压缩为 ZIP”可归档一个文件夹树（最多 10,000 项、32 层、2 GB），跳过链接、仅云端文件和系统文件。RAR 解压、其他 7z 方法和加密仍待实现。",
+    "可將選取的一般檔案建立為 ZIP、TAR 或單檔 GZip，來源資料上限 2 GB；可在 NTFS 上把一般 ZIP 和 ZIP64（儲存/Deflate）、TAR（POSIX ustar/pax 或 GNU）、.tar.gz/.tgz、單檔 .gz 及 7z（LZMA、LZMA2、BCJ x86 或儲存；不含加密、分割或其他方法）（最多 2 GB、10,000 個項目）解壓縮到新資料夾。連結、裝置和稀疏檔案會被拒絕；macOS 的 ._ 屬性檔案不解壓縮。「將資料夾壓縮為 ZIP」可封存一個資料夾樹（最多 10,000 項、32 層、2 GB），略過連結、僅雲端檔案和系統檔案。RAR 解壓縮、其他 7z 方式和加密仍待實作。",
+    "選択した通常ファイルから ZIP/TAR/単一ファイル GZip を作成します（元データ 2 GB まで）。NTFS 上で通常の ZIP と ZIP64（格納/Deflate）、TAR（POSIX ustar/pax または GNU）、.tar.gz/.tgz、単一ファイル .gz、7z（LZMA・LZMA2・BCJ x86・Copy。暗号化・分割・その他の方式を除く）（2 GB・10,000 項目まで）を新しいフォルダーに展開できます。リンク、デバイス、スパースファイルは拒否し、macOS の ._ 属性ファイルは展開しません。「フォルダーを ZIP に圧縮」で 1 つのフォルダー構造をアーカイブできます（10,000 項目・32 階層・2 GB まで、リンク・クラウドのみ・システムファイルは除外）。RAR の展開、その他の 7z 方式、暗号化は実装予定です。"
+  ],
+  "This file is not a supported 7z archive.": [
+    "此文件不是受支持的 7z 压缩包。",
+    "此檔案不是受支援的 7z 壓縮檔。",
+    "このファイルは対応している 7z アーカイブではありません。"
+  ],
+  "This 7z archive needs a newer format version and was not extracted.": [
+    "此 7z 压缩包需要更新的格式版本，未解压。",
+    "此 7z 壓縮檔需要更新的格式版本，未解壓縮。",
+    "この 7z アーカイブは新しい形式バージョンが必要なため、展開しませんでした。"
+  ],
+  "This 7z archive is damaged and was not extracted.": [
+    "此 7z 压缩包已损坏，未解压。",
+    "此 7z 壓縮檔已損毀，未解壓縮。",
+    "この 7z アーカイブは破損しているため、展開しませんでした。"
+  ],
+  "This 7z archive is empty.": [
+    "此 7z 压缩包是空的。",
+    "此 7z 壓縮檔是空的。",
+    "この 7z アーカイブは空です。"
+  ],
+  "This 7z archive is incomplete or split into parts and was not extracted.": [
+    "此 7z 压缩包不完整或是分卷压缩包，未解压。",
+    "此 7z 壓縮檔不完整或是分割壓縮檔，未解壓縮。",
+    "この 7z アーカイブは不完全か分割されているため、展開しませんでした。"
+  ],
+  "This 7z archive has unexpected data after its header and was not extracted.": [
+    "此 7z 压缩包的文件头之后有多余数据，未解压。",
+    "此 7z 壓縮檔的檔頭之後有多餘資料，未解壓縮。",
+    "この 7z アーカイブはヘッダーの後に想定外のデータがあるため、展開しませんでした。"
+  ],
+  "This 7z archive uses features this reader does not support and was not extracted.": [
+    "此 7z 压缩包使用了本读取器不支持的功能，未解压。",
+    "此 7z 壓縮檔使用了本讀取器不支援的功能，未解壓縮。",
+    "この 7z アーカイブはこの読み取り機能が対応していない機能を使っているため、展開しませんでした。"
+  ],
+  "This 7z archive contains deletion markers (anti-items) and was not extracted.": [
+    "此 7z 压缩包含有删除标记（anti 项），未解压。",
+    "此 7z 壓縮檔含有刪除標記（anti 項目），未解壓縮。",
+    "この 7z アーカイブには削除マーカー（アンチ項目）が含まれているため、展開しませんでした。"
+  ],
+  "This 7z archive has files without checksums and was not extracted.": [
+    "此 7z 压缩包中有文件没有校验值，未解压。",
+    "此 7z 壓縮檔中有檔案沒有校驗值，未解壓縮。",
+    "この 7z アーカイブにはチェックサムのないファイルがあるため、展開しませんでした。"
+  ],
+  "7z archives containing links are not extracted.": [
+    "不解压含有链接的 7z 压缩包。",
+    "不解壓縮含有連結的 7z 壓縮檔。",
+    "リンクを含む 7z アーカイブは展開しません。"
+  ],
+  "This 7z archive contains special files and was not extracted.": [
+    "此 7z 压缩包含有特殊文件，未解压。",
+    "此 7z 壓縮檔含有特殊檔案，未解壓縮。",
+    "この 7z アーカイブには特殊ファイルが含まれているため、展開しませんでした。"
+  ],
+  "This 7z archive contains invalid Unicode names.": [
+    "此 7z 压缩包含有无效的 Unicode 名称。",
+    "此 7z 壓縮檔含有無效的 Unicode 名稱。",
+    "この 7z アーカイブには無効な Unicode の名前が含まれています。"
+  ],
+  "Encrypted 7z archives are not supported.": [
+    "不支持加密的 7z 压缩包。",
+    "不支援加密的 7z 壓縮檔。",
+    "暗号化された 7z アーカイブには対応していません。"
+  ],
+  "This 7z archive uses a compression method other than LZMA, LZMA2, BCJ (x86) or Copy.": [
+    "此 7z 压缩包使用了 LZMA、LZMA2、BCJ（x86）和存储（Copy）以外的压缩方法。",
+    "此 7z 壓縮檔使用了 LZMA、LZMA2、BCJ（x86）和儲存（Copy）以外的壓縮方法。",
+    "この 7z アーカイブは LZMA・LZMA2・BCJ（x86）・Copy 以外の圧縮方式を使っています。"
+  ],
+  "This 7z archive needs more than 256 MB of decoder memory and was not extracted.": [
+    "此 7z 压缩包解码需要超过 256 MB 内存，未解压。",
+    "此 7z 壓縮檔解碼需要超過 256 MB 記憶體，未解壓縮。",
+    "この 7z アーカイブの復号には 256 MB を超えるメモリーが必要なため、展開しませんでした。"
+  ],
+  "A 7z entry's compressed data is damaged and was not extracted.": [
+    "某个 7z 条目的压缩数据已损坏，未解压。",
+    "某個 7z 項目的壓縮資料已損毀，未解壓縮。",
+    "7z の項目の圧縮データが破損しているため、展開しませんでした。"
+  ],
+  "A 7z entry failed its CRC check and was not extracted.": [
+    "某个 7z 条目未通过 CRC 校验，未解压。",
+    "某個 7z 項目未通過 CRC 校驗，未解壓縮。",
+    "7z の項目が CRC チェックに失敗したため、展開しませんでした。"
+  ],
+  "Choose a .zip, .7z, .tar, .tar.gz, .tgz or .gz file to extract.": [
+    "请选择要解压的 .zip、.7z、.tar、.tar.gz、.tgz 或 .gz 文件。",
+    "請選擇要解壓縮的 .zip、.7z、.tar、.tar.gz、.tgz 或 .gz 檔案。",
+    "展開する .zip・.7z・.tar・.tar.gz・.tgz・.gz ファイルを選んでください。"
   ]
 }

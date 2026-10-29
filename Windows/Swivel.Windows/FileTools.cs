@@ -75,28 +75,38 @@ public sealed class ZipExtractWork : IDisposable
     public TarKind? Tar { get; }
     public string Path => input.Path;
     private readonly string stem;
-    private ZipExtractWork(NativeFiles.Input input, ZipPlan plan, int zone, TarKind? tar, string stem) { this.input = input; Plan = plan; Zone = zone; Tar = tar; this.stem = stem; }
+    /// Non-null for 7z: where each reviewed member's data lives.
+    private readonly SevenZipArchive? sevenZip;
+    private ZipExtractWork(NativeFiles.Input input, ZipPlan plan, int zone, TarKind? tar, string stem, SevenZipArchive? sevenZip)
+    { this.input = input; Plan = plan; Zone = zone; Tar = tar; this.stem = stem; this.sevenZip = sevenZip; }
     public static ZipExtractWork Open(string path, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         string name = System.IO.Path.GetFileName(path);
-        bool zip = string.Equals(System.IO.Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase);
-        TarKind? tar = zip ? null : TarExtract.KindFor(name);
-        if (!zip && tar is null) throw new UserError("Choose a .zip, .tar, .tar.gz, .tgz or .gz file to extract.");
+        string extension = System.IO.Path.GetExtension(path);
+        bool zip = string.Equals(extension, ".zip", StringComparison.OrdinalIgnoreCase), seven = string.Equals(extension, ".7z", StringComparison.OrdinalIgnoreCase);
+        TarKind? tar = zip || seven ? null : TarExtract.KindFor(name);
+        if (!zip && !seven && tar is null) throw new UserError("Choose a .zip, .7z, .tar, .tar.gz, .tgz or .gz file to extract.");
         var input = NativeFiles.OpenRead(path);
         try
         {
-            var plan = tar is TarKind kind ? TarExtract.Read(input.Stream, kind, name, token) : ZipExtract.Read(input.Stream, token);
+            SevenZipArchive? sevenZip = seven ? SevenZipExtract.Read(input.Stream, token) : null;
+            var plan = sevenZip?.Plan ?? (tar is TarKind kind ? TarExtract.Read(input.Stream, kind, name, token) : ZipExtract.Read(input.Stream, token));
             string stem = tar is TarKind folderKind ? TarExtract.FolderStem(name, folderKind) : ZipExtract.FolderStem(name);
             NativeFiles.CheckExtractionTarget(input, plan, stem);
             int zone = ZipExtract.TargetZone(NativeFiles.ReadZoneIdentifier(input));
             token.ThrowIfCancellationRequested();
-            return new(input, plan, zone, tar, stem);
+            return new(input, plan, zone, tar, stem, sevenZip);
         }
         catch { input.Dispose(); throw; }
     }
     public ZipOutcome Extract(CancellationToken token, Action<int, int>? progress)
     {
+        if (sevenZip is not null)
+        {
+            using var reader = SevenZipExtract.OpenSource(input.Stream, sevenZip);
+            return NativeFiles.ExtractArchive(input, Plan, stem, Zone, (member, output) => reader.Extract(member, output, token), token, progress);
+        }
         if (Tar is not TarKind kind) return NativeFiles.ExtractZip(input, Plan, Zone, token, progress);
         using var source = TarExtract.OpenSource(input.Stream, kind, token);
         return NativeFiles.ExtractArchive(input, Plan, stem, Zone, (member, output) => source.Extract(member, output, token), token, progress);
