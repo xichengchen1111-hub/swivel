@@ -28,7 +28,7 @@ internal static class AppMemoryNativeChecks
     {
         check(IntPtr.Size==8&&Marshal.SizeOf<AppMemoryReader.MemoryCounters>()==72&&Marshal.OffsetOf<AppMemoryReader.MemoryCounters>(nameof(AppMemoryReader.MemoryCounters.WorkingSetSize)).ToInt32()==16&&Marshal.OffsetOf<AppMemoryReader.MemoryCounters>(nameof(AppMemoryReader.MemoryCounters.PeakPagefileUsage)).ToInt32()==64,"App memory counter ABI is72bytes with native SIZE_T offsets on supported64bit architectures");
         var imports=typeof(AppMemoryReader).GetMethods(BindingFlags.Static|BindingFlags.NonPublic).Where(x=>x.GetCustomAttribute<DllImportAttribute>() is not null).ToArray();
-        check(imports.Length==5&&imports.All(x=>x.GetCustomAttribute<DllImportAttribute>()!.Value=="kernel32.dll"&&x.GetCustomAttribute<DefaultDllImportSearchPathsAttribute>()?.Paths==DllImportSearchPath.System32),"All five process metadata imports restrict native loading to System32");
+        check(imports.Length==7&&imports.All(x=>x.GetCustomAttribute<DllImportAttribute>()!.Value=="kernel32.dll"&&x.GetCustomAttribute<DefaultDllImportSearchPathsAttribute>()?.Paths==DllImportSearchPath.System32),"All seven process metadata imports restrict native loading to System32");
         reject(()=>AppMemoryReader.Read(new CancellationToken(true)),"Process reader precancel avoids all native queries");
         var snapshot=AppMemory.Scan(new Source(),default);var app=Application.Current as App??new App();app.ShutdownMode=ShutdownMode.OnExplicitShutdown;
         var dialog=new AppMemoryDialog(app,snapshot);
@@ -36,7 +36,7 @@ internal static class AppMemoryNativeChecks
         {
             var nodes=Descendants(dialog).ToArray();var lists=nodes.OfType<ListView>().ToArray();
             var groups=lists.Single(x=>AutomationProperties.GetName(x)==app.L("Executable Path Groups"));var processes=lists.Single(x=>AutomationProperties.GetName(x)==app.L("Recorded Processes"));
-            var paths=nodes.OfType<CheckBox>().Single(x=>AutomationProperties.GetName(x)==app.L("Show Full Executable Paths"));var details=nodes.OfType<TextBox>().ToArray();
+            var paths=nodes.OfType<CheckBox>().Single(x=>AutomationProperties.GetName(x)==app.L("Show Full Executable Paths"));var details=nodes.OfType<TextBox>().Where(x=>AutomationProperties.GetName(x)==app.L("Selected Group Details")||AutomationProperties.GetName(x)==app.L("Selected Process Details")).ToArray();
             check(!dialog.IncludePaths&&paths.IsChecked!=true&&!dialog.CurrentReport.Contains("private-memory-owner"),"App memory full paths default hidden in all copies");
             check(lists.Length==2&&lists.All(x=>VirtualizingPanel.GetIsVirtualizing(x)&&VirtualizingPanel.GetVirtualizationMode(x)==VirtualizationMode.Recycling&&x.SelectionMode==SelectionMode.Single),"Both native process lists remain virtualized and single-select");
             check(groups.Items.Cast<object>().Concat(processes.Items.Cast<object>()).All(x=>!x.ToString()!.Contains("private-memory-owner")),"UIAutomation default row text never exposes a raw record path");
@@ -48,7 +48,7 @@ internal static class AppMemoryNativeChecks
             nodes.OfType<TabControl>().Single().SelectedIndex=1;
             check(dialog.SelectedReport is string processReport&&processReport.Contains(string.Format(app.L("Process identifier: {0}"),1)),"Selected copy follows active tab and exact selected process");
             var footer=((DockPanel)dialog.Content).Children.OfType<WrapPanel>().Single();
-            check(DockPanel.GetDock(footer)==Dock.Bottom&&footer.Children.OfType<Button>().Count()==3,"App memory native footer provides explicit CopyReport/CopySelected/Close");
+            check(DockPanel.GetDock(footer)==Dock.Bottom&&footer.Children.OfType<Button>().Count()==4,"App memory native footer provides explicit CopyReport/CopySelected/Quit/Close");
         }
         finally{dialog.Close();}
     }

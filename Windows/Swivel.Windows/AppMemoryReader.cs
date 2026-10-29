@@ -64,6 +64,20 @@ internal static class AppMemoryReader
             }
             catch(Exception e)when(Unavailable(e)){return null;}
         }
+        public ulong? CpuTime()
+        {
+            try
+            {
+                if(!GetProcessTimes(handle,out _,out _,out var kernel,out var user))return null;
+                ulong a=kernel.Value,b=user.Value;return b>ulong.MaxValue-a?null:a+b;
+            }
+            catch(Exception e)when(Unavailable(e)){return null;}
+        }
+        public uint? Session()
+        {
+            try{return ProcessIdToSessionId(GetProcessId(handle),out uint session)?session:null;}
+            catch(Exception e)when(Unavailable(e)){return null;}
+        }
         public void Dispose()=>handle.Dispose();
     }
     [StructLayout(LayoutKind.Sequential)] internal struct NativeTime
@@ -81,6 +95,10 @@ internal static class AppMemoryReader
     [return:MarshalAs(UnmanagedType.Bool)] private static extern bool GetProcessTimes(SafeProcessHandle handle,out NativeTime created,out NativeTime exit,out NativeTime kernel,out NativeTime user);
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,ExactSpelling=true,SetLastError=true)] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return:MarshalAs(UnmanagedType.Bool)] private static extern bool QueryFullProcessImageNameW(SafeProcessHandle handle,uint flags,StringBuilder path,ref uint length);
+    [DllImport("kernel32.dll",SetLastError=true)] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern uint GetProcessId(SafeProcessHandle handle);
+    [DllImport("kernel32.dll",SetLastError=true)] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return:MarshalAs(UnmanagedType.Bool)] private static extern bool ProcessIdToSessionId(uint pid,out uint session);
     [DllImport("kernel32.dll",SetLastError=true)] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return:MarshalAs(UnmanagedType.Bool)] private static extern bool K32GetProcessMemoryInfo(SafeProcessHandle handle,out MemoryCounters counters,uint bytes);
 }

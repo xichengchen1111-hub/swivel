@@ -131,6 +131,7 @@ LargeFileChecks.Run(Check, Reject);
 UsageChecks.Run(Check, Reject);
 AppMemoryChecks.Run(Check, Reject);
 AppMemoryHelperChecks.Run(Check, Reject);
+AppQuitChecks.Run(Check, Reject);
 InstalledAppsChecks.Run(Check, Reject);
 StorePackagesChecks.Run(Check, Reject);
 StartupChecks.Run(Check, Reject);

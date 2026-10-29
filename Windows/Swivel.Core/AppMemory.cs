@@ -25,11 +25,16 @@ public interface IAppMemoryProcess : IDisposable
     ulong? CreationTime();
     string? ImagePath();
     ulong? WorkingSet();
+    /// Kernel plus user time in 100-nanosecond units; null when unavailable or not supported.
+    ulong? CpuTime()=>null;
+    /// Windows session identifier; null when unavailable or not supported.
+    uint? Session()=>null;
 }
 [Flags] public enum AppMemoryIssue { None=0,ProcessUnavailable=1,CreationUnavailable=2,PathUnavailable=4,MemoryUnavailable=8,TimeLimit=16 }
 [Flags] public enum AppMemoryParentIssue { None=0,NotRead=1,Limited=2,Unavailable=4,Changed=8,TimeLimit=16 }
 /// Parent is the identifier reported identically before and after the check, or null.
-public sealed record AppMemoryProcess(uint Pid,ulong? Created,string? Path,ulong? WorkingSet,AppMemoryIssue Issues,uint? Parent=null);
+/// Cpu and Session are optional readings used only by the quit and live-refresh options; they are not reported.
+public sealed record AppMemoryProcess(uint Pid,ulong? Created,string? Path,ulong? WorkingSet,AppMemoryIssue Issues,uint? Parent=null,ulong? Cpu=null,uint? Session=null);
 public sealed record AppMemoryHelper(uint Pid,uint Parent);
 public sealed record AppMemoryGroup(string? Path,IReadOnlyList<AppMemoryProcess> Processes,decimal KnownBytes,int Unmeasured,IReadOnlyList<AppMemoryHelper>? Helpers=null)
 {
@@ -73,7 +78,7 @@ public static class AppMemory
         foreach(uint pid in ids.Ids)
         {
             token.ThrowIfCancellationRequested();if(!seen.Add(pid)){duplicates=true;continue;}
-            ulong? created=null,memory=null;string? path=null;AppMemoryIssue issues=AppMemoryIssue.None;
+            ulong? created=null,memory=null,cpu=null;uint? session=null;string? path=null;AppMemoryIssue issues=AppMemoryIssue.None;
             if(Stop())issues=AppMemoryIssue.TimeLimit;
             else
             {
@@ -85,11 +90,16 @@ public static class AppMemory
                     else issues|=AppMemoryIssue.TimeLimit;
                     if(!Stop()){path=process.ImagePath();token.ThrowIfCancellationRequested();if(!ValidPath(path)){path=null;issues|=AppMemoryIssue.PathUnavailable;}}
                     else issues|=AppMemoryIssue.TimeLimit;
-                    if(!Stop()){memory=process.WorkingSet();token.ThrowIfCancellationRequested();if(!memory.HasValue)issues|=AppMemoryIssue.MemoryUnavailable;}
+                    if(!Stop())
+                    {
+                        memory=process.WorkingSet();token.ThrowIfCancellationRequested();if(!memory.HasValue)issues|=AppMemoryIssue.MemoryUnavailable;
+                        // Optional readings add no issue and no time-limit step of their own.
+                        cpu=process.CpuTime();session=process.Session();token.ThrowIfCancellationRequested();
+                    }
                     else issues|=AppMemoryIssue.TimeLimit;
                 }
             }
-            rows.Add(new(pid,created,path,memory,issues));
+            rows.Add(new(pid,created,path,memory,issues,null,cpu,session));
         }
         token.ThrowIfCancellationRequested();
         bool afterTime=!beforeTime&&before is not null&&Stop();var after=beforeTime||before is null||afterTime?null:Parents();
