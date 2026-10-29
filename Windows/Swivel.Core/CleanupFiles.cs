@@ -29,7 +29,7 @@ public static class CleanupFiles
     /// Installers this size or larger are offered (Mac uses the same 5 MB).
     public const long InstallerMinimum = 5_000_000;
     public const string Notice = "Clean Up Files looks in four places Windows Doctor already checks: cache folders of known browsers and apps, items in the temporary folder unchanged for 7 days, installers of 5 MB or more in Downloads, and project build folders in Documents, Desktop and your source folder. Only cache folders of apps that are not running are selected for you; review everything else and tick what you no longer need. Each item is checked again before it moves to the Recycle Bin, and Undo restores the last move while this window is open.";
-    public const string Limits = "Each place is read within its tool's limits (folders four levels deep, 20,000 entries and about 30 seconds each), so a list can be partial. Sizes are logical and may count shared files twice. Leftovers of removed apps need the installation records from before you uninstalled, so they stay in Inspect Desktop Installation Records; duplicate files stay in Compare Common Folders.";
+    public const string Limits = "Each place is read within its tool's limits (the temporary folder, Downloads and each project folder four levels deep, 20,000 entries and about 30 seconds each; app caches within Review Browser and App Caches' own limits), so a list can be partial. Sizes are logical and may count shared files twice. Not included here: leftovers of removed apps (they need the installation records from before you uninstalled, so they stay in Inspect Desktop Installation Records), duplicate and similar files (Compare Common Folders), large files that are not installers (Find Large Files) and apps not opened for a while (Windows keeps no reliable last-opened date for desktop apps).";
 
     public static string Name(CleanupGroup group) => group switch
     {
@@ -58,10 +58,22 @@ public static class CleanupFiles
         result.Folders.Select(folder => new CleanupEntry(CleanupGroup.ProjectBuilds, System.IO.Path.Combine(root, folder.RelativePath), folder.Kind,
             folder.Bytes, folder.Partial, false, new CleanupBuild(root, folder))).ToArray();
 
-    /// All entries in group order, largest first within a group, then by path; a path found twice
-    /// (one searched folder inside another) is listed once.
-    public static IReadOnlyList<CleanupEntry> Combine(IEnumerable<CleanupEntry> entries) =>
-        entries.DistinctBy(e => e.Path, StringComparer.OrdinalIgnoreCase).OrderBy(e => e.Group).ThenByDescending(e => e.Bytes).ThenBy(e => e.Path, StringComparer.OrdinalIgnoreCase).ToArray();
+    /// All entries in group order, largest first within a group, then by path. A path found twice
+    /// (one searched folder inside another), or inside another listed folder, is listed once: moving
+    /// the outer folder moves it too.
+    public static IReadOnlyList<CleanupEntry> Combine(IEnumerable<CleanupEntry> entries)
+    {
+        var unique = entries.DistinctBy(e => Trim(e.Path), StringComparer.OrdinalIgnoreCase).ToArray();
+        var folders = new HashSet<string>(unique.Select(e => Trim(e.Path)), StringComparer.OrdinalIgnoreCase);
+        bool Inside(string path)
+        {
+            for (string? parent = System.IO.Path.GetDirectoryName(Trim(path)); !string.IsNullOrEmpty(parent); parent = System.IO.Path.GetDirectoryName(parent))
+                if (folders.Contains(parent)) return true;
+            return false;
+        }
+        return unique.Where(e => !Inside(e.Path)).OrderBy(e => e.Group).ThenByDescending(e => e.Bytes).ThenBy(e => e.Path, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+    private static string Trim(string path) => path.TrimEnd('\\', '/');
 
     /// A group's tick box: true when all are ticked, false when none, null when some.
     public static bool? GroupState(IEnumerable<bool> ticks)

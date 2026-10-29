@@ -51,28 +51,30 @@ internal static class CleanupReader
         string? Folder(CommonFolderKind kind) => common.FirstOrDefault(c => c.Kind == kind)?.Path;
         Part(CleanupGroup.Installers, () =>
         {
-            if (Folder(CommonFolderKind.Downloads) is not { } downloads) return (Array.Empty<CleanupEntry>(), true, "Windows could not report this folder location.");
+            var choice = common.FirstOrDefault(c => c.Kind == CommonFolderKind.Downloads);
+            if (choice?.Path is not { } downloads) return (Array.Empty<CleanupEntry>(), true, choice?.Issue ?? "Windows could not report this folder location.");
             var (scan, files) = DoctorLargeFiles.Run(downloads, token);
             return (CleanupFiles.Installers(downloads, files, token), Partial(scan), null);
         });
         Part(CleanupGroup.ProjectBuilds, () =>
         {
-            var found = new List<CleanupEntry>(); bool partial = false;
+            var found = new List<CleanupEntry>(); bool partial = false, missing = false;
             string? source = null;
             try { source = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile, Environment.SpecialFolderOption.DoNotVerify), "source"); }
             catch (Exception error) when (error is IOException or SecurityException or ArgumentException or NotSupportedException) { }
             var roots = new[] { Folder(CommonFolderKind.Documents), Folder(CommonFolderKind.Desktop), source };
             for (int i = 0; i < roots.Length; i++)
             {
-                if (roots[i] is not { } root) { partial |= i < 2; continue; }
+                if (roots[i] is not { } root) { if (i < 2) missing = true; continue; }
                 (FolderScanResult Scan, ProjectFolderResult Projects) result;
                 try { result = DoctorProjects.Run(root, token); }
                 // The source folder only exists for some developers; the others are reported.
-                catch (Exception error) when (error is UserError or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception) { token.ThrowIfCancellationRequested(); partial |= i < 2; continue; }
+                catch (Exception error) when (error is UserError or IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or SecurityException or ArgumentException or NotSupportedException)
+                { token.ThrowIfCancellationRequested(); if (i < 2) missing = true; continue; }
                 partial |= Partial(result.Scan);
                 found.AddRange(CleanupFiles.Builds(root, result.Projects));
             }
-            return (found, partial, null);
+            return (found, partial || missing, missing ? "Documents or Desktop could not be read; build folders there are not listed." : null);
         });
         return new(CleanupFiles.Combine(entries), parts);
     }

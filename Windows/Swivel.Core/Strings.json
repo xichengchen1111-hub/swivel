@@ -13944,11 +13944,6 @@
     "「清理檔案」會在 Windows 醫生已經檢查的四個地方尋找：已知瀏覽器和應用程式的快取資料夾、暫存資料夾中 7 天未變更的項目、「下載」中 5 MB 以上的安裝程式，以及「文件」、「桌面」和 source 資料夾裡的專案建置資料夾。只有未在執行的應用程式的快取資料夾會預先勾選；其他項目請自行檢視，勾選不再需要的。每個項目移到資源回收筒前都會再檢查一次；此視窗開啟期間，「復原移動」可還原上一次移動的項目。",
     "「ファイルのクリーンアップ」は、Windows 診断がすでに調べている 4 か所を探します：既知のブラウザーとアプリのキャッシュフォルダー、一時フォルダー内で 7 日間変更されていない項目、「ダウンロード」内の 5 MB 以上のインストーラー、「ドキュメント」「デスクトップ」と source フォルダー内のプロジェクトのビルドフォルダーです。実行中でないアプリのキャッシュフォルダーだけがあらかじめ選択されます。ほかの項目は確認して、不要なものにチェックを付けてください。各項目はごみ箱に移す前にもう一度確認され、このウインドウを開いている間は「移動を取り消す」で直前の移動を元に戻せます。"
   ],
-  "Each place is read within its tool's limits (folders four levels deep, 20,000 entries and about 30 seconds each), so a list can be partial. Sizes are logical and may count shared files twice. Leftovers of removed apps need the installation records from before you uninstalled, so they stay in Inspect Desktop Installation Records; duplicate files stay in Compare Common Folders.": [
-    "每个地方都按其工具的限制读取（各最多四层文件夹、20,000 个条目、约 30 秒），因此列表可能不完整。大小为逻辑大小，共享的文件可能重复计算。已卸载应用的残留需要卸载前的安装记录，所以仍在“检查桌面程序安装记录”中；重复文件仍在“比较常用文件夹”中。",
-    "每個地方都按其工具的限制讀取（各最多四層資料夾、20,000 個項目、約 30 秒），因此清單可能不完整。大小為邏輯大小，共用的檔案可能重複計算。已解除安裝應用程式的殘留需要解除安裝前的安裝記錄，所以仍在「檢查桌面程式安裝記錄」中；重複檔案仍在「比較常用資料夾」中。",
-    "各場所はそのツールの制限内で読み取ります（それぞれ最大 4 階層、20,000 項目、約 30 秒）。そのため一覧が不完全なことがあります。サイズは論理サイズで、共有ファイルを重複して数えることがあります。削除したアプリの残りはアンインストール前のインストール記録が必要なため「デスクトップアプリのインストール記録を確認」に、重複ファイルは「よく使うフォルダーを比較」に残っています。"
-  ],
   "Each item is checked again first, under the rules of the tool that found it: cache folders only while their app is closed, temporary items only if still unchanged for 7 days, project folders only next to their project file. Installers and project folders may still be wanted; check each one. If an item is too large for the Recycle Bin, Windows asks before deleting it permanently.": [
     "每个项目都会先按找到它的工具的规则再检查一次：缓存文件夹只在其应用关闭时移动，临时项目只在仍 7 天未改动时移动，项目文件夹只在旁边仍有项目文件时移动。安装包和项目文件夹可能仍有用，请逐个确认。如果项目太大无法放进回收站，Windows 会先询问是否永久删除。",
     "每個項目都會先按找到它的工具的規則再檢查一次：快取資料夾只在其應用程式關閉時移動，暫存項目只在仍 7 天未變更時移動，專案資料夾只在旁邊仍有專案檔時移動。安裝程式和專案資料夾可能仍有用，請逐一確認。如果項目太大無法放進資源回收筒，Windows 會先詢問是否永久刪除。",
@@ -14023,5 +14018,15 @@
     "无法读取这个地方。",
     "無法讀取這個地方。",
     "この場所を読み取れませんでした。"
+  ],
+  "Each place is read within its tool's limits (the temporary folder, Downloads and each project folder four levels deep, 20,000 entries and about 30 seconds each; app caches within Review Browser and App Caches' own limits), so a list can be partial. Sizes are logical and may count shared files twice. Not included here: leftovers of removed apps (they need the installation records from before you uninstalled, so they stay in Inspect Desktop Installation Records), duplicate and similar files (Compare Common Folders), large files that are not installers (Find Large Files) and apps not opened for a while (Windows keeps no reliable last-opened date for desktop apps).": [
+    "每个地方都按其工具的限制读取（临时文件夹、“下载”和每个项目文件夹各最多四层、20,000 个条目、约 30 秒；应用缓存按“检查浏览器和应用缓存”自己的限制），因此列表可能不完整。大小为逻辑大小，共享的文件可能重复计算。这里不包括：已卸载应用的残留（需要卸载前的安装记录，所以仍在“检查桌面程序安装记录”中）、重复和相似文件（“比较常用文件夹”）、不是安装包的大文件（“查找大文件”）以及很久没打开的应用（Windows 不会可靠地记录桌面程序上次打开的时间）。",
+    "每個地方都按其工具的限制讀取（暫存資料夾、「下載」和每個專案資料夾各最多四層、20,000 個項目、約 30 秒；應用程式快取按「檢查瀏覽器和應用程式快取」自己的限制），因此清單可能不完整。大小為邏輯大小，共用的檔案可能重複計算。這裡不包括：已解除安裝應用程式的殘留（需要解除安裝前的安裝記錄，所以仍在「檢查桌面程式安裝記錄」中）、重複和相似檔案（「比較常用資料夾」）、不是安裝程式的大型檔案（「尋找大型檔案」）以及很久沒開啟的應用程式（Windows 不會可靠地記錄桌面程式上次開啟的時間）。",
+    "各場所はそのツールの制限内で読み取ります（一時フォルダー、「ダウンロード」、各プロジェクトフォルダーはそれぞれ最大 4 階層、20,000 項目、約 30 秒。アプリのキャッシュは「ブラウザーとアプリのキャッシュを確認」の制限）。そのため一覧が不完全なことがあります。サイズは論理サイズで、共有ファイルを重複して数えることがあります。ここに含まれないもの：削除したアプリの残り（アンインストール前のインストール記録が必要なため「デスクトップアプリのインストール記録を確認」に残っています）、重複・類似ファイル（「よく使うフォルダーを比較」）、インストーラーでない大きなファイル（「大きなファイルを検索」）、しばらく開いていないアプリ（Windows はデスクトップアプリを最後に開いた日時を確実には記録しません）。"
+  ],
+  "Documents or Desktop could not be read; build folders there are not listed.": [
+    "无法读取“文档”或“桌面”；那里的构建文件夹没有列出。",
+    "無法讀取「文件」或「桌面」；那裡的建置資料夾沒有列出。",
+    "「ドキュメント」または「デスクトップ」を読み取れませんでした。そこにあるビルドフォルダーは一覧にありません。"
   ]
 }

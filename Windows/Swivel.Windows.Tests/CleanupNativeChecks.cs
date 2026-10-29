@@ -47,10 +47,20 @@ internal static class CleanupNativeChecks
         check(box.IsChecked == false && !move.IsEnabled, "Clicking a ticked group clears it");
         dialog.Close();
 
+        // A cache of a closed app found by the search starts ticked, and its status says so.
+        var cache = new AppCacheItem(new AppCacheFolder(AppCaches.Apps.First(), null, "Cache", Path.Combine(root, "cache")), new AppCacheSize(1234, 1, 1, false, null));
+        var withCache = CleanupFiles.Combine(entries.Concat(CleanupFiles.Caches(new AppCacheResult(Array.Empty<AppCacheAppResult>(), new[] { cache }, false, false, false, false, DateTimeOffset.UnixEpoch),
+            new System.Collections.Generic.HashSet<string>())));
+        var preselected = new CleanupFilesDialog(app, new CleanupReader.Result(withCache, result.Parts));
+        var moveCache = ((DockPanel)preselected.Content).Children.OfType<WrapPanel>().Single().Children.OfType<Button>().Single(b => Equals(b.Content, app.L("Move Selected to Recycle Bin…")));
+        check(moveCache.IsEnabled && preselected.CurrentReport.Split('\n').Count(l => l.StartsWith("[x] ")) == 1 && preselected.CurrentReport.Contains(string.Format(app.L("Found: {0} items · {1} · selected: {2} items · {3}"), 4, AppCaches.ShortSize(withCache.Sum(e => e.Bytes)), 1, AppCaches.ShortSize(1234))),
+            "A closed app's cache opens ticked: Move is on and the summary counts 1 selected item");
+        preselected.Close();
+
         if (!RecycleBin.Available(setup)) { Console.WriteLine("SKIP: no Recycle Bin on the test drive."); return; }
         var stored = entries.Select(e => CleanupFilesDialog.Recycle(e, IntPtr.Zero)).ToArray();
         check(!File.Exists(oldFile) && !File.Exists(setup) && !Directory.Exists(build) && File.Exists(Path.Combine(temp, "new.tmp")) && File.Exists(Path.Combine(docs, "web", "package.json")),
-            "Each kind moves to the Recycle Bin under its own rules; everything else stays");
+            "The temporary item, installer and build folder each move to the Recycle Bin under their own rules; everything else stays");
         for (int i = 0; i < entries.Count; i++) CleanupFilesDialog.Restore(entries[i], stored[i]);
         check(File.ReadAllText(oldFile) == "old" && new FileInfo(setup).Length == 6_000_000 && File.ReadAllText(Path.Combine(build, "pkg", "index.js")) == "x", "Undo puts each one back");
 

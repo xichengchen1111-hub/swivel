@@ -19,7 +19,7 @@ internal static class CleanupFilesChecks
         }, false, false, false, false, DateTimeOffset.UnixEpoch);
         var running = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { chrome.Processes[0] };
         var cacheEntries = CleanupFiles.Caches(caches, running);
-        check(cacheEntries.Select(e => e.Preselected).SequenceEqual(new[] { false, true, false, false }), "Only a closed app's measured cache is selected (a running app's, an unmeasurable and an unmeasured one are not)");
+        check(cacheEntries.Select(e => e.Preselected).SequenceEqual(new[] { false, true, false, false }), "Only a closed app's cache with a size (even a partial one) is selected; a running app's, an unmeasurable and an unmeasured one are not");
         check(cacheEntries.Select(e => e.Partial).SequenceEqual(new[] { false, true, true, true }) && cacheEntries[1].Bytes == 900 && cacheEntries[3].Bytes == 0, "Partial, failed and unmeasured cache sizes are marked partial");
         check(CleanupFiles.Caches(caches, null).All(e => !e.Preselected), "When running apps cannot be listed, no cache is selected");
 
@@ -43,6 +43,11 @@ internal static class CleanupFilesChecks
         check(all.Select(e => e.Group).SequenceEqual(all.Select(e => e.Group).Order()) && all.Count == 4 + 2 + 2 + 1, "The list is grouped in kind order and a path found twice appears once");
         check(all.Where(e => e.Group == CleanupGroup.OldTemporary).Select(e => e.Bytes).SequenceEqual(new decimal[] { 70, 50 }), "Largest first within a kind");
         check(CleanupFiles.Total(all) == (9, 300 + 900 + 0 + 0 + 70 + 50 + 6_000_000 + 5_000_000 + 1000), "Totals count items and bytes");
+
+        var inner = installers[0] with { Path = System.IO.Path.Combine(builds[0].Path, "pkg", "setup.exe") };
+        var sibling = installers[0] with { Path = builds[0].Path + " copy" + System.IO.Path.DirectorySeparatorChar + "setup.exe" };
+        var nested = CleanupFiles.Combine(new[] { inner, builds[0], sibling });
+        check(nested.Count == 2 && nested.Contains(builds[0]) && nested.Contains(sibling), "An item inside another listed folder is listed once, with the folder; a folder with a longer name beside it is not its parent");
 
         // Group tick boxes.
         check(CleanupFiles.GroupState(new[] { true, true }) == true && CleanupFiles.GroupState(new[] { false, false }) == false && CleanupFiles.GroupState(new[] { true, false }) is null

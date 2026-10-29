@@ -19,7 +19,12 @@ internal sealed class CleanupFilesDialog : Window
     private readonly App app;
     private readonly CleanupReader.Result result;
     private readonly RecycleBinSession<CleanupEntry> bin;
-    private readonly Dictionary<CleanupEntry, Row> rows = new();
+    // Keyed by reference: an entry's value hash would hash its whole source record every lookup.
+    private readonly Dictionary<CleanupEntry, Row> rows = new(ReferenceEqualityComparer.Instance);
+    // Moved in this window at any time (also when Undo brought them back).
+    private readonly HashSet<CleanupEntry> moved = new(ReferenceEqualityComparer.Instance);
+    private IReadOnlySet<string>? processes;
+    private bool bulk;
     private readonly List<(CleanupGroup Group, CheckBox Box, TextBlock Header, ListView List)> groups = new();
     private readonly TextBlock summary;
     internal int Moved => bin.Gone.Count;
@@ -56,6 +61,7 @@ internal sealed class CleanupFilesDialog : Window
         var root = new DockPanel { Margin = new Thickness(20) };
         var footer = new WrapPanel(); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
         footer.Children.Add(bin.Move); footer.Children.Add(bin.Undo);
+        if (result.Entries.Any(e => e.Group == CleanupGroup.AppCaches)) footer.Children.Add(UI.Button(app.L("Check Running Apps Again"), () => { if (bin.Idle) Refresh(); }));
         footer.Children.Add(UI.Button(app.L("Copy Report"), () => app.Try(() => Clipboard.SetText(CurrentReport))));
         var close = UI.Button(app.L("Close"), () => DialogResult = false); close.IsCancel = true; footer.Children.Add(close);
 
@@ -80,21 +86,23 @@ internal sealed class CleanupFilesDialog : Window
             tick.SetBinding(System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty, new Binding(nameof(Row.Checked)) { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged });
             tick.SetBinding(AutomationProperties.NameProperty, new Binding(nameof(Row.Path)));
             view.Columns.Add(new GridViewColumn { Header = "", CellTemplate = new DataTemplate { VisualTree = tick }, Width = 36 });
-            foreach (var (title, property, width) in new[] { ("Path", nameof(Row.Path), 560.0), ("Kind", nameof(Row.Kind), 160.0), ("Size", nameof(Row.Size), 170.0) })
+            var columns = new List<(string, string, double)> { ("Path", nameof(Row.Path), 520.0), ("Kind", nameof(Row.Kind), 140.0), ("Size", nameof(Row.Size), 150.0) };
+            if (group == CleanupGroup.AppCaches) columns.Add(("Status", nameof(Row.Status), 260.0));
+            foreach (var (title, property, width) in columns)
                 view.Columns.Add(new GridViewColumn { Header = app.L(title), DisplayMemberBinding = new Binding(property), Width = width });
             list.View = view; AutomationProperties.SetName(list, app.L(CleanupFiles.Name(group)));
             // Space ticks the selected rows, so the list works without a mouse.
-            list.KeyDown += (_, e) =>
+            // (Before the list uses Space to select; a focused tick box toggles itself.)
+            list.PreviewKeyDown += (_, e) =>
             {
-                if (e.Key != System.Windows.Input.Key.Space || list.SelectedItems.Count == 0 || !bin.Idle) return;
+                if (e.Key != System.Windows.Input.Key.Space || e.OriginalSource is CheckBox || list.SelectedItems.Count == 0 || !bin.Idle) return;
                 var chosen = list.SelectedItems.OfType<Row>().ToArray(); bool value = !chosen.All(r => r.Checked);
-                foreach (var row in chosen) row.Checked = value; e.Handled = true;
+                Bulk(() => { foreach (var row in chosen) row.Checked = value; }); e.Handled = true;
             };
             box.Click += (_, _) =>
             {
                 bool value = CleanupFiles.GroupClick(CleanupFiles.GroupState(Listed().Where(e => e.Group == group).Select(e => rows[e].Checked)));
-                foreach (var entry in Listed().Where(e => e.Group == group)) rows[entry].Checked = value;
-                Ticked();
+                Bulk(() => { foreach (var entry in Listed().Where(e => e.Group == group)) rows[entry].Checked = value; });
             };
             body.Children.Add(new Expander { Header = headerPanel, Content = list, IsExpanded = false, Margin = new Thickness(0, 6, 0, 0) });
             groups.Add((group, box, header, list));
@@ -106,7 +114,12 @@ internal sealed class CleanupFilesDialog : Window
     }
 
     // The Recycle Bin session asks for the ticked items while it is being built, before `bin` is set.
-    private IEnumerable<CleanupEntry> Listed() => result.Entries.Where(entry => bin?.Gone.Contains(entry) != true);
+    // Temporary items restored by Undo count as recently changed, so they leave the list (as in Old
+    // Temporary Files).
+    private IEnumerable<CleanupEntry> Listed() => result.Entries.Where(entry => bin?.Gone.Contains(entry) != true && !(entry.Group == CleanupGroup.OldTemporary && moved.Contains(entry)));
+
+    /// Many ticks at once, then one update.
+    private void Bulk(Action change) { bulk = true; try { change(); } finally { bulk = false; } Ticked(); }
 
     private string Summary()
     {
@@ -124,6 +137,7 @@ internal sealed class CleanupFilesDialog : Window
 
     private void Ticked()
     {
+        if (bulk) return;
         foreach (var (group, box, header, _) in groups)
         {
             var listed = Listed().Where(e => e.Group == group).ToArray(); var total = CleanupFiles.Total(listed);
@@ -136,6 +150,11 @@ internal sealed class CleanupFilesDialog : Window
 
     private void Refresh()
     {
+        if (bin.Idle) processes = AppCacheReader.RunningNames();
+        // Items Undo brought back return unticked.
+        foreach (var entry in result.Entries)
+            if (bin.Gone.Contains(entry)) moved.Add(entry);
+            else if (moved.Contains(entry)) rows[entry].Untick();
         foreach (var (group, _, _, list) in groups)
         {
             list.ItemsSource = Listed().Where(e => e.Group == group).Select(e => rows[e]).ToArray();
@@ -182,7 +201,12 @@ internal sealed class CleanupFilesDialog : Window
             get => ticked;
             set { if (ticked == value) return; ticked = value; PropertyChanged?.Invoke(this, new(nameof(Checked))); owner.Ticked(); }
         }
+        public void Untick() { if (!ticked) return; ticked = false; PropertyChanged?.Invoke(this, new(nameof(Checked))); }
         public string Path => Visible(entry.Path);
+        public string Status => entry.Source is AppCacheItem cache
+            ? owner.processes is null ? owner.app.L("Swivel could not list the running programs, so no folder can be moved or put back now.")
+            : AppCaches.IsRunning(cache.Folder.App, owner.processes) ? owner.app.L("Its app is running; close it first") : owner.app.L("Can be moved to the Recycle Bin")
+            : "";
         public string Kind => owner.app.L(entry.Label);
         public string Size => owner.Size(entry);
     }
