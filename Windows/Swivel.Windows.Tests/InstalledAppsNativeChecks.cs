@@ -43,7 +43,7 @@ internal static class InstalledAppsNativeChecks
             nodes.OfType<TabControl>().Single().SelectedIndex=1;check(dialog.SelectedReport is null,"Selected record copy is disabled while only root-status tab is visible");
             nodes.OfType<TabControl>().Single().SelectedIndex=0;check(dialog.SelectedReport is not null,"Returning to record tab restores explicit selected-record copy");
             var footer=((DockPanel)dialog.Content).Children.OfType<WrapPanel>().Single();var buttons=footer.Children.OfType<Button>().Select(x=>x.Content as string).ToArray();
-            check(DockPanel.GetDock(footer)==Dock.Bottom&&buttons.SequenceEqual(new[]{app.L("Open Installed Apps in Settings"),app.L("Find Leftovers of Apps Removed Since This List Was Read…"),app.L("Copy Report"),app.L("Copy Selected Details"),app.L("Close")})&&!dialog.LeftoversRequested,
+            check(DockPanel.GetDock(footer)==Dock.Bottom&&buttons.SequenceEqual(new[]{app.L("Open Installed Apps in Settings"),app.L("Find Leftovers of Apps Removed Since This List Was Read…"),app.L("Read Store and MSIX Packages…"),app.L("Copy Report"),app.L("Copy Selected Details"),app.L("Close")})&&!dialog.LeftoversRequested&&!dialog.PackagesRequested,
                 "Fixed footer offers Windows Settings for uninstalling, the leftover search, explicit copies and close; no uninstall command of its own and no leftover search until asked");
             check(Descendants(dialog).OfType<TextBlock>().Any(x=>x.Text==app.L(InstalledApps.Uninstall)),"The window says Windows does the uninstalling and how to find leftovers");
         }

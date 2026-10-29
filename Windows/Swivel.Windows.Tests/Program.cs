@@ -177,6 +177,7 @@ internal static class Program
             Group("AppMemoryNativeChecks", () => AppMemoryNativeChecks.Run(Check,Reject));
             Group("AppMemoryHelperNativeChecks", () => AppMemoryHelperNativeChecks.Run(Check,Reject));
             Group("InstalledAppsNativeChecks", () => InstalledAppsNativeChecks.Run(Check,Reject));
+            Group("StorePackagesNativeChecks", () => StorePackagesNativeChecks.Run(Check,Reject));
             Group("StartupNativeChecks", () => StartupNativeChecks.Run(Check,Reject));
             Group("GifNativeChecks", () => GifNativeChecks.Run(directory,Check,Reject));
             Group("GifExportNativeChecks", () => GifExportNativeChecks.Run(directory,Check,Reject));
