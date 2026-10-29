@@ -263,6 +263,7 @@ public static class Catalog
         ,new("doctor.commonfolders", "Measure Common Folders…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.scheduledtasks", "Inspect Scheduled Task Metadata…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.services", "Inspect Windows Services…", Core.Feature.Doctor, RequiresFiles: false)
+        ,new("doctor.startupapps", "Inspect Startup Apps…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.startupapproved", "Inspect StartupApproved Records…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.sleepstates", "Inspect Sleep Capabilities…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.caches", "Inspect User Cache Locations…", Core.Feature.Doctor, RequiresFiles: false)

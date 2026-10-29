@@ -380,6 +380,24 @@ public sealed partial class App : Application
                 report(token.IsCancellationRequested?L("Cancelled."):L("Startup-folder inspection closed. Nothing was changed."));
                 return;
             }
+            if(action.Id=="doctor.startupapps")
+            {
+                if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
+                workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();report(L("Reading logon startup records…"));
+                var runRecords=await AwaitDoctorReadAsync(Task.Run(()=>StartupReader.Read(token),token),token);token.ThrowIfCancellationRequested();
+                report(L("Reading bounded StartupApproved registry data…"));var approvals=await AwaitDoctorReadAsync(Task.Run(()=>StartupApprovalReader.Read(token),token),token);token.ThrowIfCancellationRequested();
+                report(L("Reading reported startup-folder locations…"));var appChoices=await AwaitDoctorReadAsync(OnSta(()=>StartupFolderReader.ReadLocations(token)),token);token.ThrowIfCancellationRequested();
+                var appChooser=new StartupFolderChooser(this,appChoices,allowSkip:true);if(!ShowOperationDialog(appChooser,owner,token))return;token.ThrowIfCancellationRequested();
+                IReadOnlyList<StartupFolderResult>? appFolders=null;
+                if(!appChooser.Skipped)
+                {
+                    var chosen=appChooser.Selected;if(chosen.Length is <1 or >2)throw new UserError("Choose an available startup folder first.");
+                    report(L("Reading startup-folder entry metadata…"));appFolders=await AwaitDoctorReadAsync(Task.Run(()=>StartupFolderReader.ReadEntries(chosen,token),token),token);token.ThrowIfCancellationRequested();
+                }
+                var startupApps=StartupApps.Combine(runRecords,approvals,appFolders,L,token);
+                ShowOperationDialog(new StartupAppsDialog(this,startupApps),owner,token);
+                report(token.IsCancellationRequested?L("Cancelled."):L("Startup Apps closed. No startup settings were changed."));return;
+            }
             if(action.Id=="doctor.startupapproved")
             {
                 if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");

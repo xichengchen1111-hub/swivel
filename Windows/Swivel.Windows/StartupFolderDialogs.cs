@@ -15,12 +15,13 @@ internal sealed class StartupFolderChooser:Window
 {
     private readonly StartupFolderChoice[] choices;private readonly HashSet<StartupFolderKind> selected=new();
     internal StartupFolderChoice[] Selected=>choices.Where(c=>c.CanAttempt&&selected.Contains(c.Kind)).ToArray();
-    internal StartupFolderChooser(App app,IReadOnlyList<StartupFolderChoice> source)
+    internal bool Skipped{get;private set;}
+    internal StartupFolderChooser(App app,IReadOnlyList<StartupFolderChoice> source,bool allowSkip=false)
     {
         choices=source.ToArray();if(choices.Length!=2||choices.Select(c=>c.Kind).Distinct().Count()!=2)throw new ArgumentException("Invalid startup folder choices.");
         Title=app.L("Review Startup Folder Locations");Width=860;Height=740;MinWidth=500;MinHeight=400;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var root=new DockPanel{Margin=new Thickness(20)};var footer=new WrapPanel();DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
-        var read=UI.Button(app.L("Read Selected Entry Metadata"),()=>{if(Selected.Length>0)DialogResult=true;});read.IsEnabled=false;footer.Children.Add(read);var cancel=UI.Button(app.L("Cancel"),()=>DialogResult=false);cancel.IsCancel=true;footer.Children.Add(cancel);
+        var read=UI.Button(app.L("Read Selected Entry Metadata"),()=>{if(Selected.Length>0)DialogResult=true;});read.IsEnabled=false;footer.Children.Add(read);if(allowSkip)footer.Children.Add(UI.Button(app.L("Continue Without Startup Folders"),()=>{Skipped=true;DialogResult=true;}));var cancel=UI.Button(app.L("Cancel"),()=>DialogResult=false);cancel.IsCancel=true;footer.Children.Add(cancel);
         var body=new StackPanel();root.Children.Add(UI.Scroll(body));Content=root;foreach(string text in new[]{StartupFolders.Scope,StartupFolders.Limits,StartupFolders.Meaning})body.Children.Add(UI.Text(app.L(text),12));
         foreach(var choice in choices)
         {
