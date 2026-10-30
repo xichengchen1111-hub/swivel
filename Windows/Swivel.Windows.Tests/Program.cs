@@ -18,9 +18,7 @@ internal static class Program
     // A failed check is reported and the run continues, so one Windows run lists every failure.
     private static void Check(bool condition, string name) { if (!condition) { failures.Add(name); Console.Error.WriteLine("FAIL: " + name); return; } checks++; }
     // An unexpected exception fails its group only; later groups still run and report.
-    private static int groupIndex;
-    private static readonly int groupLo = int.Parse(Environment.GetEnvironmentVariable("SWIVEL_GROUP_LO") ?? "0"), groupHi = int.Parse(Environment.GetEnvironmentVariable("SWIVEL_GROUP_HI") ?? "100000");
-    private static void Group(string name, Action run) { int index = groupIndex++; if (index < groupLo || index >= groupHi) return; Console.WriteLine("RUN: " + name); try { run(); } catch (Exception error) { failures.Add(name + " threw " + error.GetType().Name + ": " + error.Message); Console.Error.WriteLine(name + " threw: " + error); } }
+    private static void Group(string name, Action run) { Console.WriteLine("RUN: " + name); try { run(); } catch (Exception error) { failures.Add(name + " threw " + error.GetType().Name + ": " + error.Message); Console.Error.WriteLine(name + " threw: " + error); } }
     private static void Reject(Action action, string name) { bool failed = false; try { action(); } catch { failed = true; } Check(failed, name); }
     [STAThread]
     public static int Main(string[] args)
@@ -31,13 +29,6 @@ internal static class Program
         string directory = Path.Combine(Path.GetTempPath(), "swivel-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var validationApp=new App(validationHost:true);
-        if (args.Length > 0 && args[0] == "--diag-appcheck")
-        {
-            Group("AppCheckNativeChecks", () => AppCheckNativeChecks.Run(directory,Check,Reject));
-            Directory.Delete(directory, true); validationApp.Shutdown();
-            Console.WriteLine("DIAG group failures " + failures.Count);
-            return failures.Count;
-        }
         try
         {
             string source = Path.Combine(directory, "图像 🦜.png");
@@ -162,7 +153,7 @@ internal static class Program
             Group("DoctorControlChecks", () => DoctorControlChecks.Run(Check, Reject));
             Group("MarkHistoryChecks", () => MarkHistoryChecks.Run(Check));
             Group("ExecutableStructureChecks", () => ExecutableStructureChecks.Run(directory,Check,Reject));
-            if (Environment.GetEnvironmentVariable("SWIVEL_SKIP_APPCHECK") != "1") Group("AppCheckNativeChecks", () => AppCheckNativeChecks.Run(directory,Check,Reject));
+            Group("AppCheckNativeChecks", () => AppCheckNativeChecks.Run(directory,Check,Reject));
             Group("WindowsDoctorPageChecks", () => WindowsDoctorPageChecks.Run(Check));
             Group("MountedDriveNativeChecks", () => MountedDriveNativeChecks.Run(Check,Reject));
             Group("PowerPlanNativeChecks", () => PowerPlanNativeChecks.Run(Check,Reject));
@@ -243,7 +234,7 @@ internal static class Program
             return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); foreach (string failure in failures) Console.Error.WriteLine("Earlier FAIL: " + failure); return 1; }
-        finally { try { Directory.Delete(directory, true); } catch (Exception e) { Console.WriteLine("DIAG delete " + e); throw; } finally { Console.WriteLine("DIAG shutdown"); validationApp.Shutdown(); Console.WriteLine("DIAG shutdown done"); } }
+        finally { try { Directory.Delete(directory, true); } finally { validationApp.Shutdown(); } }
     }
     private static BitmapFrame Decode(string path)
     {

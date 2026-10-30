@@ -14,33 +14,11 @@ try {
     & (Join-Path $PSScriptRoot 'ThirdParty/RealESRGAN/fetch-model.ps1') # pinned upscaling model, converted and checked by SHA-256
     & (Join-Path $PSScriptRoot 'ThirdParty/Whisper/fetch-model.ps1') # pinned speech model, converted and checked by SHA-256
     if (-not $SkipTests) {
-        & dotnet build Swivel.Windows.Tests -c Release
-        $diagExe = Get-ChildItem Swivel.Windows.Tests/bin/Release -Recurse -Filter Swivel.Windows.Tests.exe | Select-Object -First 1
-        $env:SWIVEL_SKIP_APPCHECK = '0'
-        function Try-Range($lo, $hi) {
-            $env:SWIVEL_GROUP_LO = "$lo"; $env:SWIVEL_GROUP_HI = "$hi"; $start = Get-Date
-            $lines = & $diagExe.FullName 2>&1; $code = $LASTEXITCODE
-            $names = ($lines | Where-Object { "$_" -match '^RUN: ' } | ForEach-Object { "$_" -replace 'RUN: ','' })
-            Write-Host "DIAG range [$lo,$hi) exit $code secs $([int]((Get-Date)-$start).TotalSeconds) groups $($names.Count) first $($names | Select-Object -First 1) last $($names | Select-Object -Last 1)"
-            return @{ Crash = ($code -eq -1073741811); Names = $names }
-        }
-        foreach ($idx in 99..119) {
-            $crashes = 0; $name = ''
-            foreach ($rep in 1..8) {
-                $env:SWIVEL_GROUP_LO = "$idx"; $env:SWIVEL_GROUP_HI = "$($idx + 1)"
-                $lines = & $diagExe.FullName 2>&1; $code = $LASTEXITCODE
-                $found = $lines | Where-Object { "$_" -match '^RUN: ' } | Select-Object -First 1
-                if ($found) { $name = "$found" -replace 'RUN: ','' }
-                if ($code -eq -1073741811) { $crashes++ }
-            }
-            Write-Host "DIAG group $idx $name crashes $crashes of 8"
-        }
-        exit 0
         & dotnet run --project Swivel.Core.Tests -c Release
         if ($LASTEXITCODE -ne 0) { throw 'Core checks failed.' }
         if ($env:OS -ne 'Windows_NT') { throw 'Native tests require Windows. Cross-builds must explicitly use -SkipTests.' }
         & dotnet run --project Swivel.Windows.Tests -c Release
-        if ($LASTEXITCODE -ne 0) { Write-Host "DIAG exit code $LASTEXITCODE"; Get-WinEvent -LogName Application -MaxEvents 8 | Where-Object { $_.ProviderName -in 'Application Error','.NET Runtime','Windows Error Reporting' } | ForEach-Object { Write-Host ("DIAG event " + $_.ProviderName + " " + ($_.Message -replace '\s+',' ')) }; throw 'Windows native checks failed.' }
+        if ($LASTEXITCODE -ne 0) { throw 'Windows native checks failed.' }
     }
     New-Item -ItemType Directory -Path $output | Out-Null
     & dotnet publish Swivel.Windows -c Release -r $Runtime --self-contained true -p:PublishSingleFile=false -p:PublishReadyToRun=false -o $output
