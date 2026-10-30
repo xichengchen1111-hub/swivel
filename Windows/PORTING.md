@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.135 合并第十轮：B08 加密 ZIP、C02 HEIC/AVIF、D03 视频降噪（D03 由 Codex 编写）
+
+分支 `claude/win-b08-zipcrypto-9e02eb`（03fcea5、5b0eff5）、`claude/win-c02-heic-809235`（b7e5d26、209be7d、0adb0e0）、`codex/win-d03-video`（ec2727e 由 Codex 编写，Claude 按审查修正）。Strings.json 三方 JSON 合并无同键冲突。
+
+- B08：按公开规范原创实现，只用 System.Security.Cryptography。WinZip AES AE-1/AE-2（PBKDF2-HMAC-SHA1 1000 次，小端计数 CTR，解密前对整段密文校验 10 字节 HMAC-SHA1；AE-1 另校验 CRC-32）与传统 ZipCrypto（只读，校验字节用本地头时间，然后 CRC-32）。密码以 UTF-8 字节保存到本次解压结束并清除。审查 P2：ZipCrypto 校验只有 1 字节，换用其他密码的项目有 1/256 概率通过后在中途停止；现在先把每个 ZipCrypto 项目解密到空输出并比对 CRC-32，再创建文件夹。PKWARE 强加密（bit 6/13、方法 0x0017）拒绝；普通 ZIP、TAR、7z 不变。
+- C02：原创有界 ISO-BMFF 检查（ftyp 品牌、序列与 movie 盒拒绝、meta/hdlr pict、pitm、iinf、iloc 范围、外部引用拒绝、ipco/ipma、未知必要属性拒绝、ispe ≤16 MP/16384、hvcC/av1C/pixi 位深、PQ/HLG、irot/imir、辅助 alpha，网格描述须在 idat 且尺寸等于 ispe）。像素只来自 CLSID_WICHeifDecoder，且其组件信息的厂商与作者为 Microsoft；HEVC/AV1 解码器由 Windows 选择。ICC 转 sRGB（在 BGRA 转换后），四分之一旋转处理，镜像/半转拒绝，非 BT.709 且无配置文件拒绝保存，非方形像素拒绝。CI 运行器有 HEIF 容器解码器但没有 HEVC/AV1 解码器，未解码过真实像素。
+- D03：解码保留部分声音 → 既有降噪器 → 可选 WSOLA → AAC → Mp4AudioMux。审查（无 P1，1 个 P2）：解码出的声音可比剪切长 100 ms，Find Quiet Sample 建议的末尾样本被降噪窗口接受却被剪辑拒绝；现在计划允许该容差，并在降噪前把样本对齐到实际解码的声音（同时处理第二次解码略短的情况）；降噪准备失败有专门提示。剩余 P3：强度 0% 仍算编辑并重编码声音。
+
 ## 0.134 合并第九轮：A05 截图卡片、B05/B06 exFAT/FAT32、C06 只去位置（C06 由 Codex 编写）
 
 分支 `claude/win-a05-screenshots-b519a1`（195c56f、ad93ff0、1523e6b、50ba46a）、`claude/win-b05-exfat-026bb6`（5100bfa、385197b、950b3eb、3e73876，另有已删除的临时 FAT 身份探测提交）、`codex/win-c06-location`（5f35f52 由 Codex 编写，Claude 按审查修正）。Strings.json 三方 JSON 合并无同键冲突。CI 工作流新增一步：在 Windows 运行器上用 diskpart 创建小型 exFAT/FAT32 虚拟盘供原生检查使用（仅 CI，应用本身不需要提权）。
