@@ -13,7 +13,7 @@ namespace Swivel.Windows;
 internal static class FolderEmojiDrawing
 {
     private const string Unsupported = "This emoji cannot be drawn in colour with the installed Segoe UI Emoji font. Choose another emoji.";
-    private static readonly Dictionary<Uri, Palette> palettes = new(); // UI/STA rendering only
+    private static readonly Dictionary<Uri, Palette?> palettes = new(); // UI/STA rendering only; null = font not usable
 
     internal static void Draw(DrawingContext target, FormattedText text, Point origin)
     {
@@ -41,9 +41,13 @@ internal static class FolderEmojiDrawing
         GlyphRun run = glyph.GlyphRun;
         if (!palettes.TryGetValue(run.GlyphTypeface.FontUri, out var palette))
         {
-            palette = new Palette(run.GlyphTypeface);
-            palettes.Add(run.GlyphTypeface.FontUri, palette);
+            // Any malformed table (or a fallback font WPF picked) refuses the emoji instead of
+            // crashing; the result, usable or not, is remembered so a font is read only once.
+            try { palette = new Palette(run.GlyphTypeface); }
+            catch (Exception error) when (error is not OutOfMemoryException) { palette = null; }
+            palettes[run.GlyphTypeface.FontUri] = palette;
         }
+        if (palette is null) throw new UserError(Unsupported);
         double advance = 0;
         int drawn = 0;
         for (int i = 0; i < run.GlyphIndices.Count; i++)
@@ -59,6 +63,7 @@ internal static class FolderEmojiDrawing
             }
             else foreach (var (layer, color) in layers)
             {
+                if (layer >= run.GlyphTypeface.GlyphCount) throw new UserError(Unsupported);
                 var colored = new GlyphRun(run.GlyphTypeface, 0, false, run.FontRenderingEmSize, run.PixelsPerDip,
                     new[] { layer }, baseline, new[] { run.AdvanceWidths[i] }, null, null, null, null, null, null);
                 target.DrawGlyphRun(color == 0xFFFF ? Brushes.White : palette.Colors[color], colored);
@@ -76,12 +81,13 @@ internal static class FolderEmojiDrawing
 
         internal Palette(GlyphTypeface font)
         {
-            // Only the installed system font is opened, never a user-supplied font or remote URI.
+            // Reads the font WPF resolved for the glyph (normally the installed Segoe UI Emoji, or a
+            // fallback font); every offset and count is bounds-checked.
             using var stream = font.GetFontStream();
             if (stream.Length is < 12 or > 64 * 1024 * 1024) throw new UserError(Unsupported);
             var bytes = new byte[(int)stream.Length]; stream.ReadExactly(bytes);
             int U16(int p) => p >= 0 && p <= bytes.Length - 2 ? BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(p, 2)) : throw new UserError(Unsupported);
-            int U32(int p) => p >= 0 && p <= bytes.Length - 4 ? checked((int)BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(p, 4))) : throw new UserError(Unsupported);
+            int U32(int p) => p >= 0 && p <= bytes.Length - 4 ? (BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(p, 4)) is var v && v <= int.MaxValue ? (int)v : throw new UserError(Unsupported)) : throw new UserError(Unsupported);
             // Segoe UI Emoji is a standalone TrueType font, not a font collection.
             if (U32(0) != 0x00010000) throw new UserError(Unsupported);
             int colr = -1, cpal = -1;
@@ -116,7 +122,7 @@ internal static class FolderEmojiDrawing
                     if (color != 0xFFFF && color >= colorCount) throw new UserError(Unsupported);
                     layers[j] = ((ushort)U16(q), (ushort)color);
                 }
-                Layers.Add((ushort)U16(p), layers);
+                if (!Layers.TryAdd((ushort)U16(p), layers)) throw new UserError(Unsupported);
             }
         }
     }

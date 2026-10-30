@@ -79,7 +79,8 @@ internal static class FolderStyleIcons
         {
             var emoji = new FormattedText(style.Emoji, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
                 new Typeface(new FontFamily("Segoe UI Emoji"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
-                s * 0.26, Brushes.White, 1.0);
+                // Small icons get a larger emoji (still fitted to the folder face) so it stays recognisable.
+                s * (s <= 32 ? 0.45 : 0.26), Brushes.White, 1.0);
             double fit = Math.Min(1, s * 0.76 / Math.Max(1, emoji.Width));
             context.PushTransform(new ScaleTransform(fit, fit, s / 2, s * 0.60));
             FolderEmojiDrawing.Draw(context, emoji, new Point((s - emoji.Width) / 2, s * 0.60 - emoji.Height / 2));
