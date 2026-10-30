@@ -45,6 +45,41 @@ public static class JpegMetadata
             Segments=Array.AsReadOnly(pieces.GroupBy(p=>p.Marker).Select(g=>new JpegMetadataSegment(g.Key,g.Count(),g.Sum(p=>(long)p.Length),g.First().Removed)).ToArray());
         }
         internal static Plan Create(byte[] source,Piece[] pieces,int width,int height,bool progressive,int scans,int markers,int restarts,ExifOrientationInfo orientation,int orientationSlot)=>new(source,pieces,width,height,progressive,scans,markers,restarts,orientation,orientationSlot);
+        private byte[]? locationExif;
+        public bool CanRemoveLocation => locationExif is not null;
+        public string? LocationUnavailableReason { get; private set; }
+        internal Plan PrepareLocation(CancellationToken token)
+        {
+            var exifs=pieces.Where(p=>p.Marker==0xe1&&IsExif(p)).ToArray();
+            if(exifs.Length!=1){LocationUnavailableReason=ExifLocation.Missing;return this;}
+            var item=exifs[0];
+            locationExif=ExifLocation.Rebuild(source.AsSpan(PayloadAt(item)+6,item.Offset+item.Length-PayloadAt(item)-6),token,out var reason);
+            LocationUnavailableReason=reason;
+            if(locationExif is not null&&(locationExif.Length>65527||source.Length-item.Length+10L+locationExif.Length>MaxBytes)){locationExif=null;LocationUnavailableReason=ExifLocation.Invalid;}
+            return this;
+        }
+        public void WriteLocationOnly(Stream output,CancellationToken token)
+        {
+            ArgumentNullException.ThrowIfNull(output);token.ThrowIfCancellationRequested();
+            if(!output.CanWrite)throw new ArgumentException("A writable output stream is required.",nameof(output));
+            if(!CanRemoveLocation)throw new UserError(LocationUnavailableReason??ExifLocation.Invalid);
+            foreach(var piece in pieces)
+            {
+                token.ThrowIfCancellationRequested();
+                if(piece.Marker==0xe1&&IsExif(piece))
+                {
+                    var header=new byte[10];header[0]=255;header[1]=0xe1;
+                    BinaryPrimitives.WriteUInt16BigEndian(header.AsSpan(2),(ushort)(locationExif!.Length+8));"Exif\0\0"u8.CopyTo(header.AsSpan(4));
+                    output.Write(header);output.Write(locationExif);continue;
+                }
+                if(piece.Marker==0xed||(piece.Marker==0xe1&&IsXmp(piece)))continue;
+                for(int at=0;at<piece.Length;){token.ThrowIfCancellationRequested();int n=Math.Min(65536,piece.Length-at);output.Write(source.AsSpan(piece.Offset+at,n));at+=n;}
+            }
+            token.ThrowIfCancellationRequested();
+        }
+        private int PayloadAt(Piece p){int at=p.Offset;while(source[at]==255)at++;return at+3;}
+        private bool IsExif(Piece p){int at=PayloadAt(p);return p.Offset+p.Length-at>=6&&source.AsSpan(at,6).SequenceEqual("Exif\0\0"u8);}
+        private bool IsXmp(Piece p){int at=PayloadAt(p);var data=source.AsSpan(at,p.Offset+p.Length-at);return data.StartsWith("http://ns.adobe.com/xap/1.0/\0"u8)||data.StartsWith("http://ns.adobe.com/xmp/extension/\0"u8);}
         public void Write(Stream output,CancellationToken token)=>Write(output,false,token);
         // keepOrientation writes one new minimal EXIF APP1 (only IFD0 Orientation) where the
         // source EXIF segment stood; every retained byte is otherwise copied unchanged.
@@ -165,7 +200,7 @@ public static class JpegMetadata
         if(!ended||(iccTotal!=0&&iccParts.Count!=iccTotal))throw new UserError(iccTotal!=0&&iccParts.Count!=iccTotal?Icc:Invalid);
         // Several EXIF APP1 segments leave no single source of truth; nothing is kept.
         if(exifSegments>1)orientation=ExifOrientationInfo.Ambiguous;
-        token.ThrowIfCancellationRequested();return Plan.Create(bytes,pieces.ToArray(),width,height,progressive,scans,markers,restarts,orientation,orientationSlot);
+        token.ThrowIfCancellationRequested();return Plan.Create(bytes,pieces.ToArray(),width,height,progressive,scans,markers,restarts,orientation,orientationSlot).PrepareLocation(token);
     }
     public const int OrientationSegmentLength=4+6+ExifOrientation.TiffLength;
     public static byte[] OrientationSegment(int orientation)

@@ -1428,8 +1428,9 @@ public sealed partial class App : Application
                 var dialog = new JpegMetadataDialog(this, document);
                 if (!ShowOperationDialog(dialog, owner, token)) return;
                 bool keepOrientation = dialog.KeepOrientation;
+                bool locationOnly = dialog.LocationOnly;
                 report(L("Processing…")); result = new BatchResult();
-                result.Outputs.Add(await Task.Run(() => document.Save(keepOrientation, token), token));
+                result.Outputs.Add(await Task.Run(() => document.Save(keepOrientation, locationOnly, token), token));
             }
             else if (action.Id == "image.tiffmetadata")
             {
@@ -1450,8 +1451,9 @@ public sealed partial class App : Application
                 var dialog = new PngMetadataDialog(this, document);
                 if (!ShowOperationDialog(dialog, owner, token)) return;
                 bool keepOrientation = dialog.KeepOrientation;
+                bool locationOnly = dialog.LocationOnly;
                 report(L("Processing…")); result = new BatchResult();
-                result.Outputs.Add(await Task.Run(() => document.Save(keepOrientation, token), token));
+                result.Outputs.Add(await Task.Run(() => document.Save(keepOrientation, locationOnly, token), token));
             }
             else if (action.Id == "image.metadata")
             {
