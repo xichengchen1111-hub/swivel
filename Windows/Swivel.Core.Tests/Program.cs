@@ -57,7 +57,7 @@ Check(Catalog.Available(off, new[] { "photo.png" }).Any(x => x.Id == "shelf.add"
 Check(!Catalog.Available(off, new[] { "photo.png", "clip.mp4" }).Any(x => x.ImageOnly), "Mixed batch not image-only");
 Check(!Catalog.Available(off, Array.Empty<string>()).Any(), "No action without explicit files");
 Check(Catalog.Actions.Select(x => x.Id).Distinct().Count() == Catalog.Actions.Length, "Unique stable IDs");
-Check(!Catalog.IsImage("image.heic") && !Catalog.IsImage("x.svg") && Catalog.IsImage("IMAGE.JPEG"), "Closed codec extensions");
+Check(Catalog.IsImage("image.heic") && !Catalog.IsImage("x.svg") && !Catalog.IsImage("x.jxl") && Catalog.IsImage("IMAGE.JPEG"), "Closed codec extensions");
 
 ImageRecipeChecks.Run(Check, Reject);
 RenameChecks.Run(Check, Reject);
@@ -98,6 +98,7 @@ FolderStyleChecks.Run(Check, Reject);
         IcoFileChecks.Run(Check, Reject);
         TgaPsdChecks.Run(Check, Reject);
         WebPChecks.Run(Check, Reject);
+        HeifChecks.Run(Check, Reject);
         FolderZipChecks.Run(Check, Reject);
         FolderCopyChecks.Run(Check, Reject);
         FolderMoveChecks.Run(Check, Reject);

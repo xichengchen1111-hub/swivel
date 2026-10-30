@@ -65,6 +65,6 @@ internal static class GifPaletteNativeChecks
             var late=new GifPaletteDialog(app,document);Find<Button>(late).Single(b=>Equals(b.Content,app.L("Generate GIF Preview"))).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));late.Close();Finish(late);check(late.Selection is null,"Palette native close awaits generation without accepted selection");
         }
         check(File.ReadAllBytes(path).SequenceEqual(original),"Palette native original bytes unchanged");var disposed=GifPaletteDocument.Open(path,default);var prior=disposed.Prepare(16,default);disposed.Dispose();reject(()=>disposed.Save(prior,default),"Palette native disposedsave refused");reject(()=>disposed.Prepare(16,default),"Palette native disposedprepare refused");
-        reject(()=>GifPaletteDocument.Open(path,new CancellationToken(true)).Dispose(),"Palette native pre-cancelledopen");reject(()=>GifPaletteDocument.Open(path+".heic",default).Dispose(),"Palette native unsupported extension refused");Directory.Move(folder,folder+" released");check(Directory.Exists(folder+" released"),"Palette native all source/ancestor leases released");
+        reject(()=>GifPaletteDocument.Open(path,new CancellationToken(true)).Dispose(),"Palette native pre-cancelledopen");reject(()=>GifPaletteDocument.Open(path+".jxl",default).Dispose(),"Palette native unsupported extension refused");Directory.Move(folder,folder+" released");check(Directory.Exists(folder+" released"),"Palette native all source/ancestor leases released");
     }
 }

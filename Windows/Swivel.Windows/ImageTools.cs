@@ -74,6 +74,7 @@ public static class ImageTools
     {
         if (stream.Length > ImageRules.MaxInputBytes) throw new UserError("Image files are limited to 128 MB.");
         cancellation.ThrowIfCancellationRequested();
+        if (HeifImage.IsHeifExtension(path)) return DecodeHeif(stream, cancellation, readOnly);
         if (OwnReader(path) is { } read)
         {
             var pixels = read(stream, cancellation);
@@ -105,6 +106,21 @@ public static class ImageTools
         try { return Convert(true); }
         catch (Exception error) when (error is System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException) { return Convert(false); }
     }
+    /// HEIC/HEIF/AVIF: Swivel's own box gate first (structure, sequences, size, orientation, bit
+    /// depth), then only Microsoft's HEIF decoder through WIC (HeifDecoder). Orientations the
+    /// decoder's output can't prove applied or not (mirrors and half turns, quarter turns of a
+    /// square picture) are refused rather than guessed.
+    private static BitmapSource DecodeHeif(Stream stream, CancellationToken cancellation, bool readOnly)
+    {
+        var info = HeifImage.Inspect(stream, cancellation);
+        if (info.Orientation is 2 or 3 or 4 || HeifImage.SwapsSides(info.Orientation) && info.Width == info.Height) throw new UserError(HeifImage.Ambiguous);
+        if (!readOnly && (info.BitDepth > 8 || info.HighDynamicRange)) throw new UserError(HeifImage.HighDepth);
+        var pixels = HeifDecoder.Read(stream, info, readOnly, cancellation, out bool oriented);
+        BitmapSource source = BitmapSource.Create(pixels.Width, pixels.Height, 96, 96, PixelFormats.Bgra32, null, pixels.Bgra, pixels.Width * 4);
+        if (!oriented) source = Orient(source, (ushort)info.Orientation);
+        var clean = CopyPixels(source, cancellation);
+        clean.Freeze(); return clean;
+    }
     /// GIF, TGA, PSD and WebP are read by Swivel's own bounded readers, never by an installed codec.
     private static Func<Stream, CancellationToken, PixelImage>? OwnReader(string path) => Path.GetExtension(path).ToLowerInvariant() switch {
         ".gif" => GifImage.Read, ".tga" => TgaImage.Read, ".psd" => PsdImage.Read, ".webp" => WebPImage.Read, _ => null
@@ -129,7 +145,7 @@ public static class ImageTools
     public static IReadOnlyList<(string Label, string Value)> Metadata(Document document, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        if (OwnReader(document.Input.Path) is not null)
+        if (OwnReader(document.Input.Path) is not null || HeifImage.IsHeifExtension(document.Input.Path))
             return new[] { ("Pixel dimensions", $"{document.Bitmap.PixelWidth} × {document.Bitmap.PixelHeight}"), ("File size", $"{document.Input.Stream.Length:N0} B") };
         var frame = CreateDecoder(document.Input).Frames[0];
         var fields = new List<(string, string)> { ("Pixel dimensions", $"{frame.PixelWidth} × {frame.PixelHeight}"), ("File size", $"{document.Input.Stream.Length:N0} B") };
