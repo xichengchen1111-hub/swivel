@@ -69,8 +69,10 @@ internal static class RopeNativeChecks
         check(RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1280,-300,0,724),second,true,false,false) && !RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1280,-300,0,684),second,true,false,false),
             "Covering a secondary monitor is full screen; stopping at its taskbar is not");
         check(!RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1288,-308,8,732),second,true,false,true),"A maximized captioned window on a taskbar-less monitor is not full screen");
-        check(RopeEdgeWatcher.IsFramed(true,0) && RopeEdgeWatcher.IsFramed(false,0x00C00000) && !RopeEdgeWatcher.IsFramed(false,unchecked((long)0x80000000)) && !RopeEdgeWatcher.IsFramed(false,0x00800000),
-            "Maximized or full-caption windows are frames; a popup without a caption is not");
+        check(RopeEdgeWatcher.IsFramed(true,0x00040000) && RopeEdgeWatcher.IsFramed(false,0x00C00000) && !RopeEdgeWatcher.IsFramed(false,unchecked((long)0x80000000)) && !RopeEdgeWatcher.IsFramed(false,0x00800000),
+            "Maximized sizing frames and full-caption windows are frames; a popup without a caption is not");
+        check(!RopeEdgeWatcher.IsFramed(true,unchecked((long)0x80000000)) && RopeEdgeTrigger.IsFullScreen(second,second,true,false,RopeEdgeWatcher.IsFramed(true,unchecked((long)0x80000000))),
+            "A maximized window without caption or frame that equals the monitor is full screen");
         // The real sampler runs without throwing (a locked or headless session may give no cursor).
         var real = RopeEdgeWatcher.Native(false);
         check(real is null || (real.Value.Monitor.Width > 0 && real.Value.Work.Width > 0 && real.Value.Monitor.Covers(real.Value.Work)),"Native cursor sample reports a monitor containing its work area");

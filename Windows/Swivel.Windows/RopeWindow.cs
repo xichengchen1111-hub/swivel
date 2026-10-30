@@ -297,8 +297,9 @@ internal sealed class RopeEdgeWatcher : IDisposable
         return RopeEdgeTrigger.IsFullScreen(bounds,rect,MonitorFromWindow(window,2) == monitor,desktopOrOwn,IsFramed(IsZoomed(window),GetWindowLongPtrW(window,-16)));
     }
 
-    /// A maximized window, or one with a full caption (WS_CAPTION = border + title bar), is an ordinary frame, not full screen.
-    internal static bool IsFramed(bool zoomed,long style) => zoomed || (style & 0x00C00000) == 0x00C00000;
+    /// A window with a full caption (WS_CAPTION = border + title bar), or a maximized one that keeps its sizing
+    /// frame, is an ordinary frame. A maximized window without a frame is how some apps go full screen.
+    internal static bool IsFramed(bool zoomed,long style) => (style & 0x00C00000) == 0x00C00000 || (zoomed && (style & 0x00040000) != 0);
 
     private static ScreenRect Rect(RopeWindow.NativeRect r) => new(r.Left,r.Top,r.Right,r.Bottom);
 
