@@ -45,7 +45,7 @@ internal static class SpeedSoundNativeChecks
                 var (seconds, sound) = VideoTrimNativeChecks.Probe(output);
                 check(sound && Math.Abs(seconds - expected) <= 0.1 + expected * 0.03 && VideoTrimNativeChecks.Colours(output, seconds) == colours,
                     $"Windows reads {what} back with sound and the planned picture: {seconds:0.000} s, {VideoTrimNativeChecks.Colours(output, seconds)} (expected {colours})");
-                var (hz, decoded, onset) = Decode(output, root);
+                var (hz, decoded, onset, _, _) = Decode(output, root);
                 check(Math.Abs(hz / 440 - 1) < 0.02 && Math.Abs(decoded - picturePart.Seconds) <= 0.1, $"The sound of {what} is still 440 Hz (pitch kept): {hz:0.0} Hz, {decoded:0.000} s decoded");
                 // The tone plays from the source's start, so a cut from 0 must sound at once (within 25 ms: Windows decodes the original with 11 ms of lead-in too).
                 Console.WriteLine($"INFO: {what}: tone heard from {onset * 1000:0.0} ms");
@@ -68,7 +68,71 @@ internal static class SpeedSoundNativeChecks
             string silent = video.TrimAsync(VideoTrim.Plan(0, 3000, video.Duration, false, true, null, 200), null, default).GetAwaiter().GetResult();
             check(Tracks(File.ReadAllBytes(silent)).Count == 1 && !VideoTrimNativeChecks.Probe(silent).Sound, "With the sound removed, 2× is saved silent");
         }
+        Noise(root, check);
         check(SHA256.HashData(File.ReadAllBytes(source)).SequenceEqual(original), "Speed changes with sound leave the original byte for byte the same");
+    }
+
+    private static void Noise(string directory, Action<bool, string> check)
+    {
+        string root = Path.Combine(directory, "noise"); Directory.CreateDirectory(root);
+        const int rate = 44100;
+        byte[] noisy = VideoTrimNativeChecks.Tone(rate, 3);
+        var random = new Random(77189);
+        for (int i = 0; i < rate * 3; i++)
+        {
+            double tone = i >= rate && i < rate * 2.7 ? 8000 * Math.Sin(2 * Math.PI * 440 * i / rate) : 0;
+            BinaryPrimitives.WriteInt16LittleEndian(noisy.AsSpan(44 + i * 2), (short)(tone + random.Next(-2400, 2401)));
+        }
+        string source = Path.Combine(root, "noisy.mp4");
+        VideoTrimNativeChecks.MakeColourVideo(root, source, 320, 240, noisy);
+        byte[] original = SHA256.HashData(File.ReadAllBytes(source));
+        var baseline = Decode(source, root, measureNoise: true);
+        using (var video = VideoTrimmer.OpenAsync(source, default).GetAwaiter().GetResult())
+        {
+            foreach (int speed in new[] { 100, 50, 200 })
+            {
+                var plan = VideoTrim.Plan(200, 2800, video.Duration, true, speed: speed, noise: new(.1, .5, 1));
+                using (var sample = video.NoiseDocumentAsync(plan, default).GetAwaiter().GetResult())
+                {
+                    var suggestion = sample.FindQuietSample((long)(sample.Info.Rate * .2), default);
+                    check(sample.Info.Bits == 16 && VideoEdit.SoundMatches(sample.Info.Frames, sample.Info.Rate, plan.Length)
+                        && suggestion.Start >= 0 && suggestion.End <= sample.Info.Seconds,
+                        "Video noise settings and quiet suggestion use only the decoded kept part at original speed");
+                    using var preview = new MemoryStream(sample.NoisePreview(plan.Noise!, default));
+                    check(PcmWave.Read(preview, default).Frames == sample.Info.Frames, "Short video cleaned preview reuses the existing full-duration denoiser preview");
+                }
+                string output = video.TrimAsync(plan, null, default).GetAwaiter().GetResult();
+                var tracks = Tracks(File.ReadAllBytes(output));
+                var picture = tracks.Single(t => t.Handler == "vide");
+                var sound = tracks.Single(t => t.Handler == "soun");
+                var result = Decode(output, root, speed, measureNoise: true);
+                double floorDb = 20 * Math.Log10(result.Noise / baseline.Noise);
+                double toneDb = 20 * Math.Log10(result.Tone / baseline.Tone);
+                check(tracks.Count == 2 && Math.Abs(sound.Seconds - picture.Seconds) <= 1 / (video.Fps * speed / 100)
+                    && Math.Abs(result.Seconds - plan.OutputLength / 1000.0) <= .1 + plan.OutputLength / 1000.0 * .03,
+                    $"Cleaned video at {speed}% has exactly one audio track of the kept/retimed duration: {sound.Seconds:0.000}s");
+                check(floorDb < -5 && Math.Abs(toneDb) < 2,
+                    $"Cleaned AAC video at {speed}% lowers noise by >5dB and preserves tone within 2dB: noise {floorDb:0.00}dB, tone {toneDb:0.00}dB");
+                check(VideoTrimNativeChecks.Colours(output, picture.Seconds) == "RB", "Video noise reduction retains the planned picture");
+            }
+            var removed = VideoTrim.Plan(200, 2800, video.Duration, false, speed: 200, noise: new(.1, .5));
+            string silent = video.TrimAsync(removed, null, default).GetAwaiter().GetResult();
+            check(removed.Noise is null && Tracks(File.ReadAllBytes(silent)).Count == 1, "Removing sound disables cleaning and emits no audio track");
+            int before = Directory.GetFiles(root).Length;
+            using var cancel = new CancellationTokenSource();
+            bool cancelled = false;
+            try
+            {
+                var task = Task.Run(() => video.TrimAsync(VideoTrim.Plan(200, 2800, video.Duration, true, noise: new(.1, .5)),
+                    done => { if (done > .8) _ = Task.Run(cancel.Cancel); }, cancel.Token));
+                if (Task.WhenAny(task, Task.Delay(TimeSpan.FromMinutes(2))).GetAwaiter().GetResult() != task)
+                    throw new TimeoutException("Video noise cancellation did not finish within two minutes.");
+                task.GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) { cancelled = true; }
+            check(cancelled && Directory.GetFiles(root).Length == before, "Cancelling video cleaning while preparing sound publishes nothing");
+        }
+        check(SHA256.HashData(File.ReadAllBytes(source)).SequenceEqual(original), "Video cleaning leaves the noisy original unchanged");
     }
 
     // Each track's handler and played length: its edit list's segments in the movie timescale, or
@@ -117,7 +181,7 @@ internal static class SpeedSoundNativeChecks
     }
 
     // Windows decodes the saved video's sound to mono 48 kHz PCM16; its tone frequency and length.
-    private static (double Hz, double Seconds, double Onset) Decode(string path, string root)
+    private static (double Hz, double Seconds, double Onset, double Noise, double Tone) Decode(string path, string root, int speed = 100, bool measureNoise = false)
     {
         string wav = Path.Combine(root, "decoded-" + Guid.NewGuid().ToString("N") + ".wav");
         var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
@@ -125,7 +189,7 @@ internal static class SpeedSoundNativeChecks
         var target = folder.CreateFileAsync(Path.GetFileName(wav), CreationCollisionOption.FailIfExists).AsTask().GetAwaiter().GetResult();
         var profile = MediaEncodingProfile.CreateWav(AudioEncodingQuality.Auto); profile.Audio = AudioEncodingProperties.CreatePcm(48000, 1, 16); profile.Video = null;
         var prepared = new MediaTranscoder { AlwaysReencode = true, HardwareAccelerationEnabled = false }.PrepareFileTranscodeAsync(file, target, profile).AsTask().GetAwaiter().GetResult();
-        if (!prepared.CanTranscode) { File.Delete(wav); return (0, 0, double.MaxValue); }
+        if (!prepared.CanTranscode) { File.Delete(wav); return (0, 0, double.MaxValue, 0, 0); }
         prepared.TranscodeAsync().AsTask().GetAwaiter().GetResult();
         try
         {
@@ -141,7 +205,21 @@ internal static class SpeedSoundNativeChecks
                 if (previous < 0 && v >= 0) { if (first < 0) first = i; else count++; last = i; }
                 previous = v;
             }
-            return (count == 0 ? 0 : count * (double)info.Rate / (last - first), info.Frames / (double)info.Rate, loud < 0 ? double.MaxValue : loud / (double)info.Rate);
+            double noiseEnergy = 0, sine = 0, cosine = 0;
+            int firstNoise = (int)(info.Rate * .15 * 100 / speed), endNoise = (int)(info.Rate * .45 * 100 / speed);
+            int firstTone = (int)(info.Rate * 1.2 * 100 / speed), endTone = (int)(info.Rate * 1.8 * 100 / speed);
+            if (!measureNoise) return (count == 0 ? 0 : count * (double)info.Rate / (last - first), info.Seconds, loud < 0 ? double.MaxValue : loud / (double)info.Rate, 0, 0);
+            if (endTone > info.Frames) throw new InvalidDataException("Noise fixture decoded shorter than its measurement window.");
+            for (int i = firstNoise; i < endNoise; i++)
+            {
+                double v = BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(i * info.Block)); noiseEnergy += v * v;
+            }
+            for (int i = firstTone; i < endTone; i++)
+            {
+                double v = BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(i * info.Block));
+                sine += v * Math.Sin(2 * Math.PI * 440 * i / info.Rate); cosine += v * Math.Cos(2 * Math.PI * 440 * i / info.Rate);
+            }
+            return (count == 0 ? 0 : count * (double)info.Rate / (last - first), info.Frames / (double)info.Rate, loud < 0 ? double.MaxValue : loud / (double)info.Rate, Math.Sqrt(noiseEnergy / (endNoise - firstNoise)), 2 * Math.Sqrt(sine * sine + cosine * cosine) / (endTone - firstTone));
         }
         finally { File.Delete(wav); }
     }

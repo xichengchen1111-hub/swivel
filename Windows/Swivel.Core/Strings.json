@@ -16813,5 +16813,35 @@
     "仅移除位置需要恰好一个源 EXIF 块。",
     "僅移除位置需要恰好一個來源 EXIF 區塊。",
     "位置情報のみの削除には、元の EXIF ブロックがちょうど1個必要です。"
+  ],
+  "Reduce noise in the sound": [
+    "降低声音中的噪声",
+    "降低聲音中的雜訊",
+    "音声のノイズを低減"
+  ],
+  "Noise sample and strength…": [
+    "噪声样本与强度…",
+    "雜訊樣本與強度…",
+    "ノイズサンプルと強度…"
+  ],
+  "Choose the noise sample and strength before trimming.": [
+    "剪辑前请选择噪声样本和强度。",
+    "剪輯前請選擇雜訊樣本和強度。",
+    "トリミングの前にノイズサンプルと強度を選択してください。"
+  ],
+  "Noise reduction uses a noise-only sample within the kept part. It runs before speed changes; removing the sound disables it. The picture receives no additional encoding.": [
+    "降噪使用保留片段内仅含噪声的样本，在变速前执行；移除声音时停用。画面不会因此额外编码。",
+    "降噪使用保留片段內僅含雜訊的樣本，在變速前執行；移除聲音時停用。畫面不會因此額外編碼。",
+    "保持部分のノイズのみのサンプルを使い、速度変更の前に処理します。音声を削除すると無効になります。映像の追加エンコードは行いません。"
+  ],
+  "Play 10 s cleaned": [
+    "播放降噪后 10 秒",
+    "播放降噪後 10 秒",
+    "ノイズ低減後の10秒を再生"
+  ],
+  "Sample times are relative to the kept part at its original speed. Previews play before any speed change. Apply uses these settings for Trim Video; no WAV is saved. The cleaned sound is encoded as AAC and replaces the original sound track.": [
+    "样本时间相对于原速的保留片段。试听不含变速。应用后将在视频剪辑时使用这些设置，不保存 WAV。降噪后的声音编码为 AAC，替换原音轨。",
+    "樣本時間相對於原速的保留片段。試聽不含變速。套用後將在影片剪輯時使用這些設定，不儲存 WAV。降噪後的聲音編碼為 AAC，取代原音軌。",
+    "サンプル時刻は元の速度での保持部分の先頭から指定します。試聴には速度変更を適用しません。適用すると動画のトリミングに設定を使い、WAVは保存しません。処理後の音声をAACにエンコードして元の音声トラックを置き換えます。"
   ]
 }

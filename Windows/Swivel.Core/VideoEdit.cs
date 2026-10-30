@@ -147,6 +147,28 @@ public static class VideoEdit
     /// a tenth of a second (Windows' cut ends within a millisecond on the CI runner).
     public static bool SoundMatches(long frames, int rate, long length) => Math.Abs(frames * 1000.0 / rate - length) <= 100;
 
+    /// Cleans at the original speed before the existing stretch. The caller supplies a
+    /// private seekable scratch stream, so a long cleaned recording need not live in RAM.
+    /// With no noise settings the existing speed path is used without any change.
+    public static long PrepareSound(Stream input, Stream output, Stream? cleaned, WaveNoise? noise, int percent, long frames, double fps, CancellationToken token)
+    {
+        if (noise is not null)
+        {
+            if (cleaned is null) throw new ArgumentNullException(nameof(cleaned));
+            WaveDenoiser.Export(input, cleaned, noise, token);
+            cleaned.Position = 0;
+            input = cleaned;
+        }
+        if (percent != 100)
+        {
+            StretchSound(input, output, percent, frames, fps, token);
+            return frames;
+        }
+        var info = PcmWave.Read(input, token);
+        PcmWave.Export(input, output, new(0, info.Seconds), token);
+        return Math.Min(frames, info.Frames);
+    }
+
     /// Time-stretches a PCM WAV to `frames` sample frames at `percent` speed keeping its pitch
     /// (WaveStretch), as 16-bit PCM; `frames` comes from the retimed video so both end together.
     /// `fps` is the source's frame rate: the video's length is whole frames, so it may differ from

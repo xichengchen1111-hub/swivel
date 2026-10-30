@@ -19,7 +19,7 @@ internal sealed class TrimVideoDialog : Window
 {
     public VideoTrimPlan? Plan { get; private set; }
     private readonly CancellationTokenSource frames = new();
-    private Task pending = Task.CompletedTask;
+    private Task pending = Task.CompletedTask, noisePending = Task.CompletedTask;
     private bool dirty, closed;
 
     public TrimVideoDialog(App app, VideoTrimmer video)
@@ -40,6 +40,10 @@ internal sealed class TrimVideoDialog : Window
         AutomationProperties.SetName(startText, app.L("Start time")); AutomationProperties.SetName(endText, app.L("End time"));
         var startFrame = Picture(app.L("Frame at the start")); var endFrame = Picture(app.L("Last frame kept"));
         var sound = new CheckBox { Content = app.L("Keep the sound"), IsChecked = video.HasSound, IsEnabled = video.HasSound, Margin = new Thickness(0, 8, 0, 4) };
+        var reduceNoise = new CheckBox { Content = app.L("Reduce noise in the sound"), IsChecked = false, IsEnabled = video.HasSound, Margin = new Thickness(0, 4, 0, 4) };
+        var noiseSettingsButton = UI.Button(app.L("Noise sample and strength…"), () => { });
+        WaveNoise? noiseSettings = null;
+        bool noiseBusy = false;
         var turn = new ComboBox { ItemsSource = new[] { app.L("No turn"), app.L("90° clockwise"), app.L("180°"), app.L("90° counterclockwise") }, SelectedIndex = 0, MinHeight = 28, Margin = new Thickness(0, 4, 0, 4) };
         var flipH = new CheckBox { Content = app.L("Flip left to right"), Margin = new Thickness(0, 4, 0, 2) };
         var flipV = new CheckBox { Content = app.L("Flip upside down"), Margin = new Thickness(0, 2, 0, 4) };
@@ -65,8 +69,10 @@ internal sealed class TrimVideoDialog : Window
 
         VideoPicture Chosen() => new(turn.SelectedIndex, flipH.IsChecked == true, flipV.IsChecked == true, (VideoAspect)shape.SelectedIndex, Math.Clamp(position.Value, 0, 1));
         int Speed() => VideoEdit.Speeds[Math.Max(0, speed.SelectedIndex)];
-        VideoTrimPlan? Check()
+        VideoTrimPlan? Check(bool requireNoise = true)
         {
+            reduceNoise.IsEnabled = !noiseBusy && sound.IsChecked == true && video.HasSound;
+            noiseSettingsButton.IsEnabled = !noiseBusy && reduceNoise.IsEnabled && reduceNoise.IsChecked == true;
             long? start = VideoTrim.Parse(startText.Text), end = VideoTrim.Parse(endText.Text);
             bool normal = Speed() == 100;
             soundNote.Text = video.HasSound && !normal && sound.IsChecked == true ? app.L(VideoTrimmer.StretchNote) : "";
@@ -77,18 +83,53 @@ internal sealed class TrimVideoDialog : Window
                 position.IsEnabled = video.PictureChanges && geometry.Seen != VideoEdit.Crop(geometry.SeenWidth, geometry.SeenHeight, VideoAspect.Original, 0);
                 if (!normal) VideoEdit.CheckRate(geometry.Width, geometry.Height, video.Fps, Speed());
                 if (start is null || end is null) throw new UserError(VideoTrim.BadTime);
-                var plan = VideoTrim.Plan(start.Value, end.Value, video.Duration, sound.IsChecked == true, video.HasSound, Chosen(), Speed());
+                var plan = VideoTrim.Plan(start.Value, end.Value, video.Duration, sound.IsChecked == true, video.HasSound, Chosen(), Speed(),
+                    reduceNoise.IsEnabled && reduceNoise.IsChecked == true ? noiseSettings ?? new WaveNoise(0, Math.Min(.25, (end.Value - start.Value) / 1000.0)) : null, video.SoundRate);
+                if (requireNoise && plan.Noise is not null && noiseSettings is null) throw new UserError("Choose the noise sample and strength before trimming.");
                 video.CheckSound(plan);
                 status.Text = string.Format(app.L("Keeps {0}, from {1} to {2}."), Time(plan.Length), Time(plan.Start), Time(plan.End))
                     + (plan.KeepSound || !video.HasSound ? "" : " " + app.L("The sound is removed."))
                     + (plan.Edited ? " " + string.Format(app.L("The new video is {0} × {1} pixels and {2} long."), geometry.Width, geometry.Height, VideoTrim.Format(plan.OutputLength, plan.OutputLength >= 3_600_000)) : "");
-                trim.IsEnabled = true;
+                trim.IsEnabled = !noiseBusy;
                 return plan;
             }
             catch (UserError error) { status.Text = app.L(error.Message); trim.IsEnabled = false; return null; }
         }
-        void Changed() { Check(); dirty = true; if (pending.IsCompleted && !closed) pending = Load(); }
+        void Changed() { noiseSettings = null; Check(); dirty = true; if (pending.IsCompleted && !closed) pending = Load(); }
         startText.TextChanged += (_, _) => Changed(); endText.TextChanged += (_, _) => Changed();
+        reduceNoise.Checked += (_, _) => { Check(); if (noisePending.IsCompleted) noisePending = ConfigureNoise(); };
+        reduceNoise.Unchecked += (_, _) => Check();
+        noiseSettingsButton.Click += (_, _) => { if (noisePending.IsCompleted) noisePending = ConfigureNoise(); };
+        async Task ConfigureNoise()
+        {
+            var plan = Check(false); if (plan is null) return;
+            noiseBusy = true;
+            startText.IsEnabled = endText.IsEnabled = sound.IsEnabled = reduceNoise.IsEnabled = noiseSettingsButton.IsEnabled = trim.IsEnabled = false;
+            status.Text = app.L("Preparing audio preview…");
+            WaveDocument? document = null;
+            string? failure = null;
+            try
+            {
+                document = await Task.Run(() => video.NoiseDocumentAsync(plan, frames.Token));
+                frames.Token.ThrowIfCancellationRequested(); if (closed) return;
+                var dialog = new WaveNoiseDialog(app, document, true, noiseSettings, video.Path) { Owner = this };
+                using var registration = frames.Token.Register(() => Dispatcher.BeginInvoke(new Action(() => { if (dialog.IsVisible) dialog.Close(); })));
+                try { if (dialog.ShowDialog() == true) noiseSettings = dialog.Settings; }
+                finally { await dialog.FinishPreviewAsync(); }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error) { failure = app.L(error is UserError ? error.Message : VideoEdit.SoundFailed); }
+            finally
+            {
+                if (document is not null)
+                {
+                    string path = document.Path; document.Dispose();
+                    try { System.IO.File.Delete(path); } catch (System.IO.IOException) { } catch (UnauthorizedAccessException) { }
+                }
+                noiseBusy = false;
+                if (!closed) { startText.IsEnabled = endText.IsEnabled = true; sound.IsEnabled = video.HasSound; Check(); if (failure is not null) status.Text = failure; }
+            }
+        }
         sound.Checked += (_, _) => Check(); sound.Unchecked += (_, _) => Check();
         void Show()
         {
@@ -154,6 +195,8 @@ internal sealed class TrimVideoDialog : Window
         body.Children.Add(times);
         body.Children.Add(frameNote);
         body.Children.Add(sound);
+        body.Children.Add(reduceNoise); body.Children.Add(noiseSettingsButton);
+        body.Children.Add(UI.Text(app.L("Noise reduction uses a noise-only sample within the kept part. It runs before speed changes; removing the sound disables it. The picture receives no additional encoding."), 12));
         if (!video.HasSound) body.Children.Add(UI.Text(app.L("This video has no sound track that Windows can decode."), 12));
         body.Children.Add(UI.Text(app.L("Picture"), 16));
         if (!video.PictureChanges) { foreach (var control in new Control[] { turn, flipH, flipV, shape, position }) control.IsEnabled = false; body.Children.Add(UI.Text(app.L(VideoTrimmer.NoPictureChanges), 12)); }
@@ -176,7 +219,7 @@ internal sealed class TrimVideoDialog : Window
     public async Task FinishAsync()
     {
         closed = true; frames.Cancel();
-        try { await pending; } catch (OperationCanceledException) { }
+        try { await Task.WhenAll(pending, noisePending); } catch (OperationCanceledException) { }
         frames.Dispose();
     }
 }
