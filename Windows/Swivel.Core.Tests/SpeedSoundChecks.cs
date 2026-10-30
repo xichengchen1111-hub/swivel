@@ -244,6 +244,7 @@ internal static class SpeedSoundChecks
         Refused(Video(false, false), M4aChecks.Build(new M4aChecks.Spec { Handlers = new[] { "soun", "vide" } }), "Audio that isn't a single-track M4A is refused");
         Refused(Video(false, false), M4aChecks.Build(new M4aChecks.Spec { TrakExtra = new[] { Box("tref", new byte[8]) } }), "An audio track referring to others is refused");
         Refused(Video(false, false), M4aChecks.Build(new M4aChecks.Spec { TrakExtra = new[] { Box("edts", Box("elst", U32(0), U32(1), U32(uint.MaxValue), U32(0), U32(0x10000))) } }), "An audio edit of unknown length is refused");
+        Refused(Video(false, false), M4aChecks.Build(new M4aChecks.Spec { TrakExtra = new[] { Box("edts", Box("free")) } }), "An audio edit box without an edit list is refused");
         Refused(Video(false, false)[..^4], good, "A truncated video is refused");
         var badOffset = Video(false, false); { int stco = Find(badOffset, "stco"); BinaryPrimitives.WriteUInt32BigEndian(badOffset.AsSpan(stco + 16), 5); }
         Refused(badOffset, good, "A video chunk outside its media data is refused");

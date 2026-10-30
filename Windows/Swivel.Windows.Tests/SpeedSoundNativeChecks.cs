@@ -47,9 +47,9 @@ internal static class SpeedSoundNativeChecks
                     $"Windows reads {what} back with sound and the planned picture: {seconds:0.000} s, {VideoTrimNativeChecks.Colours(output, seconds)} (expected {colours})");
                 var (hz, decoded, onset) = Decode(output, root);
                 check(Math.Abs(hz / 440 - 1) < 0.02 && Math.Abs(decoded - picturePart.Seconds) <= 0.1, $"The sound of {what} is still 440 Hz (pitch kept): {hz:0.0} Hz, {decoded:0.000} s decoded");
-                // The tone plays from the source's start, so a cut from 0 must sound at once (a loose bound: priming samples of two AAC encodes).
+                // The tone plays from the source's start, so a cut from 0 must sound at once (within 25 ms: Windows decodes the original with 11 ms of lead-in too).
                 Console.WriteLine($"INFO: {what}: tone heard from {onset * 1000:0.0} ms");
-                if (start == 0) check(onset <= 0.1, $"The sound of {what} starts with the picture: tone heard from {onset * 1000:0.0} ms");
+                if (start == 0) check(onset <= 0.025, $"The sound of {what} starts with the picture: tone heard from {onset * 1000:0.0} ms");
             }
 
             // Cancelled once the sound is being prepared: nothing is saved.

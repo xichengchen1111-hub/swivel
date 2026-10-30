@@ -122,9 +122,14 @@ public static class Mp4AudioMux
         // Its length in the video's movie timescale: the edit list's segments, or else the media's duration.
         ulong audioDuration = 0; bool trimmed = false;
         {
-            ulong? edits = null, media = null; uint mediaScale = 0;
+            ulong? edits = null, media = null; uint mediaScale = 0; bool edited = false;
             foreach (var (type, s, e) in Children(audioMovie, audioTrak, audioTrakEnd))
             {
+                if (type == "edts")
+                {
+                    if (edited) Fail();
+                    edited = true;
+                }
                 if (type == "edts")
                     foreach (var (t2, s2, e2) in Children(audioMovie, s, e))
                         if (t2 == "elst")
@@ -145,6 +150,8 @@ public static class Mp4AudioMux
                             mediaScale = (uint)Read(audioMovie, s2 + (v1 ? 20 : 12), 4); media = Read(audioMovie, s2 + (v1 ? 24 : 16), v1 ? 8 : 4);
                         }
             }
+            // An edit box without an edit list is refused rather than given a second one.
+            if (edited && edits is null) Fail();
             if (edits is { } total) audioDuration = Rescale(total);
             else if (media is { } m && mediaScale != 0 && m != uint.MaxValue && m != ulong.MaxValue)
             {
