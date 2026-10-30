@@ -17238,5 +17238,595 @@
     "Opera GX 本地缓存",
     "Opera GX 本機快取",
     "Opera GX ローカルキャッシュ"
+  ],
+  "(relative units)": [
+    "（相对单位）",
+    "（相對單位）",
+    "（相対単位）"
+  ],
+  "A battery holds much less charge than when new.": [
+    "有电池能储存的电量比新电池时少很多。",
+    "有電池能儲存的電量比新電池時少很多。",
+    "新品時よりかなり少ない電力しか蓄えられないバッテリーがあります。"
+  ],
+  "A battery holds noticeably less charge than when new.": [
+    "有电池能储存的电量比新电池时明显减少。",
+    "有電池能儲存的電量比新電池時明顯減少。",
+    "新品時より明らかに蓄えられる電力が減ったバッテリーがあります。"
+  ],
+  "Access to the System event log was denied for this account.": [
+    "此帐户无权读取“系统”事件日志。",
+    "此帳戶無權讀取「系統」事件記錄。",
+    "このアカウントには「システム」イベント ログへのアクセスが拒否されました。"
+  ],
+  "Administrator Commands (Not Run)": [
+    "管理员命令（不会运行）",
+    "系統管理員命令（不會執行）",
+    "管理者コマンド（実行しません）"
+  ],
+  "Apps and Drivers Preventing Sleep": [
+    "阻止睡眠的应用和驱动程序",
+    "阻止睡眠的 App 和驅動程式",
+    "スリープを妨げているアプリとドライバー"
+  ],
+  "Away mode required": [
+    "需要离开模式",
+    "需要離開模式",
+    "退席モードが必要"
+  ],
+  "Batteries": [
+    "电池",
+    "電池",
+    "バッテリー"
+  ],
+  "Battery Device List": [
+    "电池设备列表",
+    "電池裝置清單",
+    "バッテリー デバイスの一覧"
+  ],
+  "Battery Health": [
+    "电池健康度",
+    "電池健康度",
+    "バッテリーの状態"
+  ],
+  "Battery Information": [
+    "电池信息",
+    "電池資訊",
+    "バッテリー情報"
+  ],
+  "Battery Kind": [
+    "电池类型",
+    "電池類型",
+    "バッテリーの種類"
+  ],
+  "Battery Unavailable": [
+    "无法读取电池",
+    "無法讀取電池",
+    "バッテリーを読み取れません"
+  ],
+  "Battery health could not be determined from the reported values.": [
+    "无法根据报告的数值判断电池健康度。",
+    "無法根據回報的數值判斷電池健康度。",
+    "報告された値からバッテリーの状態を判断できませんでした。"
+  ],
+  "Battery information could not be read.": [
+    "无法读取电池信息。",
+    "無法讀取電池資訊。",
+    "バッテリー情報を読み取れませんでした。"
+  ],
+  "Battery inspection closed. No battery or power setting was changed.": [
+    "电池检查已关闭。未更改任何电池或电源设置。",
+    "電池檢查已關閉。未變更任何電池或電源設定。",
+    "バッテリーの確認を閉じました。バッテリーや電源の設定は変更していません。"
+  ],
+  "Battery {0}": [
+    "电池 {0}",
+    "電池 {0}",
+    "バッテリー {0}"
+  ],
+  "Charge or Discharge Rate": [
+    "充电或放电速率",
+    "充電或放電速率",
+    "充電または放電の速度"
+  ],
+  "Charging": [
+    "正在充电",
+    "正在充電",
+    "充電中"
+  ],
+  "Chemistry": [
+    "化学类型",
+    "化學類型",
+    "化学組成"
+  ],
+  "Continuous": [
+    "持续",
+    "持續",
+    "継続"
+  ],
+  "Copy Command": [
+    "复制命令",
+    "複製命令",
+    "コマンドをコピー"
+  ],
+  "Critical": [
+    "电量极低",
+    "電量極低",
+    "残量危険"
+  ],
+  "Current Status": [
+    "当前状态",
+    "目前狀態",
+    "現在の状態"
+  ],
+  "Cycle Count": [
+    "循环次数",
+    "循環次數",
+    "充放電回数"
+  ],
+  "Designed Capacity": [
+    "设计容量",
+    "設計容量",
+    "設計容量"
+  ],
+  "Designed capacity is not reported (zero or unknown).": [
+    "未报告设计容量（为零或未知）。",
+    "未回報設計容量（為零或未知）。",
+    "設計容量が報告されていません（0 または不明）。"
+  ],
+  "Details": [
+    "详细信息",
+    "詳細資訊",
+    "詳細"
+  ],
+  "Device Name": [
+    "设备名称",
+    "裝置名稱",
+    "デバイス名"
+  ],
+  "Discharging": [
+    "正在放电",
+    "正在放電",
+    "放電中"
+  ],
+  "Display required": [
+    "需要显示器",
+    "需要顯示器",
+    "ディスプレイが必要"
+  ],
+  "Empty Battery Bays": [
+    "空电池槽",
+    "空電池槽",
+    "空のバッテリー ベイ"
+  ],
+  "Entering sleep (Kernel-Power 42)": [
+    "进入睡眠（Kernel-Power 42）",
+    "進入睡眠（Kernel-Power 42）",
+    "スリープ開始（Kernel-Power 42）"
+  ],
+  "Event": [
+    "事件",
+    "事件",
+    "イベント"
+  ],
+  "Events": [
+    "事件",
+    "事件",
+    "イベント"
+  ],
+  "Full-charge Capacity": [
+    "完全充电容量",
+    "完全充電容量",
+    "満充電容量"
+  ],
+  "Full-charge capacity is not reported (zero or unknown).": [
+    "未报告完全充电容量（为零或未知）。",
+    "未回報完全充電容量（為零或未知）。",
+    "満充電容量が報告されていません（0 または不明）。"
+  ],
+  "Good (80% or more of design capacity)": [
+    "良好（达到设计容量的 80% 或以上）",
+    "良好（達到設計容量的 80% 或以上）",
+    "良好（設計容量の 80% 以上）"
+  ],
+  "Health": [
+    "健康度",
+    "健康度",
+    "状態"
+  ],
+  "Health is full-charge capacity divided by designed capacity, as reported by the battery firmware at capture time. Many batteries report zero or unknown values, and some only report relative capacity; those are shown as unknown, never as 0%. A full-charge value above design is reported as is. Cycle count zero often means not reported. This is not a calibration, safety or warranty verdict, and values from external batteries or UPS units may differ in meaning.": [
+    "健康度 = 完全充电容量 ÷ 设计容量，数值来自读取时电池固件的报告。许多电池会报告零或未知值，有些只报告相对容量；这些情况显示为未知，绝不显示为 0%。完全充电容量高于设计容量时按原值显示。循环次数为 0 通常表示未报告。这不是校准、安全或保修结论；外接电池或 UPS 的数值含义可能不同。",
+    "健康度 = 完全充電容量 ÷ 設計容量，數值來自讀取時電池韌體的回報。許多電池會回報零或未知值，有些只回報相對容量；這些情況顯示為未知，絕不顯示為 0%。完全充電容量高於設計容量時按原值顯示。循環次數為 0 通常表示未回報。這不是校正、安全或保固結論；外接電池或 UPS 的數值含義可能不同。",
+    "状態は満充電容量 ÷ 設計容量で、取得時にバッテリーのファームウェアが報告した値です。多くのバッテリーは 0 や不明な値を報告し、相対容量しか報告しないものもあります。これらは不明と表示し、0% とは表示しません。満充電容量が設計容量を超える場合はそのまま表示します。充放電回数 0 は多くの場合、報告されていないことを意味します。これは較正・安全性・保証の判定ではなく、外付けバッテリーや UPS では値の意味が異なることがあります。"
+  ],
+  "Incomplete": [
+    "不完整",
+    "不完整",
+    "不完全"
+  ],
+  "Inspect Battery Health…": [
+    "检查电池健康度…",
+    "檢查電池健康度…",
+    "バッテリーの状態を確認…"
+  ],
+  "Inspect Sleep and Wake History…": [
+    "检查睡眠和唤醒记录…",
+    "檢查睡眠和喚醒記錄…",
+    "スリープと復帰の履歴を確認…"
+  ],
+  "Inspect battery health from designed and full-charge capacity, the System event log's sleep and wake history with recorded wake sources, what may be keeping the PC awake, reported power state, plan timeouts and sleep capabilities. Apps blocking sleep are only listed to an administrator, so Swivel shows that command as text and never runs it; nothing is changed.": [
+    "根据设计容量和完全充电容量检查电池健康度，查看“系统”事件日志中的睡眠和唤醒记录及记录的唤醒源、可能使电脑保持唤醒的因素、报告的电源状态、计划超时和睡眠能力。阻止睡眠的应用只对管理员列出，因此 Swivel 只以文本显示该命令，从不运行；不会更改任何内容。",
+    "根據設計容量和完全充電容量檢查電池健康度，查看「系統」事件記錄中的睡眠和喚醒記錄及記錄的喚醒來源、可能使電腦保持喚醒的因素、回報的電源狀態、計畫逾時和睡眠能力。阻止睡眠的 App 只對系統管理員列出，因此 Swivel 只以文字顯示該命令，從不執行；不會變更任何內容。",
+    "設計容量と満充電容量からバッテリーの状態を確認し、「システム」イベント ログのスリープと復帰の履歴と記録された復帰要因、PC をスリープさせない可能性のある要因、報告された電源状態、プランのタイムアウトとスリープ機能を確認します。スリープを妨げるアプリは管理者にしか一覧表示されないため、Swivel はそのコマンドをテキストで示すだけで実行しません。何も変更しません。"
+  ],
+  "Last Entered Sleep": [
+    "最近一次进入睡眠",
+    "最近一次進入睡眠",
+    "最後にスリープした時刻"
+  ],
+  "Last Recorded Wake Source": [
+    "最近记录的唤醒源",
+    "最近記錄的喚醒來源",
+    "最後に記録された復帰要因"
+  ],
+  "Last Woke": [
+    "最近一次唤醒",
+    "最近一次喚醒",
+    "最後に復帰した時刻"
+  ],
+  "Last {0} days, from {1}": [
+    "最近 {0} 天，自 {1} 起",
+    "最近 {0} 天，自 {1} 起",
+    "過去 {0} 日間（{1} 以降）"
+  ],
+  "Listed by Windows only to an administrator; not read here.": [
+    "Windows 只向管理员列出；此处不读取。",
+    "Windows 只向系統管理員列出；此處不讀取。",
+    "Windows は管理者にのみ一覧表示します。ここでは読み取りません。"
+  ],
+  "Lists the apps, services and drivers currently asking the PC or display to stay awake.": [
+    "列出当前要求电脑或显示器保持唤醒的应用、服务和驱动程序。",
+    "列出目前要求電腦或顯示器保持喚醒的 App、服務和驅動程式。",
+    "PC またはディスプレイをスリープさせないよう現在要求しているアプリ、サービス、ドライバーを一覧表示します。"
+  ],
+  "Longest Recorded Sleep": [
+    "记录中最长的睡眠",
+    "記錄中最長的睡眠",
+    "記録上最長のスリープ"
+  ],
+  "Low-power Returns with Wake Source": [
+    "带唤醒源的低功耗恢复",
+    "帶喚醒來源的低功耗恢復",
+    "復帰要因付きの低電力状態からの復帰"
+  ],
+  "Manufacturer": [
+    "制造商",
+    "製造商",
+    "製造元"
+  ],
+  "No flags set": [
+    "未设置标志",
+    "未設定旗標",
+    "フラグなし"
+  ],
+  "No sleep or wake events were recorded in this period.": [
+    "此期间没有记录睡眠或唤醒事件。",
+    "此期間沒有記錄睡眠或喚醒事件。",
+    "この期間にスリープや復帰のイベントは記録されていません。"
+  ],
+  "Non-rechargeable": [
+    "不可充电",
+    "不可充電",
+    "充電不可"
+  ],
+  "None recorded": [
+    "无记录",
+    "無記錄",
+    "記録なし"
+  ],
+  "None reported": [
+    "未报告任何电池",
+    "未回報任何電池",
+    "報告なし"
+  ],
+  "Not a system battery (for example a UPS)": [
+    "非系统电池（例如 UPS）",
+    "非系統電池（例如 UPS）",
+    "システム バッテリーではない（UPS など）"
+  ],
+  "Not recorded": [
+    "未记录",
+    "未記錄",
+    "記録なし"
+  ],
+  "Not reported (0)": [
+    "未报告 (0)",
+    "未回報 (0)",
+    "報告なし (0)"
+  ],
+  "On until turned off": [
+    "开启，直到手动关闭",
+    "開啟，直到手動關閉",
+    "オフにするまでオン"
+  ],
+  "On until {0}": [
+    "开启，直到 {0}",
+    "開啟，直到 {0}",
+    "{0} までオン"
+  ],
+  "One explicit read-only look at what may be keeping this PC awake and at the System event log's sleep and wake events from the last 7 days (at most 200 events, newest first). Event entries are read through the standard Windows event log interface; no log is cleared or changed.": [
+    "一次明确的只读查看：可能使这台电脑保持唤醒的因素，以及“系统”事件日志中最近 7 天的睡眠和唤醒事件（最多 200 条，最新的在前）。事件通过 Windows 标准事件日志接口读取；不会清除或更改任何日志。",
+    "一次明確的唯讀查看：可能使這台電腦保持喚醒的因素，以及「系統」事件記錄中最近 7 天的睡眠和喚醒事件（最多 200 筆，最新的在前）。事件透過 Windows 標準事件記錄介面讀取；不會清除或變更任何記錄。",
+    "この PC をスリープさせない可能性のある要因と、「システム」イベント ログの過去 7 日間のスリープ・復帰イベント（最大 200 件、新しい順）を明示的に一度だけ読み取ります。イベントは Windows 標準のイベント ログ インターフェイスで読み取り、ログの消去や変更は行いません。"
+  ],
+  "One explicit read-only sample of each battery the Windows battery class driver lists: designed and full-charge capacity, cycle count, chemistry and current charge status. Device name, manufacturer and serial number are read but hidden until you show them. No battery setting, charge limit or calibration is changed; no administrator command, battery report or network request is used.": [
+    "对 Windows 电池类驱动程序列出的每块电池进行一次明确的只读采样：设计容量、完全充电容量、循环次数、化学类型和当前充电状态。设备名称、制造商和序列号会被读取，但在你选择显示之前保持隐藏。不会更改电池设置、充电上限或校准；不使用管理员命令、电池报告或网络请求。",
+    "對 Windows 電池類別驅動程式列出的每顆電池進行一次明確的唯讀取樣：設計容量、完全充電容量、循環次數、化學類型和目前充電狀態。裝置名稱、製造商和序號會被讀取，但在你選擇顯示之前保持隱藏。不會變更電池設定、充電上限或校正；不使用系統管理員命令、電池報告或網路要求。",
+    "Windows のバッテリー クラス ドライバーが一覧表示する各バッテリーを明示的に一度だけ読み取ります：設計容量、満充電容量、充放電回数、化学組成、現在の充電状態。デバイス名、製造元、シリアル番号は読み取りますが、表示を選ぶまで隠します。バッテリー設定、充電上限、較正は変更せず、管理者コマンド、バッテリー レポート、ネットワーク要求も使いません。"
+  ],
+  "Only the first {0} batteries are shown.": [
+    "仅显示前 {0} 块电池。",
+    "僅顯示前 {0} 顆電池。",
+    "最初の {0} 個のバッテリーのみ表示しています。"
+  ],
+  "Only the newest {0} events are shown.": [
+    "仅显示最新的 {0} 条事件。",
+    "僅顯示最新的 {0} 筆事件。",
+    "最新の {0} 件のイベントのみ表示しています。"
+  ],
+  "Other bits": [
+    "其他位",
+    "其他位元",
+    "その他のビット"
+  ],
+  "Period": [
+    "期间",
+    "期間",
+    "期間"
+  ],
+  "Power State": [
+    "电源状态",
+    "電源狀態",
+    "電源の状態"
+  ],
+  "Read": [
+    "已读取",
+    "已讀取",
+    "読み取り済み"
+  ],
+  "Reading reported battery information…": [
+    "正在读取报告的电池信息…",
+    "正在讀取回報的電池資訊…",
+    "報告されたバッテリー情報を読み取っています…"
+  ],
+  "Reading sleep and wake events…": [
+    "正在读取睡眠和唤醒事件…",
+    "正在讀取睡眠和喚醒事件…",
+    "スリープと復帰のイベントを読み取っています…"
+  ],
+  "Reading stopped at the time limit; older events may be missing.": [
+    "读取在时间上限处停止；可能缺少较早的事件。",
+    "讀取在時間上限處停止；可能缺少較早的事件。",
+    "時間制限で読み取りを停止しました。古いイベントが欠けている可能性があります。"
+  ],
+  "Reason (raw)": [
+    "原因（原始值）",
+    "原因（原始值）",
+    "理由（生の値）"
+  ],
+  "Rechargeable": [
+    "可充电",
+    "可充電",
+    "充電式"
+  ],
+  "Reduced (60–79% of design capacity)": [
+    "下降（设计容量的 60–79%）",
+    "下降（設計容量的 60–79%）",
+    "低下（設計容量の 60〜79%）"
+  ],
+  "Remaining Capacity": [
+    "剩余容量",
+    "剩餘容量",
+    "残り容量"
+  ],
+  "Reported System Execution State": [
+    "报告的系统执行状态",
+    "回報的系統執行狀態",
+    "報告されたシステム実行状態"
+  ],
+  "Reported battery capacity looks normal.": [
+    "报告的电池容量看起来正常。",
+    "回報的電池容量看起來正常。",
+    "報告されたバッテリー容量は正常に見えます。"
+  ],
+  "Resumed from sleep (Kernel-Power 107)": [
+    "从睡眠恢复（Kernel-Power 107）",
+    "從睡眠恢復（Kernel-Power 107）",
+    "スリープから再開（Kernel-Power 107）"
+  ],
+  "Returned from low power (Power-Troubleshooter 1)": [
+    "从低功耗状态恢复（Power-Troubleshooter 1）",
+    "從低功耗狀態恢復（Power-Troubleshooter 1）",
+    "低電力状態から復帰（Power-Troubleshooter 1）"
+  ],
+  "Screen kept on": [
+    "屏幕保持开启",
+    "螢幕保持開啟",
+    "画面をオンのまま"
+  ],
+  "Serial Number": [
+    "序列号",
+    "序號",
+    "シリアル番号"
+  ],
+  "Short-term system battery": [
+    "短时系统电池",
+    "短時系統電池",
+    "短時間用システム バッテリー"
+  ],
+  "Show device names, manufacturers and serial numbers": [
+    "显示设备名称、制造商和序列号",
+    "顯示裝置名稱、製造商和序號",
+    "デバイス名、製造元、シリアル番号を表示"
+  ],
+  "Shows what last woke the PC from sleep.": [
+    "显示上次将电脑从睡眠中唤醒的原因。",
+    "顯示上次將電腦從睡眠中喚醒的原因。",
+    "PC を最後にスリープから復帰させたものを表示します。"
+  ],
+  "Sleep and Wake Events": [
+    "睡眠和唤醒事件",
+    "睡眠和喚醒事件",
+    "スリープと復帰のイベント"
+  ],
+  "Sleep and Wake History": [
+    "睡眠和唤醒记录",
+    "睡眠和喚醒記錄",
+    "スリープと復帰の履歴"
+  ],
+  "Sleep and Wake Summary": [
+    "睡眠和唤醒摘要",
+    "睡眠和喚醒摘要",
+    "スリープと復帰の概要"
+  ],
+  "Sleep and wake history closed. No command was run and nothing was changed.": [
+    "睡眠和唤醒记录已关闭。未运行任何命令，也未更改任何内容。",
+    "睡眠和喚醒記錄已關閉。未執行任何命令，也未變更任何內容。",
+    "スリープと復帰の履歴を閉じました。コマンドは実行せず、何も変更していません。"
+  ],
+  "Slept": [
+    "睡眠时长",
+    "睡眠時長",
+    "スリープ時間"
+  ],
+  "Swivel Keep Awake": [
+    "Swivel 保持唤醒",
+    "Swivel 保持喚醒",
+    "Swivel のスリープ防止"
+  ],
+  "System Event Log": [
+    "“系统”事件日志",
+    "「系統」事件記錄",
+    "「システム」イベント ログ"
+  ],
+  "System battery": [
+    "系统电池",
+    "系統電池",
+    "システム バッテリー"
+  ],
+  "System required": [
+    "需要系统",
+    "需要系統",
+    "システムが必要"
+  ],
+  "Target State (raw)": [
+    "目标状态（原始值）",
+    "目標狀態（原始值）",
+    "目標状態（生の値）"
+  ],
+  "Technology": [
+    "技术",
+    "技術",
+    "種類"
+  ],
+  "The System event log could not be read.": [
+    "无法读取“系统”事件日志。",
+    "無法讀取「系統」事件記錄。",
+    "「システム」イベント ログを読み取れませんでした。"
+  ],
+  "The System event log or its power providers are not available.": [
+    "“系统”事件日志或其电源提供程序不可用。",
+    "「系統」事件記錄或其電源提供者無法使用。",
+    "「システム」イベント ログまたはその電源プロバイダーを利用できません。"
+  ],
+  "The reported execution state is a system-wide value; it does not name the app that set it, and Windows does not document it as a complete list of sleep blockers.": [
+    "报告的执行状态是系统范围的值；它不会指出是哪个应用设置的，Windows 也未说明它是完整的睡眠阻止项列表。",
+    "回報的執行狀態是系統範圍的值；它不會指出是哪個 App 設定的，Windows 也未說明它是完整的睡眠阻止項目清單。",
+    "報告される実行状態はシステム全体の値で、設定したアプリは分かりません。Windows はこれをスリープを妨げる要因の完全な一覧とは説明していません。"
+  ],
+  "This battery reports relative capacity only, so wear cannot be measured.": [
+    "此电池只报告相对容量，因此无法衡量损耗。",
+    "此電池只回報相對容量，因此無法衡量耗損。",
+    "このバッテリーは相対容量しか報告しないため、劣化を測定できません。"
+  ],
+  "Time": [
+    "时间",
+    "時間",
+    "時刻"
+  ],
+  "Times Entering Sleep": [
+    "进入睡眠次数",
+    "進入睡眠次數",
+    "スリープした回数"
+  ],
+  "Times Resumed": [
+    "恢复次数",
+    "恢復次數",
+    "再開した回数"
+  ],
+  "To see the apps and drivers currently preventing sleep, or the device that last woke the PC, you can run these commands yourself in an administrator terminal. Swivel only shows them; it never runs them.": [
+    "如需查看当前阻止睡眠的应用和驱动程序，或上次唤醒电脑的设备，你可以自行在管理员终端中运行以下命令。Swivel 只显示这些命令，从不运行。",
+    "如需查看目前阻止睡眠的 App 和驅動程式，或上次喚醒電腦的裝置，你可以自行在系統管理員終端機中執行以下命令。Swivel 只顯示這些命令，從不執行。",
+    "現在スリープを妨げているアプリとドライバー、または最後に PC を復帰させたデバイスを確認するには、管理者のターミナルでこれらのコマンドをご自身で実行できます。Swivel は表示するだけで、実行はしません。"
+  ],
+  "User present": [
+    "用户在场",
+    "使用者在場",
+    "ユーザーが在席"
+  ],
+  "Voltage": [
+    "电压",
+    "電壓",
+    "電圧"
+  ],
+  "Wake Source": [
+    "唤醒源",
+    "喚醒來源",
+    "復帰要因"
+  ],
+  "What May Be Keeping This PC Awake": [
+    "可能使这台电脑保持唤醒的因素",
+    "可能使這台電腦保持喚醒的因素",
+    "この PC をスリープさせない可能性のある要因"
+  ],
+  "Why Unknown": [
+    "未知原因",
+    "未知原因",
+    "不明な理由"
+  ],
+  "Windows could not list battery devices.": [
+    "Windows 无法列出电池设备。",
+    "Windows 無法列出電池裝置。",
+    "Windows はバッテリー デバイスを一覧表示できませんでした。"
+  ],
+  "Windows only lists which apps or drivers are currently asking the PC to stay awake to an administrator, and Swivel never runs administrator commands. Without one, Swivel shows the system-wide execution state Windows reports and its own Keep Awake; other programs can still prevent sleep. Event log entries can be missing when the log was cleared, rotated or disabled, and some PCs (Modern Standby) record sleep differently. Wake sources are the text Windows recorded and can be general (for example Unknown).": [
+    "Windows 只向管理员列出当前要求电脑保持唤醒的应用或驱动程序，而 Swivel 从不运行管理员命令。因此 Swivel 只显示 Windows 报告的系统范围执行状态及其自身的保持唤醒；其他程序仍可能阻止睡眠。日志被清除、轮转或停用时可能缺少事件，有些电脑（新式待机）记录睡眠的方式不同。唤醒源是 Windows 记录的文本，可能很笼统（例如 Unknown）。",
+    "Windows 只向系統管理員列出目前要求電腦保持喚醒的 App 或驅動程式，而 Swivel 從不執行系統管理員命令。因此 Swivel 只顯示 Windows 回報的系統範圍執行狀態及其自身的保持喚醒；其他程式仍可能阻止睡眠。記錄被清除、輪替或停用時可能缺少事件，有些電腦（新式待命）記錄睡眠的方式不同。喚醒來源是 Windows 記錄的文字，可能很籠統（例如 Unknown）。",
+    "現在 PC をスリープさせないよう要求しているアプリやドライバーを Windows が一覧表示するのは管理者に対してだけで、Swivel は管理者コマンドを実行しません。そのため Swivel は Windows が報告するシステム全体の実行状態と自身のスリープ防止だけを表示します。他のプログラムがスリープを妨げている場合もあります。ログが消去・ローテーション・無効化されているとイベントが欠けることがあり、モダン スタンバイの PC ではスリープの記録方法が異なります。復帰要因は Windows が記録したテキストで、一般的な内容（Unknown など）の場合があります。"
+  ],
+  "Windows reports no battery in this PC.": [
+    "Windows 报告这台电脑没有电池。",
+    "Windows 回報這台電腦沒有電池。",
+    "Windows はこの PC にバッテリーがないと報告しています。"
+  ],
+  "Worn (below 60% of design capacity)": [
+    "损耗严重（低于设计容量的 60%）",
+    "耗損嚴重（低於設計容量的 60%）",
+    "劣化（設計容量の 60% 未満）"
+  ],
+  "{0} h {1} min": [
+    "{0} 小时 {1} 分钟",
+    "{0} 小時 {1} 分鐘",
+    "{0} 時間 {1} 分"
+  ],
+  "{0} min {1} s": [
+    "{0} 分钟 {1} 秒",
+    "{0} 分鐘 {1} 秒",
+    "{0} 分 {1} 秒"
+  ],
+  "{0} times": [
+    "{0} 次",
+    "{0} 次",
+    "{0} 回"
   ]
 }

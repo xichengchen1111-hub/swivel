@@ -13,6 +13,8 @@ public sealed class KeepAwake : IDisposable
     private readonly DispatcherTimer timer;
     private DateTimeOffset? until;
     public bool Active { get; private set; }
+    public bool Display { get; private set; }
+    public DateTimeOffset? Until => until;
     public event Action? Changed;
     public KeepAwake()
     {
@@ -29,7 +31,7 @@ public sealed class KeepAwake : IDisposable
         if (SetThreadExecutionState(0x80000000 | 1u | (display ? 2u : 0u)) == 0)
             throw new UserError("Windows could not start Keep Awake.");
         until = duration.HasValue ? DateTimeOffset.UtcNow + duration.Value : null;
-        Active = true;
+        Active = true; Display = display;
         timer.Start();
         Changed?.Invoke();
     }
@@ -38,7 +40,7 @@ public sealed class KeepAwake : IDisposable
         dispatcher.VerifyAccess();
         if (Active && SetThreadExecutionState(0x80000000) == 0)
             throw new UserError("Windows could not stop Keep Awake. Quit Swivel to release it.");
-        timer.Stop(); until = null; Active = false; Changed?.Invoke();
+        timer.Stop(); until = null; Active = false; Display = false; Changed?.Invoke();
     }
     public void Dispose() { Stop(); }
     [DllImport("kernel32.dll")] private static extern uint SetThreadExecutionState(uint flags);
