@@ -5764,11 +5764,6 @@
     "原圖預覽",
     "元の画像のプレビュー"
   ],
-  "Original Windows QR relief scenes: Tree, Bouquet and Island, with Spring, Summer and Autumn palettes. The dark module squares and four-module white border are retained in the top projection. Lighting, viewing angle, screen resolution and dense codes can prevent scanning. Use the existing flat QR image for sharing or printing; this scene is not a scan guarantee or a 3D model export.": [
-    "原创 Windows 二维码浮雕场景：树木、花束和岛屿，搭配春、夏、秋配色。俯视投影保留深色模块方格和四模块白边。光照、视角、屏幕分辨率及密集码可能妨碍扫码。分享或打印请使用现有平面二维码；此场景不保证可扫码，也不导出三维模型。",
-    "原創 Windows QR 浮雕場景：樹木、花束和島嶼，搭配春、夏、秋配色。俯視投影保留深色模組方格和四模組白邊。光照、視角、螢幕解析度及密集碼可能妨礙掃碼。分享或列印請使用現有平面 QR 碼；此場景不保證可掃碼，也不匯出 3D 模型。",
-    "独自の Windows QR レリーフです。木・花束・島に春・夏・秋の配色を組み合わせます。真上の投影では暗いモジュールの正方形と 4 モジュールの白い余白を保持します。照明、角度、画面解像度、密度により読み取れない場合があります。共有や印刷には既存の平面 QR 画像を使ってください。読み取り保証や 3D モデル出力ではありません。"
-  ],
   "Original path to restore": [
     "要还原的原路径",
     "要還原的原路徑",
@@ -18403,5 +18398,10 @@
     "此程序为 {0} 处理器制作，但这台电脑使用 {1}。请向发布者获取适用于这台电脑的版本。",
     "此程式為 {0} 處理器製作，但這台電腦使用 {1}。請向發行者取得適用於這台電腦的版本。",
     "このプログラムは {0} プロセッサ向けですが、この PC は {1} です。この PC 向けのバージョンを発行元から入手してください。"
+  ],
+  "Voxel Tree, Bouquet and Island gardens turn into the code from above. Trunks, stems, paper, boats and filler foliage fade during the turn. Screen resolution, viewing angle and dense codes can prevent scanning. Use the flat QR image for copying, sharing and PNG export; the 3D view has not been verified for scanning.": [
+    "体素树木、花束和岛屿花园转到顶视时显出二维码。树干、花茎、包装纸、小船和填充枝叶会在转动时淡出。屏幕分辨率、观看角度和密集二维码可能导致无法扫描。复制、分享和导出 PNG 请使用平面二维码；三维视图尚未经扫码验证。",
+    "體素樹木、花束和島嶼花園轉到頂視時顯出 QR 碼。樹幹、花莖、包裝紙、小船和填充枝葉會在轉動時淡出。螢幕解析度、觀看角度和密集 QR 碼可能導致無法掃描。複製、分享和匯出 PNG 請使用平面 QR 碼；三維視圖尚未經掃碼驗證。",
+    "ボクセルの木・花束・島の庭は、真上から見ると QR コードになります。回転中に幹・茎・包装紙・小舟・補完の葉がフェードアウトします。画面の解像度、見る角度、密度の高いコードによっては読み取れません。コピー・共有・PNG 出力には平面の QR 画像を使用してください。3D 表示の読み取りは未検証です。"
   ]
 }
