@@ -65,9 +65,11 @@ internal static class BatterySleepNativeChecks
         check(shortLimit.Status == SleepLogStatus.Read, "A time limit inside a native read keeps the Read status: " + shortLimit.Status + " " + shortLimit.ErrorCode);
         using (var stop = new CancellationTokenSource())
         {
-            stop.CancelAfter(TimeSpan.FromMilliseconds(30)); clock.Restart(); bool cancelled = false;
-            try { SleepHistoryReader.ReadHistory(all, SleepHistory.MaxEvents, TimeSpan.FromSeconds(60), stop.Token); } catch (OperationCanceledException) { cancelled = true; }
-            check(cancelled && clock.Elapsed < TimeSpan.FromSeconds(10), "Cancelling a long event-log read stops promptly with cancellation");
+            // Cancel after the first record of a broad query, so cancellation lands mid-read.
+            clock.Restart(); bool cancelled = false; int seen = 0;
+            try { SleepHistoryReader.ReadHistory(all, SleepHistory.MaxEvents, TimeSpan.FromSeconds(60), stop.Token, () => { if (++seen == 1) stop.Cancel(); }); } catch (OperationCanceledException) { cancelled = true; }
+            check(seen == 0 || (cancelled && seen == 1 && clock.Elapsed < TimeSpan.FromSeconds(10)), "Cancelling an event-log read mid-way stops at once with cancellation (records seen: " + seen + ")");
+            if (seen == 0) Console.WriteLine("No System events in the last 7 days; mid-read cancellation not exercised.");
         }
 
         reject(() => SleepHistoryReader.ReadStayAwake(false, false, null, new CancellationToken(true)), "Precancelled execution-state read calls nothing");
@@ -99,7 +101,7 @@ internal static class BatterySleepNativeChecks
                 check(footer.Length == 2, "Battery window only copies and closes: " + language);
                 check(dialog.Reveal.IsChecked == false && !dialog.CurrentReport.Contains("SERIAL-12345") && !dialog.CurrentReport.Contains("DELL ABC") && !dialog.CurrentReport.Contains("SMP"), "Serial, name and maker hidden by default: " + language);
                 check(dialog.CurrentReport.Contains("71.9%") && dialog.CurrentReport.Contains(app.L(BatteryHealth.Name(BatteryHealthClass.Reduced))), "Health percentage from full ÷ design: " + language);
-                check(dialog.CurrentReport.Contains(app.L(BatteryHealth.Reason(BatteryUnknownReason.RelativeCapacity))) && dialog.CurrentReport.Contains(app.L(BatteryHealth.Reason(BatteryUnknownReason.DesignUnknown))) && !dialog.CurrentReport.Contains("0.0%"), "Relative and zero-design batteries are unknown, never 0%: " + language);
+                check(dialog.CurrentReport.Contains(app.L(BatteryHealth.Reason(BatteryUnknownReason.RelativeCapacity))) && dialog.CurrentReport.Contains(app.L(BatteryHealth.Reason(BatteryUnknownReason.DesignUnknown))) && !dialog.CurrentReport.Contains(" 0.0%"), "Relative and zero-design batteries are unknown, never 0%: " + language);
                 check(dialog.CurrentReport.Contains(app.L("Not reported") + " (0)") && dialog.CurrentReport.Contains(app.L("Empty Battery Bays")) && dialog.CurrentReport.Contains(app.L("Windows Error Code") + " 5") && dialog.CurrentReport.Contains(app.L("Windows Error Code") + " 31"), "Zero cycles, empty bays and per-battery errors visible: " + language);
                 dialog.Reveal.IsChecked = true;
                 check(dialog.CurrentReport.Contains("SERIAL-12345") && dialog.CurrentReport.Contains("DELL ABC") && dialog.CurrentReport.Contains(app.L("Windows Error Code") + " 50"), "Explicit reveal shows names, serials and their errors: " + language);

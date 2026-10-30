@@ -23,7 +23,8 @@ internal static class SleepHistoryReader
 
     internal static SleepHistorySnapshot ReadHistory(CancellationToken token) => ReadHistory(SleepHistory.Query(), SleepHistory.MaxEvents, SleepHistory.TimeLimit, token);
 
-    internal static SleepHistorySnapshot ReadHistory(string query, int maxEvents, TimeSpan timeLimit, CancellationToken token)
+    // afterRecord is a test hook called after each record is read (before it is filtered).
+    internal static SleepHistorySnapshot ReadHistory(string query, int maxEvents, TimeSpan timeLimit, CancellationToken token, Action? afterRecord = null)
     {
         if (maxEvents is < 1 or > SleepHistory.MaxEvents) throw new ArgumentOutOfRangeException(nameof(maxEvents));
         token.ThrowIfCancellationRequested();
@@ -51,6 +52,7 @@ internal static class SleepHistoryReader
                 catch (Exception e) when (!token.IsCancellationRequested && (limit.IsCancellationRequested || (e is EventLogException && (e.HResult == ErrorTimeout || clock.Elapsed >= timeLimit - TimeSpan.FromMilliseconds(50)))))
                 { timedOut = true; break; }
                 using EventRecord? record = next;
+                if (record is not null) afterRecord?.Invoke();
                 token.ThrowIfCancellationRequested();
                 if (record is null) { if (clock.Elapsed >= timeLimit) timedOut = true; break; }
                 if (events.Count >= maxEvents) { truncated = true; break; }
