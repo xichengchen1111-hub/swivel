@@ -61,8 +61,8 @@ public static partial class NativeFiles
     /// `token`. ReOpenFile opens the same object, never a path.
     internal static void HoldFat(ulong token, SafeFileHandle handle, bool directory)
     {
-        var held = ReOpenFile(handle, ReadAttributes, 7, OpenReparse | (directory ? BackupSemantics : 0));
-        if (held.IsInvalid) { int error = Marshal.GetLastWin32Error(); held.Dispose(); throw new Win32Exception(error); }
+        var held = Reopen(handle, ReadAttributes, 7, directory, out int error);
+        if (held.IsInvalid) { held.Dispose(); throw new Win32Exception(error); }
         SafeFileHandle? old;
         lock (fatHolds) { fatHolds.TryGetValue(token, out old); fatHolds[token] = held; }
         old?.Dispose();
@@ -75,10 +75,10 @@ public static partial class NativeFiles
         SafeFileHandle? held;
         lock (fatHolds) fatHolds.TryGetValue(token, out held);
         if (held is null) throw new UserError(FatRules.Released);
-        var handle = ReOpenFile(held, access, share, OpenReparse | (directory ? BackupSemantics : 0));
+        var handle = Reopen(held, access, share, directory, out int error);
         if (handle.IsInvalid)
         {
-            int error = Marshal.GetLastWin32Error(); handle.Dispose();
+            handle.Dispose();
             // A deleted item cannot be reopened (access denied); one in use by another app is shared out.
             if (error == 32) throw new UserError(directory ? FolderMove.InUse : "A file is in use by another app. Nothing was changed.");
             throw new UserError(FatRules.MovedElsewhere);
@@ -129,6 +129,45 @@ public static partial class NativeFiles
         }
     }
 
+    // A new handle to the very object `original` refers to. ReOpenFile does that for files but
+    // refuses directories; for those the same is done by opening an empty name relative to the
+    // held handle (NtOpenFile), which also never resolves a path.
+    private static SafeFileHandle Reopen(SafeFileHandle original, uint access, uint share, bool directory, out int error)
+    {
+        error = 0;
+        if (!directory)
+        {
+            var file = ReOpenFile(original, access, share, OpenReparse);
+            if (file.IsInvalid) error = Marshal.GetLastWin32Error();
+            return file;
+        }
+        bool retained = false;
+        try
+        {
+            original.DangerousAddRef(ref retained);
+            var name = new UnicodeString();
+            var attributes = new ObjectAttributes { Length = Marshal.SizeOf<ObjectAttributes>(), RootDirectory = original.DangerousGetHandle(), ObjectName = IntPtr.Zero, Attributes = 0x40 }; // OBJ_CASE_INSENSITIVE
+            IntPtr namePointer = Marshal.AllocHGlobal(Marshal.SizeOf<UnicodeString>());
+            try
+            {
+                Marshal.StructureToPtr(name, namePointer, false); attributes.ObjectName = namePointer;
+                // SYNCHRONIZE; directory, synchronous I/O as CreateFile gives, backup intent, no reparse following.
+                int status = NtOpenFile(out var handle, access | 0x100000, ref attributes, out _, share, 0x1 | 0x20 | 0x4000 | 0x200000);
+                if (status < 0) { handle.Dispose(); error = (int)RtlNtStatusToDosError(status); return new SafeFileHandle(IntPtr.Zero, true); }
+                return handle;
+            }
+            finally { Marshal.FreeHGlobal(namePointer); }
+        }
+        finally { if (retained) original.DangerousRelease(); }
+    }
+    [StructLayout(LayoutKind.Sequential)] private struct UnicodeString { public ushort Length, MaximumLength; public IntPtr Buffer; }
+    [StructLayout(LayoutKind.Sequential)] private struct ObjectAttributes
+    {
+        public int Length; public IntPtr RootDirectory, ObjectName; public uint Attributes; public IntPtr SecurityDescriptor, SecurityQualityOfService;
+    }
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [DllImport("ntdll.dll", ExactSpelling = true)]
+    private static extern int NtOpenFile(out SafeFileHandle handle, uint access, ref ObjectAttributes attributes, out IoStatusBlock status, uint share, uint options);
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern SafeFileHandle ReOpenFile(SafeFileHandle original, uint access, uint share, uint flags);

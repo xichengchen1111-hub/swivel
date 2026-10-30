@@ -135,12 +135,13 @@ internal static class FatVolumeNativeChecks
         reject(() => FolderMoveSession.Open(folder, target, CancellationToken.None).Dispose(), fs + ": agents' folder move (no allowFat) still refuses FAT");
         reject(() => FolderMoveSession.Open(folder, Path.Combine(folder, "inner"), CancellationToken.None, true).Dispose(), fs + ": a folder cannot move into itself");
         check(NativeFiles.FolderOnVolumeOf(folder, target) == true, fs + ": Move Folder sees the same drive");
-        FolderMoveReceipt receipt;
+        FolderMoveReceipt receipt; int holds = NativeFiles.FatHoldCount;
         using (var session = FolderMoveSession.Open(folder, target, CancellationToken.None, true))
         {
             check(session.IsFat, fs + ": folder move session knows it is on FAT");
             receipt = session.Execute(CancellationToken.None);
         }
+        check(NativeFiles.FatHoldCount == holds + 1, fs + ": a reference is kept to the moved folder");
         string moved = Path.Combine(target, "Holiday photos");
         check(receipt.Current == moved && File.ReadAllText(Path.Combine(moved, "inner", "p.txt")) == "picture" && !Directory.Exists(folder), fs + ": the folder moves whole within the drive");
         using (var undo = FolderMoveSession.ForUndo(receipt, CancellationToken.None, true)) undo.Execute(CancellationToken.None);
