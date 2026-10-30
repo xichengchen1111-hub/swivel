@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Reflection;
@@ -14,6 +15,7 @@ internal static class QrGardenChecks
         var tree=QrGarden.Build(QrCode.Encode("Layer regression"),QrGardenTemplate.Tree,QrGardenSeason.Spring);
         check(tree.Cover.Any(b=>b.Bottom>0)&&tree.Structure.Any(b=>b.Bottom>0&&b.Width<1),"Tree has separate canopy foliage and structure above the ground, rather than a solid relief");
         double[] worst=new double[3];int maxBoxes=0;
+        var colors=new Dictionary<uint,(double Luma,double Linear)>();
         foreach(var level in Enum.GetValues<QrCorrection>())
         {
             string field=level switch{QrCorrection.Low=>"DataWords",QrCorrection.Medium=>"MediumDataWords",QrCorrection.Quartile=>"QuartileDataWords",_=>"HighDataWords"};
@@ -29,7 +31,7 @@ internal static class QrGardenChecks
                     if(version==40)worst[(int)template]=Math.Max(worst[(int)template],watch.Elapsed.TotalMilliseconds);
                     maxBoxes=Math.Max(maxBoxes,garden.BoxCount);
                     check(garden.Size==code.Size&&garden.BoxCount<=code.Size*code.Size+9217&&garden.FaceCount<=QrGarden.MaxFaces,"Garden model and rendered faces have hard bounds at every size");
-                    EveryTemplateTopSurfaceMatchesTheCode(code,garden,check);
+                    EveryTemplateTopSurfaceMatchesTheCode(code,garden,colors,check);
                     check(garden.Structure.Count>30&&garden.Structure.Any(b=>b.Top>code.Size*.1),"All compositions have independent above-ground structure");
                     if(version is 1 or 17 or 40)
                     {
@@ -82,31 +84,44 @@ internal static class QrGardenChecks
         check(pref.Serialize()==old,"Invalid garden mutation leaves preferences exact");
     }
 
-    private static void EveryTemplateTopSurfaceMatchesTheCode(QrCode code,QrGarden garden,Action<bool,string> check)
+    private static void EveryTemplateTopSurfaceMatchesTheCode(QrCode code,QrGarden garden,Dictionary<uint,(double Luma,double Linear)> colors,Action<bool,string> check)
     {
         int n=code.Size;double half=(n-1)/2.0;var full=new bool[n*n];double darkest=0,lightest=1,darkLinear=0,lightLinear=1;
+        // The same baked RGB values recur in millions of faces. Check their contrast
+        // once per colour while still checking every footprint in every combination.
+        (double Luma,double Linear) Color(uint rgb)
+        {if(!colors.TryGetValue(rgb,out var value)){value=(Luma(rgb),Linear(rgb));colors.Add(rgb,value);}return value;}
         var slab=garden.Ground[0];
-        check(slab.X==0&&slab.Z==0&&slab.Width==n+8&&slab.Depth==n+8&&slab.Top==0&&Luma(slab.Color)>.82,"Pale continuous four-module quiet zone");
+        var slabColor=Color(slab.Color);
+        check(slab.X==0&&slab.Z==0&&slab.Width==n+8&&slab.Depth==n+8&&slab.Top==0&&slabColor.Luma>.82,"Pale continuous four-module quiet zone");
         // This checks complete rectangle footprints, not just module centres. A full unit
         // surface exists at every module; all overlying persistent faces stay in that same
         // module and colour class. Thus no sample or pixel-resolution assumption is needed.
+        bool confined=true,colored=true;
         foreach(var box in garden.Ground.Skip(1).Concat(garden.Cover))
         {
             int c=(int)Math.Round(box.X+half),r=(int)Math.Round(box.Z+half);double x=c-half,z=r-half;
-            check(c>=0&&c<n&&r>=0&&r<n&&box.X-box.Width/2>=x-.5-1e-10&&box.X+box.Width/2<=x+.5+1e-10&&box.Z-box.Depth/2>=z-.5-1e-10&&box.Z+box.Depth/2<=z+.5+1e-10,"Every persistent face confined to its module; none pollute light modules or quiet zone");
-            double luma=Luma(box.Color),linear=Linear(box.Color);
-            check(code[c,r]?luma<.60:luma>.82,"Every possible visible persistent top face has its source module's colour class");
+            bool inCode=c>=0&&c<n&&r>=0&&r<n;
+            confined&=inCode&&box.X-box.Width/2>=x-.5-1e-10&&box.X+box.Width/2<=x+.5+1e-10&&box.Z-box.Depth/2>=z-.5-1e-10&&box.Z+box.Depth/2<=z+.5+1e-10;
+            if(!inCode)continue;
+            var color=Color(box.Color);double luma=color.Luma,linear=color.Linear;
+            colored&=code[c,r]?luma<.60:luma>.82;
             if(code[c,r]){darkest=Math.Max(darkest,luma);darkLinear=Math.Max(darkLinear,linear);}else{lightest=Math.Min(lightest,luma);lightLinear=Math.Min(lightLinear,linear);}
             if(box.X==x&&box.Z==z&&box.Width==1&&box.Depth==1&&box.Top>0)full[r*n+c]=true;
         }
-        for(int i=0;i<full.Length;i++)check(full[i],"Every QR module has a complete opaque unit top surface with no gaps");
-        lightest=Math.Min(lightest,Luma(slab.Color));lightLinear=Math.Min(lightLinear,Linear(slab.Color));
+        check(confined,"Every persistent face confined to its module; none pollute light modules or quiet zone");
+        check(colored,"Every possible visible persistent top face has its source module's colour class");
+        check(full.All(value=>value),"Every QR module has a complete opaque unit top surface with no gaps");
+        lightest=Math.Min(lightest,slabColor.Luma);lightLinear=Math.Min(lightLinear,slabColor.Linear);
         check(lightest-darkest>.22&&(lightLinear+.05)/(darkLinear+.05)>=3,"Per-module baked colour contrast: luma gap > .22 and linear contrast >= 3:1");
+        bool valid=true,inside=true;
         foreach(var box in garden.Ground.Concat(garden.Cover).Concat(garden.Structure))
         {
-            check(double.IsFinite(box.X)&&double.IsFinite(box.Z)&&double.IsFinite(box.Bottom)&&double.IsFinite(box.Top)&&double.IsFinite(box.Width)&&double.IsFinite(box.Depth)&&box.Top>box.Bottom&&box.Width>0&&box.Depth>0&&box.Color<=0xffffff&&box.Side<=0xffffff,"Finite valid voxel in each layer");
-            check(Math.Abs(box.X)+box.Width/2<(n+8)/2.0&&Math.Abs(box.Z)+box.Depth/2<(n+8)/2.0||box==slab,"All geometry fits the slab footprint");
+            valid&=double.IsFinite(box.X)&&double.IsFinite(box.Z)&&double.IsFinite(box.Bottom)&&double.IsFinite(box.Top)&&double.IsFinite(box.Width)&&double.IsFinite(box.Depth)&&box.Top>box.Bottom&&box.Width>0&&box.Depth>0&&box.Color<=0xffffff&&box.Side<=0xffffff;
+            inside&=Math.Abs(box.X)+box.Width/2<(n+8)/2.0&&Math.Abs(box.Z)+box.Depth/2<(n+8)/2.0||box==slab;
         }
+        check(valid,"Finite valid voxel in each layer");
+        check(inside,"All geometry fits the slab footprint");
     }
     private static double Luma(uint color)=>(.2126*(color>>16&255)+.7152*(color>>8&255)+.0722*(color&255))/255;
     private static double Linear(uint color)
