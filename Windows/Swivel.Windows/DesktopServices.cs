@@ -106,7 +106,10 @@ public static class Explorer
 {
     public static void Reveal(string path)
     {
-        NativeFiles.ValidateInput(path);
+        var reference = NativeFiles.InspectShelfReference(path, System.Threading.CancellationToken.None);
+        // Explorer can have a content preview pane; do not ask it to select
+        // an online-only item. Copy/drag remains a pure reference handoff.
+        if (reference.IsOnlineOnly) throw new UserError(ShelfReferences.OnlineOnlyRefusal);
         int result = SHParseDisplayName(path, IntPtr.Zero, out var pidl, 0, out _);
         Marshal.ThrowExceptionForHR(result);
         try { Marshal.ThrowExceptionForHR(SHOpenFolderAndSelectItems(pidl, 0, IntPtr.Zero, 0)); }

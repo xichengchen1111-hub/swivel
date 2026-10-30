@@ -49,6 +49,7 @@ public sealed partial class App : Application
     internal App(bool validationHost)
     {
         this.validationHost=validationHost;
+        Shelf.CollectionChanged += ShelfReferencesChanged;
         if(validationHost)ShutdownMode=ShutdownMode.OnExplicitShutdown;
         // Use the framework's Windows Fluent controls and system theme tracking.
         // Keep the native title bar, focus visuals and high-contrast resources.
@@ -202,10 +203,15 @@ public sealed partial class App : Application
     public void AddShelf(IEnumerable<string> files)
     {
         if (!Prefs.IsOn(Feature.Shelf)) throw new UserError("Enable File Shelf in Settings first.");
-        var paths = Validate(files);
+        var references = ShelfReferences.Inspect(files, NativeFiles.InspectShelfReference, default);
+        var paths = references.Select(x => x.Path).ToArray();
         if (Shelf.Count + paths.Count(x => !Shelf.Contains(x, StringComparer.OrdinalIgnoreCase)) > 100)
             throw new UserError("Choose up to 100 files at a time.");
-        foreach (var path in paths) if (!Shelf.Contains(path, StringComparer.OrdinalIgnoreCase)) Shelf.Add(path);
+        foreach (var reference in references)
+        {
+            shelfReferences[reference.Path] = reference;
+            if (!Shelf.Contains(reference.Path, StringComparer.OrdinalIgnoreCase)) Shelf.Add(reference.Path);
+        }
     }
     public void CancelWork()
     {
@@ -273,6 +279,13 @@ public sealed partial class App : Application
         owner.Closed += ownerClosed;
         try
         {
+            if (action.Id == "shelf.systempreview") { await ShowShelfSystemPreviewAsync(files, owner, report, ownedWork); return; }
+            if (shelfPreview)
+            {
+                if (!Prefs.IsOn(Feature.Shelf)) throw new UserError("Enable File Shelf in Settings first.");
+                workFeature = Feature.Shelf;
+                foreach (var reference in ShelfReferences.Inspect(files, NativeFiles.InspectShelfReference, token)) ShelfReferences.RequireContent(reference);
+            }
             if(action.Id=="assistant.choose")
             {
                 if(!Prefs.IsOn(Feature.Assistant)||!Prefs.IsOn(Feature.QuickActions))throw new UserError("Enable Assistant and Quick Actions in Settings first.");workFeature=Feature.Assistant;
@@ -951,7 +964,7 @@ public sealed partial class App : Application
                     ? (pageRoute.CopyToClipboard ? "File references copied and page sent to the default browser. Paste or choose the files yourself." : "Page sent to the default browser.")
                     : (pageRoute.CopyToClipboard ? "File references copied and page sent to the selected browser. Paste or choose the files yourself." : "Page sent to the selected browser."))); return;
             }
-            files = Validate(files);
+            files = action.Id is "shelf.add" or "file.copy" or "file.paths" or "file.reveal" ? ValidateShelf(files, token) : Validate(files);
             if (action.SingleFile && files.Length != 1) throw new UserError("Select exactly one file for this action.");
             action = Catalog.Available(Prefs, files).FirstOrDefault(x => x.Id == action.Id)
                 ?? throw new UserError("This action is not available for these files.");

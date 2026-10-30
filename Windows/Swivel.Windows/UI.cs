@@ -26,7 +26,7 @@ internal static class UI
         var picker = new OpenFileDialog { Multiselect = true, CheckFileExists = true };
         return picker.ShowDialog(owner) == true ? picker.FileNames : Array.Empty<string>();
     }
-    public static void DropFiles(UIElement element, App app, Action<string[]> receive)
+    public static void DropFiles(UIElement element, App app, Action<string[]> receive, bool shelfReferences = false)
     {
         // WPF panels with null backgrounds do not hit-test their empty area.
         if (element is Panel panel && panel.Background is null) panel.Background = Brushes.Transparent;
@@ -40,7 +40,7 @@ internal static class UI
             e.Handled = true; e.Effects = DragDropEffects.None;
             if ((e.AllowedEffects & DragDropEffects.Copy) == 0) return;
             app.Try(() => {
-                if (e.Data.GetData(DataFormats.FileDrop, false) is string[] files) { receive(app.Validate(files)); e.Effects = DragDropEffects.Copy; }
+                if (e.Data.GetData(DataFormats.FileDrop, false) is string[] files) { receive(shelfReferences ? app.ValidateShelf(files) : app.Validate(files)); e.Effects = DragDropEffects.Copy; }
             });
         };
     }
@@ -48,7 +48,21 @@ internal static class UI
         ItemsSource = files, SelectionMode = SelectionMode.Extended, MinHeight = 120, MaxHeight = 240,
         Margin = new Thickness(0, 4, 0, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch
     };
-    public static void CopyDrag(ListBox list, App app)
+    public static ListBox ShelfList(App app)
+    {
+        var list = FileList(app.Shelf);
+        var text = new FrameworkElementFactory(typeof(TextBlock));
+        text.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding { Converter = new ShelfLabelConverter(app) });
+        text.SetValue(TextBlock.TextWrappingProperty, TextWrapping.Wrap);
+        list.ItemTemplate = new DataTemplate { VisualTree = text };
+        return list;
+    }
+    public static string[] PickShelfFolders(Window owner)
+    {
+        var picker = new OpenFolderDialog { Multiselect = true };
+        return picker.ShowDialog(owner) == true ? picker.FolderNames : Array.Empty<string>();
+    }
+    public static void CopyDrag(ListBox list, App app, bool shelfReferences = false)
     {
         Point start = new();
         bool armed = false;
@@ -72,7 +86,7 @@ internal static class UI
             armed = false;
             pendingSingle = null;
             app.Try(() => {
-                var paths = app.Validate(list.SelectedItems.Cast<string>());
+                var paths = shelfReferences ? app.ValidateShelf(list.SelectedItems.Cast<string>()) : app.Validate(list.SelectedItems.Cast<string>());
                 var data = new DataObject(DataFormats.FileDrop, paths);
                 DragDrop.DoDragDrop(list, data, DragDropEffects.Copy);
             });
@@ -199,14 +213,16 @@ public sealed class MainWindow : Window
     {
         var page = Page();
         page.Children.Add(UI.Text(app.L("File Shelf"), 22));
-        page.Children.Add(UI.Text(app.L("References only. Select several files and drag to copy them out. Removing a reference never deletes a file.")));
+        page.Children.Add(UI.Text(app.L("References only. Files, folders and online-only items can be dragged out together. Removing a reference never deletes the original.")));
         if (!app.Prefs.IsOn(Feature.Shelf)) { shelfList = null; page.Children.Add(UI.Text(app.L("Enable File Shelf in Settings first."))); return page; }
-        var list = shelfList = UI.FileList(app.Shelf); page.Children.Add(list);
-        UI.DropFiles(page, app, app.AddShelf); UI.CopyDrag(list, app);
+        var list = shelfList = UI.ShelfList(app); page.Children.Add(list);
+        UI.DropFiles(page, app, app.AddShelf, shelfReferences: true); UI.CopyDrag(list, app, shelfReferences: true);
         var row = new WrapPanel();
         row.Children.Add(UI.Button(app.L("Open Floating Shelf"),app.OpenShelf));
         row.Children.Add(UI.Button(app.L("Preview File"), async () => await app.PreviewShelfFileAsync(list.SelectedItems.Count == 0 ? app.Shelf.ToArray() : list.SelectedItems.Cast<string>().ToArray(), this, SetStatus)));
+        row.Children.Add(UI.Button(app.L("System Preview…"), async () => await app.PreviewShelfSystemAsync(list.SelectedItems.Count == 0 ? app.Shelf.ToArray() : list.SelectedItems.Cast<string>().ToArray(), this, SetStatus)));
         row.Children.Add(UI.Button(app.L("Choose Files…"), () => app.Try(() => app.AddShelf(UI.Pick(this)))));
+        row.Children.Add(UI.Button(app.L("Choose Folders…"), () => app.Try(() => app.AddShelf(UI.PickShelfFolders(this)))));
         row.Children.Add(UI.Button(app.L("Remove Selected"), () => { foreach (string path in list.SelectedItems.Cast<string>().ToArray()) app.Shelf.Remove(path); }));
         row.Children.Add(UI.Button(app.L("Clear"), () => app.Shelf.Clear()));
         row.Children.Add(UI.Button(app.L("Show in Explorer"), () => { if (list.SelectedItem is string path) app.Try(() => Explorer.Reveal(path)); }));

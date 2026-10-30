@@ -105,6 +105,7 @@ internal static class Program
             catch (IOException) { Console.WriteLine("SKIP: this filesystem cannot create test symlinks."); }
             if (linkCreated) { Reject(() => NativeFiles.OpenRead(link).Dispose(), "Reject symlink input"); File.Delete(link); }
             using (var awake = new KeepAwake()) { awake.Start(TimeSpan.FromMinutes(1), false); Check(awake.Active, "Wake request started"); awake.Stop(); Check(!awake.Active, "Wake request released"); }
+            Group("ShelfReferenceNativeChecks", () => ShelfReferenceNativeChecks.Run(directory, Check, Reject));
             Group("ImageRecipeChecks", () => ImageRecipeChecks.Run(directory, Check, Reject));
             Group("PdfToolsChecks", () => PdfToolsChecks.Run(directory, Check, Reject));
             Group("RetouchToolsChecks", () => RetouchToolsChecks.Run(directory, Check, Reject));

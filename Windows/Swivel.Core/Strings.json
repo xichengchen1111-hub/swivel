@@ -18403,5 +18403,80 @@
     "此程序为 {0} 处理器制作，但这台电脑使用 {1}。请向发布者获取适用于这台电脑的版本。",
     "此程式為 {0} 處理器製作，但這台電腦使用 {1}。請向發行者取得適用於這台電腦的版本。",
     "このプログラムは {0} プロセッサ向けですが、この PC は {1} です。この PC 向けのバージョンを発行元から入手してください。"
+  ],
+  "System Preview…": [
+    "系统预览…",
+    "系統預覽…",
+    "システムプレビュー…"
+  ],
+  "File reference": [
+    "文件引用",
+    "檔案參照",
+    "ファイル参照"
+  ],
+  "Folder reference": [
+    "文件夹引用",
+    "資料夾參照",
+    "フォルダー参照"
+  ],
+  "Online only": [
+    "仅联机",
+    "僅線上",
+    "オンラインのみ"
+  ],
+  "Choose Folders…": [
+    "选择文件夹…",
+    "選擇資料夾…",
+    "フォルダーを選択…"
+  ],
+  "References only. Files, folders and online-only items can be dragged out together. Removing a reference never deletes the original.": [
+    "仅保存引用。文件、文件夹及仅联机项目可以一起拖出。移除引用不会删除原始项目。",
+    "僅儲存參照。檔案、資料夾及僅線上項目可一起拖出。移除參照不會刪除原始項目。",
+    "参照のみ保存します。ファイル、フォルダー、オンラインのみの項目をまとめてドラッグできます。参照を削除しても元の項目は削除されません。"
+  ],
+  "Drop files or folders here. Online-only items stay online. References last until Swivel quits.": [
+    "将文件或文件夹拖到这里。仅联机项目不会被下载。引用保留至 Swivel 退出。",
+    "將檔案或資料夾拖到這裡。僅線上項目不會被下載。參照保留至 Swivel 結束。",
+    "ファイルやフォルダーをここにドロップします。オンラインのみの項目はダウンロードしません。参照は Swivel の終了まで保持されます。"
+  ],
+  "This item is online only. Swivel will not download it. Download it yourself outside Swivel before using content actions.": [
+    "此项目仅联机。Swivel 不会下载它。使用内容操作前，请先在 Swivel 外自行下载。",
+    "此項目僅線上。Swivel 不會下載它。使用內容操作前，請先在 Swivel 外自行下載。",
+    "この項目はオンラインのみです。Swivel はダウンロードしません。内容を扱う操作の前に Swivel の外でダウンロードしてください。"
+  ],
+  "Preview File requires a local file. Folder references can be dragged out or shown in Explorer.": [
+    "预览文件需要本地文件。文件夹引用可以拖出或在资源管理器中显示。",
+    "預覽檔案需要本機檔案。資料夾參照可以拖出或在檔案總管中顯示。",
+    "ファイルのプレビューにはローカルファイルが必要です。フォルダー参照はドラッグするか、エクスプローラーで表示できます。"
+  ],
+  "This reference is no longer on the Shelf.": [
+    "此引用已不在文件架上。",
+    "此參照已不在檔案架上。",
+    "この参照はシェルフから削除されています。"
+  ],
+  "Looking for a cached system thumbnail…": [
+    "正在查找系统缓存缩略图…",
+    "正在尋找系統快取縮圖…",
+    "システムのキャッシュ済みサムネイルを探しています…"
+  ],
+  "No cached system thumbnail is available. The reference is unchanged.": [
+    "没有可用的系统缓存缩略图。引用未变更。",
+    "沒有可用的系統快取縮圖。參照未變更。",
+    "キャッシュ済みシステムサムネイルがありません。参照は変更されていません。"
+  ],
+  "System preview closed. The reference is unchanged.": [
+    "系统预览已关闭。引用未变更。",
+    "系統預覽已關閉。參照未變更。",
+    "システムプレビューを閉じました。参照は変更されていません。"
+  ],
+  "Cached system thumbnail only. It may be old. Swivel does not download online-only items or load preview handlers.": [
+    "仅显示系统缓存缩略图，可能已过时。Swivel 不下载仅联机项目，也不加载预览处理程序。",
+    "僅顯示系統快取縮圖，可能已過時。Swivel 不下載僅線上項目，也不載入預覽處理常式。",
+    "システムのキャッシュ済みサムネイルのみ表示します。古い場合があります。Swivel はオンラインのみの項目をダウンロードせず、プレビューハンドラーを読み込みません。"
+  ],
+  "Session-only file and folder references, including online-only cloud items, with multi-select copy drag in both Shelf windows. Content previews use existing image, document/text and audio readers and refuse online-only items. Optional System Preview only reads a cached Shell thumbnail (256 pixels); a cache miss leaves the reference unchanged. No folder enumeration, automatic cloud downloads or in-process preview handlers. Cloud reparse items are conservatively marked online only; Explorer reveal is refused for them because Explorer may preview content. Non-activating focus and real Windows acceptance remain pending.": [
+    "会话内保存文件和文件夹引用，包括仅联机的云项目；两个文件架窗口均可多选并拖出复制。内容预览使用现有图片、文档／文字和音频读取器，拒绝仅联机项目。可选的系统预览只读取 Shell 缓存缩略图（256 像素），无缓存时保留原引用。不枚举文件夹内容，不自动下载云项目，不在进程内加载预览处理程序。云重解析项目保守标为仅联机；因资源管理器可能预览内容，拒绝定位这些项目。非激活焦点和真实 Windows 验收仍待完成。",
+    "工作階段內儲存檔案和資料夾參照，包括僅線上的雲端項目；兩個檔案架視窗均可多選並拖出複製。內容預覽使用現有圖片、文件／文字和音訊讀取器，拒絕僅線上項目。可選的系統預覽只讀取 Shell 快取縮圖（256 像素），無快取時保留原參照。不列舉資料夾內容，不自動下載雲端項目，不在處理程序內載入預覽處理常式。雲端重新剖析項目保守標為僅線上；因檔案總管可能預覽內容，拒絕定位這些項目。非啟用焦點和真實 Windows 驗收仍待完成。",
+    "セッション内のファイルとフォルダー参照に対応し、オンラインのみのクラウド項目も両方のシェルフで複数選択してドラッグできます。内容のプレビューは既存の画像、文書／テキスト、音声リーダーを使用し、オンラインのみの項目は拒否します。任意のシステムプレビューは Shell のキャッシュ済みサムネイル（256 ピクセル）のみ取得し、キャッシュがなければ参照を保持します。フォルダーの内容列挙、クラウドの自動ダウンロード、プロセス内のプレビューハンドラーは使用しません。クラウド再解析項目は安全のためオンラインのみと表示し、エクスプローラーが内容をプレビューする可能性があるため場所の表示も拒否します。非アクティブのフォーカスと実際の Windows での検証は未完了です。"
   ]
 }
