@@ -1261,6 +1261,29 @@ public sealed partial class App : Application
                 }
                 catch (OperationCanceledException) { result.Cancelled = true; } catch (Exception error) { result.Error = error; }
             }
+            else if (action.Id == "video.upscale")
+            {
+                report(L("Loading video…"));
+                using var video = await Task.Run(() => VideoUpscaler.OpenAsync(files[0], token), token);
+                token.ThrowIfCancellationRequested();
+                report(L("Loading the upscaling model and timing one block of the first frame…"));
+                var (graphics, perBlock) = await Task.Run(() => video.Measure(token), token);
+                token.ThrowIfCancellationRequested();
+                if (!ShowOperationDialog(new UpscaleVideoDialog(this, video, graphics, perBlock), owner, token)) return;
+                result = new BatchResult();
+                try
+                {
+                    report(L("Upscaling the video…"));
+                    result.Outputs.Add(await Task.Run(() => video.Run((done, total, left) =>
+                    {
+                        string text = left is { } time
+                            ? string.Format(L("Upscaling the video: frame {0} of about {1}, about {2} left…"), done, total, string.Format(L(VideoUpscale.Duration(time).Format), VideoUpscale.Duration(time).Value))
+                            : string.Format(L("Upscaling the video: frame {0} of about {1}…"), done, total);
+                        Dispatcher.BeginInvoke(() => report(text));
+                    }, () => Dispatcher.BeginInvoke(() => report(L("Encoding the sound…"))), token), token));
+                }
+                catch (OperationCanceledException) { result.Cancelled = true; } catch (Exception error) { result.Error = error; }
+            }
             else if (action.Id == "audio.transcribe")
             {
                 report(L("Loading audio…"));

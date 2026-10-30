@@ -125,6 +125,7 @@ internal static class Program
             Group("CutoutNativeChecks", () => CutoutNativeChecks.Run(directory,Check,Reject));
             Group("IdPhotoNativeChecks", () => IdPhotoNativeChecks.Run(directory,Check,Reject));
             Group("UpscaleNativeChecks", () => UpscaleNativeChecks.Run(directory,Check,Reject));
+            Group("UpscaleVideoNativeChecks", () => UpscaleVideoNativeChecks.Run(directory,Check,Reject));
             Group("TranscribeNativeChecks", () => TranscribeNativeChecks.Run(directory,Check,Reject));
             Group("SubtitleBurnNativeChecks", () => SubtitleBurnNativeChecks.Run(directory,Check,Reject));
             Group("RotatedVideoNativeChecks", () => RotatedVideoNativeChecks.Run(directory,Check));
