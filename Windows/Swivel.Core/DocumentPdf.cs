@@ -39,7 +39,7 @@ public static class PdfTextLayout
         if (Ignorable(s)) return false;
         if (s is 0x202B or 0x202E or 0x2067 or (>= 0x0590 and <= 0x08FF) or (>= 0xFB1D and <= 0xFDFF) or (>= 0xFE70 and <= 0xFEFE) or (>= 0x10800 and <= 0x10FFF) or (>= 0x1E800 and <= 0x1EFFF)
             or (>= 0x0900 and <= 0x0DFF) or (>= 0x0E00 and <= 0x0FFF) or (>= 0x1000 and <= 0x109F) or (>= 0x1100 and <= 0x11FF) or (>= 0x1700 and <= 0x18AF) or (>= 0x1900 and <= 0x1CFF)
-            or (>= 0xA800 and <= 0xABFF) or (>= 0xD7B0 and <= 0xD7FF) or (>= 0x11000 and <= 0x11FFF)) return true;
+            or (>= 0xA800 and <= 0xAB2F) or (>= 0xABC0 and <= 0xABFF) or (>= 0xD7B0 and <= 0xD7FF) or (>= 0x11000 and <= 0x11FFF)) return true;
         return CharUnicodeInfo.GetUnicodeCategory(s) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark;
     }
     public static bool EastAsian(int s) => s is (>= 0x2E80 and <= 0x9FFF) or (>= 0xAC00 and <= 0xD7AF) or (>= 0xF900 and <= 0xFAFF) or (>= 0xFE30 and <= 0xFE4F) or (>= 0xFF00 and <= 0xFFEF) or (>= 0x1F300 and <= 0x1FAFF) or (>= 0x20000 and <= 0x3FFFF);
@@ -66,7 +66,7 @@ public static class PdfTextLayout
         }
         void Wrap()
         {
-            if (lastBreak > 0 && lastBreak < line.Count)
+            if (lastBreak >= 0 && lastBreak < line.Count && (lastBreak > 0 || line[0].X > 0))
             {
                 var rest = line.GetRange(lastBreak, line.Count - lastBreak); line.RemoveRange(lastBreak, line.Count - lastBreak); Emit(line);
                 float shift = rest[0].X; line = rest.Select(g => g with { X = g.X - shift }).ToList(); x -= shift;
@@ -121,18 +121,23 @@ public sealed record PdfFontCandidate(string Label, Func<CancellationToken, True
 public sealed class DocumentPdf
 {
     public const string Missing = "No embeddable font among those Swivel uses for PDF has a glyph for {0}. Nothing was saved; choose TXT, RTF, DOCX, HTML or ODT.";
+    public const string TooManyCharacters = "PDF (text) supports at most 65,000 different characters per font. Nothing was saved; choose TXT, RTF, DOCX, HTML or ODT.";
+    /// One embedded font: its subset and a CID for every distinct character drawn with it, so
+    /// characters sharing a glyph (such as space and no-break space) keep their own ToUnicode entry.
+    private sealed record EmbeddedFont(TrueTypeFace Face, TrueTypeFace.Subset Subset, int[] Scalars, Dictionary<int, int> Cids);
     private readonly PdfTextLayoutResult layout;
-    private readonly List<TrueTypeFace> faces;
+    private readonly EmbeddedFont[] fonts;
     private readonly PdfLayoutSettings settings;
     public int Pages => layout.Pages;
-    public IReadOnlyList<string> FontNames => faces.Select(f => f.PostScriptName).ToArray();
-    private DocumentPdf(PdfTextLayoutResult layout, List<TrueTypeFace> faces, PdfLayoutSettings settings) { this.layout = layout; this.faces = faces; this.settings = settings; }
+    public IReadOnlyList<string> FontNames => fonts.Select(f => f.Face.PostScriptName).ToArray();
+    private DocumentPdf(PdfTextLayoutResult layout, EmbeddedFont[] fonts, PdfLayoutSettings settings) { this.layout = layout; this.fonts = fonts; this.settings = settings; }
 
-    /// Width in PDF glyph-space units (1/1000 em), rounded as written in /W.
+    /// Width in PDF glyph-space units (1/1000 em), rounded as written in /W; layout uses the same value.
     private static double Units(TrueTypeFace face, int glyph) => Math.Round(face.Advance(glyph) * 1000.0 / face.UnitsPerEm, 3);
 
-    /// Chooses fonts and lays out the whole text before anything is written: refuses complex
-    /// scripts, characters no embeddable font covers and text over the page limit.
+    /// Chooses fonts, lays out the whole text and builds the font subsets before anything is
+    /// written: refuses complex scripts, characters no embeddable font covers, damaged fonts and
+    /// text over the page limit.
     public static DocumentPdf Prepare(string text, IReadOnlyList<PdfFontCandidate> candidates, CancellationToken token, PdfLayoutSettings? settings = null)
     {
         settings ??= PdfLayoutSettings.A4;
@@ -143,6 +148,7 @@ public sealed class DocumentPdf
         {
             if (cache.TryGetValue(scalar, out var known)) return known;
             (int, double)? result = null;
+            bool blank = scalar == ' ' || CharUnicodeInfo.GetUnicodeCategory(scalar) == UnicodeCategory.SpaceSeparator;
             for (int i = 0; i < candidates.Count && result is null; i++)
             {
                 if (!tried[i])
@@ -151,28 +157,35 @@ public sealed class DocumentPdf
                     try { var face = candidates[i].Load(token); loaded[i] = face is { MayEmbedSubset: true } ? face : null; }
                     catch (UserError) { loaded[i] = null; }
                 }
-                if (loaded[i] is not { } f || f.Glyph(scalar) is not (> 0 and var glyph)) continue;
+                // A visible character whose glyph has no outline (a color-only emoji, say) would print blank.
+                if (loaded[i] is not { } f || f.Glyph(scalar) is not (> 0 and var glyph) || !blank && !f.HasOutline(glyph)) continue;
                 if (!usedIndex.TryGetValue(i, out int index)) { index = used.Count; used.Add(f); usedIndex[i] = index; }
                 result = (index, Units(f, glyph) * settings.FontSize / 1000);
             }
             cache[scalar] = result; return result;
         }
         var layout = PdfTextLayout.Layout(text, Measure, settings, s => new UserError(Missing, "U+" + s.ToString("X4", CultureInfo.InvariantCulture)), token);
+        var scalars = used.Select(_ => new SortedSet<int>()).ToArray();
+        foreach (var line in layout.Lines) { token.ThrowIfCancellationRequested(); foreach (var g in line) scalars[g.Font].Add(g.Scalar); }
+        var fonts = new EmbeddedFont[used.Count];
+        for (int i = 0; i < used.Count; i++)
+        {
+            if (scalars[i].Count > 65000) throw new UserError(TooManyCharacters);
+            var unicode = scalars[i].ToDictionary(s => s, s => used[i].Glyph(s));
+            var order = scalars[i].ToArray(); var cids = new Dictionary<int, int>();
+            for (int c = 0; c < order.Length; c++) cids[order[c]] = c + 1;
+            fonts[i] = new(used[i], used[i].Build(unicode.Values, unicode, token), order, cids);
+        }
         token.ThrowIfCancellationRequested();
-        return new(layout, used, settings);
+        return new(layout, fonts, settings);
     }
 
+    /// Writes the PDF. The destination stays open: only an internal buffer is flushed into it.
     public void Write(Stream destination, CancellationToken token)
     {
         if (!destination.CanWrite) throw new ArgumentException("Writable output required.");
-        // Subsets: original glyph per scalar for each used font.
-        var unicode = faces.Select(_ => new Dictionary<int, int>()).ToArray();
-        foreach (var line in layout.Lines) foreach (var g in line) { token.ThrowIfCancellationRequested(); if (!unicode[g.Font].ContainsKey(g.Scalar)) unicode[g.Font][g.Scalar] = faces[g.Font].Glyph(g.Scalar); }
-        var subsets = new TrueTypeFace.Subset[faces.Count];
-        for (int i = 0; i < faces.Count; i++) subsets[i] = faces[i].Build(unicode[i].Values, unicode[i], token);
-
-        using var output = new BufferedStream(destination, 1 << 16);
-        long position = 0; int pages = layout.Pages, objects = 3 + faces.Count * 5 + pages * 2;
+        var output = new BufferedStream(destination, 1 << 16); // never disposed: that would close the destination
+        long position = 0; int pages = layout.Pages, objects = 3 + fonts.Length * 6 + pages * 2;
         var offsets = new long[objects];
         void Raw(byte[] bytes) { token.ThrowIfCancellationRequested(); output.Write(bytes); position += bytes.Length; }
         void Text(string value) => Raw(Encoding.ASCII.GetBytes(value));
@@ -187,28 +200,31 @@ public sealed class DocumentPdf
         static string N(double v) => Math.Round(v, 3).ToString("0.###", CultureInfo.InvariantCulture);
 
         Text("%PDF-1.4\n"); Raw(new byte[] { 37, 226, 227, 207, 211, 10 });
-        int firstPage = 3 + faces.Count * 5;
+        int firstPage = 3 + fonts.Length * 6;
         Object(1, "<< /Type /Catalog /Pages 2 0 R >>");
         Object(2, $"<< /Type /Pages /Count {pages} /Kids [" + string.Join(" ", Enumerable.Range(0, pages).Select(i => $"{firstPage + i * 2} 0 R")) + "] >>");
-        for (int i = 0; i < faces.Count; i++)
+        for (int i = 0; i < fonts.Length; i++)
         {
-            var face = faces[i]; var subset = subsets[i]; int b = 3 + i * 5; double scale = 1000.0 / face.UnitsPerEm;
+            var (face, subset, scalars, _) = fonts[i]; int b = 3 + i * 6; double scale = 1000.0 / face.UnitsPerEm;
             string name = Tag(subset.Font) + "+" + (face.PostScriptName.Length > 0 ? face.PostScriptName : "SwivelFont" + i.ToString(CultureInfo.InvariantCulture));
             Object(b, $"<< /Type /Font /Subtype /Type0 /BaseFont /{name} /Encoding /Identity-H /DescendantFonts [{b + 1} 0 R] /ToUnicode {b + 4} 0 R >>");
-            var widths = new StringBuilder("[0 [");
-            for (int g = 0; g < subset.Advances.Count; g++) { if (g > 0) widths.Append(' '); widths.Append(N(Math.Round(subset.Advances[g] * scale, 3))); }
+            // CID 0 is .notdef; CID n is the n-th distinct character, drawn with its (shared) glyph.
+            var gids = new int[scalars.Length + 1]; var widths = new StringBuilder("[0 [").Append(N(Units(face, 0)));
+            for (int c = 0; c < scalars.Length; c++) { int glyph = face.Glyph(scalars[c]); gids[c + 1] = subset.NewGlyphs[glyph]; widths.Append(' ').Append(N(Units(face, glyph))); }
             widths.Append("]]");
-            Object(b + 1, $"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /{name} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor {b + 2} 0 R /DW 1000 /W {widths} /CIDToGIDMap /Identity >>");
+            var map = new byte[gids.Length * 2]; for (int c = 0; c < gids.Length; c++) { map[c * 2] = (byte)(gids[c] >> 8); map[c * 2 + 1] = (byte)gids[c]; }
+            Object(b + 1, $"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /{name} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor {b + 2} 0 R /DW 1000 /W {widths} /CIDToGIDMap {b + 5} 0 R >>");
             Object(b + 2, $"<< /Type /FontDescriptor /FontName /{name} /Flags 32 /FontBBox [{N(face.Box.XMin * scale)} {N(face.Box.YMin * scale)} {N(face.Box.XMax * scale)} {N(face.Box.YMax * scale)}] /ItalicAngle 0 /Ascent {N(face.Ascender * scale)} /Descent {N(face.Descender * scale)} /CapHeight {N(face.CapHeight * scale)} /StemV 80 /FontFile2 {b + 3} 0 R >>");
             Stream(b + 3, $"/Length1 {subset.Font.Length}", subset.Font, true);
-            Stream(b + 4, "", Encoding.ASCII.GetBytes(ToUnicode(unicode[i].ToDictionary(x => x.Key, x => subset.NewGlyphs[x.Value]))), true);
+            Stream(b + 4, "", Encoding.ASCII.GetBytes(ToUnicode(scalars)), true);
+            Stream(b + 5, "", map, true);
         }
-        string fonts = string.Join(" ", Enumerable.Range(0, faces.Count).Select(i => $"/F{i} {3 + i * 5} 0 R"));
+        string resources = string.Join(" ", Enumerable.Range(0, fonts.Length).Select(i => $"/F{i} {3 + i * 6} 0 R"));
         for (int p = 0; p < pages; p++)
         {
             token.ThrowIfCancellationRequested();
             int page = firstPage + p * 2;
-            Object(page, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {N(settings.PageWidth)} {N(settings.PageHeight)}] /Resources << /Font << {fonts} >> >> /Contents {page + 1} 0 R >>");
+            Object(page, $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {N(settings.PageWidth)} {N(settings.PageHeight)}] /Resources << /Font << {resources} >> >> /Contents {page + 1} 0 R >>");
             var content = new StringBuilder("BT\n"); int current = -1;
             for (int l = p * layout.LinesPerPage; l < Math.Min(layout.Lines.Count, (p + 1) * layout.LinesPerPage); l++)
             {
@@ -220,7 +236,7 @@ public sealed class DocumentPdf
                     int font = line[start].Font;
                     if (font != current) { content.Append("/F").Append(font).Append(' ').Append(N(settings.FontSize)).Append(" Tf\n"); current = font; }
                     content.Append("1 0 0 1 ").Append(N(settings.Margin + line[start].X)).Append(' ').Append(N(y)).Append(" Tm <");
-                    for (int g = start; g < end; g++) content.Append(subsets[font].NewGlyphs[unicode[font][line[g].Scalar]].ToString("X4", CultureInfo.InvariantCulture));
+                    for (int g = start; g < end; g++) content.Append(fonts[font].Cids[line[g].Scalar].ToString("X4", CultureInfo.InvariantCulture));
                     content.Append("> Tj\n"); start = end;
                 }
             }
@@ -241,19 +257,18 @@ public sealed class DocumentPdf
         return new string(tag);
     }
 
-    private static string ToUnicode(IReadOnlyDictionary<int, int> map)
+    /// CID n (1-based) is the n-th scalar.
+    private static string ToUnicode(int[] scalars)
     {
         var text = new StringBuilder("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n");
-        // One code per glyph: when two scalars share a glyph, the smaller one is reported.
-        var entries = map.GroupBy(x => x.Value).Select(g => (Glyph: g.Key, Scalar: g.Min(x => x.Key))).OrderBy(x => x.Glyph).ToArray();
-        for (int i = 0; i < entries.Length; i += 100)
+        for (int i = 0; i < scalars.Length; i += 100)
         {
-            var block = entries.Skip(i).Take(100).ToArray();
-            text.Append(block.Length).Append(" beginbfchar\n");
-            foreach (var (glyph, scalar) in block)
+            int count = Math.Min(100, scalars.Length - i);
+            text.Append(count).Append(" beginbfchar\n");
+            for (int c = i; c < i + count; c++)
             {
-                text.Append('<').Append(glyph.ToString("X4", CultureInfo.InvariantCulture)).Append("> <");
-                foreach (char c in char.ConvertFromUtf32(scalar)) text.Append(((int)c).ToString("X4", CultureInfo.InvariantCulture));
+                text.Append('<').Append((c + 1).ToString("X4", CultureInfo.InvariantCulture)).Append("> <");
+                foreach (char unit in char.ConvertFromUtf32(scalars[c])) text.Append(((int)unit).ToString("X4", CultureInfo.InvariantCulture));
                 text.Append(">\n");
             }
             text.Append("endbfchar\n");

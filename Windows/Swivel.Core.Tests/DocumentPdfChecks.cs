@@ -142,6 +142,9 @@ internal static class DocumentPdfChecks
         check(FontFileFormats.Checksum(subset.Font)==0xB1B0AFBA&&BinaryPrimitives.ReadInt16BigEndian(Table(subset.Font,"head").AsSpan(50))==1&&Table(subset.Font,"OS/2").Length==96&&Table(subset.Font,"post").Length==32,"Subset head checksum adjustment, long loca, copied OS/2 and format 3 post");
         var simple=face.Build(new[]{2},new Dictionary<int,int>{['B']=2,[0x1F600]=2},default);var simpleFace=TrueTypeFace.Parse(simple.Font);
         check(simple.NewGlyphs.Count==2&&simpleFace.Glyph('B')==1&&simpleFace.Glyph(0x1F600)==1,"Subset of one simple glyph keeps only notdef and that glyph; non-BMP cmap entry retained");
+        var wide=Enumerable.Range(0x4E00,9000).ToDictionary(x=>x,x=>x%2==0?1:2);var wideSubset=TrueTypeFace.Parse(face.Build(new[]{1,2},wide,default).Font);
+        check(wideSubset.Glyph(0x4E00)==1&&wideSubset.Glyph(0x4E01)==2&&wideSubset.Glyph(0x4E00+8999)==2,"Subset cmap with 9,000 unmergeable characters stays valid through format 12");
+        check(TrueTypeFace.Parse(face.Build(new[]{1},new Dictionary<int,int>{['A']=1,['B']=1},default).Font).Glyph('B')==1,"Subset cmap keeps several characters on one glyph");
         check(TrueTypeFace.Parse(Collection(bytes),0).Glyph('C')==3,"TrueType collection face is read by its offset");
         reject(()=>TrueTypeFace.Parse(Collection(bytes),1),"TrueType collection face out of range refused");
         foreach(var (fs,ok) in new[]{(0,true),(4,true),(8,true),(2,false),(6,true),(0x102,false),(0x100,false),(0x200,false),(0x0204,false)})
@@ -242,16 +245,25 @@ internal static class DocumentPdfChecks
         var type0=objects.Values.Single(o=>o.Dictionary.Contains("/Subtype /Type0",StringComparison.Ordinal));
         check(Regex.IsMatch(type0.Dictionary,@"/BaseFont /[A-Z]{6}\+SwivelTiny /Encoding /Identity-H"),"PDF Type0 font uses a subset tag and Identity-H");
         var cid=objects.Values.Single(o=>o.Dictionary.Contains("/CIDFontType2",StringComparison.Ordinal));
-        check(cid.Dictionary.Contains("/CIDToGIDMap /Identity",StringComparison.Ordinal)&&cid.Dictionary.Contains("/W [0 [500 600 650 1000 1100 250]]",StringComparison.Ordinal),"PDF CIDFont widths are the subset advances in 1/1000 em");
+        check(Regex.IsMatch(cid.Dictionary,@"/CIDToGIDMap \d+ 0 R")&&cid.Dictionary.Contains("/W [0 [500 250 600 650 1000 1100]]",StringComparison.Ordinal),"PDF CIDFont widths per character CID in 1/1000 em");
+        var gidMap=objects[int.Parse(Regex.Match(cid.Dictionary,@"/CIDToGIDMap (\d+) 0 R").Groups[1].Value)].Stream!;
+        check(gidMap.SequenceEqual(new byte[]{0,0,0,5,0,1,0,2,0,3,0,4}),"PDF CIDToGIDMap maps each character CID to its subset glyph");
         var file=objects.Values.Single(o=>o.Dictionary.Contains("/Length1",StringComparison.Ordinal));
         var embedded=TrueTypeFace.Parse(file.Stream!);
         check(file.Dictionary.Contains($"/Length1 {file.Stream!.Length} ",StringComparison.Ordinal)&&embedded.GlyphCount==6&&embedded.Glyph('E')==4,"PDF FontFile2 is the parsed subset with exact Length1");
         var page=objects.Values.Single(o=>o.Dictionary.StartsWith("<< /Type /Page ",StringComparison.Ordinal));
         string content=Encoding.ASCII.GetString(objects[int.Parse(Regex.Match(page.Dictionary,@"/Contents (\d+) 0 R").Groups[1].Value)].Stream!);
-        check(content.Contains("1 0 0 1 56.693 774.197 Tm <0001000200030005000400> Tj",StringComparison.Ordinal)||content.Contains("Tm <00010002000300050004> Tj",StringComparison.Ordinal),"PDF draws one run per contiguous font/position: "+content.Replace("\n"," | "));
-        check(content.Contains("1 0 0 1 128.693 774.197 Tm <0001> Tj",StringComparison.Ordinal),"PDF tab moves the next run to the 0.5 inch stop");
+        check(content.Contains("1 0 0 1 56.693 774.197 Tm <00020003000400010005> Tj",StringComparison.Ordinal),"PDF draws one run per contiguous font/position: "+content.Replace("\n"," | "));
+        check(content.Contains("1 0 0 1 128.693 774.197 Tm <0002> Tj",StringComparison.Ordinal),"PDF tab moves the next run to the 0.5 inch stop");
         var two=DocumentPdf.Prepare("AZ\n中",fonts,default);var twoObjects=Validate(Render(two),check,"Two-font PDF");
-        check(two.FontNames.SequenceEqual(new[]{"SwivelTiny","SwivelOther"})&&Extract(twoObjects)=="AZ\n中\f"&&twoObjects.Count==1+1+10+2,"PDF falls back per character to the next font and embeds both");
+        check(two.FontNames.SequenceEqual(new[]{"SwivelTiny","SwivelOther"})&&Extract(twoObjects)=="AZ\n中\f"&&twoObjects.Count==1+1+12+2,"PDF falls back per character to the next font and embeds both");
+        var shared=DocumentPdf.Prepare("A\u00A0B A",new[]{Candidate(TinyFont(extra:new Dictionary<int,int>{[0xA0]=6}))},default);
+        check(Extract(Validate(Render(shared),check,"Shared-glyph PDF"))=="A\u00A0B A\f","PDF characters sharing one glyph keep their own ToUnicode entry");
+        var blank=DocumentPdf.Prepare("AQ",new[]{Candidate(TinyFont(extra:new Dictionary<int,int>{['Q']=6})),Candidate(TinyFont(0,"Outlined",new Dictionary<int,int>{['Q']=1}))},default);
+        check(blank.FontNames.SequenceEqual(new[]{"SwivelTiny","Outlined"}),"PDF skips a font whose glyph for a visible character has no outline");
+        string temp=Path.Combine(Path.GetTempPath(),"swivel-pdf-"+Guid.NewGuid().ToString("N")+".pdf");
+        try{using var target=new FileStream(temp,FileMode.CreateNew,FileAccess.Write);plan.Write(target,default);check(target.CanWrite,"PDF writing leaves the destination stream open");target.Flush(true);check(target.Length>0&&File.Exists(temp),"PDF output can be flushed by its owner afterwards");}
+        finally{File.Delete(temp);}
         var many=DocumentPdf.Prepare(string.Join("\n",Enumerable.Repeat("A",100)),fonts,default);var manyObjects=Validate(Render(many),check,"Three-page PDF");
         check(many.Pages==3&&Extract(manyObjects).Split('\f').Select(p=>p.Count(c=>c=='A')).SequenceEqual(new[]{47,47,6,0}),"PDF A4 pages hold 47 lines each");
         var empty=DocumentPdf.Prepare("",fonts,default);var emptyObjects=Validate(Render(empty),check,"Empty PDF");

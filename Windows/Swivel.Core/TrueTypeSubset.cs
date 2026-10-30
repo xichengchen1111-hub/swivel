@@ -134,6 +134,8 @@ public sealed class TrueTypeFace
         if (glyph < 0 || glyph >= GlyphCount) throw new ArgumentOutOfRangeException(nameof(glyph));
         return U16(tables[Hmtx].Offset + Math.Min(glyph, metricCount - 1) * 4);
     }
+    /// Whether the glyph has outline data (an empty glyph draws nothing).
+    public bool HasOutline(int glyph) => glyph >= 0 && glyph < GlyphCount && GlyphData(glyph).Length > 0;
     private int SideBearing(int glyph) => glyph < metricCount ? S16(tables[Hmtx].Offset + glyph * 4 + 2) : S16(tables[Hmtx].Offset + metricCount * 4 + (glyph - metricCount) * 2);
 
     private (int Offset, int Length) GlyphData(int glyph)
@@ -188,6 +190,7 @@ public sealed class TrueTypeFace
         Visit(0, 0);
         foreach (int g in glyphs) Visit(g, 0);
         var order = state.Keys.OrderBy(x => x).ToArray();
+        if (order.Length > 65535) throw new UserError(Damaged);
         var map = new Dictionary<int, int>();
         for (int i = 0; i < order.Length; i++) map[order[i]] = i;
 
@@ -216,16 +219,47 @@ public sealed class TrueTypeFace
             new(Head, head), new(Hhea, hhea), new(Maxp, maxp), new(Hmtx, hmtx), new(Loca, loca), new(Glyf, glyf.ToArray()),
             new(Cmap, MinimalCmap(mapped)), new(Post, post), new(Os2, Copy(Os2)),
         };
-        if (tables.TryGetValue(Name, out var name) && name.Length <= 1024 * 1024) list.Add(new(Name, Copy(Name)));
+        list.Add(new(Name, tables.TryGetValue(Name, out var name) && name.Length is > 6 and <= 1024 * 1024 ? Copy(Name) : MinimalName(PostScriptName.Length > 0 ? PostScriptName : "SwivelSubset")));
         foreach (uint tag in new[] { Cvt, Fpgm, Prep }) if (tables.ContainsKey(tag)) list.Add(new(tag, Copy(tag)));
         return new(FontFileFormats.Sfnt(new FontFileFormats.Font(0x00010000, list)), map, advances);
     }
 
-    /// (3,1) format 4 for BMP scalars, plus (3,10) format 12 when any scalar is outside it.
+    /// Windows-platform family, subfamily, full and PostScript names, for rasterizers that need a name table.
+    private static byte[] MinimalName(string name)
+    {
+        var value = Encoding.BigEndianUnicode.GetBytes(name); var regular = Encoding.BigEndianUnicode.GetBytes("Regular");
+        (int Id, byte[] Text)[] records = { (1, value), (2, regular), (4, value), (6, value) };
+        var table = new byte[6 + records.Length * 12 + value.Length * 3 + regular.Length];
+        Put16(table, 2, records.Length); Put16(table, 4, 6 + records.Length * 12);
+        int offset = 0;
+        for (int i = 0; i < records.Length; i++)
+        {
+            int at = 6 + i * 12; Put16(table, at, 3); Put16(table, at + 2, 1); Put16(table, at + 4, 0x409); Put16(table, at + 6, records[i].Id); Put16(table, at + 8, records[i].Text.Length); Put16(table, at + 10, offset);
+            records[i].Text.CopyTo(table, 6 + records.Length * 12 + offset); offset += records[i].Text.Length;
+        }
+        return table;
+    }
+
+    /// Runs of consecutive codes with consecutive glyphs, as cmap groups.
+    private static List<(int Start, int End, int Glyph)> Groups(IEnumerable<KeyValuePair<int, int>> map)
+    {
+        var groups = new List<(int Start, int End, int Glyph)>();
+        foreach (var (code, glyph) in map.OrderBy(x => x.Key))
+        {
+            if (groups.Count > 0 && groups[^1].End == code - 1 && groups[^1].Glyph + (code - groups[^1].Start) == glyph) groups[^1] = (groups[^1].Start, code, groups[^1].Glyph);
+            else groups.Add((code, code, glyph));
+        }
+        return groups;
+    }
+
+    /// (3,10) format 12 with every mapping, and (3,1) format 4 with the BMP ones when they fit
+    /// its 16-bit sizes (otherwise just the required final segment). The PDF itself addresses
+    /// glyphs through CIDToGIDMap, so this table only keeps the font well formed.
     private static byte[] MinimalCmap(IReadOnlyDictionary<int, int> map)
     {
-        var bmp = map.Where(x => x.Key <= 0xFFFF && x.Key != 0xFFFF).OrderBy(x => x.Key).ToArray();
-        int segments = bmp.Length + 1;
+        var bmp = Groups(map.Where(x => x.Key < 0xFFFF));
+        if (16 + (bmp.Count + 1) * 8 > 0xFFFF) bmp.Clear();
+        int segments = bmp.Count + 1;
         var f4 = new byte[16 + segments * 8];
         Put16(f4, 0, 4); Put16(f4, 2, f4.Length); Put16(f4, 6, segments * 2);
         int power = 1, log = 0; while (power * 2 <= segments) { power *= 2; log++; }
@@ -233,21 +267,18 @@ public sealed class TrueTypeFace
         int ends = 14, starts = 16 + segments * 2, deltas = starts + segments * 2, ranges = deltas + segments * 2;
         for (int i = 0; i < segments; i++)
         {
-            int code = i < bmp.Length ? bmp[i].Key : 0xFFFF, delta = i < bmp.Length ? (bmp[i].Value - code) & 0xFFFF : 1;
-            Put16(f4, ends + i * 2, code); Put16(f4, starts + i * 2, code); Put16(f4, deltas + i * 2, delta); Put16(f4, ranges + i * 2, 0);
+            var (start, end, glyph) = i < bmp.Count ? bmp[i] : (0xFFFF, 0xFFFF, 0);
+            Put16(f4, ends + i * 2, end); Put16(f4, starts + i * 2, start); Put16(f4, deltas + i * 2, i < bmp.Count ? (glyph - start) & 0xFFFF : 1); Put16(f4, ranges + i * 2, 0);
         }
-        var wide = map.OrderBy(x => x.Key).ToArray(); bool full = wide.Any(x => x.Key > 0xFFFF);
-        var f12 = full ? new byte[16 + wide.Length * 12] : Array.Empty<byte>();
-        if (full)
-        {
-            Put16(f12, 0, 12); Put32(f12, 4, (uint)f12.Length); Put32(f12, 12, (uint)wide.Length);
-            for (int i = 0; i < wide.Length; i++) { Put32(f12, 16 + i * 12, (uint)wide[i].Key); Put32(f12, 20 + i * 12, (uint)wide[i].Key); Put32(f12, 24 + i * 12, (uint)wide[i].Value); }
-        }
-        int records = full ? 2 : 1, header = 4 + records * 8;
+        var wide = Groups(map);
+        var f12 = new byte[16 + wide.Count * 12];
+        Put16(f12, 0, 12); Put32(f12, 4, (uint)f12.Length); Put32(f12, 12, (uint)wide.Count);
+        for (int i = 0; i < wide.Count; i++) { Put32(f12, 16 + i * 12, (uint)wide[i].Start); Put32(f12, 20 + i * 12, (uint)wide[i].End); Put32(f12, 24 + i * 12, (uint)wide[i].Glyph); }
+        const int header = 4 + 2 * 8;
         var cmap = new byte[header + f4.Length + f12.Length];
-        Put16(cmap, 2, records);
-        Put16(cmap, 4, 3); Put16(cmap, 6, 1); Put32(cmap, 8, (uint)header);
-        if (full) { Put16(cmap, 12, 3); Put16(cmap, 14, 10); Put32(cmap, 16, (uint)(header + f4.Length)); }
+        Put16(cmap, 2, 2);
+        Put16(cmap, 4, 3); Put16(cmap, 6, 1); Put32(cmap, 8, header);
+        Put16(cmap, 12, 3); Put16(cmap, 14, 10); Put32(cmap, 16, (uint)(header + f4.Length));
         f4.CopyTo(cmap, header); f12.CopyTo(cmap, header + f4.Length);
         return cmap;
     }
