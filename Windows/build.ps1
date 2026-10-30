@@ -16,8 +16,14 @@ try {
     if (-not $SkipTests) {
         & dotnet build Swivel.Windows.Tests -c Release
         $diagExe = Get-ChildItem Swivel.Windows.Tests/bin/Release -Recurse -Filter Swivel.Windows.Tests.exe | Select-Object -First 1
-        foreach ($i in 1..40) { & $diagExe.FullName --diag-appcheck | Out-Null; Write-Host "DIAG try $i exit $LASTEXITCODE" }
-        Get-WinEvent -LogName Application -MaxEvents 60 | Where-Object { $_.ProviderName -in 'Application Error','.NET Runtime' } | Select-Object -First 6 | ForEach-Object { Write-Host ("DIAG event " + $_.ProviderName + " " + ($_.Message -replace '\s+',' ')) }
+        foreach ($i in 1..8) {
+            $skip = if ($i % 2 -eq 0) { '1' } else { '0' }; $env:SWIVEL_SKIP_APPCHECK = $skip
+            $since = Get-Date; $start = Get-Date
+            $lines = & $diagExe.FullName 2>&1; $code = $LASTEXITCODE
+            $summary = ($lines | Where-Object { "$_" -match 'PASS: \d+ Windows native|FAIL:|threw:' } | Select-Object -First 6) -join ' | '
+            Write-Host "DIAG try $i skipAppCheck=$skip exit $code secs $([int]((Get-Date)-$start).TotalSeconds) $summary"
+            Get-WinEvent -FilterHashtable @{LogName='Application';StartTime=$since} -ErrorAction SilentlyContinue | Where-Object { $_.ProviderName -in 'Application Error','.NET Runtime' } | Select-Object -First 3 | ForEach-Object { Write-Host ("DIAG event " + $_.ProviderName + " " + ($_.Message -replace '\s+',' ')) }
+        }
         exit 0
         & dotnet run --project Swivel.Core.Tests -c Release
         if ($LASTEXITCODE -ne 0) { throw 'Core checks failed.' }
