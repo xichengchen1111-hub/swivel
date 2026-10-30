@@ -54,7 +54,13 @@ enum DoctorStorage {
         }
         defer { fts_close(fts) }
         var linked = Set<UInt64>()
+        var visited = 0
+        defer { DoctorProgress.current?.scanned(visited % 256) }
         while let entry = fts_read(fts) {
+            if Int32(entry.pointee.fts_info) != FTS_DP {
+                visited += 1
+                if visited % 256 == 0 { DoctorProgress.current?.scanned(256) }
+            }
             if size.items % 4096 == 0, Task.isCancelled || size.items >= maxItems {
                 size.cancelled = true
                 break
@@ -183,7 +189,7 @@ enum DoctorStorage {
 
     /// Runs a size scan off the main thread; cancelling the calling task stops it.
     static func scan(_ url: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) async -> Size {
-        let task = Task.detached(priority: .utility) { size(of: url, home: home) }
+        let task = DoctorProgress.detached(priority: .utility) { size(of: url, home: home) }
         return await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
     }
 
@@ -226,7 +232,9 @@ enum DoctorStorage {
         var result = DoctorResult(section: .caches, severity: .ok, badge: "", headline: "")
         var total: Int64 = 0
         var skipped = 0
-        for entry in catalogue {
+        DoctorProgress.current?.stage("Measuring caches…", total: catalogue.count)
+        for (index, entry) in catalogue.enumerated() {
+            DoctorProgress.current?.stage("Measuring caches…", completed: index, total: catalogue.count)
             if Task.isCancelled { break }
             // Protected caches (Safari's) can't be read without Full Disk Access: never try.
             let expected = env.home.appendingPathComponent(String(entry.path.dropFirst(2)))
@@ -249,6 +257,7 @@ enum DoctorStorage {
                                          trash: DoctorTrashTarget(path: entry.path, mode: .contents),
                                          bundleIDs: owners[entry.id] ?? []))
         }
+        DoctorProgress.current?.stage("Measuring browser caches…")
         // Code, graphics and shader caches inside Chromium browsers' profiles.
         for (index, found) in DoctorBrowserCaches.find(home: env.home).enumerated() {
             if Task.isCancelled { break }
@@ -314,10 +323,12 @@ enum DoctorStorage {
         }
         var grand: Int64 = 0
         let home = FileManager.default.homeDirectoryForCurrentUser
+        DoctorProgress.current?.stage("Measuring folders…", total: folders.count)
         for (number, folder) in folders.enumerated() {
+            DoctorProgress.current?.stage("Measuring folders…", completed: number, total: folders.count)
             if Task.isCancelled { break }
             // One walk per folder gives both the list and the space map.
-            let map = await Task.detached(priority: .utility) { DoctorSpaceMap.build(folder, home: home) }.value
+            let map = await DoctorProgress.run(priority: .utility) { DoctorSpaceMap.build(folder, home: home) }
             if Task.isCancelled { break }
             result.maps.append(map.root)
             let total = map.root.bytes

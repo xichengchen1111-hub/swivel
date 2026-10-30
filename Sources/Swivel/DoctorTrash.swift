@@ -242,7 +242,9 @@ enum DoctorTrash {
         let folder = try makeCollector(in: plan.target, name: plan.name)
         let folderIdentity = try FileIdentity.read(folder)
         var gathered: [String] = []
-        for item in plan.items {
+        DoctorProgress.current?.stage("Moving cache contents…", total: plan.items.count)
+        for (index, item) in plan.items.enumerated() {
+            DoctorProgress.current?.stage("Moving cache contents…", completed: index, total: plan.items.count)
             guard (try? FileIdentity.read(item.url)) == item.identity else {
                 receipt.failures.append(L("%@ changed since the check and was left in place.", displayPath(item.url)))
                 continue
@@ -258,6 +260,7 @@ enum DoctorTrash {
             rmdir(folder.path)
             return receipt
         }
+        DoctorProgress.current?.stage("Moving to Trash…")
         do {
             guard unchanged(plan.chain) else { throw ToolError(L("Files changed since the check. Run the check again.")) }
             let trashed = try move(folder)
@@ -324,7 +327,9 @@ enum DoctorTrash {
     static func undo(_ receipt: DoctorTrashReceipt) -> (restored: Int, left: [URL]) {
         var restored = 0
         var left: [URL] = []
-        for moved in receipt.moved.reversed() {
+        DoctorProgress.current?.stage("Restoring items…", total: receipt.moved.count)
+        for (index, moved) in receipt.moved.reversed().enumerated() {
+            DoctorProgress.current?.stage("Restoring items…", completed: index, total: receipt.moved.count)
             guard (try? FileIdentity.read(moved.trashed)) == moved.identity, unchanged(moved.parents),
                   rename(moved.trashed, moved.original) == nil else {
                 left.append(moved.trashed)

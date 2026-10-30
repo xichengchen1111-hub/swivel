@@ -32,6 +32,45 @@ final class DoctorCenter {
     private(set) var running: Set<DoctorSection> = []
     private(set) var testingSpeed = false
     private(set) var searchingFiles = false
+    private var progress: [DoctorSection: DoctorProgress] = [:]
+    private var fileProgress: DoctorProgress?
+    private var speedProgress: DoctorProgress?
+    private var quitProgress: DoctorProgress?
+    private var quitTask: Task<Void, Never>?
+    private var actionProgress: [DoctorProgress] = []
+    private var batchProgress: DoctorProgress?
+    private var batchSections: Set<DoctorSection> = []
+    private var batchIncludesFiles = false
+    private var batchTitle = ""
+    private var batchFinishedScanned = 0
+
+    func activity(for section: DoctorSection) -> DoctorProgress? {
+        if let actionProgress = actionProgress.last { return actionProgress }
+        if let batchProgress, section == .summary || (section == .uninstall && cleanUpMode) {
+            let total = batchSections.count + (batchIncludesFiles ? 1 : 0)
+            let pending = batchSections.intersection(running).count + (batchIncludesFiles && searchingFiles ? 1 : 0)
+            guard pending > 0 else { self.batchProgress = nil; return activity(for: section) }
+            let scanned = batchSections.compactMap { progress[$0]?.snapshot().scanned }.reduce(0, +)
+                + (batchIncludesFiles ? fileProgress?.snapshot().scanned ?? 0 : 0)
+            batchProgress.setScanned(batchFinishedScanned + scanned)
+            batchProgress.stage(batchTitle, completed: total - pending, total: total, estimate: false)
+            return batchProgress
+        }
+        if section == .performance, let quitProgress { return quitProgress }
+        if let selected = progress[section] { return selected }
+        if section == .storage, let fileProgress { return fileProgress }
+        if section == .network, let speedProgress { return speedProgress }
+        return DoctorSection.allCases.compactMap { progress[$0] }.first ?? fileProgress ?? speedProgress ?? quitProgress
+    }
+
+    private func withActivity<T>(_ title: String, cleaning: Bool = false,
+                                 _ body: () async throws -> T) async rethrows -> T {
+        let work = DoctorProgress(title, cleaning: cleaning)
+        actionProgress.append(work); post()
+        defer { actionProgress.removeAll { $0 === work }; post() }
+        return try await DoctorProgress.$current.withValue(work) { try await body() }
+    }
+
     private var filesTask: Task<Void, Never>?
     /// Chosen in this session only; nothing about them is saved.
     private(set) var folders: [URL] = []
@@ -79,6 +118,10 @@ final class DoctorCenter {
     func runAll() {
         let sections = DoctorSection.allCases.filter(\.runsWithAll)
         checkingAll = Set(sections)
+        batchSections = Set(sections); batchIncludesFiles = false
+        batchTitle = "Checking this Mac…"
+        batchProgress = DoctorProgress(batchTitle)
+        batchFinishedScanned = 0
         for section in sections { run(section) }
     }
 
@@ -95,6 +138,8 @@ final class DoctorCenter {
         guard Feature.doctor.isOn, section != .summary else { return }
         tasks[section]?.cancel()
         running.insert(section)
+        let work = DoctorProgress(section.title)
+        progress[section] = work
         post()
         let env = environment
         let folders = folders
@@ -103,30 +148,34 @@ final class DoctorCenter {
         let uninstallApp = uninstallApp
         let app = app
         tasks[section] = Task { [weak self] in
-            let result: DoctorResult? = switch section {
-            case .summary: nil
-            case .storage: await DoctorStorage.checkStorage(env)
-            case .caches: await DoctorStorage.checkCaches(env)
-            case .folders: await DoctorStorage.checkFolders(folders)
-            case .duplicates:
-                await Task.detached(priority: .utility) {
-                    DoctorDuplicates.result(DoctorDuplicates.find(duplicateFolders, home: env.home), roots: duplicateFolders, home: env.home)
-                }.value
-            case .projects:
-                await Task.detached(priority: .utility) {
-                    let found = DoctorProjects.find(projectFolders, home: env.home)
-                    return DoctorProjects.result(found.found, cancelled: found.cancelled, home: env.home)
-                }.value
-            case .uninstall:
-                if uninstallApp == nil { await self?.findUnused(home: env.home) } else { await self?.inspectUninstall(uninstallApp, home: env.home) }
-            case .performance: await self?.performance(env)
-            case .power: await Self.power()
-            case .network: await DoctorNetwork.check(dns: try? env.run(.dnsConfiguration), proxy: try? env.run(.proxySettings))
-            case .drives: await Self.drives(env)
-            case .background: await Self.background(env)
-            case .app: if let app { await Self.appCheck(app, env: env) } else { nil }
+            let result = await DoctorProgress.$current.withValue(work) { () async -> DoctorResult? in
+                return switch section {
+                case .summary: nil
+                case .storage: await DoctorStorage.checkStorage(env)
+                case .caches: await DoctorStorage.checkCaches(env)
+                case .folders: await DoctorStorage.checkFolders(folders)
+                case .duplicates:
+                    await DoctorProgress.run(priority: .utility) {
+                        DoctorDuplicates.result(DoctorDuplicates.find(duplicateFolders, home: env.home), roots: duplicateFolders, home: env.home)
+                    }
+                case .projects:
+                    await DoctorProgress.run(priority: .utility) {
+                        let found = DoctorProjects.find(projectFolders, home: env.home)
+                        return DoctorProjects.result(found.found, cancelled: found.cancelled, home: env.home)
+                    }
+                case .uninstall:
+                    if uninstallApp == nil { await self?.findUnused(home: env.home) } else { await self?.inspectUninstall(uninstallApp, home: env.home) }
+                case .performance: await self?.performance(env)
+                case .power: await Self.power()
+                case .network: await DoctorNetwork.check(dns: try? env.run(.dnsConfiguration), proxy: try? env.run(.proxySettings))
+                case .drives: await Self.drives(env)
+                case .background: await Self.background(env)
+                case .app: if let app { await Self.appCheck(app, env: env) } else { nil }
+                }
             }
             guard let self, !Task.isCancelled else { return }
+            if batchSections.contains(section) { batchFinishedScanned += work.snapshot().scanned }
+            progress[section] = nil
             if let result { stored[section] = result }
             running.remove(section)
             tasks[section] = nil
@@ -146,6 +195,8 @@ final class DoctorCenter {
         tasks[section]?.cancel()
         tasks[section] = nil
         running.remove(section)
+        if batchSections.contains(section) { batchFinishedScanned += progress[section]?.snapshot().scanned ?? 0 }
+        progress[section] = nil
         checkingAll.remove(section)
         post()
     }
@@ -154,6 +205,11 @@ final class DoctorCenter {
         for task in tasks.values { task.cancel() }
         tasks = [:]
         running = []
+        progress = [:]
+        batchProgress = nil
+        quitTask?.cancel(); quitTask = nil; quitProgress = nil
+        fileProgress = nil
+        speedProgress = nil
         checkingAll = []
         speedTask?.cancel()
         speedTask = nil
@@ -171,14 +227,18 @@ final class DoctorCenter {
     func searchLargeFiles() {
         guard Feature.doctor.isOn, !searchingFiles else { return }
         searchingFiles = true
+        let work = DoctorProgress("Looking through Downloads, Desktop and Documents…")
+        fileProgress = work
         if stored[.storage] == nil, !running.contains(.storage) { run(.storage) }
         post()
         let home = environment.home
         filesTask = Task { [weak self] in
-            let outcome = await DoctorLargeFiles.scanDetached(home: home)
+            let outcome = await DoctorProgress.$current.withValue(work) { await DoctorLargeFiles.scanDetached(home: home) }
             guard let self, !Task.isCancelled else { return }
             largeFiles = outcome
+            if batchIncludesFiles { batchFinishedScanned += work.snapshot().scanned }
             searchingFiles = false
+            fileProgress = nil
             filesTask = nil
             Feedback.done()
             post()
@@ -186,9 +246,11 @@ final class DoctorCenter {
     }
 
     func stopFileSearch() {
+        if batchIncludesFiles { batchFinishedScanned += fileProgress?.snapshot().scanned ?? 0 }
         filesTask?.cancel()
         filesTask = nil
         searchingFiles = false
+        fileProgress = nil
         post()
     }
 
@@ -201,7 +263,7 @@ final class DoctorCenter {
         guard Feature.doctor.isOn, stored[.performance] != nil, !running.contains(.performance) else { return false }
         let apps = DoctorApps.candidates()
         let previous = appSample
-        let measured = await Task.detached(priority: .utility) { DoctorApps.usage(apps, previous: previous) }.value
+        let measured = await DoctorProgress.run(priority: .utility) { DoctorApps.usage(apps, previous: previous) }
         appSample = measured.sample
         guard previous != nil, var result = stored[.performance], !running.contains(.performance) else { return false }
         result.rows = DoctorApps.rows(measured.usage) + result.rows.filter { $0.quit == nil && $0.id != "apps" }
@@ -214,9 +276,13 @@ final class DoctorCenter {
         guard Feature.doctor.isOn else { return ([], []) }
         let outcome = DoctorApps.quit(rows.compactMap(\.quit))
         if !outcome.asked.isEmpty {
-            Task { [weak self] in
+            quitTask?.cancel()
+            quitProgress = DoctorProgress("Waiting for apps to quit…")
+            post()
+            quitTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(3))
-                guard let self, Feature.doctor.isOn else { return }
+                guard let self, !Task.isCancelled, Feature.doctor.isOn else { return }
+                quitProgress = nil; quitTask = nil
                 run(.performance)
             }
         }
@@ -227,6 +293,7 @@ final class DoctorCenter {
     func testSpeed() {
         guard Feature.doctor.isOn, !testingSpeed else { return }
         testingSpeed = true
+        speedProgress = DoctorProgress("Testing connection speed…")
         post()
         let env = environment
         speedTask = Task { [weak self] in
@@ -234,6 +301,7 @@ final class DoctorCenter {
             guard let self, !Task.isCancelled else { return }
             speed = DoctorNetwork.SpeedOutcome(output)
             testingSpeed = false
+            speedProgress = nil
             speedTask = nil
             post()
         }
@@ -243,6 +311,7 @@ final class DoctorCenter {
         speedTask?.cancel()
         speedTask = nil
         testingSpeed = false
+        speedProgress = nil
         post()
     }
 
@@ -304,6 +373,7 @@ final class DoctorCenter {
     /// other checks. Each part shows up as soon as it is done.
     func findThingsToClean() {
         guard Feature.doctor.isOn else { return }
+        stopFileSearch()
         uninstallApp = nil
         uninstallInfo = nil
         stored[.uninstall] = nil
@@ -311,8 +381,11 @@ final class DoctorCenter {
         cleanUpMode = true
         duplicateFolders = Self.commonFolders.compactMap { DoctorLargeFiles.folder($0, home: environment.home) }
         projectFolders = [(try? DoctorTrash.realHome(environment.home)) ?? environment.home]
+        batchSections = [.uninstall, .caches, .background, .duplicates, .projects]
+        batchIncludesFiles = true; batchTitle = "Finding things to clean…"
+        batchProgress = DoctorProgress(batchTitle)
+        batchFinishedScanned = 0
         for section in [DoctorSection.uninstall, .caches, .background, .duplicates, .projects] { run(section) }
-        stopFileSearch()
         searchLargeFiles()
     }
 
@@ -347,7 +420,7 @@ final class DoctorCenter {
         guard cleanUpMode else { return nil }
         let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier?.lowercased() })
         let after = DoctorSweep.unusedAfter
-        let task = Task.detached(priority: .utility) { () -> DoctorSweep.Outcome in
+        let task = DoctorProgress.detached(priority: .utility) { () -> DoctorSweep.Outcome in
             let now = Date()
             let unused = DoctorSweep.unusedApps(home: home, now: now, after: after, running: running)
             let installed = Set(DoctorSweep.installedApps(home: home).compactMap { Bundle(url: $0)?.bundleIdentifier })
@@ -362,48 +435,50 @@ final class DoctorCenter {
     /// Moves what was selected on Clean Up Files: each app with the files named after its identifier, everything else
     /// by its own check's rule, as one step Undo can reverse.
     func cleanUp(_ rows: [DoctorRow]) async throws -> DoctorTrashReceipt {
-        guard Feature.doctor.isOn else { throw ToolError(L("This feature is turned off.")) }
-        let home = environment.home
-        var apps: [DoctorUninstall.App] = []
-        var refused: [String] = []
-        for row in rows where row.trash?.origin == .app {
-            guard let target = row.trash, let id = row.bundleIDs.first else { continue }
-            if !NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty {
-                refused.append(L("Quit %@ first", row.title))
-                continue
+        return try await withActivity("Preparing cleanup…", cleaning: true) {
+            guard Feature.doctor.isOn else { throw ToolError(L("This feature is turned off.")) }
+            let home = environment.home
+            var apps: [DoctorUninstall.App] = []
+            var refused: [String] = []
+            for row in rows where row.trash?.origin == .app {
+                guard let target = row.trash, let id = row.bundleIDs.first else { continue }
+                if !NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty {
+                    refused.append(L("Quit %@ first", row.title))
+                    continue
+                }
+                let url = URL(fileURLWithPath: target.path)
+                let app = await DoctorProgress.run(priority: .userInitiated) { DoctorUninstall.inspect(url, home: home) }
+                guard let app, app.identity == target.identity, app.bundleID == id, app.refusal == nil else {
+                    refused.append(L("%@ changed since the check, so it was left in place.", row.title))
+                    continue
+                }
+                apps.append(app)
             }
-            let url = URL(fileURLWithPath: target.path)
-            let app = await Task.detached(priority: .userInitiated) { DoctorUninstall.inspect(url, home: home) }.value
-            guard let app, app.identity == target.identity, app.bundleID == id, app.refusal == nil else {
-                refused.append(L("%@ changed since the check, so it was left in place.", row.title))
-                continue
+            // Only what is named exactly after each app's identifier goes with it; nothing when the identifier is shared.
+            let leftovers = apps.flatMap { app -> [DoctorRow] in
+                guard !app.sharedIdentifier else { return [] }
+                return app.leftovers.filter { !$0.byName }.enumerated().compactMap { index, item in
+                    let target = DoctorTrashTarget(path: item.path, mode: item.isFolder ? .folder : .item, identity: item.identity, origin: .leftover)
+                    guard DoctorTrash.isAllowed(target) else { return nil }
+                    return DoctorRow(id: "left.\(index)", title: DoctorText.visible(item.url.lastPathComponent), value: "", detail: "",
+                                     severity: .info, bytes: item.bytes, location: item.url, trash: target, group: "app:" + app.bundleID)
+                }
             }
-            apps.append(app)
+            let others = rows.filter { $0.trash != nil && $0.trash?.origin != .app }
+            var receipt = DoctorTrashReceipt()
+            if !apps.isEmpty || !others.isEmpty { receipt = try await move(others + leftovers, apps: apps) }
+            receipt.failures = refused + receipt.failures
+            let moved = Set(receipt.moved.map(\.original.path))
+            cleanUp?.apps.removeAll { moved.contains($0.app.url.path) }
+            cleanUp?.orphans.removeAll { moved.contains($0.url.path) }
+            post()
+            return receipt
         }
-        // Only what is named exactly after each app's identifier goes with it; nothing when the identifier is shared.
-        let leftovers = apps.flatMap { app -> [DoctorRow] in
-            guard !app.sharedIdentifier else { return [] }
-            return app.leftovers.filter { !$0.byName }.enumerated().compactMap { index, item in
-                let target = DoctorTrashTarget(path: item.path, mode: item.isFolder ? .folder : .item, identity: item.identity, origin: .leftover)
-                guard DoctorTrash.isAllowed(target) else { return nil }
-                return DoctorRow(id: "left.\(index)", title: DoctorText.visible(item.url.lastPathComponent), value: "", detail: "",
-                                 severity: .info, bytes: item.bytes, location: item.url, trash: target, group: "app:" + app.bundleID)
-            }
-        }
-        let others = rows.filter { $0.trash != nil && $0.trash?.origin != .app }
-        var receipt = DoctorTrashReceipt()
-        if !apps.isEmpty || !others.isEmpty { receipt = try await move(others + leftovers, apps: apps) }
-        receipt.failures = refused + receipt.failures
-        let moved = Set(receipt.moved.map(\.original.path))
-        cleanUp?.apps.removeAll { moved.contains($0.app.url.path) }
-        cleanUp?.orphans.removeAll { moved.contains($0.url.path) }
-        post()
-        return receipt
     }
 
     private func inspectUninstall(_ app: URL?, home: URL) async -> DoctorResult? {
         guard let app else { return nil }
-        let info = await Task.detached(priority: .userInitiated) { DoctorUninstall.inspect(app, home: home) }.value
+        let info = await DoctorProgress.run(priority: .userInitiated) { DoctorUninstall.inspect(app, home: home) }
         if !Task.isCancelled { uninstallInfo = info }
         return DoctorUninstall.result(info, home: home)
     }
@@ -420,34 +495,38 @@ final class DoctorCenter {
     /// Plans and moves the given rows to the Trash. Rows are re-checked here: only catalogue caches and your own
     /// leftover launch agents can be moved, and never while their app runs. Blocking file work runs off the main thread.
     func moveToTrash(_ rows: [DoctorRow]) async throws -> DoctorTrashReceipt {
-        try await move(rows, apps: [])
+        return try await withActivity("Preparing cleanup…", cleaning: true) {
+            try await move(rows, apps: [])
+        }
     }
 
     /// Moves the inspected app and the chosen leftover rows to the Trash, as one step Undo can reverse.
     func uninstall(_ rows: [DoctorRow]) async throws -> DoctorTrashReceipt {
-        guard let app = uninstallApp, let inspected = uninstallInfo, inspected.url == app, inspected.refusal == nil else {
-            throw ToolError(L("Choose the app again."))
-        }
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: inspected.bundleID)
-        guard running.isEmpty else { throw ToolError(L("Quit %@ first", inspected.name)) }
-        // A leftover named after a longer identifier may belong to another app that is running (Chrome Canary).
-        let busy = NSWorkspace.shared.runningApplications.filter { app in
-            guard let id = app.bundleIdentifier?.lowercased() else { return false }
-            return rows.contains { row in
-                let name = (row.location?.lastPathComponent.lowercased() ?? "")
-                return name == id || name.hasPrefix(id + ".")
+        return try await withActivity("Preparing cleanup…", cleaning: true) {
+            guard let app = uninstallApp, let inspected = uninstallInfo, inspected.url == app, inspected.refusal == nil else {
+                throw ToolError(L("Choose the app again."))
             }
+            let running = NSRunningApplication.runningApplications(withBundleIdentifier: inspected.bundleID)
+            guard running.isEmpty else { throw ToolError(L("Quit %@ first", inspected.name)) }
+            // A leftover named after a longer identifier may belong to another app that is running (Chrome Canary).
+            let busy = NSWorkspace.shared.runningApplications.filter { app in
+                guard let id = app.bundleIdentifier?.lowercased() else { return false }
+                return rows.contains { row in
+                    let name = (row.location?.lastPathComponent.lowercased() ?? "")
+                    return name == id || name.hasPrefix(id + ".")
+                }
+            }
+            guard busy.isEmpty else { throw ToolError(L("Quit %@ first", busy.compactMap(\.localizedName).joined(separator: ", "))) }
+            let leftovers = rows.filter { $0.trash?.origin == .leftover }.map { row in var row = row; row.group = "app:" + inspected.bundleID; return row }
+            let receipt = try await move(leftovers, apps: [inspected])
+            if receipt.moved.contains(where: { $0.original == app }) {
+                uninstallApp = nil
+                uninstallInfo = nil
+                stored[.uninstall] = nil
+            }
+            post()
+            return receipt
         }
-        guard busy.isEmpty else { throw ToolError(L("Quit %@ first", busy.compactMap(\.localizedName).joined(separator: ", "))) }
-        let leftovers = rows.filter { $0.trash?.origin == .leftover }.map { row in var row = row; row.group = "app:" + inspected.bundleID; return row }
-        let receipt = try await move(leftovers, apps: [inspected])
-        if receipt.moved.contains(where: { $0.original == app }) {
-            uninstallApp = nil
-            uninstallInfo = nil
-            stored[.uninstall] = nil
-        }
-        post()
-        return receipt
     }
 
     /// Plans and moves rows to the Trash. Rows are re-checked here, each by the rule of the check that offered it:
@@ -468,7 +547,8 @@ final class DoctorCenter {
         }
         guard !jobs.isEmpty || !apps.isEmpty else { throw ToolError(L("Mac Doctor can’t move these items.")) }
         let running = Set(NSWorkspace.shared.runningApplications.compactMap { $0.bundleIdentifier?.lowercased() })
-        let receipt = try await Images.detached { () -> DoctorTrashReceipt in DoctorWalk.withoutDownloads {
+        let work = DoctorProgress.current
+        let receipt = try await Images.detached { DoctorProgress.$current.withValue(work) { () -> DoctorTrashReceipt in DoctorWalk.withoutDownloads {
             var total = DoctorTrashReceipt()
             // Each kept copy is read once per move, however many of its copies go; nil when it can't be read.
             var keptDigests: [URL: String?] = [:]
@@ -479,7 +559,10 @@ final class DoctorCenter {
                 return value
             }
             var kept: Set<String> = []
-            for app in apps {
+            let count = apps.count + jobs.count
+            DoctorProgress.current?.stage("Moving to Trash…", total: count)
+            for (index, app) in apps.enumerated() {
+                DoctorProgress.current?.stage("Moving to Trash…", completed: index, total: count)
                 do {
                     total.moved.append(try DoctorUninstall.trashApp(app.url, identity: app.identity, bundleID: app.bundleID, move: env.trash))
                 } catch {
@@ -488,7 +571,9 @@ final class DoctorCenter {
                     kept.insert("app:" + app.bundleID)
                 }
             }
-            for (target, name, keeper, group) in jobs {
+            for (index, job) in jobs.enumerated() {
+                let (target, name, keeper, group) = job
+                DoctorProgress.current?.stage("Moving to Trash…", completed: apps.count + index, total: count)
                 if let group, kept.contains(group) { continue }
                 do {
                     switch target.origin {
@@ -536,7 +621,7 @@ final class DoctorCenter {
                 }
             }
             return total
-        } }
+        } } }
         if !receipt.moved.isEmpty { receipts.append(receipt) }
         let moved = Set(receipt.moved.map(\.original.path))
         largeFiles?.files.removeAll { moved.contains($0.url.path) }
@@ -585,13 +670,16 @@ final class DoctorCenter {
 
     /// Puts the newest move back. Items whose place was taken again stay in the Trash.
     func undoLastMove() async -> (restored: Int, left: [URL]) {
-        guard let receipt = receipts.popLast() else { return (0, []) }
-        let outcome = await (try? Images.detached { DoctorTrash.undo(receipt) }) ?? (0, receipt.moved.map(\.trashed))
-        // Quick checks run again; the duplicate and project searches wait for Check Again (they can take minutes).
-        for section in [DoctorSection.caches, .background] where results[section] != nil { run(section) }
-        if largeFiles != nil { searchLargeFiles() }
-        post()
-        return outcome
+        return await withActivity("Restoring items…", cleaning: false) {
+            guard let receipt = receipts.popLast() else { return (0, []) }
+            let work = DoctorProgress.current
+            let outcome = await (try? Images.detached { DoctorProgress.$current.withValue(work) { DoctorTrash.undo(receipt) } }) ?? (0, receipt.moved.map(\.trashed))
+            // Quick checks run again; the duplicate and project searches wait for Check Again (they can take minutes).
+            for section in [DoctorSection.caches, .background] where results[section] != nil { run(section) }
+            if largeFiles != nil { searchLargeFiles() }
+            post()
+            return outcome
+        }
     }
 
     /// The section a movable row belongs to, to check it again after a move.
@@ -619,16 +707,18 @@ final class DoctorCenter {
 
     /// Ejects the drive holding a volume, as Finder does (never forced). Returns nil when it worked, otherwise why not.
     func eject(_ volume: URL) async -> String? {
-        guard Feature.doctor.isOn, let volume = DoctorCommand.validatedVolume(volume),
-              DoctorDrives.volumes().contains(where: { $0.mountPoint == volume.path && $0.local }) else {
-            return L("Mac Doctor can’t eject this drive.")
+        return await withActivity("Ejecting drive…", cleaning: false) {
+            guard Feature.doctor.isOn, let volume = DoctorCommand.validatedVolume(volume),
+                  DoctorDrives.volumes().contains(where: { $0.mountPoint == volume.path && $0.local }) else {
+                return L("Mac Doctor can’t eject this drive.")
+            }
+            let output = try? await environment.run(.eject(volume))
+            run(.drives)
+            guard let output else { return L("The drive couldn’t be ejected.") }
+            if output.status == 0 { return nil }
+            if let holder = DoctorParse.dissenter(output) { return DoctorDrives.holder(holder.name) }
+            return L("The drive couldn’t be ejected. Quit apps that use files on it and try again.")
         }
-        let output = try? await environment.run(.eject(volume))
-        run(.drives)
-        guard let output else { return L("The drive couldn’t be ejected.") }
-        if output.status == 0 { return nil }
-        if let holder = DoctorParse.dissenter(output) { return DoctorDrives.holder(holder.name) }
-        return L("The drive couldn’t be ejected. Quit apps that use files on it and try again.")
     }
 
     // MARK: Checks that need several steps
@@ -642,9 +732,9 @@ final class DoctorCenter {
         result.ran = [DoctorCommand.processCPU.displayString, DoctorCommand.processMemory.displayString]
         let apps = DoctorApps.candidates()
         // Two readings a second apart, so processor use is known straight away.
-        let first = await Task.detached(priority: .utility) { DoctorApps.usage(apps, previous: nil).sample }.value
+        let first = await DoctorProgress.run(priority: .utility) { DoctorApps.usage(apps, previous: nil).sample }
         try? await Task.sleep(for: .seconds(1))
-        let measured = await Task.detached(priority: .utility) { DoctorApps.usage(apps, previous: first) }.value
+        let measured = await DoctorProgress.run(priority: .utility) { DoctorApps.usage(apps, previous: first) }
         let usage = measured.usage
         appSample = measured.sample
         if !usage.isEmpty {
@@ -664,9 +754,9 @@ final class DoctorCenter {
     }
 
     private static func power() async -> DoctorResult {
-        let (assertions, battery) = await Task.detached(priority: .utility) {
+        let (assertions, battery) = await DoctorProgress.run(priority: .utility) {
             (DoctorPower.assertions(), DoctorBattery.health())
-        }.value
+        }
         return DoctorPower.check(assertions, battery: battery)
     }
 
@@ -713,7 +803,7 @@ final class DoctorCenter {
     }
 
     private static func background(_ env: DoctorEnvironment) async -> DoctorResult {
-        let items = await Task.detached(priority: .utility) { DoctorBackground.items(home: env.home) }.value
+        let items = await DoctorProgress.run(priority: .utility) { DoctorBackground.items(home: env.home) }
         let jobs = (try? await env.run(.launchdUserJobs)).flatMap { $0.status == 0 ? DoctorParse.launchdJobs($0.text) : nil }
         var systemLoaded = Set<String>()
         for item in items where item.place == .daemons && item.kind == .regular && DoctorCommand.isSafeLabel(item.label) {
@@ -728,7 +818,7 @@ final class DoctorCenter {
     }
 
     private static func appCheck(_ app: URL, env: DoctorEnvironment) async -> DoctorResult {
-        var findings = await Task.detached(priority: .userInitiated) { DoctorApp.inspect(app, home: env.home) }.value
+        var findings = await DoctorProgress.run(priority: .userInitiated) { DoctorApp.inspect(app, home: env.home) }
         var ran: [String] = []
         // An incomplete bundle is never handed to codesign or spctl: they would follow whatever it points at.
         if !findings.iOSApp, findings.bundleComplete, !Task.isCancelled {

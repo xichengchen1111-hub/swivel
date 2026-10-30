@@ -96,7 +96,10 @@ enum DoctorSweep {
                            apps: [URL]? = nil, dates: (URL) -> (opened: Date?, added: Date?) = dates) -> (apps: [UnusedApp], noRecords: Bool) {
         var found: [UnusedApp] = []
         var anyRecord = false
-        for url in apps ?? installedApps(home: home) {
+        let candidates = apps ?? installedApps(home: home)
+        DoctorProgress.current?.stage("Checking unused apps…", total: candidates.count)
+        for (index, url) in candidates.enumerated() {
+            DoctorProgress.current?.stage("Checking unused apps…", completed: index, total: candidates.count)
             if Task.isCancelled { break }
             guard let bundle = Bundle(url: url), let id = bundle.bundleIdentifier,
                   DoctorUninstall.refusal(bundleID: id, url: url) == nil, !running.contains(id) else { continue }
@@ -151,6 +154,7 @@ enum DoctorSweep {
         let realHome = (try? DoctorTrash.realHome(home)) ?? home
         let vendors = Set(installed.map { $0.lowercased().split(separator: ".").prefix(2).joined(separator: ".") })
         var found: [Orphan] = []
+        DoctorProgress.current?.stage("Checking app leftovers…")
         for place in orphanPlaces {
             let folder = realHome.appendingPathComponent(place.path, isDirectory: true)
             guard !DoctorPrivacy.isProtected(folder, home: realHome),

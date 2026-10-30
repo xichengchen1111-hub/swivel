@@ -47,7 +47,8 @@ enum DoctorLargeFiles {
         let previous = getiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD)
         setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, IOPOL_MATERIALIZE_DATALESS_FILES_OFF)
         defer { if previous >= 0 { setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES, IOPOL_SCOPE_THREAD, previous) } }
-        var items = 0
+        var items = 0, scanned = 0
+        defer { DoctorProgress.current?.scanned(scanned % 256) }
         for name in roots {
             guard let root = folder(name, home: home), let path = strdup(root.path) else {
                 outcome.unreadable.append(name)
@@ -62,6 +63,10 @@ enum DoctorLargeFiles {
             defer { fts_close(fts) }
             while let entry = fts_read(fts) {
                 items += 1
+                if Int32(entry.pointee.fts_info) != FTS_DP {
+                    scanned += 1
+                    if scanned % 256 == 0 { DoctorProgress.current?.scanned(256) }
+                }
                 if items % 4096 == 0, Task.isCancelled || items >= maxItems { outcome.cancelled = true; break }
                 let info = Int32(entry.pointee.fts_info)
                 if info == FTS_DNR, entry.pointee.fts_level == 0 { outcome.unreadable.append(name); continue }
@@ -104,7 +109,7 @@ enum DoctorLargeFiles {
 
     /// Runs the scan off the main thread; cancelling the calling task stops it.
     static func scanDetached(home: URL) async -> Outcome {
-        let task = Task.detached(priority: .utility) { scan(home: home) }
+        let task = DoctorProgress.detached(priority: .utility) { scan(home: home) }
         return await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
     }
 

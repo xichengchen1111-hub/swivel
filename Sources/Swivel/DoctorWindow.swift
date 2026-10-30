@@ -28,6 +28,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     private let detail = NSStackView()
     private let status = ToolUI.note("")
     private let spinner = NSProgressIndicator()
+    private let workProgress = DoctorProgressView()
     private var checkAllButton: NSButton!
     private var askButton: NSButton!
     private var selected: DoctorSection = .summary
@@ -153,9 +154,13 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         sidebar.setContentHuggingPriority(.required, for: .horizontal)
         detailScroll.setContentHuggingPriority(.defaultLow, for: .horizontal)
         detailScroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let root = ToolUI.stack([top, split, status], spacing: 12)
+        workProgress.activity = { [weak self] in
+            guard let self else { return nil }
+            return self.center.activity(for: self.selected)
+        }
+        let root = ToolUI.stack([top, split, workProgress, status], spacing: 12)
         install(root)
-        for view in [top, split, status] { view.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true }
+        for view in [top, split, workProgress, status] { view.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true }
         sidebar.heightAnchor.constraint(equalTo: split.heightAnchor).isActive = true
         detailScroll.heightAnchor.constraint(equalTo: split.heightAnchor).isActive = true
 
@@ -186,9 +191,11 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
     override func windowDidBecomeKey(_ notification: Notification) {
         super.windowDidBecomeKey(notification)
         updateLive()
+        workProgress.refresh()
     }
 
     override func windowWillClose(_ notification: Notification) {
+        workProgress.stop()
         sheet?.close()
         liveTask?.cancel()
         liveTask = nil
@@ -218,6 +225,7 @@ final class DoctorWindow: FileToolWindow, NSTableViewDataSource, NSTableViewDele
         // Results are written in the language they were checked in; reopen to see the new language.
         if Language.resolved != language { if !isBusy { window.close() }; return }
         center.isBusy ? spinner.startAnimation(nil) : spinner.stopAnimation(nil)
+        workProgress.refresh()
         checkAllButton.isEnabled = !isBusy && !center.running.contains(where: \.runsWithAll)
         askButton.isEnabled = !isBusy && !center.results.isEmpty
         askButton.toolTip = center.results.isEmpty ? L("Run a check first; then the assistant can explain the results.") : nil
@@ -1612,7 +1620,8 @@ final class DoctorAssistantSheet: NSObject {
     private let note = ToolUI.note("")
     private let warning = NSTextField(wrappingLabelWithString: "")
     private let includeNames = NSButton(checkboxWithTitle: "", target: nil, action: nil)
-    private let spinner = NSProgressIndicator()
+    private let workProgress = DoctorProgressView()
+    private var requestProgress: DoctorProgress?
     private var sendButton: NSButton!
     private var cancelButton: NSButton!
     private var task: Task<Void, Never>?
@@ -1650,19 +1659,20 @@ final class DoctorAssistantSheet: NSObject {
         scroll.documentView = text
         scroll.hasVerticalScroller = true
         scroll.borderType = .bezelBorder
-        scroll.heightAnchor.constraint(equalToConstant: 330).isActive = true
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.isDisplayedWhenStopped = false
+        let preferredHeight = scroll.heightAnchor.constraint(equalToConstant: 330)
+        preferredHeight.priority = .defaultLow
+        preferredHeight.isActive = true
+        scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
+        workProgress.activity = { [weak self] in self?.requestProgress }
         cancelButton = ToolUI.button("Cancel", target: self, action: #selector(close))
         cancelButton.keyEquivalent = "\u{1b}"
         sendButton = ToolUI.button("Send", target: self, action: #selector(send))
-        let buttons = ToolUI.stack([spinner, NSView(), cancelButton, sendButton], vertical: false, spacing: 8)
-        let root = ToolUI.stack([heading, note, includeNames, warning, scroll, buttons], spacing: 12)
+        let buttons = ToolUI.stack([NSView(), cancelButton, sendButton], vertical: false, spacing: 8)
+        let root = ToolUI.stack([heading, note, includeNames, warning, scroll, workProgress, buttons], spacing: 12)
         let content = NSView()
         panel.contentView = content
         ToolUI.embed(root, in: content)
-        for view in [heading, note, warning, scroll, buttons] { view.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true }
+        for view in [heading, note, warning, scroll, workProgress, buttons] { view.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true }
     }
 
     func begin(on window: NSWindow) {
@@ -1683,7 +1693,8 @@ final class DoctorAssistantSheet: NSObject {
         guard Feature.doctor.isOn, Assistant.isConfigured, DoctorSettings.allowAssistant else { return close() }
         sendButton.isEnabled = false
         includeNames.isEnabled = false
-        spinner.startAnimation(nil)
+        requestProgress = DoctorProgress("Waiting for the assistant…")
+        workProgress.refresh()
         heading.stringValue = L("Asking the assistant…")
         let sent = report  // exactly what is on screen
         task = Task { [weak self] in
@@ -1700,7 +1711,8 @@ final class DoctorAssistantSheet: NSObject {
     }
 
     private func show(_ answer: String, heading title: String, risky: Bool) {
-        spinner.stopAnimation(nil)
+        requestProgress = nil
+        workProgress.refresh()
         heading.stringValue = title
         let settings = Prefs.assistant
         note.stringValue = L("Written by %@ at %@. AI explanations can be wrong; Swivel never runs anything from them, and Mac Doctor does nothing until you choose a fix yourself.",
@@ -1716,6 +1728,8 @@ final class DoctorAssistantSheet: NSObject {
     }
 
     @objc func close() {
+        requestProgress = nil
+        workProgress.stop()
         task?.cancel()
         task = nil
         if let observer { NotificationCenter.default.removeObserver(observer) }

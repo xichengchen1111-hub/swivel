@@ -444,6 +444,109 @@ struct DoctorTests {
         }
     }
 
+    @Test func progressClearsAfterCompletionCancellationAndCleanup() async throws {
+        try await withDoctorAsync(true) {
+            let center = DoctorCenter.shared
+            let saved = center.environment
+            var root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            root = try DoctorTrash.realHome(root)
+            defer { center.cancelAll(); center.removeFolders(); center.environment = saved; try? FileManager.default.removeItem(at: root) }
+            center.environment.home = root
+            let cache = root.appendingPathComponent("Library/Caches/Homebrew")
+            try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+            try Data("fixture".utf8).write(to: cache.appendingPathComponent("cache.bin"))
+            center.addFolder(cache)
+            #expect(center.activity(for: .folders) != nil)
+            center.cancel(.folders)
+            #expect(center.activity(for: .folders) == nil)
+            center.run(.folders)
+            let until = ProcessInfo.processInfo.systemUptime + 3
+            while center.running.contains(.folders), ProcessInfo.processInfo.systemUptime < until {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            #expect(center.activity(for: .folders) == nil)
+            center.environment.trash = { source in
+                #expect(DoctorProgress.current?.cleaning == true)
+                let destination = root.appendingPathComponent("trashed-fixture")
+                try FileManager.default.moveItem(at: source, to: destination)
+                return destination
+            }
+            let row = DoctorRow(id: "cache.fixture", title: "Homebrew Cache", value: "", detail: "", severity: .info,
+                                trash: DoctorTrashTarget(path: "~/Library/Caches/Homebrew", mode: .contents))
+            let receipt = try await center.moveToTrash([row])
+            #expect(receipt.movedItems == 1 && receipt.failures.isEmpty)
+            center.cancelAll()
+            #expect(center.activity(for: .caches) == nil)
+            let restored = await center.undoLastMove()
+            #expect(restored.restored == 1 && restored.left.isEmpty)
+            center.cancelAll()
+            #expect(center.activity(for: .caches) == nil)
+            #expect(try Data(contentsOf: cache.appendingPathComponent("cache.bin")) == Data("fixture".utf8))
+        }
+    }
+
+    @Test func progressPanelsFitAndStopInEveryLanguage() throws {
+        try withDoctor(true) {
+            _ = NSApplication.shared
+            let savedLanguage = UserDefaults.standard.object(forKey: "language")
+            defer {
+                if let savedLanguage { UserDefaults.standard.set(savedLanguage, forKey: "language") }
+                else { UserDefaults.standard.removeObject(forKey: "language") }
+            }
+            for language in [Language.en, .zhHans, .zhHant, .ja] {
+                UserDefaults.standard.set(language.rawValue, forKey: "language")
+                let work = DoctorProgress("Moving cache contents…", cleaning: true,
+                                          now: ProcessInfo.processInfo.systemUptime - 10)
+                work.stage("Moving cache contents…", total: 100, now: ProcessInfo.processInfo.systemUptime - 10)
+                work.stage("Moving cache contents…", completed: 25, total: 100)
+                work.scanned(12480)
+                let panel = DoctorProgressView()
+                var active: DoctorProgress? = work
+                panel.activity = { active }
+                let host = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 100),
+                                    styleMask: [.titled], backing: .buffered, defer: false)
+                host.isReleasedWhenClosed = false
+                let content = DoctorProgressTestBackground(); host.contentView = content
+                ToolUI.embed(panel, in: content)
+                host.orderFront(nil)
+                panel.refresh(); content.layoutSubtreeIfNeeded()
+                #expect(!panel.isHidden && panel.fittingSize.width <= 820)
+                #expect(panel.fittingSize.height <= 100)
+                if let path = ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_RENDERS"] {
+                    try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+                    try render(content, to: URL(fileURLWithPath: path).appendingPathComponent("progress-\(language.rawValue).png"))
+                }
+                active = nil; panel.refresh()
+                #expect(panel.isHidden)
+                panel.stop(); host.close()
+                let owner = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 680),
+                                     styleMask: [.titled], backing: .buffered, defer: false)
+                owner.isReleasedWhenClosed = false
+                owner.orderFront(nil)
+                let sheet = DoctorAssistantSheet(center: .shared)
+                sheet.begin(on: owner)
+                if let content = owner.attachedSheet?.contentView {
+                    let background = DoctorProgressTestBackground(frame: content.bounds)
+                    background.autoresizingMask = [.width, .height]
+                    content.addSubview(background, positioned: .below, relativeTo: nil)
+                    func findProgress(_ view: NSView) -> DoctorProgressView? {
+                        if let progress = view as? DoctorProgressView { return progress }
+                        return view.subviews.compactMap { findProgress($0) }.first
+                    }
+                    let progress = try #require(findProgress(content))
+                    progress.activity = { work }; progress.refresh()
+                    content.layoutSubtreeIfNeeded()
+                    #expect(content.fittingSize.height <= content.bounds.height + 1)
+                    if let path = ProcessInfo.processInfo.environment["SWIVEL_DOCTOR_RENDERS"] {
+                        try render(content, to: URL(fileURLWithPath: path).appendingPathComponent("assistant-progress-\(language.rawValue).png"))
+                    }
+                } else { Issue.record("The native assistant sheet did not attach") }
+                sheet.close(); owner.close()
+            }
+        }
+    }
+
     private func render(_ view: NSView, to url: URL) throws {
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             view.appearance = NSAppearance(named: appearance)
@@ -544,5 +647,13 @@ private extension URL {
     func creatingDirectory() throws -> URL {
         try FileManager.default.createDirectory(at: self, withIntermediateDirectories: true)
         return self
+    }
+}
+
+@MainActor
+private final class DoctorProgressTestBackground: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.windowBackgroundColor.setFill()
+        dirtyRect.fill()
     }
 }

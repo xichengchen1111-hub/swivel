@@ -27,9 +27,14 @@ enum DoctorWalk {
         var paths: [UnsafeMutablePointer<CChar>?] = [path, nil]
         guard let fts = fts_open(&paths, FTS_PHYSICAL | FTS_XDEV | FTS_NOCHDIR, nil) else { return false }
         defer { fts_close(fts) }
-        var count = 0
+        var count = 0, scanned = 0
+        defer { DoctorProgress.current?.scanned(scanned % 256) }
         while let entry = fts_read(fts) {
             count += 1
+            if Int32(entry.pointee.fts_info) != FTS_DP {
+                scanned += 1
+                if scanned % 256 == 0 { DoctorProgress.current?.scanned(256) }
+            }
             if count % 4096 == 0, Task.isCancelled || count >= limit { return false }
             let info = Int32(entry.pointee.fts_info)
             let current = String(cString: entry.pointee.fts_path)
@@ -206,6 +211,7 @@ enum DoctorDuplicates {
                 }
                 if !finished { outcome.cancelled = true; return outcome }
             }
+            DoctorProgress.current?.stage("Comparing file contents…")
             for (_, copies) in bySize where copies.count > 1 {
                 if Task.isCancelled { outcome.cancelled = true; break }
                 var byEnds: [Data: [Copy]] = [:]
@@ -264,12 +270,18 @@ enum DoctorDuplicates {
     static func digest(_ url: URL) -> String? {
         guard let handle = open(url) else { return nil }
         var hasher = SHA256()
+        var info = stat()
+        let total = fstat(handle.fileDescriptor, &info) == 0 ? Int(clamping: info.st_size) : 0
+        var read = 0
+        DoctorProgress.current?.stage("Verifying file contents…", total: total, bytes: true)
         while true {
             if Task.isCancelled { return nil }
             let data: Data?
             do { data = try handle.read(upToCount: 1 << 20) } catch { return nil }
             guard let data, !data.isEmpty else { break }  // nil or empty: the end of the file
             hasher.update(data: data)
+            read += data.count
+            DoctorProgress.current?.stage("Verifying file contents…", completed: read, total: total, bytes: true)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
@@ -445,7 +457,9 @@ enum DoctorProjects {
                 if !finished { cancelled = true; break }
             }
         }
+        DoctorProgress.current?.stage("Measuring build folders…", total: found.count)
         for index in found.indices {
+            DoctorProgress.current?.stage("Measuring build folders…", completed: index, total: found.count)
             if Task.isCancelled { cancelled = true; break }
             found[index].bytes = DoctorStorage.size(of: found[index].url, home: home).bytes
         }
@@ -713,7 +727,9 @@ enum DoctorSimilar {
     static func groups(_ candidates: [DoctorDuplicates.Copy]) -> [Group] {
         var photos: [(DoctorDuplicates.Copy, UInt64)] = []
         var texts: [(DoctorDuplicates.Copy, Set<Int>, String)] = []
-        for copy in candidates {
+        DoctorProgress.current?.stage("Comparing similar files…", total: candidates.count)
+        for (index, copy) in candidates.enumerated() {
+            DoctorProgress.current?.stage("Comparing similar files…", completed: index, total: candidates.count)
             if Task.isCancelled { return [] }
             switch kind(of: copy.url.path, size: copy.bytes) ?? (photoExtensions.contains(copy.url.pathExtension.lowercased()) ? .photo : .text) {
             case .photo:
@@ -724,6 +740,7 @@ enum DoctorSimilar {
                 }
             }
         }
+        DoctorProgress.current?.stage("Grouping similar files…")
         var out: [Group] = []
         // Photos: compare every pair of hashes; 20 000 photos is 200 million cheap bit counts at most.
         out += cluster(photos.count, kind: .photo, copy: { photos[$0].0 }) { a, b in
