@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.137 合并第十二轮：B09 文件夹 emoji 与纹理（Codex 编写）、F09 电池与睡眠记录
+
+分支 `codex/win-b09-folderstyle`（21bbf32 及之前的提交，Codex 编写，Claude 按审查修正）、`claude/win-f09-battery-cfa2b0`（d0ba1d8）。Strings.json 三方 JSON 合并无同键冲突。同轮 `claude/win-f09-appcheck-7e4e3b` 未合并：其 CI 反复出现原生测试进程在 PASS 之后以 `c000000d` 退出，原因未查清；合并时必须压缩（含 7 个临时诊断提交）。
+
+- B09：emoji 标记解析 Segoe UI Emoji 的 COLR/CPAL 分层绘制，8 种纹理在 `FolderSurfaces.cs`，写入后依次发送 SHCNE_UPDATEDIR、SHCNE_UPDATEITEM。字体解析异常时拒绝而不是崩溃。审查无 P1/P2；只有 COLRv1 的字形和 ZWJ 组合未在真实 Windows 验证。
+- F09：`doctor.battery` 读电池类驱动的 BATTERY_INFORMATION/BATTERY_STATUS，未知哨兵值保持未知；`doctor.sleephistory` 查询 System 事件日志 7 天、最多 200 条、10 秒上限，唤醒来源取 Windows 记录的文字。不运行 powercfg 或任何管理员命令。真实电池和真实睡眠记录未验证。
+- 两个新动作 ID 使旧版可能拒绝含有它们的 My Wheel 设置（整份偏好回到默认、之后保存会覆盖），降级前保留备份。
+
 ## 0.136 合并第十一轮：C11 视频放大、E03 导出 PDF、F06 更多缓存（F06 由 Codex 编写）
 
 分支 `claude/win-c11-videoupscale-81ab63`（e59536b、bbb4dfe、305d390）、`claude/win-e03-pdf-302c7c`（1f256a9、4f7c156、8a67f09）、`codex/win-f06-caches`（a5a7059 由 Codex 编写）。Strings.json 三方 JSON 合并无同键冲突。

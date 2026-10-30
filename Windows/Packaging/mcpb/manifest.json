@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "swivel-windows",
   "display_name": "Swivel for Windows (preview)",
-  "version": "0.136.0",
+  "version": "0.137.0",
   "description": "Convert, compress, rename, move and inspect files on your PC with Swivel's local tools.",
   "long_description": "Starts the Swivel installed on this PC with --mcp: the MSIX package's command, or the Swivel.exe from the portable ZIP chosen in this extension's settings. The extension contains only that launcher, which Claude Desktop's built-in Node.js runs. Turn on Agent Tools (MCP) in Swivel's settings first. Everything runs locally and only touches the absolute paths the assistant passes. Anything that writes is planned first and applied on request; new files go next to the originals and never overwrite anything, and every applied change can be undone (created files go to the Recycle Bin, renames and moves are put back). Swivel listens on no network port.",
   "author": { "name": "Swivel" },
