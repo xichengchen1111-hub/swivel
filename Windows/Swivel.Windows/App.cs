@@ -571,6 +571,18 @@ public sealed partial class App : Application
                 ShowOperationDialog(new MountedDriveDialog(this,snapshot),owner,token);
                 report(token.IsCancellationRequested?L("Cancelled."):L("Drive inspection closed. No drive was changed or ejected."));return;
             }
+            if(action.Id=="doctor.appcheck")
+            {
+                if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
+                workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();
+                // The system picker follows a chosen shortcut to its target itself; nothing is run or loaded.
+                var picker=new Microsoft.Win32.OpenFileDialog{Title=L("Choose a Program, Installer or DLL to Check…"),Filter=L(AppCheck.Extensions),CheckFileExists=true,Multiselect=false,DereferenceLinks=true};
+                if(picker.ShowDialog(owner)!=true)return;token.ThrowIfCancellationRequested();string path=picker.FileName;
+                report(L("Checking signature, download warning and DLLs…"));using var file=await AwaitDoctorReadAsync(Task.Run(()=>AppCheckFile.Open(path,token),token),token);
+                token.ThrowIfCancellationRequested();var dialog=new AppCheckDialog(this,file);
+                try{ShowOperationDialog(dialog,owner,token);}finally{await dialog.FinishAsync();}
+                report(token.IsCancellationRequested?L("Cancelled."):dialog.Removed?L("App check closed. The download warning was removed; nothing was run."):L("App check closed. No file was run or changed."));return;
+            }
             if(action.Id=="doctor.executable")
             {
                 if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");

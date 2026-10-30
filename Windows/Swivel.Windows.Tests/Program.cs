@@ -153,6 +153,7 @@ internal static class Program
             Group("DoctorControlChecks", () => DoctorControlChecks.Run(Check, Reject));
             Group("MarkHistoryChecks", () => MarkHistoryChecks.Run(Check));
             Group("ExecutableStructureChecks", () => ExecutableStructureChecks.Run(directory,Check,Reject));
+            Group("AppCheckNativeChecks", () => AppCheckNativeChecks.Run(directory,Check,Reject));
             Group("WindowsDoctorPageChecks", () => WindowsDoctorPageChecks.Run(Check));
             Group("MountedDriveNativeChecks", () => MountedDriveNativeChecks.Run(Check,Reject));
             Group("PowerPlanNativeChecks", () => PowerPlanNativeChecks.Run(Check,Reject));

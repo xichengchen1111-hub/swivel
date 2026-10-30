@@ -292,6 +292,7 @@ public static class Catalog
         ,new("doctor.appmemory", "Inspect App Memory…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.startup", "Inspect Logon Startup Records…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.executable", "Inspect EXE Structure…", Core.Feature.Doctor, RequiresFiles: false)
+        ,new("doctor.appcheck", "Check Why an App Won't Open…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.installedapps", "Inspect Desktop Installation Records…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.monitor", "Monitor CPU and Memory…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.cleanup", "Clean Up Files…", Core.Feature.Doctor, RequiresFiles: false)

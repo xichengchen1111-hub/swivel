@@ -17238,5 +17238,475 @@
     "Opera GX 本地缓存",
     "Opera GX 本機快取",
     "Opera GX ローカルキャッシュ"
+  ],
+  "Check Why an App Won't Open…": [
+    "检查应用为何打不开…",
+    "檢查 App 為何打不開…",
+    "アプリが開かない理由を確認…"
+  ],
+  "Why an App Won't Open": [
+    "应用为何打不开",
+    "App 為何打不開",
+    "アプリが開かない理由"
+  ],
+  "Choose a Program, Installer or DLL to Check…": [
+    "选择要检查的程序、安装程序或 DLL…",
+    "選擇要檢查的程式、安裝程式或 DLL…",
+    "確認するプログラム、インストーラー、DLL を選択…"
+  ],
+  "Checking signature, download warning and DLLs…": [
+    "正在检查签名、下载警告和 DLL…",
+    "正在檢查簽章、下載警告與 DLL…",
+    "署名、ダウンロード警告、DLL を確認しています…"
+  ],
+  "App check closed. No file was run or changed.": [
+    "应用检查已关闭。没有运行或更改任何文件。",
+    "App 檢查已關閉。沒有執行或變更任何檔案。",
+    "アプリの確認を閉じました。ファイルは実行も変更もされていません。"
+  ],
+  "App check closed. The download warning was removed; nothing was run.": [
+    "应用检查已关闭。已移除下载警告；没有运行任何程序。",
+    "App 檢查已關閉。已移除下載警告；沒有執行任何程式。",
+    "アプリの確認を閉じました。ダウンロード警告を削除しました。何も実行していません。"
+  ],
+  "Choose a program, installer or DLL to check why it will not open: Windows signature verification (online revocation only from its own button), the download warning and what SmartScreen means, processor type against this PC, and imported DLLs missing from the app and Windows folders. Nothing is run or loaded. Only a validly signed file from a trusted publisher can have its download warning removed, after a confirmation; Swivel never bypasses SmartScreen, Defender or Smart App Control. Or inspect bounded EXE header declarations.": [
+    "选择程序、安装程序或 DLL，检查它为何打不开：Windows 签名验证（联网吊销检查只在其专用按钮中进行）、下载警告及 SmartScreen 的含义、与本机处理器的匹配，以及在应用文件夹和 Windows 文件夹中找不到的导入 DLL。不会运行或加载任何内容。只有由受信任发布者有效签名的文件，才能在确认后移除下载警告；Swivel 绝不绕过 SmartScreen、Defender 或智能应用控制。也可以查看有限的 EXE 标头声明。",
+    "選擇程式、安裝程式或 DLL，檢查它為何打不開：Windows 簽章驗證（連線撤銷檢查只在其專用按鈕中進行）、下載警告及 SmartScreen 的含義、與本機處理器的相符程度，以及在 App 資料夾和 Windows 資料夾中找不到的匯入 DLL。不會執行或載入任何內容。只有由受信任發行者有效簽章的檔案，才能在確認後移除下載警告；Swivel 絕不繞過 SmartScreen、Defender 或智慧型應用程式控制。也可以檢視有限的 EXE 標頭宣告。",
+    "プログラム、インストーラー、DLL を選んで、開かない理由を確認します: Windows の署名検証（オンラインの失効確認は専用ボタンからのみ）、ダウンロード警告と SmartScreen の意味、この PC とのプロセッサの適合、アプリのフォルダーと Windows フォルダーに見つからないインポート DLL。何も実行・読み込みしません。信頼された発行元が正しく署名したファイルに限り、確認のうえダウンロード警告を削除できます。Swivel は SmartScreen、Defender、スマート アプリ コントロールを回避しません。EXE ヘッダー宣言の限定的な確認もできます。"
+  ],
+  "\"Windows protected your PC\" is Microsoft Defender SmartScreen. It appears for files that came from the internet when Microsoft has not yet seen the file or its publisher often enough to trust it. It is a warning, not proof that the file is harmful. Swivel never offers a way around it.": [
+    "“Windows 已保护你的电脑”来自 Microsoft Defender SmartScreen。当文件来自互联网，而 Microsoft 还没有足够多地见过该文件或其发布者、尚不能信任它时，就会出现。这是警告，并不证明文件有害。Swivel 绝不提供绕过它的方法。",
+    "「Windows 已保護您的電腦」來自 Microsoft Defender SmartScreen。當檔案來自網際網路，而 Microsoft 還沒有足夠多次看過該檔案或其發行者、尚無法信任時，就會出現。這是警告，並不證明檔案有害。Swivel 絕不提供繞過它的方法。",
+    "「Windows によって PC が保護されました」は Microsoft Defender SmartScreen の表示です。インターネットから来たファイルについて、Microsoft がそのファイルや発行元をまだ十分に確認できず信頼できないときに表示されます。これは警告であり、ファイルが有害だという証拠ではありません。Swivel が回避方法を示すことはありません。"
+  ],
+  ".NET program": [
+    ".NET 程序",
+    ".NET 程式",
+    ".NET プログラム"
+  ],
+  "Certificate issued by": [
+    "证书颁发者",
+    "憑證簽發者",
+    "証明書の発行者"
+  ],
+  "Certificate valid until": [
+    "证书有效期至",
+    "憑證有效期限至",
+    "証明書の有効期限"
+  ],
+  "Check Revocation Online (Contacts the Internet)": [
+    "联网检查吊销状态（会连接互联网）",
+    "連線檢查撤銷狀態（會連線網際網路）",
+    "失効をオンラインで確認（インターネットに接続）"
+  ],
+  "Checking revocation online…": [
+    "正在联网检查吊销状态…",
+    "正在連線檢查撤銷狀態…",
+    "失効をオンラインで確認しています…"
+  ],
+  "Choose one local program (.exe), installer (.msi) or DLL to check.": [
+    "请选择一个本地程序（.exe）、安装程序（.msi）或 DLL 进行检查。",
+    "請選擇一個本機程式（.exe）、安裝程式（.msi）或 DLL 進行檢查。",
+    "確認するローカルのプログラム（.exe）、インストーラー（.msi）、DLL を 1 つ選んでください。"
+  ],
+  "Download addresses": [
+    "下载地址",
+    "下載位址",
+    "ダウンロード元アドレス"
+  ],
+  "Download mark present but unreadable": [
+    "有下载标记，但无法读取",
+    "有下載標記，但無法讀取",
+    "ダウンロードの印はありますが読み取れません"
+  ],
+  "Download mark with an unknown zone": [
+    "下载标记的区域未知",
+    "下載標記的區域不明",
+    "ダウンロードの印のゾーンが不明です"
+  ],
+  "Download warning": [
+    "下载警告",
+    "下載警告",
+    "ダウンロード警告"
+  ],
+  "Downloaded from": [
+    "下载自",
+    "下載自",
+    "ダウンロード元"
+  ],
+  "Embedded signature": [
+    "内嵌签名",
+    "內嵌簽章",
+    "埋め込み署名"
+  ],
+  "Fit": [
+    "是否匹配",
+    "是否相符",
+    "適合"
+  ],
+  "Found in the Windows folder": [
+    "在 Windows 文件夹中找到",
+    "在 Windows 資料夾中找到",
+    "Windows フォルダーにあります"
+  ],
+  "Found in the Windows system folder": [
+    "在 Windows 系统文件夹中找到",
+    "在 Windows 系統資料夾中找到",
+    "Windows システム フォルダーにあります"
+  ],
+  "Found in the app's folder": [
+    "在应用文件夹中找到",
+    "在 App 資料夾中找到",
+    "アプリのフォルダーにあります"
+  ],
+  "Imported DLLs": [
+    "导入的 DLL",
+    "匯入的 DLL",
+    "インポートされる DLL"
+  ],
+  "Imported DLLs are read from the file's import table (at most 256 names). Each name is only looked up as a file in the app's folder, the Windows system folder and the Windows folder; nothing is loaded. Delay-loaded DLLs, DLLs found through PATH, side-by-side manifests or the program's own loading code are not checked, and a found file is not checked for the right processor type.": [
+    "导入的 DLL 读取自文件的导入表（最多 256 个名称）。每个名称只会在应用文件夹、Windows 系统文件夹和 Windows 文件夹中按文件查找，不会加载任何内容。不检查延迟加载的 DLL、通过 PATH 找到的 DLL、并行清单或程序自身的加载代码；找到的文件也不检查处理器类型是否正确。",
+    "匯入的 DLL 讀取自檔案的匯入表（最多 256 個名稱）。每個名稱只會在 App 資料夾、Windows 系統資料夾和 Windows 資料夾中依檔案尋找，不會載入任何內容。不檢查延遲載入的 DLL、透過 PATH 找到的 DLL、並存資訊清單或程式本身的載入程式碼；找到的檔案也不檢查處理器類型是否正確。",
+    "インポート DLL はファイルのインポート テーブルから読み取ります（最大 256 名）。各名前はアプリのフォルダー、Windows システム フォルダー、Windows フォルダーでファイルとして探すだけで、何も読み込みません。遅延読み込み DLL、PATH で見つかる DLL、サイドバイサイド マニフェスト、プログラム独自の読み込み処理は確認せず、見つかったファイルのプロセッサの種類も確認しません。"
+  ],
+  "Made for": [
+    "适用于",
+    "適用於",
+    "対象"
+  ],
+  "Made for a different processor; it cannot run on this PC": [
+    "为其他处理器制作，无法在这台电脑上运行",
+    "為其他處理器製作，無法在這台電腦上執行",
+    "別のプロセッサ向けで、この PC では実行できません"
+  ],
+  "Made for this PC's processor": [
+    "为这台电脑的处理器制作",
+    "為這台電腦的處理器製作",
+    "この PC のプロセッサ向けです"
+  ],
+  "Marked as downloaded from the internet (zone 3)": [
+    "标记为从互联网下载（区域 3）",
+    "標記為從網際網路下載（區域 3）",
+    "インターネットからダウンロードした印（ゾーン 3）"
+  ],
+  "Marked as from a restricted site (zone 4)": [
+    "标记为来自受限站点（区域 4）",
+    "標記為來自受限制的網站（區域 4）",
+    "制限付きサイトからの印（ゾーン 4）"
+  ],
+  "Marked as from a trusted site (zone 2)": [
+    "标记为来自受信任的站点（区域 2）",
+    "標記為來自信任的網站（區域 2）",
+    "信頼済みサイトからの印（ゾーン 2）"
+  ],
+  "Marked as from the local intranet (zone 1)": [
+    "标记为来自本地 Intranet（区域 1）",
+    "標記為來自近端內部網路（區域 1）",
+    "ローカル イントラネットからの印（ゾーン 1）"
+  ],
+  "Marked as from this computer (zone 0)": [
+    "标记为来自这台计算机（区域 0）",
+    "標記為來自這台電腦（區域 0）",
+    "このコンピューターからの印（ゾーン 0）"
+  ],
+  "Microsoft Visual C++ runtime files are missing: {0}. Install the latest supported Visual C++ Redistributable for {1} from Microsoft's website.": [
+    "缺少 Microsoft Visual C++ 运行库文件：{0}。请从 Microsoft 网站安装适用于 {1} 的最新受支持 Visual C++ 可再发行组件包。",
+    "缺少 Microsoft Visual C++ 執行階段檔案：{0}。請從 Microsoft 網站安裝適用於 {1} 的最新受支援 Visual C++ 可轉散發套件。",
+    "Microsoft Visual C++ ランタイム ファイルがありません: {0}。Microsoft の Web サイトから {1} 用の最新のサポートされている Visual C++ 再頒布可能パッケージをインストールしてください。"
+  ],
+  "No download warning (no Mark of the Web)": [
+    "没有下载警告（无网络标记）",
+    "沒有下載警告（無網路標記）",
+    "ダウンロード警告はありません（Mark of the Web なし）"
+  ],
+  "No signature found": [
+    "未找到签名",
+    "找不到簽章",
+    "署名が見つかりません"
+  ],
+  "None found": [
+    "未找到",
+    "找不到",
+    "見つかりません"
+  ],
+  "Not applicable to installers (.msi).": [
+    "不适用于安装程序（.msi）。",
+    "不適用於安裝程式（.msi）。",
+    "インストーラー（.msi）には該当しません。"
+  ],
+  "Not decided from the header alone": [
+    "仅凭标头无法判断",
+    "僅憑標頭無法判斷",
+    "ヘッダーだけでは判断できません"
+  ],
+  "Not signed": [
+    "未签名",
+    "未簽章",
+    "署名なし"
+  ],
+  "Nothing obvious stops this installer: the signature and download mark look normal.": [
+    "没有发现明显阻止此安装程序的问题：签名和下载标记看起来正常。",
+    "沒有發現明顯阻止此安裝程式的問題：簽章與下載標記看起來正常。",
+    "このインストーラーを妨げる明らかな問題はありません。署名とダウンロードの印は正常です。"
+  ],
+  "Nothing obvious stops this program: signature, processor and the DLLs checked look normal. The cause may be inside the program (settings, missing data, permissions).": [
+    "没有发现明显阻止此程序的问题：签名、处理器和已检查的 DLL 看起来正常。原因可能在程序内部（设置、缺失的数据、权限）。",
+    "沒有發現明顯阻止此程式的問題：簽章、處理器和已檢查的 DLL 看起來正常。原因可能在程式內部（設定、遺失的資料、權限）。",
+    "このプログラムを妨げる明らかな問題はありません。署名、プロセッサ、確認した DLL は正常です。原因はプログラム内部（設定、不足しているデータ、アクセス許可）にあるかもしれません。"
+  ],
+  "Online revocation check": [
+    "联网吊销检查",
+    "連線撤銷檢查",
+    "オンラインの失効確認"
+  ],
+  "Only a file that is validly signed by a trusted publisher and still carries a download warning can have the warning removed here.": [
+    "只有由受信任发布者有效签名、且仍带有下载警告的文件，才能在这里移除警告。",
+    "只有由受信任發行者有效簽章、且仍帶有下載警告的檔案，才能在這裡移除警告。",
+    "ここで警告を削除できるのは、信頼された発行元が正しく署名し、まだダウンロード警告が付いているファイルだけです。"
+  ],
+  "Only the first 256 imported DLLs are listed.": [
+    "只列出前 256 个导入的 DLL。",
+    "只列出前 256 個匯入的 DLL。",
+    "最初の 256 個のインポート DLL だけを表示しています。"
+  ],
+  "Processor": [
+    "处理器",
+    "處理器",
+    "プロセッサ"
+  ],
+  "Programs and installers (*.exe;*.msi;*.dll)|*.exe;*.msi;*.dll": [
+    "程序和安装程序 (*.exe;*.msi;*.dll)|*.exe;*.msi;*.dll",
+    "程式與安裝程式 (*.exe;*.msi;*.dll)|*.exe;*.msi;*.dll",
+    "プログラムとインストーラー (*.exe;*.msi;*.dll)|*.exe;*.msi;*.dll"
+  ],
+  "Read-only check. Swivel never runs or loads the chosen file. The signature check uses Windows' own verification without contacting the internet (only certificates already on this PC are used, and revocation is not checked unless you press Check Revocation Online). Results describe this file now; they are not a malware scan and do not replace Microsoft Defender, SmartScreen or Smart App Control.": [
+    "只读检查。Swivel 绝不运行或加载所选文件。签名检查使用 Windows 自身的验证，不连接互联网（只使用这台电脑上已有的证书；除非你按“联网检查吊销状态”，否则不检查吊销）。结果描述的是文件当前的状态；这不是恶意软件扫描，也不能替代 Microsoft Defender、SmartScreen 或智能应用控制。",
+    "唯讀檢查。Swivel 絕不執行或載入所選檔案。簽章檢查使用 Windows 本身的驗證，不連線網際網路（只使用這台電腦上已有的憑證；除非您按「連線檢查撤銷狀態」，否則不檢查撤銷）。結果描述的是檔案目前的狀態；這不是惡意軟體掃描，也不能取代 Microsoft Defender、SmartScreen 或智慧型應用程式控制。",
+    "読み取り専用の確認です。Swivel は選んだファイルを実行も読み込みもしません。署名の確認には Windows 自身の検証を使い、インターネットには接続しません（この PC にある証明書だけを使い、「失効をオンラインで確認」を押さない限り失効は確認しません）。結果は現在のファイルの状態を示すもので、マルウェア スキャンではなく、Microsoft Defender、SmartScreen、スマート アプリ コントロールの代わりにはなりません。"
+  ],
+  "Referring page": [
+    "来源页面",
+    "來源頁面",
+    "参照元ページ"
+  ],
+  "Remove Download Warning…": [
+    "移除下载警告…",
+    "移除下載警告…",
+    "ダウンロード警告を削除…"
+  ],
+  "Remove the download warning from this file? Windows and SmartScreen will then treat it as if it had not come from the internet. Its signature is currently valid and trusted, but that only tells you who published it, not that it is safe for you. This cannot be undone from Swivel.": [
+    "要移除此文件的下载警告吗？之后 Windows 和 SmartScreen 会把它当作并非来自互联网。它的签名目前有效且受信任，但这只说明发布者是谁，并不说明它对你是安全的。此操作无法在 Swivel 中撤销。",
+    "要移除此檔案的下載警告嗎？之後 Windows 和 SmartScreen 會把它視為並非來自網際網路。它的簽章目前有效且受信任，但這只說明發行者是誰，並不表示它對您是安全的。此操作無法在 Swivel 中復原。",
+    "このファイルのダウンロード警告を削除しますか？ 以後、Windows と SmartScreen はこのファイルをインターネットから来たものとして扱いません。署名は現在有効で信頼されていますが、それは発行元が誰かを示すだけで、あなたにとって安全であることを示すものではありません。この操作は Swivel では元に戻せません。"
+  ],
+  "Revocation not checked. Press Check Revocation Online to ask the certificate authorities; this contacts the internet.": [
+    "未检查吊销状态。按“联网检查吊销状态”向证书颁发机构查询；这会连接互联网。",
+    "未檢查撤銷狀態。按「連線檢查撤銷狀態」向憑證授權單位查詢；這會連線網際網路。",
+    "失効は確認していません。「失効をオンラインで確認」を押すと証明機関に問い合わせます。インターネットに接続します。"
+  ],
+  "Runs on this PC through Windows' built-in compatibility layer or emulation": [
+    "可通过 Windows 内置的兼容层或仿真在这台电脑上运行",
+    "可透過 Windows 內建的相容層或模擬在這台電腦上執行",
+    "Windows の組み込みの互換レイヤーまたはエミュレーションでこの PC で実行されます"
+  ],
+  "Show download addresses (may be private)": [
+    "显示下载地址（可能涉及隐私）",
+    "顯示下載位址（可能涉及隱私）",
+    "ダウンロード元アドレスを表示（個人的な情報の可能性あり）"
+  ],
+  "Signature": [
+    "签名",
+    "簽章",
+    "署名"
+  ],
+  "Signature certificate expired without a timestamp": [
+    "签名证书已过期且没有时间戳",
+    "簽章憑證已過期且沒有時間戳記",
+    "署名証明書の期限が切れており、タイムスタンプがありません"
+  ],
+  "Signature certificate revoked": [
+    "签名证书已被吊销",
+    "簽章憑證已被撤銷",
+    "署名証明書は失効しています"
+  ],
+  "Signature could not be verified": [
+    "无法验证签名",
+    "無法驗證簽章",
+    "署名を検証できませんでした"
+  ],
+  "Signature invalid: the file was changed after signing": [
+    "签名无效：文件在签名后被更改",
+    "簽章無效：檔案在簽章後被變更",
+    "署名が無効です: 署名後にファイルが変更されています"
+  ],
+  "Signed and trusted": [
+    "已签名且受信任",
+    "已簽章且受信任",
+    "署名済みで信頼されています"
+  ],
+  "Signed and trusted (certificate since expired, signed while valid)": [
+    "已签名且受信任（证书现已过期，但签名时有效）",
+    "已簽章且受信任（憑證現已過期，但簽章時有效）",
+    "署名済みで信頼されています（証明書は期限切れですが、有効期間中に署名されています）"
+  ],
+  "Signed by": [
+    "签名者",
+    "簽章者",
+    "署名者"
+  ],
+  "Signed, but not by a certificate this PC trusts": [
+    "已签名，但证书不受这台电脑信任",
+    "已簽章，但憑證不受這台電腦信任",
+    "署名されていますが、この PC が信頼する証明書ではありません"
+  ],
+  "Signed, but revocation could not be checked": [
+    "已签名，但无法检查吊销状态",
+    "已簽章，但無法檢查撤銷狀態",
+    "署名されていますが、失効を確認できませんでした"
+  ],
+  "Signer explicitly distrusted on this PC": [
+    "这台电脑明确不信任该签名者",
+    "這台電腦明確不信任該簽章者",
+    "この PC では署名者が明示的に信頼されていません"
+  ],
+  "Some DLLs the program needs were not found next to it or in Windows: {0}. Reinstalling the program usually restores them. They might still be found through PATH.": [
+    "在程序旁边或 Windows 中找不到它需要的部分 DLL：{0}。重新安装程序通常可以恢复它们。它们仍可能通过 PATH 找到。",
+    "在程式旁邊或 Windows 中找不到它需要的部分 DLL：{0}。重新安裝程式通常可以還原它們。它們仍可能透過 PATH 找到。",
+    "プログラムが必要とする一部の DLL が、同じ場所にも Windows にも見つかりません: {0}。通常はプログラムを再インストールすると戻ります。PATH から見つかる可能性もあります。"
+  ],
+  "Swivel offers to remove the download warning only for a file that is validly signed by a trusted publisher.": [
+    "Swivel 只为由受信任发布者有效签名的文件提供移除下载警告。",
+    "Swivel 只為由受信任發行者有效簽章的檔案提供移除下載警告。",
+    "Swivel がダウンロード警告の削除を提案するのは、信頼された発行元が正しく署名したファイルだけです。"
+  ],
+  "The download warning was removed from this file.": [
+    "已移除此文件的下载警告。",
+    "已移除此檔案的下載警告。",
+    "このファイルのダウンロード警告を削除しました。"
+  ],
+  "The file carries a download warning and is not validly signed by a trusted publisher, so SmartScreen will probably show \"Windows protected your PC\".": [
+    "文件带有下载警告，且没有由受信任发布者有效签名，因此 SmartScreen 很可能会显示“Windows 已保护你的电脑”。",
+    "檔案帶有下載警告，且沒有由受信任發行者有效簽章，因此 SmartScreen 很可能會顯示「Windows 已保護您的電腦」。",
+    "ファイルにはダウンロード警告があり、信頼された発行元による正しい署名がないため、SmartScreen が「Windows によって PC が保護されました」と表示する可能性が高いです。"
+  ],
+  "The file carries a download warning. SmartScreen may still ask before it opens and shows the verified publisher under More info.": [
+    "文件带有下载警告。SmartScreen 仍可能在打开前询问，并在“更多信息”中显示经验证的发布者。",
+    "檔案帶有下載警告。SmartScreen 仍可能在開啟前詢問，並在「其他資訊」中顯示經驗證的發行者。",
+    "ファイルにはダウンロード警告があります。開く前に SmartScreen が確認することがあり、「詳細情報」に検証済みの発行元が表示されます。"
+  ],
+  "The file is not signed, so Windows cannot show who published it. SmartScreen or Smart App Control may block or warn about it. Only use it if you trust where it came from; Swivel does not offer to remove warnings for unsigned files.": [
+    "文件未签名，因此 Windows 无法显示发布者。SmartScreen 或智能应用控制可能会阻止或警告。只有在你信任其来源时才使用；Swivel 不提供移除未签名文件警告的选项。",
+    "檔案未簽章，因此 Windows 無法顯示發行者。SmartScreen 或智慧型應用程式控制可能會封鎖或警告。只有在您信任其來源時才使用；Swivel 不提供移除未簽章檔案警告的選項。",
+    "ファイルは署名されていないため、Windows は発行元を表示できません。SmartScreen やスマート アプリ コントロールがブロックまたは警告することがあります。入手元を信頼できる場合にだけ使ってください。Swivel は署名のないファイルの警告削除を提案しません。"
+  ],
+  "The file is signed, but the certificate does not lead to an authority this PC trusts. Windows may block or warn about it.": [
+    "文件已签名，但证书无法追溯到这台电脑信任的颁发机构。Windows 可能会阻止或警告。",
+    "檔案已簽章，但憑證無法追溯到這台電腦信任的授權單位。Windows 可能會封鎖或警告。",
+    "ファイルは署名されていますが、証明書をこの PC が信頼する機関までたどれません。Windows がブロックまたは警告することがあります。"
+  ],
+  "The file was changed after it was signed, so Windows will not trust it. It may be damaged or tampered with. Do not run it; download a fresh copy from the publisher's official site.": [
+    "文件在签名后被更改，因此 Windows 不会信任它。它可能已损坏或被篡改。请不要运行；从发布者的官方网站重新下载。",
+    "檔案在簽章後被變更，因此 Windows 不會信任它。它可能已損壞或遭竄改。請不要執行；從發行者的官方網站重新下載。",
+    "ファイルは署名後に変更されているため、Windows は信頼しません。破損または改ざんされている可能性があります。実行せず、発行元の公式サイトから新しくダウンロードしてください。"
+  ],
+  "The import table is damaged or unusual; the list may be incomplete.": [
+    "导入表已损坏或不寻常；列表可能不完整。",
+    "匯入表已損壞或不尋常；清單可能不完整。",
+    "インポート テーブルが破損しているか特殊なため、一覧が不完全な可能性があります。"
+  ],
+  "The program's headers could not be read, so its DLLs are not listed.": [
+    "无法读取程序的标头，因此未列出它的 DLL。",
+    "無法讀取程式的標頭，因此未列出它的 DLL。",
+    "プログラムのヘッダーを読み取れないため、DLL は表示していません。"
+  ],
+  "The program's headers could not be read.": [
+    "无法读取程序的标头。",
+    "無法讀取程式的標頭。",
+    "プログラムのヘッダーを読み取れませんでした。"
+  ],
+  "The publisher's certificate was revoked. Windows treats this file as untrustworthy. Do not run it.": [
+    "发布者的证书已被吊销。Windows 认为此文件不可信。请不要运行。",
+    "發行者的憑證已被撤銷。Windows 認為此檔案不可信任。請不要執行。",
+    "発行元の証明書は失効しています。Windows はこのファイルを信頼できないものとして扱います。実行しないでください。"
+  ],
+  "The signature is valid, but its revocation status could not be confirmed online.": [
+    "签名有效，但无法联网确认其吊销状态。",
+    "簽章有效，但無法連線確認其撤銷狀態。",
+    "署名は有効ですが、失効状態をオンラインで確認できませんでした。"
+  ],
+  "The signing certificate has expired and the signature has no timestamp, so Windows may no longer trust it. Look for a newer version from the publisher.": [
+    "签名证书已过期且签名没有时间戳，因此 Windows 可能不再信任它。请向发布者寻找较新版本。",
+    "簽章憑證已過期且簽章沒有時間戳記，因此 Windows 可能不再信任它。請向發行者尋找較新版本。",
+    "署名証明書の期限が切れ、署名にタイムスタンプがないため、Windows はもう信頼しないかもしれません。発行元の新しいバージョンを探してください。"
+  ],
+  "The signing certificate has expired, but the file was timestamped while it was valid, so the signature still counts.": [
+    "签名证书已过期，但文件在证书有效时加盖了时间戳，因此签名仍然有效。",
+    "簽章憑證已過期，但檔案在憑證有效時加上了時間戳記，因此簽章仍然有效。",
+    "署名証明書は期限切れですが、有効期間中にタイムスタンプが付けられているため、署名は引き続き有効です。"
+  ],
+  "This PC": [
+    "这台电脑",
+    "這台電腦",
+    "この PC"
+  ],
+  "This PC is set to distrust this signer. Do not run it unless your administrator says otherwise.": [
+    "这台电脑被设置为不信任该签名者。除非管理员另有说明，否则请不要运行。",
+    "這台電腦被設定為不信任該簽章者。除非系統管理員另有說明，否則請不要執行。",
+    "この PC はこの署名者を信頼しない設定です。管理者の指示がない限り実行しないでください。"
+  ],
+  "This program is made for {0} processors, but this PC uses {1}. Get the version made for this PC from the publisher.": [
+    "此程序为 {0} 处理器制作，但这台电脑使用 {1}。请向发布者获取适用于这台电脑的版本。",
+    "此程式為 {0} 處理器製作，但這台電腦使用 {1}。請向發行者取得適用於這台電腦的版本。",
+    "このプログラムは {0} プロセッサ向けですが、この PC は {1} です。この PC 向けのバージョンを発行元から入手してください。"
+  ],
+  "Timestamp": [
+    "时间戳",
+    "時間戳記",
+    "タイムスタンプ"
+  ],
+  "Unusual name, not looked up": [
+    "名称不寻常，未查找",
+    "名稱不尋常，未尋找",
+    "特殊な名前のため探していません"
+  ],
+  "Warning": [
+    "警告",
+    "警告",
+    "警告"
+  ],
+  "What Swivel found": [
+    "Swivel 发现的情况",
+    "Swivel 發現的情況",
+    "Swivel が見つけたこと"
+  ],
+  "Where the signature is": [
+    "签名所在位置",
+    "簽章所在位置",
+    "署名の場所"
+  ],
+  "Windows API set (provided by Windows)": [
+    "Windows API 集（由 Windows 提供）",
+    "Windows API 集（由 Windows 提供）",
+    "Windows API セット（Windows が提供）"
+  ],
+  "Windows catalog signature": [
+    "Windows 目录签名",
+    "Windows 目錄簽章",
+    "Windows カタログ署名"
+  ],
+  "Windows could not verify the signature (code {0}).": [
+    "Windows 无法验证签名（代码 {0}）。",
+    "Windows 無法驗證簽章（代碼 {0}）。",
+    "Windows は署名を検証できませんでした（コード {0}）。"
+  ],
+  "Windows result code": [
+    "Windows 结果代码",
+    "Windows 結果代碼",
+    "Windows の結果コード"
+  ],
+  "Windows' own steps: right-click the file in File Explorer, choose Properties, select Unblock on the General tab, then OK. Do this only for a file from a publisher you trust.": [
+    "Windows 自带的步骤：在文件资源管理器中右键单击该文件，选择“属性”，在“常规”选项卡中勾选“解除锁定”，然后单击“确定”。只对来自你信任的发布者的文件这样做。",
+    "Windows 本身的步驟：在檔案總管中以滑鼠右鍵按一下該檔案，選擇「內容」，在「一般」索引標籤中勾選「解除封鎖」，然後按「確定」。只對來自您信任的發行者的檔案這樣做。",
+    "Windows の手順: エクスプローラーでファイルを右クリックし、［プロパティ］を選び、［全般］タブの［許可する］をオンにして［OK］を押します。信頼できる発行元のファイルに対してだけ行ってください。"
   ]
 }
