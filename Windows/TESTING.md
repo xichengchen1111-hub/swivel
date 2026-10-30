@@ -1330,7 +1330,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 ## Windows0.133 — merged A05 top-edge rope, F09 connection test, F05 project kinds (Codex) (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: A05 40987721945 (core 4,553,662, native 6,200; one P2 and three P3s fixed), F09 40988223533 (core 4,553,790, native 6,195; no P1, four P2s fixed and rechecked), F05 40985925418 (core 4,553,899, native 6,171; written by Codex, three P2s fixed by dropping non-regenerable folders).
-- After merging all three: core 4,554,319 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- After merging all three: core 4,554,319 on Mac, native compiled 0 warnings/errors there. Windows CI 40998382109 on the merged branch passed (core 4,554,319, native 6,224).
 - Not tested: how the rope feels on real hardware and multi-monitor setups, the connection test on a home network with a captive portal or proxy, project folders from real Unity/Unreal/Maven projects.
 
 ## Windows0.132 — merged D04 speed-change sound, F08 Store uninstall, A04 Preview File (Codex) (2026-10-30)
