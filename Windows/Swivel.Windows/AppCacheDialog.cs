@@ -57,7 +57,7 @@ internal sealed class AppCacheDialog : Window
         ScrollViewer.SetCanContentScroll(items, true); ScrollViewer.SetHorizontalScrollBarVisibility(items, ScrollBarVisibility.Auto);
         bin = new RecycleBinSession<AppCacheItem>(app, this, new(
             item => Visible(item.Folder.Path),
-            item => item.Folder.App.Name + " · " + Visible(item.Folder.Path) + " · " + AppCaches.Size(item.Size, app.L),
+            item => app.L(item.Folder.App.Name) + " · " + Visible(item.Folder.Path) + " · " + AppCaches.Size(item.Size, app.L),
             (item, owner) => NativeFiles.RecycleAppCache(item.Folder.Path, () => AppCacheReader.IsRunning(item.Folder.App), owner),
             (item, stored) => NativeFiles.RestoreAppCache(item.Folder.Path, stored, () => AppCacheReader.IsRunning(item.Folder.App)),
             "Move 1 cache folder to the Recycle Bin?", "Move {0} cache folders to the Recycle Bin?", "Close each app first, including any copy running in the background. Its next start may be slower while it builds the cache again."),
@@ -111,13 +111,13 @@ internal sealed class AppCacheDialog : Window
     private IEnumerable<string> AppLines()
     {
         yield return string.Format(app.L("Apps looked for, and the programs checked before a move or Undo: {0}"),
-            string.Join("; ", AppCaches.Apps.Select(a => a.Name + " (" + AppCaches.Programs(a) + ")")));
-        var missing = result.Apps.Where(a => a.State == AppCacheAppState.NotFound).Select(a => a.App.Name).ToArray();
+            string.Join("; ", AppCaches.Apps.Select(a => app.L(a.Name) + " (" + AppCaches.Programs(a) + ")")));
+        var missing = result.Apps.Where(a => a.State == AppCacheAppState.NotFound).Select(a => app.L(a.App.Name)).ToArray();
         if (missing.Length > 0) yield return string.Format(app.L("Not found at the default place: {0}"), string.Join(", ", missing));
-        var empty = result.Apps.Where(a => a.State == AppCacheAppState.Found && a.Issue is null && !a.Unreadable && !a.Partial && !result.Items.Any(i => i.Folder.App == a.App)).Select(a => a.App.Name).ToArray();
+        var empty = result.Apps.Where(a => a.State == AppCacheAppState.Found && a.Issue is null && !a.Unreadable && !a.Partial && !result.Items.Any(i => i.Folder.App == a.App)).Select(a => app.L(a.App.Name)).ToArray();
         if (empty.Length > 0) yield return string.Format(app.L("Found without a listed cache folder: {0}"), string.Join(", ", empty));
         foreach (var unavailable in result.Apps.Where(a => a.State == AppCacheAppState.Unavailable || a.Issue is not null || a.Unreadable))
-            yield return unavailable.App.Name + " · " + Visible(unavailable.Container ?? "") + " · " + app.L(unavailable.Issue ?? (unavailable.Unreadable ? AppCaches.SomeUnreadable : AppCaches.ContainerUnreadable));
+            yield return app.L(unavailable.App.Name) + " · " + Visible(unavailable.Container ?? "") + " · " + app.L(unavailable.Issue ?? (unavailable.Unreadable ? AppCaches.SomeUnreadable : AppCaches.ContainerUnreadable));
     }
 
     private void Refresh()
@@ -130,7 +130,7 @@ internal sealed class AppCacheDialog : Window
                 .ToDictionary(root => root, Fixed, StringComparer.OrdinalIgnoreCase);
         }
         running.Text = processes is null ? app.L("Swivel could not list the running programs, so no folder can be moved or put back now.")
-            : Listed().Select(item => item.Folder.App).Distinct().Where(Running).Select(a => a.Name + " (" + AppCaches.Programs(a, processes) + ")").ToArray() is { Length: > 0 } open
+            : Listed().Select(item => item.Folder.App).Distinct().Where(Running).Select(a => app.L(a.Name) + " (" + AppCaches.Programs(a, processes) + ")").ToArray() is { Length: > 0 } open
                 ? string.Format(app.L("Running now (close them first): {0}"), string.Join(", ", open)) : app.L("None of the listed apps is running now.");
         items.ItemsSource = Listed().Select(item => new Row(this, item)).ToArray();
         items.IsEnabled = selectAll.IsEnabled = checkRunning.IsEnabled = bin.Idle;
@@ -161,14 +161,14 @@ internal sealed class AppCacheDialog : Window
             line.Children.Add(UI.Text(text, 12)); legend.Children.Add(line);
         }
         for (int index = 0; index < Math.Min(CacheRing.Named, shares.Count); index++)
-            Entry(index, shares[index].App.Name + " · " + Amount(shares[index].Bytes, shares[index].Partial), bright[index]);
+            Entry(index, app.L(shares[index].App.Name) + " · " + Amount(shares[index].Bytes, shares[index].Partial), bright[index]);
         if (shares.Count > CacheRing.Named)
         {
             var rest = shares.Skip(CacheRing.Named).ToArray();
             Entry(CacheRing.Named, string.Format(app.L("{0} more · {1}"), rest.Length, Amount(rest.Sum(share => share.Bytes), rest.Any(share => share.Partial))),
                 chosen.Count == 0 || rest.Any(share => chosen.Contains(share.App)));
         }
-        AutomationProperties.SetHelpText(ring, caption + ": " + center + ". " + string.Join("; ", shares.Select(share => share.App.Name + " " + Amount(share.Bytes, share.Partial))));
+        AutomationProperties.SetHelpText(ring, caption + ": " + center + ". " + string.Join("; ", shares.Select(share => app.L(share.App.Name) + " " + Amount(share.Bytes, share.Partial))));
     }
 
     private static bool Fixed(string root)
@@ -181,12 +181,12 @@ internal sealed class AppCacheDialog : Window
     private string Status(AppCacheItem item) => item.Size?.Issue is { } issue ? app.L(issue)
         : !fixedDrives.GetValueOrDefault(System.IO.Path.GetPathRoot(item.Folder.Path) ?? "") ? app.L("Not on a fixed drive; it cannot be moved")
         : Running(item.Folder.App) ? app.L("Its app is running; close it first") : app.L("Can be moved to the Recycle Bin");
-    private string Line(AppCacheItem item) => item.Folder.App.Name + " · " + Visible(item.Folder.Path) + " · " + AppCaches.Size(item.Size, app.L) + " · " + Status(item);
+    private string Line(AppCacheItem item) => app.L(item.Folder.App.Name) + " · " + Visible(item.Folder.Path) + " · " + AppCaches.Size(item.Size, app.L) + " · " + Status(item);
     private static string Visible(string value) => DoctorFacts.VisibleBounded(value, 512);
 
     private sealed record Row(AppCacheDialog Owner, AppCacheItem Item)
     {
-        public string App => Item.Folder.App.Name;
+        public string App => Owner.app.L(Item.Folder.App.Name);
         public string Profile => Item.Folder.Profile is { } profile ? Visible(profile) : "";
         public string Folder => Visible(Item.Folder.Folder);
         public string Size => AppCaches.Size(Item.Size, Owner.app.L);

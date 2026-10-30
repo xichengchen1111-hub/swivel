@@ -13,6 +13,7 @@ internal static class AppCacheChecks
     {
         check(AppCaches.Apps.Select(a => a.Id).Distinct().Count() == AppCaches.Apps.Count && AppCaches.Apps.All(a => a.Processes.Count > 0 && a.Processes.All(p => p.Length > 0 && !p.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))),
             "Cache catalogue has unique app IDs and process names without extensions");
+        AppCacheCatalogueChecks.Run(check);
         bool namesValid = true;
         foreach (var app in AppCaches.Apps)
             foreach (string name in app.Container.Split('\\').Concat(app.Folders).Concat(app.ProfileFolders))
