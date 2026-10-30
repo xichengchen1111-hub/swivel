@@ -123,7 +123,7 @@ public static class NetworkTest
     }
 
     /// Megabits per second (1,000,000 bits), or null when the sample is too small to mean anything.
-    public static double? Mbps(SpeedProbe probe) => probe.Status == 200 && probe.Bytes >= 262_144 && probe.Seconds >= 0.2 ? probe.Bytes * 8 / probe.Seconds / 1_000_000 : null;
+    public static double? Mbps(SpeedProbe probe) => probe.Status == 200 && probe.Bytes >= 262_144 && probe.Seconds >= 0.02 ? probe.Bytes * 8 / probe.Seconds / 1_000_000 : null;
     public static NetStepLine Speed(SpeedProbe probe)
     {
         if (Mbps(probe) is double mbps)

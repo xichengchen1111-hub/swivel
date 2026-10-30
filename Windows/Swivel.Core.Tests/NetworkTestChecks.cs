@@ -79,7 +79,8 @@ internal static class NetworkTestChecks
         // Speed: bounded sample, Mbit/s arithmetic and refusal to report a meaningless figure.
         var speed = new SpeedProbe(200, 25_000_000, 10, SpeedStop.ByteLimit, NetError.None, false);
         check(NetworkTest.Mbps(speed) == 20, "25 MB in 10 s is 20 Mbit/s (decimal megabits)");
-        check(NetworkTest.Mbps(speed with { Bytes = 100_000 }) is null && NetworkTest.Mbps(speed with { Seconds = 0.05 }) is null, "Tiny samples give no speed");
+        check(NetworkTest.Mbps(speed with { Bytes = 100_000 }) is null && NetworkTest.Mbps(speed with { Seconds = 0.01 }) is null, "Tiny samples give no speed");
+        check(NetworkTest.Mbps(speed with { Seconds = 0.18 }) is > 1000, "A full 25 MB sample on a gigabit link still reports a speed");
         check(NetworkTest.Mbps(speed with { Status = 404 }) is null && NetworkTest.Speed(speed with { Status = 404 }).Status == NetStepStatus.Failed, "Non-200 download gives no speed");
         check(NetworkTest.Mbps(speed with { Reason = SpeedStop.Error, Error = NetError.Connection, Bytes = 5_000_000, Seconds = 2 }) == 20, "A sample interrupted by an error still reports what arrived");
         check(NetworkTest.Speed(speed with { Bytes = 0, Error = NetError.Timeout, Reason = SpeedStop.Error }).Status == NetStepStatus.Failed, "Timeout with no data is a failure");
