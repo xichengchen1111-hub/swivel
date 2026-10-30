@@ -127,25 +127,37 @@ public static partial class NativeFiles
     {
         private readonly SafeFileHandle handle;
         private readonly DirectoryLease parent;
+        // exFAT/FAT32: the held-handle token that stands for the file's identity (see NativeFiles.Fat.cs).
+        private readonly ulong? fatToken;
         public string CurrentPath { get; private set; }
         public FileStamp Stamp { get; }
+        internal bool IsFat => fatToken is not null;
         /// The held file's name as stored now (long name, exact case).
         public string StoredName => Leaf(FinalPath(handle));
-        internal RenameLease(string path, DirectoryLease parent, SafeFileHandle handle)
+        internal RenameLease(string path, DirectoryLease parent, SafeFileHandle handle, ulong? fatToken = null)
         {
-            CurrentPath = path; this.parent = parent; this.handle = handle;
-            Stamp = ReadStamp(handle);
+            CurrentPath = path; this.parent = parent; this.handle = handle; this.fatToken = fatToken;
+            Stamp = Now();
         }
+        // On FAT the file index moves with the directory entry; the held handle is the identity.
+        private FileStamp Now() => fatToken is ulong token ? ReadStamp(handle) with { Index = token } : ReadStamp(handle);
         public void MoveTo(string destination)
         {
             WindowsPathPolicy.Validate(destination);
             if (System.IO.Path.GetDirectoryName(destination) != System.IO.Path.GetDirectoryName(CurrentPath))
                 throw new UserError("Batch Rename keeps each file in its original folder.");
-            if (!ReadStamp(handle).SameObjectAndContent(Stamp)) throw new UserError("A file changed. Create a new preview before renaming.");
+            if (!Now().SameObjectAndContent(Stamp)) throw new UserError("A file changed. Create a new preview before renaming.");
             if (!Rename(handle, destination, out int error)) throw new Win32Exception(error);
             // Set immediately after success; a later failure must never lose its location.
             CurrentPath = destination;
+            if (fatToken is null) return;
+            // FAT reports success for a case-only rename without changing the stored name: the
+            // name actually stored decides where the file is.
+            CurrentPath = FatCurrentPath(handle);
+            if (!string.Equals(CurrentPath, destination, StringComparison.Ordinal)) throw new UserError(FatRules.NameNotTaken);
         }
+        /// Keeps a reference for Undo on exFAT/FAT32 (nothing on NTFS).
+        internal void HoldForUndo() { if (fatToken is ulong token) HoldFat(token, handle, false); }
         public void EnsureDestinationFree(string destination)
         {
             WindowsPathPolicy.Validate(destination);
@@ -167,16 +179,27 @@ public static partial class NativeFiles
         if (error == 2) return false;
         throw new Win32Exception(error);
     }
-    public static RenameLease OpenRename(string path)
+    /// With `allowFat`, files on exFAT and FAT32 drives too; there `fatToken` (from an undo
+    /// receipt) reopens the file Swivel kept a reference to instead of opening the path.
+    public static RenameLease OpenRename(string path, bool allowFat = false, ulong? fatToken = null)
     {
         WindowsPathPolicy.Validate(path);
         var parent = DirectoryLease.Open(System.IO.Path.GetDirectoryName(path)!);
         SafeFileHandle? handle = null;
         try
         {
-            var fileSystem = new StringBuilder(64);
-            if (!GetVolumeInformation(path[..3], null, 0, out _, out _, out _, fileSystem, fileSystem.Capacity)) ThrowLast();
-            if (fileSystem.ToString() != "NTFS") throw new UserError("Batch Rename currently requires NTFS. Other file systems need separate identity and undo validation.");
+            var format = Format(path);
+            if (allowFat && FatRules.IsFat(format))
+            {
+                // No content read, no reparse following, no shared writes or deletes.
+                handle = fatToken is ulong token ? ReopenFat(token, path, DeleteAccess | ReadAttributes, 1, false) : Open(path, DeleteAccess | ReadAttributes, 1, 3, OpenReparse);
+                Check(handle, false);
+                if (fatToken is null) RequireExactFatName(handle, path);
+                if (!FatRules.IsFat(Format(handle))) throw new UserError(LocalOnly);
+                var fat = new RenameLease(path, parent, handle, fatToken ?? NewFatToken()); handle = null; return fat;
+            }
+            if (format != VolumeFormat.Ntfs)
+                throw new UserError(allowFat ? "Batch Rename works on NTFS, exFAT and FAT32 drives only." : "Batch Rename currently requires NTFS. Other file systems need separate identity and undo validation.");
             // Single attribute/delete handle: a preceding READ-only probe would block DELETE.
             // No content read, no reparse following, no shared writes or deletes.
             handle = Open(path, DeleteAccess | ReadAttributes, 1, 3, OpenReparse);

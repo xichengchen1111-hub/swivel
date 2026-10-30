@@ -26,7 +26,10 @@ internal sealed class ArchiveDialog : Window
 /// much, the rules, and every item that will be skipped.
 internal sealed class FolderPlanDialog : Window
 {
-    public FolderPlanDialog(App app, string title, string heading, IEnumerable<string> lines, FolderZipPlan plan, string notice, string action, string? footnote = null)
+    /// Whether the consent box (shown only when `consent` is given) was ticked.
+    public bool Consented { get; private set; }
+    /// With `consent`, the action stays disabled until the user ticks that explicit box.
+    public FolderPlanDialog(App app, string title, string heading, IEnumerable<string> lines, FolderZipPlan plan, string notice, string action, string? footnote = null, string? consent = null)
     {
         Title = app.L(title); Width = 680; Height = 560; MinWidth = 460; MinHeight = 340; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(22) };
@@ -38,7 +41,15 @@ internal sealed class FolderPlanDialog : Window
         if (footnote is not null) top.Children.Add(UI.Text(app.L(footnote), 12));
         if (plan.Skipped.Count > 0) top.Children.Add(UI.Text(string.Format(app.L("Skipped ({0}):"), plan.Skipped.Count)));
         var buttons = new WrapPanel();
-        buttons.Children.Add(UI.Button(app.L(action), () => DialogResult = true));
+        CheckBox? agree = null;
+        var run = UI.Button(app.L(action), () => { Consented = agree?.IsChecked == true; DialogResult = true; });
+        if (consent is not null)
+        {
+            agree = new CheckBox { Content = app.L(consent), Margin = new Thickness(0, 8, 0, 4) };
+            run.IsEnabled = false; agree.Checked += (_, _) => run.IsEnabled = true; agree.Unchecked += (_, _) => run.IsEnabled = false;
+            top.Children.Add(agree);
+        }
+        buttons.Children.Add(run);
         var cancel = UI.Button(app.L("Cancel"), () => DialogResult = false); cancel.IsCancel = true; buttons.Children.Add(cancel);
         DockPanel.SetDock(top, Dock.Top); root.Children.Add(top); DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
         var skipped = new ListBox { Margin = new Thickness(0, 6, 0, 10) };

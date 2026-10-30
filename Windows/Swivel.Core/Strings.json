@@ -16583,5 +16583,125 @@
     "Nuxt 构建输出",
     "Nuxt 建置輸出",
     "Nuxt ビルド出力"
+  ],
+  "On exFAT and FAT32 drives (USB sticks, memory cards) Swivel cannot recognise a file again later, so Undo works only while Swivel keeps a reference to each moved or renamed item until you undo or forget the history. Windows may say the drive is in use while it does: forget the history before ejecting it.": [
+    "在 exFAT 和 FAT32 驱动器（U 盘、存储卡）上，Swivel 之后无法再次识别同一个文件，因此只有在 Swivel 为每个移动或重命名的项目保留引用期间才能撤销，直到你撤销或清除历史记录为止。在此期间 Windows 可能提示驱动器正在使用：弹出前请先清除历史记录。",
+    "在 exFAT 和 FAT32 磁碟機（USB 隨身碟、記憶卡）上，Swivel 之後無法再次辨識同一個檔案，因此只有在 Swivel 為每個移動或重新命名的項目保留參照期間才能復原，直到你復原或清除歷程記錄為止。在此期間 Windows 可能提示磁碟機正在使用中：退出前請先清除歷程記錄。",
+    "exFAT や FAT32 のドライブ（USB メモリー、メモリーカード）では、Swivel は後から同じファイルを識別できません。そのため取り消しは、移動または名前変更した各項目への参照を Swivel が保持している間だけ使えます（取り消すか履歴を消去するまで）。その間、Windows がドライブを使用中と表示することがあります。取り出す前に履歴を消去してください。"
+  ],
+  "On exFAT and FAT32 drives, choose each item by its exact stored name (same letter case, not a short 8.3 name).": [
+    "在 exFAT 和 FAT32 驱动器上，请按项目实际存储的名称选择（大小写一致，不要使用 8.3 短名称）。",
+    "在 exFAT 和 FAT32 磁碟機上，請依項目實際儲存的名稱選擇（大小寫一致，不要使用 8.3 短名稱）。",
+    "exFAT や FAT32 のドライブでは、各項目を保存されている正確な名前で選んでください（大文字と小文字も同じ、8.3 形式の短い名前は不可）。"
+  ],
+  "The drive did not store the new name exactly as asked. Nothing was overwritten; check the current names.": [
+    "驱动器没有完全按要求存储新名称。没有覆盖任何内容；请检查当前名称。",
+    "磁碟機沒有完全依要求儲存新名稱。沒有覆寫任何內容；請檢查目前名稱。",
+    "ドライブは新しい名前を指定どおりに保存しませんでした。何も上書きされていません。現在の名前を確認してください。"
+  ],
+  "Undo is no longer available for this item: on exFAT and FAT32 drives it needs the reference Swivel kept, which was released. Nothing was changed.": [
+    "此项目已无法撤销：在 exFAT 和 FAT32 驱动器上，撤销需要 Swivel 保留的引用，而该引用已被释放。没有更改任何内容。",
+    "此項目已無法復原：在 exFAT 和 FAT32 磁碟機上，復原需要 Swivel 保留的參照，而該參照已被釋放。沒有變更任何內容。",
+    "この項目はもう取り消せません。exFAT や FAT32 のドライブでは、Swivel が保持していた参照が必要ですが、それは解放されました。何も変更されていません。"
+  ],
+  "An item was moved, renamed or removed by another app since. Undo was refused without changing it.": [
+    "之后有项目被其他应用移动、重命名或删除。已拒绝撤销，未作任何更改。",
+    "之後有項目被其他應用程式移動、重新命名或刪除。已拒絕復原，未作任何變更。",
+    "その後、項目が別のアプリによって移動、名前変更、または削除されました。取り消しは何も変更せずに拒否されました。"
+  ],
+  "\"{0}\" is 4 GB or larger, and FAT32 drives cannot hold files that large. Nothing was copied. Choose an NTFS or exFAT destination.": [
+    "“{0}”大于或等于 4 GB，FAT32 驱动器无法存放这么大的文件。没有复制任何内容。请选择 NTFS 或 exFAT 目标位置。",
+    "「{0}」大於或等於 4 GB，FAT32 磁碟機無法存放這麼大的檔案。沒有複製任何內容。請選擇 NTFS 或 exFAT 目的地。",
+    "「{0}」は 4 GB 以上あり、FAT32 のドライブにはこの大きさのファイルを保存できません。何もコピーされていません。NTFS または exFAT のコピー先を選んでください。"
+  ],
+  "\"{0}\" has extra data streams that exFAT and FAT32 drives cannot hold. Nothing was copied. Choose an NTFS destination.": [
+    "“{0}”含有 exFAT 和 FAT32 驱动器无法存放的额外数据流。没有复制任何内容。请选择 NTFS 目标位置。",
+    "「{0}」含有 exFAT 和 FAT32 磁碟機無法存放的額外資料串流。沒有複製任何內容。請選擇 NTFS 目的地。",
+    "「{0}」には exFAT や FAT32 のドライブに保存できない追加のデータストリームがあります。何もコピーされていません。NTFS のコピー先を選んでください。"
+  ],
+  "\"{0}\" has a name exFAT and FAT32 drives cannot store. Nothing was copied.": [
+    "“{0}”的名称无法存储在 exFAT 和 FAT32 驱动器上。没有复制任何内容。",
+    "「{0}」的名稱無法儲存在 exFAT 和 FAT32 磁碟機上。沒有複製任何內容。",
+    "「{0}」は exFAT や FAT32 のドライブに保存できない名前です。何もコピーされていません。"
+  ],
+  "\"{0}\" and \"{1}\" differ only in letter case; exFAT and FAT32 drives cannot hold both in one folder. Nothing was copied.": [
+    "“{0}”和“{1}”仅大小写不同；exFAT 和 FAT32 驱动器无法在同一文件夹中同时存放二者。没有复制任何内容。",
+    "「{0}」和「{1}」僅大小寫不同；exFAT 和 FAT32 磁碟機無法在同一資料夾中同時存放兩者。沒有複製任何內容。",
+    "「{0}」と「{1}」は大文字と小文字だけが異なります。exFAT や FAT32 のドライブでは、1 つのフォルダーに両方を保存できません。何もコピーされていません。"
+  ],
+  "{0} file(s) carry the download warning (Mark of the Web). exFAT and FAT32 drives cannot store it, so their copies would open without it.": [
+    "{0} 个文件带有下载警告（Web 标记）。exFAT 和 FAT32 驱动器无法存储该标记，因此这些副本打开时将不再有此警告。",
+    "{0} 個檔案帶有下載警告（Web 標記）。exFAT 和 FAT32 磁碟機無法儲存該標記，因此這些副本開啟時將不再有此警告。",
+    "{0} 個のファイルにダウンロード警告（Mark of the Web）があります。exFAT や FAT32 のドライブには保存できないため、コピーは警告なしで開かれます。"
+  ],
+  "Copy them without the download warning": [
+    "复制这些文件，不保留下载警告",
+    "複製這些檔案，不保留下載警告",
+    "ダウンロード警告なしでコピーする"
+  ],
+  "\"{0}\" carries the download warning, which exFAT and FAT32 drives cannot store. Nothing more was copied; confirm losing the warning to copy it.": [
+    "“{0}”带有下载警告，而 exFAT 和 FAT32 驱动器无法存储它。没有再复制其他内容；如要复制，请确认放弃该警告。",
+    "「{0}」帶有下載警告，而 exFAT 和 FAT32 磁碟機無法儲存它。沒有再複製其他內容；如要複製，請確認放棄該警告。",
+    "「{0}」にはダウンロード警告がありますが、exFAT や FAT32 のドライブには保存できません。これ以上はコピーされていません。コピーするには警告を失うことを確認してください。"
+  ],
+  "The folder and everything inside it move as one, by renaming it into the destination on the same drive: nothing is copied. If the destination already has an item with this name, the folder takes the next free numbered name; nothing is overwritten. Undo puts it back while it is still the same folder and its original name is free.": [
+    "文件夹及其中的所有内容作为一个整体移动：在同一驱动器上将其重命名到目标位置，不复制任何内容。如果目标位置已有同名项目，文件夹会使用下一个可用的编号名称；不会覆盖任何内容。只要仍是同一个文件夹且原名称未被占用，撤销即可将其放回原处。",
+    "資料夾及其中的所有內容作為一個整體移動：在同一磁碟機上將其重新命名到目的地，不複製任何內容。如果目的地已有同名項目，資料夾會使用下一個可用的編號名稱；不會覆寫任何內容。只要仍是同一個資料夾且原名稱未被佔用，復原即可將其放回原處。",
+    "フォルダーとその中のすべてが 1 つとして移動します。同じドライブ上でコピー先へ名前を変更するだけで、何もコピーされません。コピー先に同じ名前の項目がある場合は、次に空いている番号付きの名前になります。何も上書きされません。同じフォルダーのままで元の名前が空いていれば、取り消しで元に戻せます。"
+  ],
+  "The destination is an exFAT or FAT32 drive: copies keep file contents, attributes and modified times, but such drives cannot store extra data streams, and FAT32 cannot hold files of 4 GB or more.": [
+    "目标位置是 exFAT 或 FAT32 驱动器：副本会保留文件内容、属性和修改时间，但这类驱动器无法存储额外的数据流，且 FAT32 无法存放 4 GB 或更大的文件。",
+    "目的地是 exFAT 或 FAT32 磁碟機：副本會保留檔案內容、屬性和修改時間，但這類磁碟機無法儲存額外的資料串流，且 FAT32 無法存放 4 GB 或更大的檔案。",
+    "コピー先は exFAT または FAT32 のドライブです。コピーにはファイルの内容、属性、更新日時が保持されますが、このようなドライブには追加のデータストリームを保存できず、FAT32 には 4 GB 以上のファイルを保存できません。"
+  ],
+  "Undo is not offered for copies on exFAT and FAT32 drives: they cannot recognise a copy again, and removable drives usually have no Recycle Bin.": [
+    "exFAT 和 FAT32 驱动器上的副本不提供撤销：这类驱动器无法再次识别副本，而且可移动驱动器通常没有回收站。",
+    "exFAT 和 FAT32 磁碟機上的副本不提供復原：這類磁碟機無法再次辨識副本，而且卸除式磁碟機通常沒有資源回收筒。",
+    "exFAT や FAT32 のドライブ上のコピーには取り消しを提供しません。コピーを再び識別できず、リムーバブルドライブには通常ごみ箱がないためです。"
+  ],
+  "Batch Rename works on NTFS, exFAT and FAT32 drives only.": [
+    "批量重命名仅适用于 NTFS、exFAT 和 FAT32 驱动器。",
+    "批次重新命名僅適用於 NTFS、exFAT 和 FAT32 磁碟機。",
+    "一括名前変更は NTFS、exFAT、FAT32 のドライブでのみ使えます。"
+  ],
+  "Move Files moves files only within one drive. Nothing was copied or deleted.": [
+    "移动文件只能在同一驱动器内移动文件。没有复制或删除任何内容。",
+    "移動檔案只能在同一磁碟機內移動檔案。沒有複製或刪除任何內容。",
+    "ファイルの移動は同じドライブ内でのみ行えます。何もコピーまたは削除されていません。"
+  ],
+  "A file is in use by another app. Nothing was changed.": [
+    "有文件正被其他应用使用。没有更改任何内容。",
+    "有檔案正被其他應用程式使用。沒有變更任何內容。",
+    "ファイルが別のアプリで使用中です。何も変更されていません。"
+  ],
+  "Regular files on NTFS, exFAT and FAT32 drives only. Case-only changes, swaps and chains use temporary names in the same folder. Conflicts never overwrite files. If rollback fails, review the recovery paths. A crash may leave temporary names; undo history lasts only for this session.": [
+    "仅限 NTFS、exFAT 和 FAT32 驱动器上的普通文件。仅大小写变化、互换和连环重命名会在同一文件夹中使用临时名称。冲突时绝不会覆盖文件。如果回滚失败，请查看恢复路径。崩溃可能留下临时名称；撤销历史仅在本次会话中保留。",
+    "僅限 NTFS、exFAT 和 FAT32 磁碟機上的一般檔案。僅大小寫變更、互換和連環重新命名會在同一資料夾中使用暫時名稱。衝突時絕不會覆寫檔案。如果復原失敗，請查看還原路徑。當機可能留下暫時名稱；復原歷程記錄僅在本次工作階段中保留。",
+    "NTFS、exFAT、FAT32 のドライブ上の通常のファイルのみ。大文字と小文字だけの変更、入れ替え、連鎖した名前変更では、同じフォルダー内で一時的な名前を使います。競合時にファイルが上書きされることはありません。ロールバックに失敗した場合は、復旧先のパスを確認してください。クラッシュすると一時的な名前が残ることがあります。取り消し履歴はこのセッション中のみ保持されます。"
+  ],
+  "Choose 1–100 ordinary files on the same exFAT or FAT32 drive as the destination. Each file moves by renaming it into the destination folder: contents are not read or copied. Files already in the destination folder stay in place and are marked as unchanged.": [
+    "请选择与目标位置在同一 exFAT 或 FAT32 驱动器上的 1–100 个普通文件。每个文件都通过重命名移入目标文件夹：不会读取或复制内容。已在目标文件夹中的文件保持不动，并标记为未更改。",
+    "請選擇與目的地在同一 exFAT 或 FAT32 磁碟機上的 1–100 個一般檔案。每個檔案都透過重新命名移入目的地資料夾：不會讀取或複製內容。已在目的地資料夾中的檔案保持不動，並標示為未變更。",
+    "コピー先と同じ exFAT または FAT32 のドライブにある通常のファイルを 1～100 個選んでください。各ファイルは名前を変更してコピー先フォルダーへ移動します。内容は読み取りもコピーもされません。すでにコピー先フォルダーにあるファイルはそのままで、未変更として表示されます。"
+  ],
+  "Move original files to another folder on the same drive (NTFS, exFAT or FAT32), or copy files to any local NTFS, exFAT or FAT32 folder. Review every source and destination before confirming. Moves across drives are offered as copies.": [
+    "将原始文件移动到同一驱动器（NTFS、exFAT 或 FAT32）上的另一个文件夹，或将文件复制到任意本地 NTFS、exFAT 或 FAT32 文件夹。确认前请检查每个来源和目标。跨驱动器的移动会改为提供复制。",
+    "將原始檔案移動到同一磁碟機（NTFS、exFAT 或 FAT32）上的另一個資料夾，或將檔案複製到任何本機 NTFS、exFAT 或 FAT32 資料夾。確認前請檢查每個來源和目的地。跨磁碟機的移動會改為提供複製。",
+    "元のファイルを同じドライブ（NTFS、exFAT、FAT32）上の別のフォルダーへ移動するか、ローカルの NTFS、exFAT、FAT32 のフォルダーへコピーします。確定する前に、すべての移動元と移動先を確認してください。ドライブをまたぐ移動はコピーとして提案されます。"
+  ],
+  "Move Folder renames the whole folder into another folder on the same drive (NTFS, exFAT or FAT32; on another drive it is copied instead). Its Undo history lasts only for this session, up to 20 moves, and returns the latest move first.": [
+    "移动文件夹会把整个文件夹重命名到同一驱动器（NTFS、exFAT 或 FAT32）上的另一个文件夹中（在其他驱动器上则改为复制）。其撤销历史仅在本次会话中保留，最多 20 次移动，并且先撤销最近一次。",
+    "移動資料夾會把整個資料夾重新命名到同一磁碟機（NTFS、exFAT 或 FAT32）上的另一個資料夾中（在其他磁碟機上則改為複製）。其復原歷程記錄僅在本次工作階段中保留，最多 20 次移動，並且先復原最近一次。",
+    "フォルダーの移動では、フォルダー全体の名前を変更して同じドライブ（NTFS、exFAT、FAT32）上の別のフォルダーへ移します（別のドライブではコピーになります）。取り消し履歴はこのセッション中のみ、最大 20 回まで保持され、最新の移動から元に戻します。"
+  ],
+  "Preview names, rename without overwriting and undo after identity checks. Regular files on NTFS, exFAT and FAT32. Case-only changes, swaps and chains use temporary names in the same folder; a crash may leave them behind. Read-only files stay read-only; renaming a hard link changes only that name. On exFAT and FAT32, Undo needs the reference Swivel keeps to each renamed file until it is undone or the history is forgotten. Other file systems remain unsupported.": [
+    "预览名称、不覆盖改名，并在身份核验后撤销。支持 NTFS、exFAT 和 FAT32 上的普通文件。仅大小写变化、互换及连锁改名使用同目录临时名称；异常退出可能留下临时文件。只读文件改名后仍为只读；硬链接只改所选的这个名称。在 exFAT 和 FAT32 上，撤销需要 Swivel 为每个改名文件保留的引用，直到撤销或清除历史记录。暂不支持其他文件系统。",
+    "預覽名稱、不覆寫改名，並在身分核驗後復原。支援 NTFS、exFAT 和 FAT32 上的一般檔案。僅大小寫變更、互換及連鎖改名使用同目錄暫存名稱；異常結束可能留下暫存檔案。唯讀檔案改名後仍為唯讀；硬連結只改所選的這個名稱。在 exFAT 和 FAT32 上，復原需要 Swivel 為每個改名檔案保留的參照，直到復原或清除歷程記錄。暫不支援其他檔案系統。",
+    "名前を確認し、上書きせず変更し、識別情報を検証して取り消します。NTFS、exFAT、FAT32 の通常ファイルに対応。大文字小文字の変更、交換、連鎖は同じフォルダーの一時名を使用し、異常終了時に残る場合があります。読み取り専用ファイルは名前を変えても読み取り専用のままです。ハードリンクは選んだその名前だけが変わります。exFAT と FAT32 では、取り消すか履歴を消去するまで、Swivel が名前を変えた各ファイルへの参照を保持する必要があります。他のファイルシステムは未対応です。"
+  ],
+  "Explicitly move ordinary files within one NTFS volume after a full path preview. No overwriting; the same file objects retain attached data and original permissions. Failed moves attempt rollback, with exact recovery paths and up to 20 session Undo records checked against recorded identities and metadata. Content changes are not fully detected. Copy to Folder copies 1–100 files to a local NTFS folder with every data stream, the download warning, attributes and the modified time, never overwriting; each copy's stream names and sizes are checked against the original. On exFAT and FAT32 drives files also move within the drive, and Copy to Folder copies there with contents, attributes and modified times (the download warning only with explicit consent to lose it; extra streams and FAT32 files of 4 GB or more are refused); Undo of moves there needs references Swivel keeps. Read-only files stay read-only and moving a hard link moves only that name. Moving across volumes, and moving folders or cloud links, remain unavailable; real Windows acceptance is pending.": [
+    "完整路径预览后，明确在同一 NTFS 卷内移动普通文件。不覆盖，原文件对象保留附带数据及原权限。失败时尝试回滚，记录准确恢复路径，并提供最多 20 批会话撤销，核对已记录的身份及元数据；不能检测所有内容变化。复制到文件夹可把 1–100 个文件复制到本地 NTFS 文件夹，保留所有数据流、下载警告、属性和修改时间，绝不覆盖，并核对每个副本的数据流名称和大小。在 exFAT 和 FAT32 驱动器上也可在驱动器内移动文件，复制到文件夹时会保留内容、属性和修改时间（仅在明确同意放弃时才会丢失下载警告；额外数据流和 FAT32 上 4 GB 及以上的文件会被拒绝）；在这些驱动器上撤销移动需要 Swivel 保留的引用。只读文件移动后仍为只读，移动硬链接只移动所选名称。暂不支持跨卷移动，以及移动文件夹或云链接；真实 Windows 验收仍待执行。",
+    "完整路徑預覽後，明確在同一 NTFS 磁碟區內移動一般檔案。不覆寫，原檔案物件保留附帶資料及原權限。失敗時嘗試復原，記錄準確恢復路徑，並提供最多 20 批工作階段復原，核對已記錄的身分及中繼資料；不能偵測所有內容變更。複製到資料夾可把 1–100 個檔案複製到本機 NTFS 資料夾，保留所有資料流、下載警告、屬性和修改時間，絕不覆寫，並核對每個副本的資料流名稱和大小。在 exFAT 和 FAT32 磁碟機上也可在磁碟機內移動檔案，複製到資料夾時會保留內容、屬性和修改時間（僅在明確同意放棄時才會遺失下載警告；額外資料流和 FAT32 上 4 GB 及以上的檔案會被拒絕）；在這些磁碟機上復原移動需要 Swivel 保留的參照。唯讀檔案移動後仍為唯讀，移動硬連結只移動所選名稱。暫不支援跨磁碟區移動，以及移動資料夾或雲端連結；真實 Windows 驗收仍待執行。",
+    "完全なパスを確認後、同じ NTFS ボリューム内で通常ファイルを明示的に移動します。上書きせず、同じファイルが付随データと元の権限を保持します。失敗時は復元を試み、正確な復旧パスと最大 20 回分のセッション取り消し履歴を記録します。識別情報と記録済みメタデータを照合しますが、すべての内容変更を検出できません。フォルダーへのコピーでは 1～100 個のファイルをローカル NTFS フォルダーにコピーし、すべてのデータストリーム、ダウンロードの警告、属性、更新日時を残し、上書きせず、各コピーのストリーム名とサイズを照合します。exFAT と FAT32 のドライブでもドライブ内でファイルを移動でき、フォルダーへのコピーでは内容、属性、更新日時を残します（ダウンロードの警告は失うことに明示的に同意した場合のみ失われ、追加のストリームと FAT32 上の 4 GB 以上のファイルは拒否されます）。これらのドライブで移動を取り消すには Swivel が保持する参照が必要です。読み取り専用ファイルは移動後も読み取り専用のままで、ハードリンクは選んだ名前だけが移動します。ボリューム間の移動や、フォルダー・クラウドリンクの移動は未対応です。Windows 実機検証は未実施です。"
   ]
 }

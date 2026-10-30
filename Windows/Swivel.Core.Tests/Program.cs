@@ -75,6 +75,7 @@ WheelGestureIntegrationChecks.Run(Check);
 WheelGestureChecks.Run(Check, Reject);
 ImageArrivalChecks.Run(Check, Reject);
 MoveFilesChecks.Run(Check, Reject);
+FatRulesChecks.Run(Check, Reject);
 PhotoChecks.Run(Check, Reject);
 MarkupChecks.Run(Check, Reject);
 FileToolChecks.Run(Check, Reject);

@@ -20,8 +20,11 @@ public static partial class NativeFiles
         private readonly List<SafeFileHandle> handles = new();
         internal MoveDirectorySnapshot Snapshot { get; private set; } = null!;
         internal SafeFileHandle Handle => handles[^1];
+        /// On exFAT/FAT32 (only with `allowFat`): ancestors are identified by their directory entry
+        /// position, which stays put while they are held without delete sharing.
+        internal bool IsFat { get; private set; }
         private MoveDirectoryLease() { }
-        internal static MoveDirectoryLease Open(string suppliedPath, CancellationToken token)
+        internal static MoveDirectoryLease Open(string suppliedPath, CancellationToken token, bool allowFat = false)
         {
             string path = MoveRules.DirectoryPath(suppliedPath);
             token.ThrowIfCancellationRequested();
@@ -35,12 +38,16 @@ public static partial class NativeFiles
                     token.ThrowIfCancellationRequested();
                     var handle = NativeFiles.Open(current, ReadAttributes | Traverse, 3, 3, OpenReparse | BackupSemantics); // held like DirectoryLease
                     lease.handles.Add(handle); Check(handle, true);
-                    entries.Add(new(current, ReadMoveIdentity(handle)));
+                    if (lease.handles.Count == 1) lease.IsFat = allowFat && FatRules.IsFat(Format(handle));
+                    entries.Add(new(current, lease.ReadIdentity(handle)));
                 }
                 string current = path[..3]; Add(current);
                 foreach (string component in path[3..].Split('\\', StringSplitOptions.RemoveEmptyEntries))
                 { current = current.TrimEnd('\\') + "\\" + component; Add(current); }
-                RequireMoveNtfs(lease.Handle);
+                // FAT: the folders must be named exactly as stored, so the paths a move or its Undo
+                // records are the ones the file system reports for the kept references.
+                if (lease.IsFat) { if (!FatRules.IsFat(Format(lease.Handle))) throw new UserError(LocalOnly); RequireExactFatName(lease.Handle, path); }
+                else RequireMoveNtfs(lease.Handle);
                 lease.Snapshot = new(path, entries.AsReadOnly()); MoveRules.ValidateDirectory(lease.Snapshot);
                 token.ThrowIfCancellationRequested(); return lease;
             }
@@ -56,10 +63,11 @@ public static partial class NativeFiles
             for (int i = 0; i < handles.Count; i++)
             {
                 Check(handles[i], true);
-                if (ReadMoveIdentity(handles[i]) != Snapshot.Ancestors[i].Identity)
+                if (ReadIdentity(handles[i]) != Snapshot.Ancestors[i].Identity)
                     throw new UserError("A source or destination folder changed. Create a new move preview.");
             }
         }
+        private MoveIdentity ReadIdentity(SafeFileHandle handle) => IsFat ? FatPositionIdentity(handle) : ReadMoveIdentity(handle);
         public void Dispose()
         {
             List<Exception>? errors = null;
@@ -74,36 +82,52 @@ public static partial class NativeFiles
         private readonly SafeFileHandle handle;
         private readonly MoveDirectoryLease start, destination;
         private readonly MoveIdentity identity;
+        // exFAT/FAT32: the held-handle token that stands for the file's identity (see NativeFiles.Fat.cs).
+        private readonly ulong? fatToken;
         public string CurrentPath { get; private set; }
         public MoveFileStamp? VerifiedStamp { get; private set; }
         public MoveDirectorySnapshot CurrentDirectory { get; private set; }
         /// The held file's stamp and stored name (long name, exact case), as the agent tools compare them.
         public FileStamp FileStamp => ReadStamp(handle);
         public string StoredName => Leaf(FinalPath(handle));
-        private MoveLease(string path, SafeFileHandle handle, MoveDirectoryLease start, MoveDirectoryLease destination, MoveFileStamp stamp)
+        private MoveLease(string path, SafeFileHandle handle, MoveDirectoryLease start, MoveDirectoryLease destination, MoveFileStamp stamp, ulong? fatToken)
         {
-            CurrentPath = path; this.handle = handle; this.start = start; this.destination = destination;
+            CurrentPath = path; this.handle = handle; this.start = start; this.destination = destination; this.fatToken = fatToken;
             VerifiedStamp = stamp; identity = stamp.Identity; CurrentDirectory = start.Snapshot;
         }
-        internal static MoveLease Open(string path, MoveDirectoryLease start, MoveDirectoryLease destination)
+        /// On exFAT/FAT32 (when the folders are), `fatToken` from an undo receipt reopens the file
+        /// Swivel kept a reference to instead of opening the path.
+        internal static MoveLease Open(string path, MoveDirectoryLease start, MoveDirectoryLease destination, ulong? fatToken = null)
         {
             WindowsPathPolicy.Validate(path); SafeFileHandle? handle = null;
             try
             {
+                if (start.IsFat || destination.IsFat)
+                {
+                    if (!start.IsFat || !destination.IsFat) throw new UserError("Move Files currently requires source and destination on the same NTFS volume. Nothing was copied or deleted.");
+                    handle = fatToken is ulong held ? ReopenFat(held, path, DeleteAccess | ReadAttributes, 1, false) : NativeFiles.Open(path, DeleteAccess | ReadAttributes, 1, 3, OpenReparse);
+                    Check(handle, false);
+                    if (fatToken is null) RequireExactFatName(handle, path);
+                    if (!FatRules.IsFat(Format(handle))) throw new UserError(LocalOnly);
+                    ulong token = fatToken ?? NewFatToken(); var fatStamp = ReadMoveStamp(handle, token);
+                    if (fatStamp.Identity.Volume != start.Snapshot.LeafIdentity.Volume || fatStamp.Identity.Volume != destination.Snapshot.LeafIdentity.Volume)
+                        throw new UserError("Move Files moves files only within one drive. Nothing was copied or deleted.");
+                    var fat = new MoveLease(path, handle, start, destination, fatStamp, token); handle = null; return fat;
+                }
                 // Do not open a preceding READ-only probe: it would block DELETE.
                 // Attribute/delete access does not read or copy any content stream.
                 handle = NativeFiles.Open(path, DeleteAccess | ReadAttributes, 1, 3, OpenReparse);
                 RequireMoveNtfs(handle); var stamp = ReadMoveStamp(handle);
                 if (stamp.Identity.Volume != start.Snapshot.LeafIdentity.Volume || stamp.Identity.Volume != destination.Snapshot.LeafIdentity.Volume)
                     throw new UserError("Move Files currently requires source and destination on the same NTFS volume. Nothing was copied or deleted.");
-                var lease = new MoveLease(path, handle, start, destination, stamp); handle = null; return lease;
+                var lease = new MoveLease(path, handle, start, destination, stamp, null); handle = null; return lease;
             }
             finally { handle?.Dispose(); }
         }
         public void Validate()
         {
             start.Verify(); destination.Verify();
-            if (VerifiedStamp is not { } expected || ReadMoveStamp(handle) != expected)
+            if (VerifiedStamp is not { } expected || ReadMoveStamp(handle, fatToken) != expected)
                 throw new UserError("The recorded file identity or metadata changed. The move was refused; create a new preview.");
         }
         private MoveDirectoryLease DirectoryFor(string path)
@@ -131,14 +155,18 @@ public static partial class NativeFiles
                 // A failed metadata refresh must not strand a moved object. Recovery
                 // uses the still-held file identity, without trusting a path or stamp.
                 start.Verify(); destination.Verify(); Check(handle, false);
-                if (ReadMoveIdentity(handle) != identity) throw new IOException("The held move identity changed.");
+                if (fatToken is null && ReadMoveIdentity(handle) != identity) throw new IOException("The held move identity changed.");
             }
             if (!RenameMove(handle, directory, MoveRules.FileName(path), out int error)) throw new Win32Exception(error);
             CurrentPath = path; CurrentDirectory = directory.Snapshot; VerifiedStamp = null;
-            VerifiedStamp = ReadMoveStamp(handle);
+            // FAT: the name actually stored decides where the file is.
+            if (fatToken is not null && !string.Equals(FatCurrentPath(handle), path, StringComparison.Ordinal)) throw new UserError(FatRules.NameNotTaken);
+            VerifiedStamp = ReadMoveStamp(handle, fatToken);
             if (!restoring && (before is not { } previous || !MoveRules.SameRenameMetadata(previous, VerifiedStamp.Value)))
                 throw new UserError("The recorded file identity or metadata changed. The move was refused; create a new preview.");
         }
+        /// Keeps a reference for Undo on exFAT/FAT32 (nothing on NTFS).
+        internal void HoldForUndo() { if (fatToken is ulong token) HoldFat(token, handle, false); }
         public void Dispose() => handle.Dispose();
     }
 
@@ -149,7 +177,8 @@ public static partial class NativeFiles
         if (identity.Low == 0 && identity.High == 0) throw new UserError("Move Files requires complete Windows file identities.");
         return identity;
     }
-    private static MoveFileStamp ReadMoveStamp(SafeFileHandle handle)
+    // On exFAT/FAT32 `fatToken` stands in for the file ID, which those drives do not have.
+    private static MoveFileStamp ReadMoveStamp(SafeFileHandle handle, ulong? fatToken = null)
     {
         Check(handle, false);
         if (!GetFileInformationByHandle(handle, out var info)) ThrowLast();
@@ -158,7 +187,8 @@ public static partial class NativeFiles
         // added or removed elsewhere since the preview still stops the move or its undo.
         if (info.Links < 1) throw new UserError("Move Files requires complete Windows file identities.");
         var basic = new byte[40]; if (!GetDirectoryInfo(handle, 0, basic, 40)) ThrowLast();
-        return new(ReadMoveIdentity(handle), ((ulong)info.SizeHigh << 32) | info.SizeLow,
+        var identity = fatToken is ulong token ? new MoveIdentity(info.Volume, token, FatToken) : ReadMoveIdentity(handle);
+        return new(identity, ((ulong)info.SizeHigh << 32) | info.SizeLow,
             BinaryPrimitives.ReadInt64LittleEndian(basic), BinaryPrimitives.ReadInt64LittleEndian(basic.AsSpan(16)),
             BinaryPrimitives.ReadInt64LittleEndian(basic.AsSpan(24)), BinaryPrimitives.ReadUInt32LittleEndian(basic.AsSpan(32)), info.Links);
     }
@@ -192,21 +222,25 @@ public sealed class MoveSession : IDisposable
     /// The held destination folder of a move (not of an undo, which may return to several).
     public MoveIdentity? DestinationIdentity { get; private set; }
     private MoveSession() { }
+    private bool allowFat;
+    /// Whether the files are on an exFAT or FAT32 drive (Undo then needs kept references).
+    public bool IsFat => directories.Any(x => x.IsFat);
     private NativeFiles.MoveDirectoryLease Directory(string path, CancellationToken token)
     {
         path = MoveRules.DirectoryPath(path);
         var found = directories.FirstOrDefault(x => x.Snapshot.Path == path);
         if (found is not null) return found;
-        var added = NativeFiles.MoveDirectoryLease.Open(path, token); directories.Add(added); return added;
+        var added = NativeFiles.MoveDirectoryLease.Open(path, token, allowFat); directories.Add(added); return added;
     }
-    public static MoveSession Open(IReadOnlyList<string> suppliedPaths, string destinationDirectory, CancellationToken token)
+    /// `allowFat`: also within one exFAT or FAT32 drive (the app's own Move Files, not agents).
+    public static MoveSession Open(IReadOnlyList<string> suppliedPaths, string destinationDirectory, CancellationToken token, bool allowFat = false)
     {
         token.ThrowIfCancellationRequested();
         if (suppliedPaths is null || suppliedPaths.Count is < 1 or > MoveRules.MaxFiles)
             throw new UserError("Choose 1–100 distinct files to move.");
         var paths = suppliedPaths.ToArray(); destinationDirectory = MoveRules.DirectoryPath(destinationDirectory);
         MoveRules.Validate(paths.Select(path => new MovePair(path, MoveRules.Destination(path, destinationDirectory))).ToArray());
-        var session = new MoveSession();
+        var session = new MoveSession { allowFat = allowFat };
         try
         {
             var destination = session.Directory(destinationDirectory, token); var plan = new List<MovePair>();
@@ -220,9 +254,9 @@ public sealed class MoveSession : IDisposable
         }
         catch (Exception error) { session.DisposeAfterFailure(error); throw; }
     }
-    public static MoveSession ForUndo(IReadOnlyList<MoveLocation> suppliedReceipt, CancellationToken token)
+    public static MoveSession ForUndo(IReadOnlyList<MoveLocation> suppliedReceipt, CancellationToken token, bool allowFat = false)
     {
-        token.ThrowIfCancellationRequested(); var receipt = MoveReceipts.ForUndo(suppliedReceipt); var session = new MoveSession();
+        token.ThrowIfCancellationRequested(); var receipt = MoveReceipts.ForUndo(suppliedReceipt); var session = new MoveSession { allowFat = allowFat };
         try
         {
             var plan = new List<MovePair>();
@@ -232,7 +266,9 @@ public sealed class MoveSession : IDisposable
                 var source = session.Directory(entry.CurrentDirectory.Path, token); var destination = session.Directory(entry.OriginalDirectory.Path, token);
                 if (!MoveRules.SameDirectory(entry.CurrentDirectory, source.Snapshot) || !MoveRules.SameDirectory(entry.OriginalDirectory, destination.Snapshot))
                     throw new UserError("A source or destination folder changed. Undo was refused without moving any file.");
-                var lease = NativeFiles.MoveLease.Open(entry.Current, source, destination); session.leases.Add(lease);
+                ulong? fatToken = source.IsFat && entry.Stamp!.Value.Identity.High == NativeFiles.FatToken ? entry.Stamp.Value.Identity.Low : null;
+                if (source.IsFat && fatToken is null) throw new UserError(FatRules.Released);
+                var lease = NativeFiles.MoveLease.Open(entry.Current, source, destination, fatToken); session.leases.Add(lease);
                 if (lease.VerifiedStamp != entry.Stamp)
                     throw new UserError("The recorded file identity or metadata changed. The move was refused; create a new preview.");
                 plan.Add(new(entry.Current, entry.Original));
@@ -255,7 +291,12 @@ public sealed class MoveSession : IDisposable
     {
         if (disposed) throw new ObjectDisposedException(nameof(MoveSession));
         if (executed) throw new InvalidOperationException("A move preview can only be executed once.");
-        executed = true; return MoveTransaction.Execute(leases, Plan, token);
+        executed = true; var outcome = MoveTransaction.Execute(leases, Plan, token);
+        // exFAT/FAT32: a reference to each file not in its starting place, for Undo.
+        for (int i = 0; i < leases.Count; i++)
+            if (!string.Equals(leases[i].CurrentPath, Plan[i].Source, StringComparison.Ordinal))
+                try { leases[i].HoldForUndo(); } catch (Exception error) when (error is System.ComponentModel.Win32Exception or UserError) { /* Undo then reports the reference as released. */ }
+        return outcome;
     }
     private void DisposeAfterFailure(Exception original)
     {

@@ -244,7 +244,8 @@ public sealed class MainWindow : Window
     private UIElement MovePage()
     {
         var page = Page(); page.Children.Add(UI.Text(app.L("Move Files"), 22));
-        page.Children.Add(UI.Text(app.L("Move original files to another folder on the same NTFS volume, or copy files to any local NTFS folder. Review every source and destination before confirming. Moves across volumes are not available yet.")));
+        page.Children.Add(UI.Text(app.L("Move original files to another folder on the same drive (NTFS, exFAT or FAT32), or copy files to any local NTFS, exFAT or FAT32 folder. Review every source and destination before confirming. Moves across drives are offered as copies.")));
+        page.Children.Add(UI.Text(app.L(FatRules.UndoNote), 12));
         page.Children.Add(UI.Text(app.L("Move history lasts only for this session, with up to 20 batches. If recovery was incomplete, use the recorded current paths. Closing Swivel or forgetting history removes its Undo records.")));
         bool enabled = app.Prefs.IsOn(Feature.FileMoves);
         if (!enabled) page.Children.Add(UI.Text(app.L("Enable Move Files in Settings first.")));
@@ -263,14 +264,14 @@ public sealed class MainWindow : Window
         copy.IsEnabled = enabled; row.Children.Add(copy);
         var undo = UI.Button(app.L("Undo File Move"), async () => await app.RunActionAsync(new("file.undoMove", "Undo File Move", Feature.FileMoves), Array.Empty<string>(), this, SetStatus));
         undo.IsEnabled = enabled && app.MoveHistory.Count > 0; row.Children.Add(undo);
-        row.Children.Add(UI.Button(app.L("Forget Move History"), () => { if (app.Busy) return; app.MoveHistory.Clear(); Refresh(); })); page.Children.Add(row);
+        row.Children.Add(UI.Button(app.L("Forget Move History"), () => { if (app.Busy) return; app.MoveHistory.Clear(); app.ReleaseUnusedFatHolds(); Refresh(); })); page.Children.Add(row);
         var folders = new WrapPanel();
         var moveFolder = UI.Button(app.L("Move a Folder…"), async () => await app.RunActionAsync(new("file.movefolder", "Move Folder to…", Feature.FileMoves, RequiresFiles: false), Array.Empty<string>(), this, SetStatus));
         moveFolder.IsEnabled = enabled; folders.Children.Add(moveFolder);
         var undoFolder = UI.Button(app.L("Undo Folder Move"), async () => await app.RunActionAsync(new("file.undoFolderMove", "Undo Folder Move", Feature.FileMoves, RequiresFiles: false), Array.Empty<string>(), this, SetStatus));
         undoFolder.IsEnabled = enabled && app.FolderMoveHistory.Count > 0; folders.Children.Add(undoFolder);
-        folders.Children.Add(UI.Button(app.L("Forget Folder Move History"), () => { if (app.Busy) return; app.FolderMoveHistory.Clear(); Refresh(); })); page.Children.Add(folders);
-        page.Children.Add(UI.Text(app.L("Move Folder renames the whole folder into another folder on the same NTFS drive (on another drive it is copied instead). Its Undo history lasts only for this session, up to 20 moves, and returns the latest move first."), 12));
+        folders.Children.Add(UI.Button(app.L("Forget Folder Move History"), () => { if (app.Busy) return; app.FolderMoveHistory.Clear(); app.ReleaseUnusedFatHolds(); Refresh(); })); page.Children.Add(folders);
+        page.Children.Add(UI.Text(app.L("Move Folder renames the whole folder into another folder on the same drive (NTFS, exFAT or FAT32; on another drive it is copied instead). Its Undo history lasts only for this session, up to 20 moves, and returns the latest move first."), 12));
         var results = UI.Button(app.L("Review Last Move Result…"), () =>
         {
             if (app.Busy || app.LastMoveOutcome is not { } outcome) return;
@@ -306,13 +307,14 @@ public sealed class MainWindow : Window
     {
         var page = Page(); page.Children.Add(UI.Text(app.L("Batch Rename"), 22));
         page.Children.Add(UI.Text(app.L("This changes original file names. Review every new name before renaming. Extensions are kept.")));
-        page.Children.Add(UI.Text(app.L("NTFS regular files only. Case-only changes, swaps and chains use temporary names in the same folder. Conflicts never overwrite files. If rollback fails, review the recovery paths. A crash may leave temporary names; undo history lasts only for this session.")));
+        page.Children.Add(UI.Text(app.L(RenameNotices.Scope)));
+        page.Children.Add(UI.Text(app.L(FatRules.UndoNote), 12));
         if (!app.Prefs.IsOn(Feature.BatchRename)) { page.Children.Add(UI.Text(app.L("Enable Batch Rename in Settings first."))); return page; }
         var row = new WrapPanel();
         row.Children.Add(UI.Button(app.L("Choose Files…"), async () => { try { var paths = UI.Pick(this); if (paths.Length > 0) await app.RunActionAsync(new("rename.files", "Batch Rename…"), paths, this, SetStatus); } catch (Exception ex) { app.ShowError(ex); } }));
         var undo = UI.Button(app.L("Undo Rename"), async () => await app.RunActionAsync(new("rename.undo", "Undo Rename"), Array.Empty<string>(), this, SetStatus));
         undo.IsEnabled = app.RenameHistory.Count > 0; row.Children.Add(undo);
-        row.Children.Add(UI.Button(app.L("Forget Undo History"), () => { if (app.Busy) return; app.RenameHistory.Clear(); Refresh(); }));
+        row.Children.Add(UI.Button(app.L("Forget Undo History"), () => { if (app.Busy) return; app.RenameHistory.Clear(); app.ReleaseUnusedFatHolds(); Refresh(); }));
         page.Children.Add(row);
         foreach (var batch in app.RenameHistory.AsEnumerable().Reverse())
         {

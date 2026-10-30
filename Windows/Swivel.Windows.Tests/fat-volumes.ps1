@@ -1,4 +1,4 @@
-# Creates small exFAT and FAT32 virtual disks for the native checks (CI runners are admin;
+# Native checks only (CI, before the suite): creates small exFAT and FAT32 virtual disks for the native checks (CI runners are admin;
 # the app itself never needs elevation). Exports SWIVEL_TEST_EXFAT / SWIVEL_TEST_FAT32.
 $ErrorActionPreference = 'Stop'
 $base = Join-Path $env:RUNNER_TEMP 'swivel-fat'
