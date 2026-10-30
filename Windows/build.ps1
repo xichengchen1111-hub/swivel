@@ -18,7 +18,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Core checks failed.' }
         if ($env:OS -ne 'Windows_NT') { throw 'Native tests require Windows. Cross-builds must explicitly use -SkipTests.' }
         & dotnet run --project Swivel.Windows.Tests -c Release
-        if ($LASTEXITCODE -ne 0) { throw 'Windows native checks failed.' }
+        if ($LASTEXITCODE -ne 0) { Write-Host "DIAG exit code $LASTEXITCODE"; Get-WinEvent -LogName Application -MaxEvents 8 | Where-Object { $_.ProviderName -in 'Application Error','.NET Runtime','Windows Error Reporting' } | ForEach-Object { Write-Host ("DIAG event " + $_.ProviderName + " " + ($_.Message -replace '\s+',' ')) }; throw 'Windows native checks failed.' }
     }
     New-Item -ItemType Directory -Path $output | Out-Null
     & dotnet publish Swivel.Windows -c Release -r $Runtime --self-contained true -p:PublishSingleFile=false -p:PublishReadyToRun=false -o $output
