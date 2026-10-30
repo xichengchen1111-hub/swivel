@@ -1330,7 +1330,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 ## Windows0.132 — merged D04 speed-change sound, F08 Store uninstall, A04 Preview File (Codex) (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: D04 40980786519 (core 4,553,063, native 6,088; review fixes and an exact sound length), F08 40979198060 (core 4,553,170, native 6,097, including a real test-package install/uninstall round trip; no P1/P2 left), A04 40977928721 (core 4,553,221, native 6,112; written by Codex, review no P1/P2, four P3s fixed).
-- After merging all three: core 4,553,516 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- After merging all three: core 4,553,516 on Mac, native compiled 0 warnings/errors there. Windows CI 40984638441 on the merged branch passed (core 4,553,516, native 6,171).
 - Not tested: listening to speed-changed sound, real phone videos, uninstalling real Store apps on a home PC, previews in the real Windows UI.
 
 ## Windows0.131 — merged D04 video edits, D03 noise inputs (Codex), F07 quit apps, G02 Agent tools (2026-10-30)
