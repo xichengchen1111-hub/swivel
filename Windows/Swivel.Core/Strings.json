@@ -16538,5 +16538,50 @@
     "因错误停止",
     "因錯誤停止",
     "エラーで停止"
+  ],
+  "Zig build output": [
+    "Zig 构建输出",
+    "Zig 建置輸出",
+    "Zig ビルド出力"
+  ],
+  "Unity project output": [
+    "Unity 项目输出",
+    "Unity 專案輸出",
+    "Unity プロジェクト出力"
+  ],
+  "Unreal Engine project output": [
+    "Unreal Engine 项目输出",
+    "Unreal Engine 專案輸出",
+    "Unreal Engine プロジェクト出力"
+  ],
+  "SvelteKit build output": [
+    "SvelteKit 构建输出",
+    "SvelteKit 建置輸出",
+    "SvelteKit ビルド出力"
+  ],
+  "CocoaPods dependencies": [
+    "CocoaPods 依赖",
+    "CocoaPods 相依套件",
+    "CocoaPods 依存関係"
+  ],
+  "Maven build output": [
+    "Maven 构建输出",
+    "Maven 建置輸出",
+    "Maven ビルド出力"
+  ],
+  "Elixir build output": [
+    "Elixir 构建输出",
+    "Elixir 建置輸出",
+    "Elixir ビルド出力"
+  ],
+  "Haskell Stack build output": [
+    "Haskell Stack 构建输出",
+    "Haskell Stack 建置輸出",
+    "Haskell Stack ビルド出力"
+  ],
+  "Nuxt build output": [
+    "Nuxt 构建输出",
+    "Nuxt 建置輸出",
+    "Nuxt ビルド出力"
   ]
 }

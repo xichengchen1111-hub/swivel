@@ -32,6 +32,26 @@ internal static class ProjectFolderChecks
             (".godot", "project.godot", null, "Godot project cache"),
             (".dart_tool", "pubspec.yaml", null, "Dart tool cache")
         };
+        var oldRules = rules;
+        rules = rules.Concat(new (string Folder, string Marker, string? Inside, string Kind)[]
+        {
+            ("target", "pom.xml", null, "Maven build output"),
+            ("Pods", "Podfile", null, "CocoaPods dependencies"),
+            ("_build", "mix.exs", null, "Elixir build output"),
+            (".stack-work", "stack.yaml", null, "Haskell Stack build output"),
+            (".zig-cache", "build.zig", null, "Zig build output"),
+            ("zig-cache", "build.zig", null, "Zig build output"),
+            ("zig-out", "build.zig", null, "Zig build output"),
+            ("Intermediate", "Game.uproject", null, "Unreal Engine project output"),
+            ("DerivedDataCache", "Game.uproject", null, "Unreal Engine project output")
+        }).Concat(from extension in new[] { "js", "mjs", "cjs", "ts", "mts", "cts" }
+                  from folder in new[] { ".nuxt", ".svelte-kit" }
+                  select (folder, (folder == ".svelte-kit" ? "svelte" : "nuxt") + ".config." + extension,
+                      (string?)null, folder == ".svelte-kit" ? "SvelteKit build output" : "Nuxt build output")).ToArray();
+        // Folders that can hold what a rebuild cannot bring back are never offered.
+        foreach (var (folder, marker) in new[] { ("Saved", "Game.uproject"), ("Binaries", "Game.uproject"), ("deps", "mix.exs"), (".output", "nuxt.config.ts"), (".terraform", "main.tf") })
+            check(Find(D("root", F(marker, 1), D(folder, F("data", 9)))).Folders.Count == 0, "Not offered (may not be regenerable): " + folder);
+        check(Find(D("root", D("Assets"), D("ProjectSettings", F("ProjectVersion.txt", 1)), D("Temp", D("__Backupscenes", F("0.backup", 9))))).Folders.Count == 0, "Unity Temp (crash scene backups) is never offered");
         foreach (var rule in rules)
         {
             var content = new List<Fixture> { F("output", 77) }; if (rule.Inside is not null) content.Add(F(rule.Inside, 5));
@@ -39,6 +59,14 @@ internal static class ProjectFolderChecks
             var result = Find(root); var row = result.Folders.Single();
             check(row.RelativePath == rule.Folder && row.ProjectPath == "." && row.Kind == rule.Kind && row.Bytes == (rule.Inside is null ? 77 : 82) && row.Files == content.Count && !row.Partial && result.Issues.Count == 0, "Recognize documented project rule using only adjacent ordinary marker names: " + rule.Folder + "/" + rule.Marker);
             check(row.Evidence.Contains(rule.Marker) && (rule.Inside is null || row.Evidence.Contains(rule.Folder + "\\" + rule.Inside)) && row.Evidence.Count == row.EvidenceCount, "Evidence reports actual sibling and internal relative marker paths");
+            if (oldRules.Contains(rule))
+            {
+                var expectedEvidence = new[] { rule.Marker }.Concat(rule.Inside is null ? Array.Empty<string>() : new[] { rule.Folder + "\\" + rule.Inside }).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+                var expected = new ProjectFolderResult(new[] { new ProjectFolder(rule.Folder, ".", rule.Kind, expectedEvidence, expectedEvidence.Length,
+                    rule.Inside is null ? 77 : 82, content.Count, false) }, Array.Empty<ProjectFolderIssue>());
+                check(System.Text.Json.JsonSerializer.Serialize(result) == System.Text.Json.JsonSerializer.Serialize(expected),
+                    "Old rule full serialized result remains byte-for-byte identical: " + rule.Folder + "/" + rule.Marker);
+            }
             check(Strings.Table.ContainsKey(rule.Kind), "Project folder kind translated: " + rule.Kind);
             result = Find(D("root", F(rule.Marker.ToUpperInvariant()), D(rule.Folder.ToUpperInvariant(), content.Select(x => F(x.Name.ToUpperInvariant(), x.Bytes)).ToArray())));
             check(result.Folders.Count == 1 && result.Folders[0].Kind == rule.Kind && result.Folders[0].RelativePath == rule.Folder.ToUpperInvariant(), "Ordinal case-insensitive names recognize Windows spellings while preserving display names");
@@ -64,6 +92,53 @@ internal static class ProjectFolderChecks
                 check(result.Folders.Count == 0, "Internal identifying marker must itself be a regular file");
             }
         }
+        foreach (string folder in new[] { "Library", "obj" })
+        {
+            Fixture Unity(bool version = true, bool assets = true) => D("root",
+                D("ProjectSettings", version ? F("ProjectVersion.txt", 1) : F("other")),
+                assets ? D("Assets") : D("Other"), D(folder, F("output", 77)));
+            var unity = Find(Unity());
+            var expected = new ProjectFolderResult(new[] { new ProjectFolder(folder, ".", "Unity project output",
+                new[] { "ProjectSettings\\ProjectVersion.txt" }, 1, 77, 1, false) }, Array.Empty<ProjectFolderIssue>());
+            check(System.Text.Json.JsonSerializer.Serialize(unity) == System.Text.Json.JsonSerializer.Serialize(expected), "Unity requires sibling Assets and ProjectSettings/ProjectVersion.txt: " + folder);
+            check(Strings.Table.ContainsKey("Unity project output"), "Unity label translated");
+            check(Find(Unity(version: false)).Folders.Count == 0, "Unity without ProjectVersion.txt ignored: " + folder);
+            check(Find(Unity(assets: false)).Folders.Count == 0, "Unity without Assets ignored: " + folder);
+            check(Find(D("root", D("ProjectSettings", D("ProjectVersion.txt")), D("Assets"), D(folder))).Folders.Count == 0, "Unity version marker must be a regular file");
+            check(Find(D("root", D("ProjectSettings", F("ProjectVersion.txt")), F("Assets"), D(folder))).Folders.Count == 0, "Unity Assets must be a directory");
+            foreach (uint flag in new uint[] { 0x4, 0x400, 0x1000, 0x40000, 0x400000 })
+            {
+                check(Find(D("root", D("ProjectSettings", F("ProjectVersion.txt", 0, flag)), D("Assets"), D(folder))).Folders.Count == 0, "Unsafe Unity version marker ignored");
+                check(Find(D("root", new Fixture("ProjectSettings", true, 0, 0x10 | flag, new[] { F("ProjectVersion.txt") }), D("Assets"), D(folder))).Folders.Count == 0, "Unsafe Unity settings directory ignored");
+                check(Find(D("root", D("ProjectSettings", F("ProjectVersion.txt")), new Fixture("Assets", true, 0, 0x10 | flag), D(folder))).Folders.Count == 0, "Unsafe Unity Assets directory ignored");
+            }
+            check(Find(Unity(), new(MaxDepth: 0)).Folders.Count == 0, "Unity does not probe beyond snapshot depth");
+            check(Find(D("root", D("PROJECTSETTINGS", F("PROJECTVERSION.TXT")), D("ASSETS"), D(folder.ToUpperInvariant()))).Folders.Single().Kind == "Unity project output", "Unity marker paths use ordinal case-insensitive matching");
+        }
+        foreach (var (folder, first, second, extra) in new[] {
+            ("target", "Cargo.toml", "pom.xml", Array.Empty<Fixture>()),
+            ("obj", "app.csproj", "unused", new[] { D("Assets"), D("ProjectSettings", F("ProjectVersion.txt")) }) })
+        {
+            var result = Find(D("root", extra.Concat(new[] { F(first), F(second), D(folder) }).ToArray()));
+            check(result.Folders.Count == 0 && result.Issues.Single().Reason == "Ambiguous project markers", "Complete overlapping rules are ambiguous: " + folder);
+        }
+        foreach (var (folder, marker) in new[] { ("Binaries", ".uproject"), (".nuxt", "nuxt.config.js.bak"), (".svelte-kit", "svelte.config."), ("dist", "vite.config.ts") })
+            check(Find(D("root", F(marker), D(folder))).Folders.Count == 0, "Empty wildcard stems, backup configs and generic Vite dist are not project evidence");
+        foreach (var rule in rules.Where(x => !oldRules.Contains(x)))
+        {
+            var nestedNew = Find(D("root", F(rule.Marker), D(rule.Folder, F("package.json"), D("node_modules", F("data", 7)))));
+            check(nestedNew.Folders.Count == 1 && nestedNew.Folders[0].RelativePath == rule.Folder, "New outer candidates suppress nested old candidates: " + rule.Folder);
+            var nestedOld = Find(D("root", F("package.json"), D("node_modules", F(rule.Marker), D(rule.Folder, F("data", 7)))));
+            check(nestedOld.Folders.Count == 1 && nestedOld.Folders[0].RelativePath == "node_modules", "Old outer candidates suppress nested new candidates: " + rule.Folder);
+        }
+        var unityNested = Find(D("root", D("Assets"), D("ProjectSettings", F("ProjectVersion.txt")), D("Library", F("pom.xml"), D("target", F("data", 7)))));
+        check(unityNested.Folders.Count == 1 && unityNested.Folders[0].RelativePath == "Library", "Unity outer candidate suppresses nested Maven candidate");
+        var unityVersions = Enumerable.Range(0, 16).Select(i => F(new string("ProjectVersion.txt".Select((c, at) => at < 4 && ((i >> at) & 1) != 0 ? char.ToUpperInvariant(c) : char.ToLowerInvariant(c)).ToArray()))).ToArray();
+        var unityMany = Find(D("root", D("Assets"), D("ProjectSettings", unityVersions), D("projectsettings", unityVersions), D("Library"))).Folders.Single();
+        var versionPaths = unityVersions.SelectMany(x => new[] { "ProjectSettings\\" + x.Name, "projectsettings\\" + x.Name }).OrderBy(x => x, StringComparer.Ordinal).Take(8);
+        check(unityMany.EvidenceCount == 32 && unityMany.Evidence.SequenceEqual(versionPaths), "Unity merges case-variant settings directories with exact counts and eight sorted file paths");
+        var unrealMany = Find(D("root", Enumerable.Range(0, 30).Reverse().Select(i => F($"p{i:D2}.uproject")).Append(D("Intermediate")).ToArray())).Folders.Single();
+        check(unrealMany.EvidenceCount == 30 && unrealMany.Evidence.SequenceEqual(Enumerable.Range(0, 8).Select(i => $"p{i:D2}.uproject")), "New wildcard evidence preserves count and deterministic eight-path cap");
         foreach (string marker in new[] { ".csproj", ".fsproj", ".vbproj", "app.csproj.bak", "app.csprojx", "csproj" })
         {
             var result = Find(D("root", F(marker), D("bin", F("payload"))));
