@@ -125,7 +125,7 @@ internal static class VideoTrimNativeChecks
         return d[i + 2] > 150 && d[i + 1] < 100 && d[i] < 100 ? 'R' : d[i + 1] > 150 && d[i + 2] < 100 && d[i] < 100 ? 'G' : d[i] > 150 && d[i + 1] < 100 && d[i + 2] < 100 ? 'B' : '?';
     }
 
-    internal static void MakeColourVideo(string root, string path, int width, int height)
+    internal static void MakeColourVideo(string root, string path, int width, int height, byte[]? sound = null)
     {
         var composition = new MediaComposition();
         foreach (var (name, b, g, r) in new[] { ("red", 0, 0, 255), ("green", 0, 255, 0), ("blue", 255, 0, 0) })
@@ -140,7 +140,7 @@ internal static class VideoTrimNativeChecks
             composition.Clips.Add(MediaClip.CreateFromImageFileAsync(image, TimeSpan.FromSeconds(1)).AsTask().GetAwaiter().GetResult());
         }
         string wav = Path.Combine(root, "tone.wav");
-        File.WriteAllBytes(wav, Tone(44100, 3));
+        File.WriteAllBytes(wav, sound ?? Tone(44100, 3));
         var tone = StorageFile.GetFileFromPathAsync(wav).AsTask().GetAwaiter().GetResult();
         composition.BackgroundAudioTracks.Add(BackgroundAudioTrack.CreateFromFileAsync(tone).AsTask().GetAwaiter().GetResult());
         var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.Vga);

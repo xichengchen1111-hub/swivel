@@ -72,6 +72,37 @@ internal static class SpeedSoundChecks
         }
         reject(() => VideoEdit.StretchSound(new MemoryStream(Tone(48000, 2, 4800, 440), false), new MemoryStream(), 100, 4800, 30, default), "1× is never stretched");
 
+        // The combined path must equal explicit denoise-then-stretch bytes, while off
+        // must equal the original stretch bytes (including the WAV header).
+        var noisy = Tone(48000, 1, 48000, 440);
+        var rng = new Random(738);
+        for (int i = 0; i < 48000; i++)
+        {
+            double tone = i < 24000 ? 0 : Math.Sin(2 * Math.PI * 440 * i / 48000) * 12000;
+            BinaryPrimitives.WriteInt16LittleEndian(noisy.AsSpan(44 + i * 2), (short)(tone + rng.Next(-1800, 1801)));
+        }
+        var settings = new WaveNoise(.1, .35, .85);
+        foreach (int speed in new[] { 50, 100, 200, 400 })
+        {
+            long frames = 48000L * 100 / speed;
+            using var source = new MemoryStream(noisy, false);
+            using var cleaned = new MemoryStream(); using var actual = new MemoryStream();
+            long kept = VideoEdit.PrepareSound(source, actual, cleaned, settings, speed, frames, 30, default);
+            using var expectedClean = new MemoryStream();
+            WaveDenoiser.Export(new MemoryStream(noisy, false), expectedClean, settings, default);
+            using var expected = new MemoryStream();
+            if (speed != 100) VideoEdit.StretchSound(expectedClean, expected, speed, frames, 30, default);
+            else PcmWave.Export(expectedClean, expected, new(0, 1), default);
+            check(kept == frames && actual.ToArray().SequenceEqual(expected.ToArray()), $"Video sound at {speed}% is exactly denoise first, then stretch");
+            if (speed != 100)
+            {
+                using var off = new MemoryStream(); using var old = new MemoryStream();
+                VideoEdit.PrepareSound(new MemoryStream(noisy, false), off, null, null, speed, frames, 30, default);
+                VideoEdit.StretchSound(new MemoryStream(noisy, false), old, speed, frames, 30, default);
+                check(off.ToArray().SequenceEqual(old.ToArray()), $"Video sound at {speed}% with cleaning off retains original bytes");
+            }
+        }
+        reject(() => VideoEdit.PrepareSound(new MemoryStream(noisy), new MemoryStream(), new MemoryStream(), settings, 200, 24000, 30, new CancellationToken(true)), "Combined video denoise/stretch observes cancellation");
         Mux(check, reject);
     }
 

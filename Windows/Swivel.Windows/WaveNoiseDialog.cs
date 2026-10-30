@@ -16,14 +16,14 @@ internal sealed class WaveNoiseDialog : Window
     private CancellationTokenSource? cancellation;
     private WaveDialog.PreviewSound? sound;
     private bool closed;
-    public WaveNoiseDialog(App app, WaveDocument document)
+    public WaveNoiseDialog(App app, WaveDocument document, bool forVideo = false, WaveNoise? initial = null, string? displayPath = null)
     {
-        var info = document.Info; Settings = new(0, Math.Min(.25, info.Seconds));
+        var info = document.Info; Settings = initial ?? new(0, Math.Min(.25, info.Seconds));
         Title = app.L("Reduce Audio Noise…"); Width = 760; Height = 730; MinWidth = 500; MinHeight = 400;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(20) }; var panel = new StackPanel();
-        panel.Children.Add(UI.Text(document.Path, 12));
-        panel.Children.Add(UI.Text(app.L(WaveNoiseInput.Hint), 12));
+        panel.Children.Add(UI.Text(displayPath ?? document.Path, 12));
+        if (!forVideo) panel.Children.Add(UI.Text(app.L(WaveNoiseInput.Hint), 12));
         if (document.Decoded) panel.Children.Add(UI.Text(app.L(WaveDocument.DecodedNotice), 12));
         panel.Children.Add(UI.Text(string.Format(app.L("{0:0.###} seconds · {1} Hz · {2} channel(s) · {3}-bit PCM"), info.Seconds, info.Rate, info.Channels, info.Bits), 18));
         panel.Children.Add(UI.Text(app.L("Choose 0.05–2 seconds containing only steady background noise. Speech or music in this sample can also be removed. Listen to the sample, then compare original and processed audio before saving.")));
@@ -33,12 +33,12 @@ internal sealed class WaveNoiseDialog : Window
             var row = new DockPanel(); var box = new TextBox { Text = value.ToString("R", CultureInfo.CurrentCulture), Width = 180, MinHeight = 30, MaxLength = 32, Margin = new Thickness(0, 5, 0, 5) };
             AutomationProperties.SetName(box, app.L(key)); DockPanel.SetDock(box, Dock.Right); row.Children.Add(box); row.Children.Add(UI.Text(app.L(key))); panel.Children.Add(row); return box;
         }
-        var start = Field("Noise Sample Start (seconds)", 0); var end = Field("Noise Sample End (seconds)", Settings.End);
+        var start = Field("Noise Sample Start (seconds)", Settings.Start); var end = Field("Noise Sample End (seconds)", Settings.End);
         panel.Children.Add(UI.Text(app.L("Noise Reduction Strength (%)")));
-        var strength = new Slider { Minimum = 0, Maximum = 100, Value = 75, TickFrequency = 5, IsSnapToTickEnabled = true, Margin = new Thickness(0, 8, 0, 8) };
+        var strength = new Slider { Minimum = 0, Maximum = 100, Value = Settings.Strength * 100, TickFrequency = 5, IsSnapToTickEnabled = true, Margin = new Thickness(0, 8, 0, 8) };
         AutomationProperties.SetName(strength, app.L("Noise Reduction Strength (%)")); panel.Children.Add(strength); var level = UI.Text("75%", 12); panel.Children.Add(level);
         panel.Children.Add(UI.Text(app.L("This local filter estimates steady noise; it does not recognize speech or reliably remove clicks, wind or changing noise. Strong settings can damage speech or create artifacts. Use a lower strength if needed. There is no automatic loudness boost; changed peaks can clip."), 12));
-        panel.Children.Add(UI.Text(app.L("The shaded waveform range is the noise sample. Original and processed previews play the first 10 seconds; sample preview plays your chosen segment. All playback uses 16-bit PCM. Save keeps the full duration, rate, channels and bit depth, removes metadata, and creates a new WAV beside the original."), 12));
+        panel.Children.Add(UI.Text(app.L(forVideo ? "Sample times are relative to the kept part at its original speed. Previews play before any speed change. Apply uses these settings for Trim Video; no WAV is saved. The cleaned sound is encoded as AAC and replaces the original sound track." : "The shaded waveform range is the noise sample. Original and processed previews play the first 10 seconds; sample preview plays your chosen segment. All playback uses 16-bit PCM. Save keeps the full duration, rate, channels and bit depth, removes metadata, and creates a new WAV beside the original."), 12));
         panel.Children.Add(UI.Text(app.L("Find Quiet Sample checks fixed windows of the current sample length, plus a final window ending at the recording end. It suggests the lowest average energy across all channels. Quiet audio can contain speech or music; this is not a noise-only detector. Listen before explicitly choosing Use Suggested Sample. Finding does not change your sample or save audio."), 12));
         QuietSampleCandidate? candidate = null; bool applyingCandidate = false;
         var suggestion = UI.Text(""); panel.Children.Add(suggestion);
@@ -50,8 +50,8 @@ internal sealed class WaveNoiseDialog : Window
         candidateButtons.Children.Add(find); candidateButtons.Children.Add(hear); candidateButtons.Children.Add(use);
         var footer = new StackPanel(); var status = UI.Text(""); footer.Children.Add(status); var buttons = new WrapPanel(); footer.Children.Add(buttons);
         DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer); root.Children.Add(UI.Scroll(panel)); Content = root;
-        var original = UI.Button(app.L("Play Original"), () => { }); var processed = UI.Button(app.L("Play Processed"), () => { }); var sample = UI.Button(app.L("Play Noise Sample"), () => { });
-        var save = UI.Button(app.L("Save WAV"), () => { try { if (!pending.IsCompleted) return; Settings = Read(); Stop(); DialogResult = true; } catch (UserError ex) { status.Text = app.L(ex.Message); } });
+        var original = UI.Button(app.L("Play Original"), () => { }); var processed = UI.Button(app.L(forVideo ? "Play 10 s cleaned" : "Play Processed"), () => { }); var sample = UI.Button(app.L("Play Noise Sample"), () => { });
+        var save = UI.Button(app.L(forVideo ? "Apply" : "Save WAV"), () => { try { if (!pending.IsCompleted) return; Settings = Read(); Stop(); DialogResult = true; } catch (UserError ex) { status.Text = app.L(ex.Message); } });
         original.Click += (_, _) => { if (pending.IsCompleted) pending = Play(0); };
         processed.Click += (_, _) => { if (pending.IsCompleted) pending = Play(1); };
         sample.Click += (_, _) => { if (pending.IsCompleted) pending = Play(2); };
@@ -123,7 +123,7 @@ internal sealed class WaveNoiseDialog : Window
                 sound = prepared; prepared = null; sound.Play(); status.Text = app.L("Playing up to 10 seconds. Stop ends playback.");
             }
             catch (OperationCanceledException) { if (!closed) status.Text = app.L("Cancelled."); }
-            catch (Exception ex) { if (!closed) status.Text = ex is UserError error ? app.L(error.Message) : app.L("Audio preview could not play. You can still save the edited WAV."); }
+            catch (Exception ex) { if (!closed) status.Text = ex is UserError error ? app.L(error.Message) : app.L(forVideo ? "Audio preview could not play." : "Audio preview could not play. You can still save the edited WAV."); }
             finally
             {
                 prepared?.Dispose(); if (ReferenceEquals(cancellation, owned)) cancellation = null; owned.Dispose();

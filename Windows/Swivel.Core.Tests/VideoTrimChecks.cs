@@ -24,6 +24,27 @@ internal static class VideoTrimChecks
         reject(() => VideoTrim.Duration(double.NaN), "The video length must be known");
         reject(() => VideoTrim.Duration(0), "The video length must be positive");
 
+        var noise = new WaveNoise(.1, .3);
+        var clean = VideoTrim.Plan(1000, 1500, 3000, true, noise: noise);
+        check(clean.Noise == noise && clean.Edited, "Video noise sample is relative to the kept part");
+        check(VideoTrim.Plan(0, 3000, 3000, true, noise: noise).Edited, "Cleaning alone permits keeping the whole picture");
+        check(VideoTrim.Plan(0, 1500, 3000, false, noise: noise).Noise is null, "Removing sound disables noise reduction");
+        check(VideoTrim.Plan(0, 1500, 3000, true, false, noise: noise).Noise is null, "A silent video has no noise reduction");
+        reject(() => VideoTrim.Plan(1000, 1500, 3000, true, noise: new(1, 1.2)), "Noise sample cannot use source times outside the kept part");
+        reject(() => VideoTrim.Plan(1000, 1500, 3000, true, speed: 50, noise: new(.5, .7)), "Noise sample bounds use original speed before stretching");
+        check(VideoTrim.Plan(1000, 1500, 3000, true, speed: 400, noise: new(.3, .5)).Noise is not null, "Noise sample may end at the original kept end at 4x");
+        // The decoder may return slightly more sound than the cut; a sample ending at the decoded end
+        // (as Find Quiet Sample suggests) is accepted, then fitted to the sound actually decoded.
+        check(VideoTrim.Plan(0, 5000, 6000, true, noise: new(3.001, 5.001)).Noise is not null, "A sample ending just past the cut (decoder tolerance) is accepted");
+        var fitted = VideoEdit.FitNoise(new WaveNoise(3.001, 5.001), new WaveInfo(48000, 1, 16, 44, 240000 * 2));
+        check(Math.Abs(fitted.End - 5) < 1e-9 && Math.Abs(fitted.Start - 3) < 1e-9, "A sample past the decoded end moves back, keeping its length");
+        check(VideoEdit.FitNoise(new WaveNoise(1, 2), new WaveInfo(48000, 1, 16, 44, 240000 * 2)) == new WaveNoise(1, 2), "A sample inside the decoded sound is unchanged");
+        check(Strings.Table.ContainsKey(VideoEdit.NoiseFailed), "Noise preparation failure is translated");
+        reject(() => VideoTrim.Plan(0, 3000, 3000, true, noise: new(0, 2.01)), "Video noise sample remains limited to two seconds");
+        check(VideoTrim.Plan(0, 1000, 3000, true, noise: new(.000011, .050001), soundRate: 44100).Noise is not null,
+            "Video noise sample uses actual 44.1 kHz nearest-frame boundaries");
+        reject(() => VideoTrim.Plan(0, 1000, 3000, true, noise: new(.000011, .050001), soundRate: 48000),
+            "The same sample is too short at 48 kHz after nearest-frame rounding");
         var plan = VideoTrim.Plan(1_000, 4_000, 10_000, true);
         check(plan == new VideoTrimPlan(1_000, 4_000, true) && plan.Length == 3_000, "A trim keeps the part between start and end");
         check(VideoTrim.Plan(0, 10_000, 10_000, false) == new VideoTrimPlan(0, 10_000, false), "Removing only the sound is allowed");
