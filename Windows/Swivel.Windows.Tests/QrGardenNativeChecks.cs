@@ -30,18 +30,46 @@ internal static class QrGardenNativeChecks
     private static ModelVisual3D Visual(QrGardenDialog dialog)=>Find<Viewport3D>(dialog).Single().Children.OfType<ModelVisual3D>().Single();
     private static void Click(QrGardenDialog dialog,App app,string key)=>Find<Button>(dialog).Single(b=>Equals(b.Content,app.L(key))).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
     private static EmissiveMaterial Emission(GeometryModel3D model)=>((MaterialGroup)model.Material).Children.OfType<EmissiveMaterial>().Single();
-    private static void CheckTopRender(Model3DGroup scene,QrCode code,Action<bool,string> check)
+    private static void CheckRenderPipeline(Action<bool,string> check)
+    {
+        // Independent XY quad: no garden geometry, top camera, fading or layout assumptions.
+        foreach(bool emissive in new[]{false,true})
+        {
+            var color=Color.FromRgb(240,234,224);var brush=new SolidColorBrush(color);var material=new MaterialGroup();
+            material.Children.Add(new DiffuseMaterial(emissive?Brushes.Black:brush));if(emissive)material.Children.Add(new EmissiveMaterial(brush));
+            var mesh=new MeshGeometry3D{Positions=new(){new(-1,-1,0),new(1,-1,0),new(1,1,0),new(-1,1,0)},TriangleIndices=new(){0,1,2,0,2,3}};
+            var scene=new Model3DGroup();scene.Children.Add(new GeometryModel3D(mesh,material));if(!emissive)scene.Children.Add(new AmbientLight(Colors.White));
+            var view=new Viewport3D{Width=32,Height=32,Camera=new OrthographicCamera(new(0,0,10),new(0,0,-1),new(0,1,0),4){NearPlaneDistance=1,FarPlaneDistance=20}};
+            view.Children.Add(new ModelVisual3D{Content=scene});view.Measure(new(32,32));view.Arrange(new(0,0,32,32));view.UpdateLayout();
+            var bitmap=new RenderTargetBitmap(32,32,96,96,PixelFormats.Pbgra32);bitmap.Render(view);var pixel=new byte[4];bitmap.CopyPixels(new Int32Rect(16,16,1,1),pixel,4,0);
+            string values=$"Independent WPF {(emissive?"unlit emissive":"ambient diffuse")} quad: BGRA=({pixel[0]},{pixel[1]},{pixel[2]},{pixel[3]}), expected=(224,234,240,255); tier={RenderCapability.Tier>>16}";
+            Console.WriteLine(values);
+            check(pixel[3]==255&&Math.Abs(pixel[0]-224)<=1&&Math.Abs(pixel[1]-234)<=1&&Math.Abs(pixel[2]-240)<=1,values);
+        }
+    }
+    private static void CheckTopRender(Model3DGroup scene,QrCode code,string label,Action<bool,string> check)
     {
         int extent=code.Size+8,side=extent*8;var top=new Model3DGroup();top.Children.Add(scene.Children[0]);top.Children.Add(scene.Children[1]);
         var view=new Viewport3D{Width=side,Height=side,Camera=new OrthographicCamera(new Point3D(0,extent*3,0),new Vector3D(0,-1,0),new Vector3D(0,0,-1),extent)};
         view.Children.Add(new ModelVisual3D{Content=top});view.Measure(new Size(side,side));view.Arrange(new Rect(0,0,side,side));view.UpdateLayout();
         var bitmap=new RenderTargetBitmap(side,side,96,96,PixelFormats.Pbgra32);bitmap.Render(view);byte[] pixels=new byte[side*side*4];bitmap.CopyPixels(pixels,side*4,0);
+        int failed=0,nonopaque=0,alphaMin=255,alphaMax=0;string first="none";
+        var ranges=new Dictionary<string,(int Count,double Min,double Max)>{["dark"]=(0,1,0),["light"]=(0,1,0),["quiet"]=(0,1,0)};
         for(int r=-4;r<code.Size+4;r++)for(int c=-4;c<code.Size+4;c++)
         {
             int i=(((r+4)*8+4)*side+(c+4)*8+4)*4;double luma=(.2126*pixels[i+2]+.7152*pixels[i+1]+.0722*pixels[i])/255;
-            bool dark=c>=0&&r>=0&&c<code.Size&&r<code.Size&&code[c,r];
-            check(pixels[i+3]==255&&(dark?luma<.60:luma>.82),"Native emissive top render has source module contrast and pale quiet zone without lights");
+            bool inside=c>=0&&r>=0&&c<code.Size&&r<code.Size,dark=inside&&code[c,r];
+            string kind=dark?"dark":inside?"light":"quiet";var range=ranges[kind];ranges[kind]=(range.Count+1,Math.Min(range.Min,luma),Math.Max(range.Max,luma));
+            int alpha=pixels[i+3];alphaMin=Math.Min(alphaMin,alpha);alphaMax=Math.Max(alphaMax,alpha);if(alpha!=255)nonopaque++;
+            if(alpha!=255||!(dark?luma<.60:luma>.82))
+            {
+                if(failed++==0)first=$"module({c},{r}) pixel({(c+4)*8+4},{(r+4)*8+4}) {kind} BGRA=({pixels[i]},{pixels[i+1]},{pixels[i+2]},{alpha}) luma={luma:F6}";
+            }
         }
+        int painted=Enumerable.Range(0,side*side).Count(i=>pixels[i*4+3]!=0);
+        string stats=string.Join("; ",ranges.Select(x=>$"{x.Key}[n={x.Value.Count},luma={x.Value.Min:F6}..{x.Value.Max:F6}]"));
+        var dpi=VisualTreeHelper.GetDpi(view);
+        check(failed==0,$"Native emissive top render has source module contrast and pale quiet zone without lights: {label}; failed={failed}/{extent*extent}; nonopaque={nonopaque}; alpha={alphaMin}..{alphaMax}; painted={painted}/{side*side}; {stats}; first={first}; viewport={view.ActualWidth}x{view.ActualHeight} DIP, dpi={dpi.PixelsPerInchX}x{dpi.PixelsPerInchY}, target={side}x{side}@96; bounds={top.Bounds}");
     }
     internal static void Run(Action<bool,string> check,Action<Action,string> reject)
     {
@@ -49,6 +77,7 @@ internal static class QrGardenNativeChecks
         try
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+            CheckRenderPipeline(check);
             foreach(var template in Enum.GetValues<QrGardenTemplate>())foreach(var season in Enum.GetValues<QrGardenSeason>())
             {
                 var code=QrCode.Encode("Native garden");byte[] png=Png(code);var source=QrGarden.Build(code,template,season);var scene=QrGardenMesh.Build(source,default);
@@ -76,7 +105,7 @@ internal static class QrGardenNativeChecks
                     }
                     check(points==layers[layer].Count*20&&indices==layers[layer].Count*30&&tops.Values.All(x=>x==0),"Exactly five quads per voxel and no missing/recoloured tops");
                 }
-                CheckTopRender(scene,code,check);
+                CheckTopRender(scene,code,$"{template}/{season}",check);
                 var live=new QrGardenPresentation(scene);var structure=(Model3DGroup)live.Root.Children[2];live.SetOpacity(.4);
                 check(structure.Children.OfType<GeometryModel3D>().All(x=>x.Geometry.IsFrozen&&Math.Abs(Emission(x).Brush.Opacity-.4)<1e-12&&Math.Abs(((DiffuseMaterial)((MaterialGroup)x.Material).Children[0]).Brush.Opacity-.4)<1e-12),"Structure fades together without copying geometry");
                 check(ReferenceEquals(live.Root.Children[0],scene.Children[0])&&ReferenceEquals(live.Root.Children[1],scene.Children[1]),"Opaque code surfaces stay frozen and untouched during fade");

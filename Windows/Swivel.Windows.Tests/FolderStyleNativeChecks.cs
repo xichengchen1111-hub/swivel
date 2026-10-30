@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,6 +12,35 @@ using Swivel.Windows;
 
 internal static class FolderStyleNativeChecks
 {
+    private static string IconDifference(byte[] actual,byte[] expected)
+    {
+        int first=0;while(first<Math.Min(actual.Length,expected.Length)&&actual[first]==expected[first])first++;
+        var details=new List<string>{$"ICO bytes={actual.Length}/{expected.Length}, first difference={first}"};
+        for(int frame=0;frame<FolderStyles.IconSizes.Length;frame++)
+        {
+            int entry=6+frame*16,size=FolderStyles.IconSizes[frame];
+            int aLength=BitConverter.ToInt32(actual,entry+8),aOffset=BitConverter.ToInt32(actual,entry+12);
+            int bLength=BitConverter.ToInt32(expected,entry+8),bOffset=BitConverter.ToInt32(expected,entry+12);
+            if(actual.AsSpan(aOffset,aLength).SequenceEqual(expected.AsSpan(bOffset,bLength)))continue;
+            static byte[] Pixels(byte[] icon,int offset,int length,int size)
+            {
+                using var stream=new MemoryStream(icon,offset,length);
+                var source=new PngBitmapDecoder(stream,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad).Frames[0];
+                var bitmap=new FormatConvertedBitmap(source,PixelFormats.Pbgra32,null,0);
+                var result=new byte[size*size*4];bitmap.CopyPixels(result,size*4,0);return result;
+            }
+            byte[] a=Pixels(actual,aOffset,aLength,size),b=Pixels(expected,bOffset,bLength,size);
+            int changed=0,maxDelta=0,firstPixel=-1;
+            for(int i=0;i<a.Length;i+=4)
+            {
+                bool differs=false;for(int c=0;c<4;c++){int delta=Math.Abs(a[i+c]-b[i+c]);maxDelta=Math.Max(maxDelta,delta);differs|=delta!=0;}
+                if(differs){changed++;if(firstPixel<0)firstPixel=i;}
+            }
+            string sample=firstPixel<0?"none":$"({firstPixel/4%size},{firstPixel/4/size}) BGRA={Convert.ToHexString(a.AsSpan(firstPixel,4))}/{Convert.ToHexString(b.AsSpan(firstPixel,4))}";
+            details.Add($"{size}px PNG bytes={aLength}/{bLength}, different pixels={changed}/{size*size}, max channel delta={maxDelta}, first={sample}");
+        }
+        return string.Join("; ",details);
+    }
     internal static void Run(string directory, Action<bool, string> check, Action<Action, string> reject)
     {
         // Windows/NTFS-only. Cross-compiling this fixture is not execution.
@@ -78,7 +108,14 @@ internal static class FolderStyleNativeChecks
             foreach (string mark in new[] { "", "A", "工作", "👩‍💻" })
             {
                 var legacy = new FolderStyle(color, mark);
-                check(FolderStyleIcons.Icon(legacy).SequenceEqual(LegacyFolderStyleIcons.Icon(legacy)), "Existing WPF icon bytes unchanged: " + color + "/" + mark);
+                byte[] actual=FolderStyleIcons.Icon(legacy),expected=LegacyFolderStyleIcons.Icon(legacy);
+                bool identical=actual.SequenceEqual(expected);string detail="";
+                if(!identical)
+                {
+                    // Diagnose repeatability; never use a retry to turn the original mismatch into a pass.
+                    detail="; "+IconDifference(actual,expected)+$"; current repeat identical={actual.SequenceEqual(FolderStyleIcons.Icon(legacy))}; legacy repeat identical={expected.SequenceEqual(LegacyFolderStyleIcons.Icon(legacy))}";
+                }
+                check(identical, "Existing WPF icon bytes unchanged: " + color + "/" + mark + detail);
             }
             foreach (FolderSurface surface in Enum.GetValues<FolderSurface>())
             {
