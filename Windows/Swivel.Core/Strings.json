@@ -17479,11 +17479,6 @@
     "程式與安裝程式 (*.exe;*.msi;*.dll)|*.exe;*.msi;*.dll",
     "プログラムとインストーラー (*.exe;*.msi;*.dll)|*.exe;*.msi;*.dll"
   ],
-  "Read-only check. Swivel never runs or loads the chosen file. The signature check uses Windows' own verification without contacting the internet (only certificates already on this PC are used, and revocation is not checked unless you press Check Revocation Online). Results describe this file now; they are not a malware scan and do not replace Microsoft Defender, SmartScreen or Smart App Control.": [
-    "只读检查。Swivel 绝不运行或加载所选文件。签名检查使用 Windows 自身的验证，不连接互联网（只使用这台电脑上已有的证书；除非你按“联网检查吊销状态”，否则不检查吊销）。结果描述的是文件当前的状态；这不是恶意软件扫描，也不能替代 Microsoft Defender、SmartScreen 或智能应用控制。",
-    "唯讀檢查。Swivel 絕不執行或載入所選檔案。簽章檢查使用 Windows 本身的驗證，不連線網際網路（只使用這台電腦上已有的憑證；除非您按「連線檢查撤銷狀態」，否則不檢查撤銷）。結果描述的是檔案目前的狀態；這不是惡意軟體掃描，也不能取代 Microsoft Defender、SmartScreen 或智慧型應用程式控制。",
-    "読み取り専用の確認です。Swivel は選んだファイルを実行も読み込みもしません。署名の確認には Windows 自身の検証を使い、インターネットには接続しません（この PC にある証明書だけを使い、「失効をオンラインで確認」を押さない限り失効は確認しません）。結果は現在のファイルの状態を示すもので、マルウェア スキャンではなく、Microsoft Defender、SmartScreen、スマート アプリ コントロールの代わりにはなりません。"
-  ],
   "Referring page": [
     "来源页面",
     "來源頁面",
@@ -17503,11 +17498,6 @@
     "未检查吊销状态。按“联网检查吊销状态”向证书颁发机构查询；这会连接互联网。",
     "未檢查撤銷狀態。按「連線檢查撤銷狀態」向憑證授權單位查詢；這會連線網際網路。",
     "失効は確認していません。「失効をオンラインで確認」を押すと証明機関に問い合わせます。インターネットに接続します。"
-  ],
-  "Runs on this PC through Windows' built-in compatibility layer or emulation": [
-    "可通过 Windows 内置的兼容层或仿真在这台电脑上运行",
-    "可透過 Windows 內建的相容層或模擬在這台電腦上執行",
-    "Windows の組み込みの互換レイヤーまたはエミュレーションでこの PC で実行されます"
   ],
   "Show download addresses (may be private)": [
     "显示下载地址（可能涉及隐私）",
@@ -17708,5 +17698,20 @@
     "Windows 自带的步骤：在文件资源管理器中右键单击该文件，选择“属性”，在“常规”选项卡中勾选“解除锁定”，然后单击“确定”。只对来自你信任的发布者的文件这样做。",
     "Windows 本身的步驟：在檔案總管中以滑鼠右鍵按一下該檔案，選擇「內容」，在「一般」索引標籤中勾選「解除封鎖」，然後按「確定」。只對來自您信任的發行者的檔案這樣做。",
     "Windows の手順: エクスプローラーでファイルを右クリックし、［プロパティ］を選び、［全般］タブの［許可する］をオンにして［OK］を押します。信頼できる発行元のファイルに対してだけ行ってください。"
+  ],
+  "Read-only check. Swivel never runs or loads the chosen file. The signature check uses Windows' own verification and asks Windows not to fetch anything from the internet (it uses certificate data already on this PC, and revocation is not checked unless you press Check Revocation Online). Results describe this file now; they are not a malware scan and do not replace Microsoft Defender, SmartScreen or Smart App Control.": [
+    "只读检查。Swivel 绝不运行或加载所选文件。签名检查使用 Windows 自身的验证，并要求 Windows 不从互联网获取任何内容（只使用这台电脑上已有的证书数据；除非你按“联网检查吊销状态”，否则不检查吊销）。结果描述的是文件当前的状态；这不是恶意软件扫描，也不能替代 Microsoft Defender、SmartScreen 或智能应用控制。",
+    "唯讀檢查。Swivel 絕不執行或載入所選檔案。簽章檢查使用 Windows 本身的驗證，並要求 Windows 不從網際網路擷取任何內容（只使用這台電腦上已有的憑證資料；除非您按「連線檢查撤銷狀態」，否則不檢查撤銷）。結果描述的是檔案目前的狀態；這不是惡意軟體掃描，也不能取代 Microsoft Defender、SmartScreen 或智慧型應用程式控制。",
+    "読み取り専用の確認です。Swivel は選んだファイルを実行も読み込みもしません。署名の確認には Windows 自身の検証を使い、インターネットから何も取得しないよう Windows に指定します（この PC にある証明書データだけを使い、「失効をオンラインで確認」を押さない限り失効は確認しません）。結果は現在のファイルの状態を示すもので、マルウェア スキャンではなく、Microsoft Defender、SmartScreen、スマート アプリ コントロールの代わりにはなりません。"
+  ],
+  "Runs on this PC through Windows' compatibility layer or emulation (x64 programs on ARM64 need Windows 11)": [
+    "可通过 Windows 的兼容层或仿真在这台电脑上运行（ARM64 上运行 x64 程序需要 Windows 11）",
+    "可透過 Windows 的相容層或模擬在這台電腦上執行（在 ARM64 上執行 x64 程式需要 Windows 11）",
+    "Windows の互換レイヤーまたはエミュレーションでこの PC で実行されます（ARM64 で x64 プログラムを動かすには Windows 11 が必要）"
+  ],
+  "The online revocation check did not confirm this signature (code {0}). Treat the file as untrusted until the publisher provides a valid copy.": [
+    "联网吊销检查没有确认此签名（代码 {0}）。在发布者提供有效副本之前，请把该文件视为不可信。",
+    "連線撤銷檢查沒有確認此簽章（代碼 {0}）。在發行者提供有效副本之前，請將此檔案視為不可信任。",
+    "オンラインの失効確認でこの署名を確認できませんでした（コード {0}）。発行元から有効なコピーが提供されるまで、このファイルは信頼できないものとして扱ってください。"
   ]
 }

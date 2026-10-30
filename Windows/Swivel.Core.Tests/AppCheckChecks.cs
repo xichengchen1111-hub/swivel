@@ -39,7 +39,7 @@ internal static class AppCheckChecks
         check(V(0x80096010) == TrustVerdict.Changed && V(0x80091007) == TrustVerdict.Changed, "Bad digest means the file changed after signing");
         check(V(0x800B0109) == TrustVerdict.UntrustedRoot && V(0x800B010A) == TrustVerdict.UntrustedRoot, "Untrusted root and broken chain");
         check(V(0x800B0101) == TrustVerdict.Expired && V(0x800B010C) == TrustVerdict.Revoked && V(0x800B0111) == TrustVerdict.Distrusted, "Expired, revoked and distrusted stay distinct");
-        check(V(0x80092013) == TrustVerdict.RevocationUnknown && V(0x80092012) == TrustVerdict.RevocationUnknown, "Offline revocation server is unknown, not revoked");
+        check(V(0x80092013) == TrustVerdict.RevocationUnknown && V(0x80092012) == TrustVerdict.RevocationUnknown && V(0x800B010E) == TrustVerdict.RevocationUnknown, "Offline revocation server is unknown, not revoked");
         check(V(0x80004005) == TrustVerdict.Other && AppCheck.Hex(unchecked((int)0x80004005u)) == "0x80004005", "Unknown codes keep their raw HRESULT");
 
         // Mark of the Web
@@ -60,6 +60,11 @@ internal static class AppCheckChecks
             check(allowed == (verdict is TrustVerdict.Trusted or TrustVerdict.TrustedExpiredTimestamped), "Remove warning offered only for trusted signatures: " + verdict);
             check(!AppCheck.CanRemoveWarning(verdict, null), "Nothing to remove without a mark: " + verdict);
         }
+
+        check(AppCheck.OnlineAllows(null, now) && AppCheck.OnlineAllows(Facts(0), now) && AppCheck.OnlineAllows(Facts(0x80092013), now), "No online result, a trusted one, or unreachable revocation does not block");
+        check(!AppCheck.OnlineAllows(Facts(0x800B010C), now) && !AppCheck.OnlineAllows(Facts(0x800B0111), now) && !AppCheck.OnlineAllows(Facts(0x80096010), now), "Online revoked/distrusted/changed result blocks removal");
+        var revoked = AppCheck.Findings(Facts(0), now, z, 0x8664, ArchFit.Native, Architecture.X64, Array.Empty<ImportFact>(), false, Facts(0x800B010C));
+        check(revoked[0].Level == FindingLevel.Problem && revoked[0].Arguments[0] == "0x800B010C" && Strings.Table.ContainsKey(revoked[0].Text), "Online revocation failure leads the findings");
 
         // Architecture
         check(AppCheck.Fit(0x8664, false, Architecture.X64) == ArchFit.Native && AppCheck.Fit(0xaa64, false, Architecture.Arm64) == ArchFit.Native, "Native processor matches");
@@ -83,6 +88,8 @@ internal static class AppCheckChecks
         check(Read(PeInspectionChecks.Fixture(true)).Names.Count == 0, "No import directory gives an empty list");
         var many = Read(Imports(Enumerable.Range(0, 300).Select(i => "d" + i + ".dll").ToArray()));
         check(many.Truncated && many.Names.Count == AppCheck.MaxImports, "Import list bounded at 256 names");
+        var exact = Read(Imports(Enumerable.Range(0, 256).Select(i => "d" + i + ".dll").ToArray()));
+        check(!exact.Truncated && exact.Names.Count == 256, "Exactly 256 imports with a terminator is complete");
         var damaged = Imports("a.dll"); BinaryPrimitives.WriteUInt32LittleEndian(damaged.AsSpan(512 + 12), 0x9000);
         check(Read(damaged).Partial, "Name outside every section gives a partial list");
         var unterminated = Imports(new string('x', 200));

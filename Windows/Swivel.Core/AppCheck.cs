@@ -33,7 +33,7 @@ public static class AppCheck
 {
     public const string Extensions = "Programs and installers (*.exe;*.msi;*.dll)|*.exe;*.msi;*.dll";
     public const int MaxImports = 256, MaxImportName = 128;
-    public const string Scope = "Read-only check. Swivel never runs or loads the chosen file. The signature check uses Windows' own verification without contacting the internet (only certificates already on this PC are used, and revocation is not checked unless you press Check Revocation Online). Results describe this file now; they are not a malware scan and do not replace Microsoft Defender, SmartScreen or Smart App Control.";
+    public const string Scope = "Read-only check. Swivel never runs or loads the chosen file. The signature check uses Windows' own verification and asks Windows not to fetch anything from the internet (it uses certificate data already on this PC, and revocation is not checked unless you press Check Revocation Online). Results describe this file now; they are not a malware scan and do not replace Microsoft Defender, SmartScreen or Smart App Control.";
     public const string ImportScope = "Imported DLLs are read from the file's import table (at most 256 names). Each name is only looked up as a file in the app's folder, the Windows system folder and the Windows folder; nothing is loaded. Delay-loaded DLLs, DLLs found through PATH, side-by-side manifests or the program's own loading code are not checked, and a found file is not checked for the right processor type.";
     public const string SmartScreen = "\"Windows protected your PC\" is Microsoft Defender SmartScreen. It appears for files that came from the internet when Microsoft has not yet seen the file or its publisher often enough to trust it. It is a warning, not proof that the file is harmful. Swivel never offers a way around it.";
     public const string UnblockSteps = "Windows' own steps: right-click the file in File Explorer, choose Properties, select Unblock on the General tab, then OK. Do this only for a file from a publisher you trust.";
@@ -52,7 +52,7 @@ public static class AppCheck
             0x800B0101 => TrustVerdict.Expired,
             0x800B010C => TrustVerdict.Revoked,
             0x800B0111 => TrustVerdict.Distrusted,
-            0x80092012 or 0x80092013 => TrustVerdict.RevocationUnknown,
+            0x80092012 or 0x80092013 or 0x800B010E => TrustVerdict.RevocationUnknown, // NO_REVOCATION_CHECK, REVOCATION_OFFLINE, CERT_E_REVOCATION_FAILURE
             _ => TrustVerdict.Other,
         };
     }
@@ -60,6 +60,8 @@ public static class AppCheck
     public static bool TrustedForUnblock(TrustVerdict verdict) => verdict is TrustVerdict.Trusted or TrustVerdict.TrustedExpiredTimestamped;
     /// The only state in which Swivel offers to remove the download warning.
     public static bool CanRemoveWarning(TrustVerdict verdict, ZoneFacts? zone) => TrustedForUnblock(verdict) && zone is not null;
+    /// An online result, once known, must also be trusted; revocation that could not be reached does not block.
+    public static bool OnlineAllows(TrustFacts? online, DateTime nowUtc) => online is null || Classify(online, nowUtc) is TrustVerdict.Trusted or TrustVerdict.TrustedExpiredTimestamped or TrustVerdict.RevocationUnknown;
 
     public static string VerdictText(TrustVerdict verdict) => verdict switch
     {
@@ -139,7 +141,7 @@ public static class AppCheck
     public static string FitText(ArchFit fit) => fit switch
     {
         ArchFit.Native => "Made for this PC's processor",
-        ArchFit.Compatible => "Runs on this PC through Windows' built-in compatibility layer or emulation",
+        ArchFit.Compatible => "Runs on this PC through Windows' compatibility layer or emulation (x64 programs on ARM64 need Windows 11)",
         ArchFit.NotSupported => "Made for a different processor; it cannot run on this PC",
         _ => "Not decided from the header alone",
     };
@@ -222,11 +224,11 @@ public static class AppCheck
         if (descriptor < 0) return new(names.AsReadOnly(), false, true);
         for (int i = 0; ; i++)
         {
-            if (i == MaxImports) return new(names.AsReadOnly(), true, false);
             long at = descriptor + i * 20L;
             if (at + 20 > length) return new(names.AsReadOnly(), false, true);
             byte[] entry = ReadAt(at, 20);
             if (entry.All(b => b == 0)) return new(names.AsReadOnly(), false, false);
+            if (i == MaxImports) return new(names.AsReadOnly(), true, false);
             long nameAt = Offset(BinaryPrimitives.ReadUInt32LittleEndian(entry.AsSpan(12)));
             if (nameAt < 0) return new(names.AsReadOnly(), false, true);
             byte[] name = ReadAt(nameAt, (int)Math.Min(MaxImportName + 1, length - nameAt));
@@ -239,9 +241,11 @@ public static class AppCheck
 
     // ---- Summary ----
 
-    public static IReadOnlyList<AppFinding> Findings(TrustFacts trust, DateTime nowUtc, ZoneFacts? zone, ushort? machine, ArchFit? fit, Architecture os, IReadOnlyList<ImportFact>? imports, bool installer)
+    public static IReadOnlyList<AppFinding> Findings(TrustFacts trust, DateTime nowUtc, ZoneFacts? zone, ushort? machine, ArchFit? fit, Architecture os, IReadOnlyList<ImportFact>? imports, bool installer, TrustFacts? online = null)
     {
         var list = new List<AppFinding>(); var verdict = Classify(trust, nowUtc);
+        if (online is not null && !OnlineAllows(online, nowUtc))
+            list.Add(new(FindingLevel.Problem, "The online revocation check did not confirm this signature (code {0}). Treat the file as untrusted until the publisher provides a valid copy.", Hex(online.Hresult)));
         if (fit == ArchFit.NotSupported && machine is ushort m)
             list.Add(new(FindingLevel.Problem, "This program is made for {0} processors, but this PC uses {1}. Get the version made for this PC from the publisher.", MachineName(m), OsName(os)));
         switch (verdict)

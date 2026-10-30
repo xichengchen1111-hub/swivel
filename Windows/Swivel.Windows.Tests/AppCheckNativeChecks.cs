@@ -29,7 +29,8 @@ internal static class AppCheckNativeChecks
             }
 
         // 2. An embedded-signed Microsoft file, copied so it can be changed safely.
-        string? embedded = candidates.FirstOrDefault(p => Header(p) is { Certificates.State: PeCertificateState.HeadersCoverTable } h && h.Certificates.Headers.Count == 1);
+        int ImportCount(string path) { try { using var s = File.OpenRead(path); return AppCheck.ReadImports(s, default).Names.Count; } catch { return 0; } }
+        string? embedded = candidates.FirstOrDefault(p => Header(p) is { Certificates.State: PeCertificateState.HeadersCoverTable } h && h.Certificates.Headers.Count == 1 && ImportCount(p) > 0);
         check(embedded is not null, "System32 has an embedded-signed binary to copy");
         if (embedded is null) return;
         using (var file = AppCheckFile.Open(embedded, default))
@@ -46,7 +47,9 @@ internal static class AppCheckNativeChecks
         int at = (int)Math.Min(info.Certificates.Offset - 16, 0x1000 + 32); changed[at] ^= 0x5A; File.WriteAllBytes(tampered, changed);
         string unsigned = Path.Combine(folder, "Unsigned.dll"); byte[] stripped = original[..(int)info.Certificates.Offset];
         int pe = BinaryPrimitives.ReadInt32LittleEndian(stripped.AsSpan(60)); int directories = pe + 24 + (info.Pe32Plus ? 112 : 96);
-        BinaryPrimitives.WriteUInt64LittleEndian(stripped.AsSpan(directories + 4 * 8), 0); File.WriteAllBytes(unsigned, stripped);
+        BinaryPrimitives.WriteUInt64LittleEndian(stripped.AsSpan(directories + 4 * 8), 0);
+        // Stripping alone keeps the Authenticode hash, so a catalog may still list the copy; change a byte too.
+        stripped[at] ^= 0x5A; File.WriteAllBytes(unsigned, stripped);
         string zone = "[ZoneTransfer]\r\nZoneId=3\r\nReferrerUrl=https://example.test/private-page\r\nHostUrl=https://example.test/private-download.dll\r\n";
         foreach (string path in new[] { signed, tampered, unsigned }) File.WriteAllText(path + ":Zone.Identifier", zone);
 
@@ -60,6 +63,7 @@ internal static class AppCheckNativeChecks
         }
         using (var file = AppCheckFile.Open(unsigned, default))
         {
+            Console.WriteLine("App check unsigned sample: " + AppCheck.Classify(file.Trust, DateTime.UtcNow) + " " + file.Trust.Source + " " + AppCheck.Hex(file.Trust.Hresult));
             check(AppCheck.Classify(file.Trust, DateTime.UtcNow) == TrustVerdict.NotSigned && file.Trust.Source == TrustSource.None, "Copy with the signature removed reports not signed");
             check(file.Zone is { ZoneId: 3 }, "Zone.Identifier stream read: zone 3");
             var dialog = new AppCheckDialog(app, file); bool asked = false; dialog.ConfirmRemove = () => asked = true;
@@ -87,6 +91,7 @@ internal static class AppCheckNativeChecks
         string missing = Path.Combine(folder, "Missing.exe"); File.WriteAllBytes(missing, Fixture("swivel-app-check-missing.dll", "VCRUNTIME140_9.dll", "kernel32.dll"));
         using (var file = AppCheckFile.Open(missing, default))
         {
+            Console.WriteLine("App check built PE: " + AppCheck.Classify(file.Trust, DateTime.UtcNow) + " " + AppCheck.Hex(file.Trust.Hresult));
             check(AppCheck.Classify(file.Trust, DateTime.UtcNow) is not TrustVerdict.Trusted and not TrustVerdict.TrustedExpiredTimestamped, "Built unsigned PE is not trusted");
             check(file.ImportFacts!.Single(x => x.Name == "swivel-app-check-missing.dll").State == ImportState.NotFound && file.ImportFacts!.Single(x => x.Name == "kernel32.dll").State == ImportState.SystemFolder, "Missing and System32 imports told apart without loading");
             var dialog = new AppCheckDialog(app, file); check(dialog.CurrentReport.Contains("swivel-app-check-missing.dll"), "Report lists missing DLL"); dialog.Close();

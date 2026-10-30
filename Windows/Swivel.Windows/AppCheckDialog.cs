@@ -79,7 +79,7 @@ internal sealed class AppCheckDialog : Window
     private void Refresh()
     {
         findings.Children.Clear();
-        foreach (var finding in AppCheck.Findings(file.Trust, DateTime.UtcNow, file.Zone, file.Pe?.Machine, file.Fit, file.Os, file.ImportFacts, file.Installer))
+        foreach (var finding in AppCheck.Findings(file.Trust, DateTime.UtcNow, file.Zone, file.Pe?.Machine, file.Fit, file.Os, file.ImportFacts, file.Installer, file.Online))
             findings.Children.Add(UI.Text(app.L(Level(finding.Level)) + ": " + Format(finding), 13));
         signature.ItemsSource = SignatureRows(file.Trust);
         zonePanel.Children.Clear();
@@ -103,7 +103,7 @@ internal sealed class AppCheckDialog : Window
     internal bool RemoveWarning()
     {
         if (!file.CanRemoveWarning || closed || !pending.IsCompleted) return false;
-        if (!ConfirmRemove()) return false;
+        if (!ConfirmRemove() || closed || !pending.IsCompleted) return false;
         file.RemoveWarning();
         Removed = removedNote = file.Zone is null;
         Refresh();
@@ -118,6 +118,7 @@ internal sealed class AppCheckDialog : Window
             var result = await Task.Run(file.CheckOnline);
             if (closed) return;
             online.Text = app.L("Online revocation check") + ": " + app.L(AppCheck.VerdictText(AppCheck.Classify(result, DateTime.UtcNow))) + " (" + AppCheck.Hex(result.Hresult) + ")";
+            Refresh();
         }
         catch (Exception error) when (!closed) { online.Text = app.L("Online revocation check") + ": " + app.L("Failed") + " (" + error.GetType().Name + ")"; }
         finally { if (!closed) onlineButton.IsEnabled = true; }
@@ -166,7 +167,7 @@ internal sealed class AppCheckDialog : Window
         {
             var report = new StringBuilder();
             report.AppendLine(DoctorFacts.VisibleBounded(file.Path, 512));
-            foreach (var finding in AppCheck.Findings(file.Trust, DateTime.UtcNow, file.Zone, file.Pe?.Machine, file.Fit, file.Os, file.ImportFacts, file.Installer)) report.AppendLine(app.L(Level(finding.Level)) + ": " + Format(finding));
+            foreach (var finding in AppCheck.Findings(file.Trust, DateTime.UtcNow, file.Zone, file.Pe?.Machine, file.Fit, file.Os, file.ImportFacts, file.Installer, file.Online)) report.AppendLine(app.L(Level(finding.Level)) + ": " + Format(finding));
             foreach (var row in SignatureRows(file.Trust)) report.AppendLine(row.Name + ": " + row.Value);
             report.AppendLine(online.Text);
             report.AppendLine(app.L("Download warning") + ": " + app.L(AppCheck.ZoneText(file.Zone)));
