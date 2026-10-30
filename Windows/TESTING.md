@@ -1327,11 +1327,18 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.138 — merged F09 app check; fixed the PDF library's exit crash (2026-10-30)
+
+- Exit crash captured under cdb on the merged 0.137 code (run 41059327504): `ntdll!TppRaiseInvalidParameter` ← `d3d10warp!Task::ScheduleTask` ← `UMContext::FlushOnDestroyContext` ← `UMDevice::DestroyDevice` ← `d3d11` device release ← `Windows_Data_Pdf!CPdfStatics::~CPdfStatics` ← `dllmain_crt_process_detach` ← `LdrShutdownProcess`. Before the fix, 1 of 2 direct runs crashed without the app check code (41056535566).
+- After `ProcessExitGuard`: Windows CI 41061589023 passed (core 4,556,268, native 6,841) and 6 of 6 direct runs of the native suite exited 0 (41061606174). A new child-process check confirms a process with the PDF library loaded keeps its exit code. Six clean runs make a return unlikely, not impossible.
+- App check branch before merging: CI 41041151208 (core 4,556,107, native 6,529); review 0 P1, 1 P2 fixed.
+- After squash-merging: Windows CI on the merged branch: see below.
+- Not tested: real blocked or damaged apps, real SmartScreen behaviour, the crash on a PC with a real GPU (only the software renderer was captured).
+
 ## Windows0.137 — merged B09 folder emoji and surfaces (Codex), F09 battery health and sleep history (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: B09 41020689083 (core 4,555,941, native 6,728; written by Codex, review fixes applied, no P1/P2), F09 41021741187 (core 4,555,963, native 6,616; review fixes rechecked).
-- After merging both: core 4,556,268 on Mac, native compiled 0 errors there. Windows CI on the merged branch: see below.
-- Not merged: `claude/win-f09-appcheck-7e4e3b` (CI 41041151208 passed, but the same code exited with `c000000d` after PASS in 3 of 6 runs; cause under investigation).
+- After merging both: core 4,556,268 on Mac, native compiled 0 errors there. Windows CI 41056367725 on the merged branch failed: all checks passed (core 4,556,268, native 6,840), then the process exited with `c000000d`. That is the existing PDF unload crash described in 0.138, not these branches.
 - Not tested: real Explorer icon display and cache behaviour, COLRv1-only glyphs and ZWJ emoji, real batteries, real sleep and wake logs.
 
 ## Windows0.136 — merged C11 video upscaling, E03 PDF export, F06 cache locations (Codex) (2026-10-30)

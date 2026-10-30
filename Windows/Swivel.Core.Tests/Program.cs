@@ -201,6 +201,7 @@ DoctorAssistantChecks.Run(Check,Reject);
 DoctorSummaryChecks.Run(Check,Reject);
 DoctorLabelChecks.Run(Check,Reject);
 PeInspectionChecks.Run(Check,Reject);
+AppCheckChecks.Run(Check,Reject);
 FilePreviewChecks.Run(Check,Reject);
 ImageBatchChecks.Run(Check);
 PresetLibraryChecks.Run(Check, Reject);

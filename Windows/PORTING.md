@@ -1047,9 +1047,16 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.138 合并 F09 检查程序为什么打不开；修复 PDF 库退出崩溃
+
+分支 `claude/win-f09-appcheck-7e4e3b` 压缩合并（含已撤销的临时诊断提交）。
+
+- F09：`doctor.appcheck` 先用 WinVerifyTrust 查内嵌签名再查目录，默认离线吊销，联网按钮单独标注且不替换阻止结果；读 Zone.Identifier、PE 架构、导入表 DLL 是否存在。移除下载标记只在签名可信时提供。审查 0 P1，1 P2 已修。真实被拦截的程序未验证。新动作 ID 使旧版可能拒绝含有它的 My Wheel 设置，降级前保留备份。
+- 退出崩溃：`Windows.Data.Pdf.dll` 的静态对象在 DLL 卸载时释放 D3D11 设备，软件渲染（d3d10warp，无显卡）下刷新渲染任务时在加载器关闭期间提交线程池任务，ntdll 抛出未处理的 c000000d。`ProcessExitGuard.Finish` 在 App、MCP 和测试入口的 Main 末尾检查该 DLL 是否已加载，已加载就 TerminateProcess 并保留退出码。未加载时走普通退出。此前 CI 随机失败都是这个原因，与 0.137 前后的功能无关。
+
 ## 0.137 合并第十二轮：B09 文件夹 emoji 与纹理（Codex 编写）、F09 电池与睡眠记录
 
-分支 `codex/win-b09-folderstyle`（21bbf32 及之前的提交，Codex 编写，Claude 按审查修正）、`claude/win-f09-battery-cfa2b0`（d0ba1d8）。Strings.json 三方 JSON 合并无同键冲突。同轮 `claude/win-f09-appcheck-7e4e3b` 未合并：其 CI 反复出现原生测试进程在 PASS 之后以 `c000000d` 退出，原因未查清；合并时必须压缩（含 7 个临时诊断提交）。
+分支 `codex/win-b09-folderstyle`（21bbf32 及之前的提交，Codex 编写，Claude 按审查修正）、`claude/win-f09-battery-cfa2b0`（d0ba1d8）。Strings.json 三方 JSON 合并无同键冲突。同轮检查程序分支见 0.138。
 
 - B09：emoji 标记解析 Segoe UI Emoji 的 COLR/CPAL 分层绘制，8 种纹理在 `FolderSurfaces.cs`，写入后依次发送 SHCNE_UPDATEDIR、SHCNE_UPDATEITEM。字体解析异常时拒绝而不是崩溃。审查无 P1/P2；只有 COLRv1 的字形和 ZWJ 组合未在真实 Windows 验证。
 - F09：`doctor.battery` 读电池类驱动的 BATTERY_INFORMATION/BATTERY_STATUS，未知哨兵值保持未知；`doctor.sleephistory` 查询 System 事件日志 7 天、最多 200 条、10 秒上限，唤醒来源取 Windows 记录的文字。不运行 powercfg 或任何管理员命令。真实电池和真实睡眠记录未验证。
