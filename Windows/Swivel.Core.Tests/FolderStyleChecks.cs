@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text;
+using System.Security.Cryptography;
 using Swivel.Core;
 
 internal static class FolderStyleChecks
@@ -39,8 +40,36 @@ internal static class FolderStyleChecks
         reject(() => new FolderStyle(-1).Validate(), "Negative colour refused");
         new FolderStyle(0, "A").Validate();
 
+        foreach (string emoji in new[] { "😀", "👩‍💻", "👨‍👩‍👧‍👦", "🇨🇳", "👍🏽", "👩🏽‍🚀", "❤️", "1️⃣", "🏳️‍🌈" })
+        {
+            FolderStyles.ValidateEmoji(emoji);
+            new FolderStyle(0, Emoji: emoji, Surface: FolderSurface.Linen).Validate();
+            check(true, "Single emoji accepted: " + emoji);
+        }
+        foreach (string emoji in new[] { "", "hello", "中", "A", "1", "#", "😀😀", "🇨", "🏻", "😀\n", "\u200D", "A‍😀", "😀‍A", "😀\u200B", "😀\uFE0E", "\uD800", "😀🏻", "👍🏽🏽", "😀‍", "😀\u0301", "\U0001F6F1", "\U0001F6F2", "\U0001FA7F", "😀️️", "\t", "\n", "\0", "\u202E" })
+            reject(() => FolderStyles.ValidateEmoji(emoji), "Invalid emoji refused: " + emoji);
+        reject(() => new FolderStyle(0, "A", "😀").Validate(), "Text and emoji cannot be combined");
+        reject(() => new FolderStyle(0, Surface: (FolderSurface)99).Validate(), "Unknown surface refused");
+        foreach (int size in FolderStyles.IconSizes)
+        {
+            var hashes = new System.Collections.Generic.HashSet<string>();
+            foreach (FolderSurface surface in Enum.GetValues<FolderSurface>())
+            {
+                byte[] pixels = FolderSurfaces.Pixels(surface, size, 123);
+                string hash = Convert.ToHexString(SHA256.HashData(pixels));
+                check(pixels.Length == size * size * 4 && hash == Convert.ToHexString(SHA256.HashData(FolderSurfaces.Pixels(surface, size, 123))), "Surface hash repeatable: " + surface + " / " + size);
+                check(hashes.Add(hash), "Surface pixels differ: " + surface + " / " + size);
+                check(pixels.Where((_, i) => i % 4 == 3).All(a => a <= 40), "Surface stays subtle: " + surface);
+            }
+            check(FolderSurfaces.Pixels(FolderSurface.Plain, size, 123).All(b => b == 0), "Plain surface has no overlay");
+            check(!FolderSurfaces.Pixels(FolderSurface.PaperGrain, size, 123).SequenceEqual(FolderSurfaces.Pixels(FolderSurface.PaperGrain, size, 124)), "Seed changes grain");
+        }
+        reject(() => FolderSurfaces.Pixels(FolderSurface.Linen, 0, 1), "Zero surface size refused");
+        reject(() => FolderSurfaces.Pixels(FolderSurface.Linen, 257, 1), "Oversize surface refused");
+
         byte[] png = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
         byte[] ico = FolderStyles.Icon(new[] { (16, png), (256, png) });
+        check(Convert.ToHexString(SHA256.HashData(ico)) == "F96DF06C02668680AFDEC2A9AF417C3D5034430AF942C2C5C882404816862635", "Existing ICO bytes are unchanged");
         check(BitConverter.ToUInt16(ico, 0) == 0 && BitConverter.ToUInt16(ico, 2) == 1 && BitConverter.ToUInt16(ico, 4) == 2, "ICO header: reserved, type 1, two images");
         check(ico[6] == 16 && ico[22] == 0 && BitConverter.ToUInt16(ico, 12) == 32 && BitConverter.ToUInt32(ico, 14) == png.Length && BitConverter.ToUInt32(ico, 18) == 38 && BitConverter.ToUInt32(ico, 34) == 38 + png.Length, "ICO entries: sizes (256 stored as 0), 32 bpp, lengths and offsets");
         check(ico.Length == 38 + 2 * png.Length && ico.Skip(38).Take(png.Length).SequenceEqual(png), "ICO image data follows the directory");
