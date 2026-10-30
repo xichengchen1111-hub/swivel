@@ -120,7 +120,8 @@ internal static class ZipEncryptChecks
     }
     private static bool Matches(byte[] zip, ZipMember member, string password)
     {
-        using var key = new ZipPassword(password); return ZipExtract.PasswordMatches(new MemoryStream(zip), member, key, CancellationToken.None);
+        // The full check: a ZipCrypto header byte alone lets 1 wrong password in 256 through.
+        using var key = new ZipPassword(password); return ZipExtract.PasswordVerified(new MemoryStream(zip), member, key, CancellationToken.None);
     }
     private static string Error(Action action)
     {
@@ -156,7 +157,8 @@ internal static class ZipEncryptChecks
                     check(Contents(zip, plan.Files[0], pw).SequenceEqual(body) && Contents(zip, plan.Files[1], pw).SequenceEqual(small), "ZIP decrypts exactly: " + what);
                     check(Matches(zip, plan.Files[0], pw) && !Matches(zip, plan.Files[0], "pässwörd 🔐"), "ZIP password check: " + what);
                     string message = Error(() => Contents(zip, plan.Files[0], "wrong"));
-                    check(message == ZipDecrypt.WrongPassword || strength == 0 && message == ZipDecrypt.Damaged, "ZIP wrong password refused: " + what + " " + message);
+                    // A 2-byte AES verifier also matches 1 time in 65,536; authentication then refuses it.
+                    check(message == ZipDecrypt.WrongPassword || strength == 0 && message == ZipDecrypt.Damaged || message == ZipDecrypt.AuthFailed, "ZIP wrong password refused: " + what + " " + message);
                     reject(() => Contents(zip, plan.Files[0], null), "ZIP encrypted entry needs a password: " + what);
                 }
         check(Plan(Build(new[] { new Item("x", body, pw, 3, AesVersion: 2) })).Files[0] is { AesVersion: 2, Crc: 0, AesMethod: 8, Method: 99 }, "ZIP AE-2 has no CRC and method 99 over Deflate");
@@ -179,12 +181,15 @@ internal static class ZipEncryptChecks
         check(Error(() => Contents(zcDeflateTampered, Plan(zcDeflateTampered).Files[0], pw)) == ZipDecrypt.Damaged, "ZIP ZipCrypto Deflate tampering refused");
         // A wrong ZipCrypto password passing the one-byte check is still caught later.
         int caught = 0;
-        for (int i = 0; i < 600 && caught < 3; i++)
+        for (int i = 0; i < 5000 && caught < 2; i++) // 1 in 256 each; missing two in 5,000 is about 1e-6
         {
-            var zip = Build(new[] { new Item("z", body, pw, 0, Method: 0) });
+            var zip = Build(new[] { new Item("z", small, pw, 0, Method: 0) });
             string guess = "guess" + i;
-            if (!Matches(zip, Plan(zip).Files[0], guess)) continue;
+            using (var key = new ZipPassword(guess)) if (!ZipExtract.PasswordMatches(new MemoryStream(zip), Plan(zip).Files[0], key, CancellationToken.None)) continue;
             check(Error(() => Contents(zip, Plan(zip).Files[0], guess)) == ZipDecrypt.Damaged, "ZIP ZipCrypto false header match caught by CRC"); caught++;
+            using (var wrong = new ZipPassword(guess)) using (var right = new ZipPassword(pw))
+                check(!ZipExtract.PasswordVerified(new MemoryStream(zip), Plan(zip).Files[0], wrong, CancellationToken.None)
+                    && ZipExtract.PasswordVerified(new MemoryStream(zip), Plan(zip).Files[0], right, CancellationToken.None), "ZIP ZipCrypto full verification rejects a false header match");
         }
         check(caught > 0, "ZIP ZipCrypto one-byte header collisions exercised");
 

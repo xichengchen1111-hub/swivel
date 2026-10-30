@@ -216,7 +216,7 @@ public static class ZipExtract
         foreach (var member in members)
         {
             token.ThrowIfCancellationRequested();
-            var (dataStart, wide) = LocalData(archive, member, token);
+            var (dataStart, wide, _) = LocalData(archive, member, token);
             // A data descriptor follows the data: at least CRC and two sizes, 8 bytes each with ZIP64.
             long end = dataStart + member.CompressedSize + ((member.Flags & 8) == 0 ? 0 : wide ? 20 : 12);
             if (end > cdOffset) throw new UserError("This ZIP archive's directory is damaged.");
@@ -229,8 +229,15 @@ public static class ZipExtract
 
     private static long LocalDataStart(Stream archive, ZipMember member, CancellationToken token) => LocalData(archive, member, token).Start;
 
+    // Info-ZIP takes the ZipCrypto check time from the local header.
+    private static (long Start, ZipMember Member) LocalCrypto(Stream archive, ZipMember member, CancellationToken token)
+    {
+        var (start, _, time) = LocalData(archive, member, token);
+        return (start, member.Encryption == ZipEncryption.ZipCrypto && time != member.DosTime ? member with { DosTime = time } : member);
+    }
+
     // The local header must agree with the directory; ZIP64 sizes come from its own 0x0001 field.
-    private static (long Start, bool Wide) LocalData(Stream archive, ZipMember member, CancellationToken token)
+    private static (long Start, bool Wide, ushort Time) LocalData(Stream archive, ZipMember member, CancellationToken token)
     {
         if (member.LocalOffset + LocalRecord > archive.Length) throw new UserError("This ZIP archive's directory is damaged.");
         byte[] local = ReadAt(archive, member.LocalOffset, LocalRecord, token);
@@ -248,7 +255,7 @@ public static class ZipExtract
             : member.Method == 99) throw new UserError("This ZIP archive's directory is damaged.");
         if ((flags & 8) == 0 && (U32(local, 14) != member.Crc || (values.Compressed ?? compressed32) != (ulong)member.CompressedSize || (values.Size ?? size32) != (ulong)member.Size))
             throw new UserError("This ZIP archive's directory is damaged.");
-        return (member.LocalOffset + LocalRecord + nameLength + extraLength, values.WideSizes);
+        return (member.LocalOffset + LocalRecord + nameLength + extraLength, values.WideSizes, U16(local, 10));
     }
 
     private readonly record struct Zip64Record(long RecordOffset, uint Disk, uint CdDisk, ulong DiskEntries, ulong Entries, ulong CdSize, ulong CdOffset, int Needed);
@@ -278,7 +285,8 @@ public static class ZipExtract
         token.ThrowIfCancellationRequested();
         bool encrypted = member.Encryption != ZipEncryption.None;
         if (encrypted && password is null) throw new UserError("This ZIP entry is encrypted and needs a password.");
-        long start = LocalDataStart(archive, member, token);
+        long start;
+        (start, member) = encrypted ? LocalCrypto(archive, member, token) : (LocalDataStart(archive, member, token), member);
         archive.Position = start;
         using var slice = new Slice(archive, member.CompressedSize, token);
         using Stream? decrypted = encrypted ? ZipDecrypt.Open(slice, member, password!, offset =>
@@ -310,9 +318,21 @@ public static class ZipExtract
     {
         token.ThrowIfCancellationRequested();
         if (member.Encryption == ZipEncryption.None) return true;
-        archive.Position = LocalDataStart(archive, member, token);
+        (archive.Position, member) = LocalCrypto(archive, member, token);
         using var slice = new Slice(archive, member.CompressedSize, token);
         return ZipDecrypt.PasswordMatches(slice, member, password);
+    }
+
+    /// The full check for one ZipCrypto member, whose one-byte header check lets a wrong
+    /// password through 1 time in 256: decrypts, inflates and compares the CRC-32 without
+    /// keeping any output. AES members (2-byte verifier, then authentication) and plain
+    /// members only get the quick check.
+    public static bool PasswordVerified(Stream archive, ZipMember member, ZipPassword password, CancellationToken token)
+    {
+        if (!PasswordMatches(archive, member, password, token)) return false;
+        if (member.Encryption != ZipEncryption.ZipCrypto) return true;
+        try { Extract(archive, member, Stream.Null, token, password); return true; }
+        catch (UserError error) when (error.Message == ZipDecrypt.Damaged) { return false; }
     }
 
     /// Mark of the Web never weakens: at least Internet (3), and a Restricted (4) source stays 4.

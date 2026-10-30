@@ -109,7 +109,8 @@ public sealed class ZipExtractWork : IDisposable
         Plan.Files.FirstOrDefault(file => file.Encryption != ZipEncryption.None) is not { } first || ZipExtract.PasswordMatches(input.Stream, first, password, token);
 
     /// Encrypted ZIP: every encrypted member's password check runs before the new folder
-    /// exists. A mismatch on the first one refuses the whole extraction; later mismatches
+    /// exists (ZipCrypto members are decrypted in full once for it, since their header check
+    /// is one byte). A mismatch on the first one refuses the whole extraction; later mismatches
     /// (archives using several passwords) are left out and listed in ZipOutcome.Refused.
     public ZipOutcome Extract(CancellationToken token, Action<int, int>? progress, ZipPassword password)
     {
@@ -120,7 +121,7 @@ public sealed class ZipExtractWork : IDisposable
         {
             token.ThrowIfCancellationRequested();
             if (member.Encryption == ZipEncryption.None) continue;
-            bool matches = ZipExtract.PasswordMatches(input.Stream, member, password, token);
+            bool matches = ZipExtract.PasswordVerified(input.Stream, member, password, token);
             if (!matches && first) throw new UserError("The password is not correct. Nothing was extracted.");
             if (!matches) refused.Add(member);
             first = false;

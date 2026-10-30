@@ -1069,7 +1069,9 @@ public sealed partial class App : Application
                 using var archive = await Task.Run(() => ZipExtractWork.Open(files[0], token), token);
                 token.ThrowIfCancellationRequested();
                 var extractDialog = new ZipExtractDialog(this, archive);
-                bool accepted = ShowOperationDialog(extractDialog, owner, token);
+                bool accepted;
+                try { accepted = ShowOperationDialog(extractDialog, owner, token); }
+                catch { extractDialog.Password?.Dispose(); throw; }
                 // Kept in memory only for this extraction; cleared when it ends however it ends.
                 using var password = extractDialog.Password;
                 if (!accepted) return;

@@ -41,6 +41,7 @@ internal sealed class ZipExtractDialog : Window
                 Password = typed; typed = null; box.Clear(); DialogResult = true;
             }
             catch (UserError error) { status!.Text = app.L(error.Message); }
+            catch (System.IO.IOException) { status!.Text = app.L("The archive could not be read. Nothing was extracted."); }
             finally { typed?.Dispose(); }
         });
         var cancel = UI.Button(app.L("Cancel"), () => DialogResult = false);
