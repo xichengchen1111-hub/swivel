@@ -173,7 +173,7 @@ public sealed class VideoUpscaler : IDisposable
     {
         token.ThrowIfCancellationRequested();
         var (ow, oh) = Output;
-        if (HasSound) { sound?.Invoke(); PrepareSound(token); }
+        if (HasSound && soundFrames is null) { sound?.Invoke(); PrepareSound(token); }
         string rendered = System.IO.Path.Combine(Workspace, "upscaled.mp4");
         try
         {

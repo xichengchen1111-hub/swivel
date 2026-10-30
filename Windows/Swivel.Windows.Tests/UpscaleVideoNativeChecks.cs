@@ -61,6 +61,7 @@ internal static class UpscaleVideoNativeChecks
             var (ow, oh, seconds, sound) = Probe(output);
             var (_, _, sourceSeconds, _) = Probe(source);
             check(ow == 2 * W && oh == 2 * H, $"The upscaled video is 128 × 96: {ow}×{oh}");
+            Console.WriteLine($"Upscale Video first frame times: source reader {sourceTimes[0] / 1e4:0.#} ms, output reader {outputTimes[0] / 1e4:0.#} ms; edit lists: source {EditLists(source)}; output {EditLists(output)}");
             // Windows' writer starts the video at 0 (the reader gave this source's first frame at 0.1 s), so times are compared from the first frame.
             check(outputFrames.Count == sourceFrames.Count && outputTimes.Zip(sourceTimes).All(p => Math.Abs(p.First - outputTimes[0] - (p.Second - sourceTimes[0])) <= 10_000),
                 $"Every frame is kept at its time: {outputFrames.Count} frames (source {sourceFrames.Count}), first times {string.Join(",", outputTimes.Take(3))} vs {string.Join(",", sourceTimes.Take(3))}");
@@ -91,6 +92,23 @@ internal static class UpscaleVideoNativeChecks
         string turned = Path.Combine(root, "turned.mp4");
         var bytes = File.ReadAllBytes(source); RotatedVideoNativeChecks.Turn(bytes, 90, W, H); File.WriteAllBytes(turned, bytes);
         reject(() => VideoUpscaler.OpenAsync(turned, default).GetAwaiter().GetResult().Dispose(), "Upscale Video refuses a video stored with a 90° turn");
+    }
+
+    // Every "elst" box's first entry (segment duration, media time) and whether "ctts" is present, for the log.
+    private static string EditLists(string path)
+    {
+        var bytes = File.ReadAllBytes(path); var parts = new System.Collections.Generic.List<string>();
+        for (int i = 4; i + 24 <= bytes.Length; i++)
+            if (bytes[i] == 'e' && bytes[i + 1] == 'l' && bytes[i + 2] == 's' && bytes[i + 3] == 't')
+            {
+                int version = bytes[i + 4]; uint count = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(i + 8));
+                if (count == 0 || version > 1 || i + 12 + (version == 1 ? 20 : 12) > bytes.Length) continue;
+                long duration = version == 1 ? (long)System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(bytes.AsSpan(i + 12)) : System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(i + 12));
+                long media = version == 1 ? System.Buffers.Binary.BinaryPrimitives.ReadInt64BigEndian(bytes.AsSpan(i + 20)) : System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(i + 16));
+                parts.Add($"elst {count} entr(ies), first {duration}/{media}");
+            }
+        bool ctts = bytes.AsSpan().IndexOf("ctts"u8) >= 0;
+        return (parts.Count == 0 ? "no elst" : string.Join(", ", parts)) + (ctts ? ", ctts" : ", no ctts");
     }
 
     // Every frame (BGRA) and its time in 100 ns units.
