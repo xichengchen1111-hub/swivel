@@ -98,7 +98,7 @@ internal static class AppCheckNativeChecks
         }
         reject(() => AppCheckFile.Open(missing, new CancellationToken(true)).Dispose(), "Precancelled check opens no source");
         string text = Path.Combine(folder, "notes.txt"); File.WriteAllText(text, "x"); reject(() => AppCheckFile.Open(text, default).Dispose(), "Only EXE, MSI and DLL accepted");
-        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); Console.WriteLine("DIAG app check finalizers ran");
+        Console.WriteLine("DIAG app check done");
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Console.WriteLine("DIAG process exit code " + Environment.ExitCode);
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Console.WriteLine("DIAG unhandled " + e.ExceptionObject);
         Directory.Move(folder, folder + " released"); check(Directory.Exists(folder + " released"), "App check releases the file and its folders");
