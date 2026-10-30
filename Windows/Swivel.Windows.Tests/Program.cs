@@ -111,6 +111,7 @@ internal static class Program
             Group("QrRecoveryDialogNativeChecks", () => QrRecoveryDialogNativeChecks.Run(Check,Reject));
             Group("QrMacExportNativeChecks", () => QrMacExportNativeChecks.Run(directory,Check,Reject));
             Group("ClotheslineGestureNativeChecks", () => ClotheslineGestureNativeChecks.Run(Check,Reject));
+            Group("RopeNativeChecks", () => RopeNativeChecks.Run(Check,Reject));
             Group("CommonSimilarityNativeChecks", () => CommonSimilarityNativeChecks.Run(directory,Check,Reject));
             Group("CloseWindowsNativeChecks", () => CloseWindowsNativeChecks.Run(Check,Reject));
             Group("MoveFilesDialogNativeChecks", () => MoveFilesDialogNativeChecks.Run(Check,Reject));

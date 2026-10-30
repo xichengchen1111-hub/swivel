@@ -21,34 +21,26 @@ internal sealed class ClotheslineWindow : Window
     private readonly App app;
     private readonly MenuMotion motion;
     private readonly TextBlock status = UI.Text("");
-    private readonly List<ClotheslinePrintButton> printButtons = new();
     // Dragging one print onto the lower half of another (held half a second) stitches it below.
-    internal const string PrintFormat = "Swivel.ClotheslinePrint";
-    private readonly StitchHover hover = new();
-    private readonly Stopwatch clock = Stopwatch.StartNew();
-    private readonly DispatcherTimer hoverTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(50) };
-    private readonly Border stitchPreview = new() { Visibility = Visibility.Collapsed, Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
-    private (Button Button, Brush Brush, Thickness Thickness)? marked;
-    private (string Top, string Bottom)? pendingStitch;
-    private string? dragSource;
-    private (Button Button, string Target, StitchHoverState State)? shown;
+    private readonly ClotheslinePrints prints;
     public ClotheslineWindow(App app)
     {
         this.app = app; motion = new MenuMotion(() => app.Prefs.AnimateMenus);
+        prints = new ClotheslinePrints(app,this,() => IsActive && IsVisible && app.Prefs.IsOn(Feature.Clothesline) && !app.Busy,text => status.Text = text);
+        prints.StitchPreview.Margin = new Thickness(0,6,0,0);
         Width = 1060; Height = 650; MinWidth = 650; MinHeight = 440; Topmost = true; ShowInTaskbar = false;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         app.Prints.CollectionChanged += Changed;
-        hoverTimer.Tick += (_,_) => { if (hover.Target is null || shown is null) hoverTimer.Stop(); else if (hover.IsReady(clock.Elapsed) && shown is { } s) Show(s.Button, s.Target, StitchHoverState.Ready); };
-        Deactivated += (_,_) => CancelPrintGestures();
-        IsVisibleChanged += (_,_) => { if (!IsVisible) CancelPrintGestures(); };
-        Closed += (_,_) => { app.Prints.CollectionChanged -= Changed; ClearHover(); DisposePrintButtons(); motion.Dispose(); };
+        Deactivated += (_,_) => prints.CancelGestures();
+        IsVisibleChanged += (_,_) => { if (!IsVisible) prints.CancelGestures(); };
+        Closed += (_,_) => { app.Prints.CollectionChanged -= Changed; prints.Dispose(); motion.Dispose(); };
         PreviewKeyDown += (_,e) => { if (e.Key == Key.Escape) { Close(); e.Handled = true; } };
         Refresh();
     }
     private void Changed(object? sender,NotifyCollectionChangedEventArgs e) => Refresh();
     public void Refresh()
     {
-        ClearHover(); DisposePrintButtons();
+        prints.Clear();
         motion.Reset(); Title = app.L("Clothesline");
         // Detach the shared status element before constructing its new parent.
         if (status.Parent is Panel previous) previous.Children.Remove(status);
@@ -63,7 +55,7 @@ internal sealed class ClotheslineWindow : Window
         row.Children.Add(UI.Button(app.L("Cancel Operation"),app.CancelWork));
         var stay = new CheckBox { Content = app.L("Stay on top"),IsChecked = Topmost,VerticalAlignment = VerticalAlignment.Center }; stay.Click += (_,_) => Topmost = stay.IsChecked == true; row.Children.Add(stay);
         top.Children.Add(row); DockPanel.SetDock(top,Dock.Top); root.Children.Add(top);
-        var footer = new StackPanel(); footer.Children.Add(UI.Text(app.L("Manual images and explicitly started folder arrival cards are available. Screen-edge activation and full rope physics are still planned."),12)); footer.Children.Add(status); if (stitchPreview.Parent is Panel old) old.Children.Remove(stitchPreview); footer.Children.Add(stitchPreview); DockPanel.SetDock(footer,Dock.Bottom); root.Children.Add(footer);
+        var footer = new StackPanel(); footer.Children.Add(UI.Text(app.L("Manual images, folder arrival cards and the optional top-edge rope (Settings) are available. Screenshot takeover is still planned."),12)); footer.Children.Add(status); if (prints.StitchPreview.Parent is Panel old) old.Children.Remove(prints.StitchPreview); footer.Children.Add(prints.StitchPreview); DockPanel.SetDock(footer,Dock.Bottom); root.Children.Add(footer);
         var canvas = new Canvas { Width = 1000,Height = 400 };
         var palette = MenuColors.Active(app,MenuTemplate.Clothesline);
         foreach (double y in new[] { 34d,219d }) canvas.Children.Add(new Line { X1 = 5,Y1 = y,X2 = 995,Y2 = y,Stroke = palette is null ? SystemColors.ControlDarkBrush : MenuColors.Brush(palette.Rope),StrokeThickness = 2 });
@@ -71,132 +63,12 @@ internal sealed class ClotheslineWindow : Window
         for (int i = 0; i < app.Prints.Count; i++)
         {
             var print = app.Prints[i]; var tile = layout[i];
-            var body = new StackPanel(); body.Children.Add(new Image { Source = print.Thumbnail,Width = 124,Height = 103,Stretch = Stretch.Uniform });
-            body.Children.Add(new TextBlock { Text = System.IO.Path.GetFileName(print.Path),TextTrimming = TextTrimming.CharacterEllipsis,FontSize = 12,Margin = new Thickness(0,6,0,0) });
-            var button = new ClotheslinePrintButton(
-                () => IsActive && IsVisible && app.Prefs.IsOn(Feature.Clothesline) && !app.Busy,
-                () => Run("file.copy","Copy Files",print.Path),
-                () => Run("image.preview","Preview Image",print.Path),
-                source => {
-                    CancelPrintGestures();
-                    app.Try(() => {
-                        var paths = app.Validate(new[] { print.Path });
-                        var data = new DataObject(DataFormats.FileDrop,paths); data.SetData(PrintFormat,print.Path);
-                        pendingStitch = null; dragSource = print.Path;
-                        try { DragDrop.DoDragDrop(source,data,DragDropEffects.Copy); } finally { dragSource = null; }
-                    });
-                    // Released while still holding (too early): say why nothing happened.
-                    bool early = shown is { State: StitchHoverState.Holding };
-                    ClearHover();
-                    if (early) status.Text = app.L("Not stitched: hold over the lower half of a print for half a second before releasing.");
-                    // Run after the drag has ended, never inside the drag loop.
-                    if (pendingStitch is { } stitch) { pendingStitch = null; Stitch(stitch.Top,stitch.Bottom); }
-                }) { ToolTip = print.Path, MinHeight = 36 };
-            printButtons.Add(button);
-            button.Content = body; button.Width = tile.Width; button.Height = tile.Height; button.Padding = new Thickness(8); button.Margin = new Thickness(0);
-            MenuColors.Apply(button,palette);
-            System.Windows.Automation.AutomationProperties.SetName(button,System.IO.Path.GetFileName(print.Path));
-            var context = new ContextMenu();
-            void Item(string label,Action action) { var entry = new MenuItem { Header = app.L(label) }; entry.Click += (_,_) => action(); context.Items.Add(entry); }
-            Item("Preview Image",() => Run("image.preview","Preview Image",print.Path)); Item("Copy Files",() => Run("file.copy","Copy Files",print.Path)); Item("Copy Path",() => Run("file.paths","Copy Path",print.Path)); Item("Show in Explorer",() => Run("file.reveal","Show in Explorer",print.Path));
-            var below = new MenuItem { Header = app.L("Stitch Another Print Below") };
-            foreach (var other in app.Prints.Where(p => !ReferenceEquals(p,print)))
-            { var choice = new MenuItem { Header = new TextBlock { Text = System.IO.Path.GetFileName(other.Path) },ToolTip = other.Path }; choice.Click += (_,_) => Stitch(print.Path,other.Path); below.Items.Add(choice); }
-            below.IsEnabled = below.Items.Count > 0; context.Items.Add(below);
-            Item("Remove Print",() => app.Prints.Remove(print)); button.ContextMenu = context;
-            button.AllowDrop = true;
-            button.DragEnter += (_,e) => Hover(e,print,button); button.DragOver += (_,e) => Hover(e,print,button);
-            button.DragLeave += (_,e) => Leave(e,button);
-            button.Drop += (_,e) => DropOn(e,print,button);
+            var button = prints.Create(print,palette,tile.Width,tile.Height,124);
             motion.Attach(button,tile.Angle); Canvas.SetLeft(button,tile.X); Canvas.SetTop(button,tile.Y); canvas.Children.Add(button);
             var peg = new Rectangle { Width = 9,Height = 27,Fill = palette is null ? SystemColors.ControlDarkBrush : MenuColors.Brush(palette.Peg),IsHitTestVisible = false }; Canvas.SetLeft(peg,tile.X+tile.Width/2-4.5); Canvas.SetTop(peg,tile.Y-22); canvas.Children.Add(peg);
         }
         root.Children.Add(new Viewbox { Child = canvas,Stretch = Stretch.Uniform,StretchDirection = StretchDirection.DownOnly });
         UI.DropFiles(root,app,Hang); Content = root;
-    }
-    private bool CanStitch => IsVisible && app.Prefs.IsOn(Feature.Clothesline) && !app.Busy;
-
-    /// Only a drag that started from a print on this line, still hung, can stitch.
-    private string? Source(DragEventArgs e) => e.Data.GetData(PrintFormat) is string source && dragSource is { } active
-        && string.Equals(source,active,StringComparison.OrdinalIgnoreCase) && app.Prints.Any(p => string.Equals(p.Path,source,StringComparison.OrdinalIgnoreCase)) ? source : null;
-
-    private void Hover(DragEventArgs e,HungPrint target,Button button)
-    {
-        if (!e.Data.GetDataPresent(PrintFormat)) return; // Files from elsewhere hang as usual.
-        e.Handled = true;
-        var state = CanStitch && Source(e) is { } source ? hover.Update(source,target.Path,e.GetPosition(button).Y,button.ActualHeight,clock.Elapsed) : StitchHoverState.None;
-        Show(button,target.Path,state);
-        e.Effects = state == StitchHoverState.Ready ? DragDropEffects.Copy : DragDropEffects.None;
-    }
-
-    private void Leave(DragEventArgs e,Button button)
-    {
-        if (!e.Data.GetDataPresent(PrintFormat)) return;
-        e.Handled = true;
-        // WPF also reports leaving the thumbnail or caption inside the print: only leaving the print counts.
-        var point = e.GetPosition(button);
-        if (point.X > 0 && point.Y > 0 && point.X < button.ActualWidth && point.Y < button.ActualHeight) return;
-        bool wasHolding = shown is { State: StitchHoverState.Holding };
-        ClearHover();
-        if (wasHolding) status.Text = app.L("Not stitched: hold over the lower half of a print for half a second before releasing.");
-    }
-
-    private void DropOn(DragEventArgs e,HungPrint target,Button button)
-    {
-        if (!e.Data.GetDataPresent(PrintFormat)) return;
-        e.Handled = true;
-        var source = CanStitch ? Source(e) : null;
-        var state = source is not null ? hover.Update(source,target.Path,e.GetPosition(button).Y,button.ActualHeight,clock.Elapsed) : StitchHoverState.None;
-        ClearHover();
-        if (state == StitchHoverState.Ready) { pendingStitch = (target.Path,source!); e.Effects = DragDropEffects.Copy; }
-        else e.Effects = DragDropEffects.None;
-    }
-
-    /// Highlights the print and shows the two-thumbnail preview; rebuilt only when something changes.
-    private void Show(Button button,string target,StitchHoverState state)
-    {
-        if (state == StitchHoverState.None || dragSource is not { } source) { ClearHover(); return; }
-        if (shown is { } last && ReferenceEquals(last.Button,button) && last.Target == target && last.State == state) return;
-        if (marked is { } m && !ReferenceEquals(m.Button,button)) Unmark();
-        marked ??= (button,button.BorderBrush,button.BorderThickness);
-        button.BorderBrush = SystemColors.HighlightBrush;
-        button.BorderThickness = new Thickness(0,0,0,state == StitchHoverState.Ready ? 6 : 2);
-        BitmapSource? Thumb(string path) => app.Prints.FirstOrDefault(p => string.Equals(p.Path,path,StringComparison.OrdinalIgnoreCase))?.Thumbnail;
-        var stack = new StackPanel();
-        foreach (var image in new[] { Thumb(target),Thumb(source) }) if (image is not null) stack.Children.Add(new Image { Source = image,Width = 72,Stretch = Stretch.Uniform });
-        stitchPreview.Child = stack; stitchPreview.Visibility = Visibility.Visible;
-        stitchPreview.Opacity = state == StitchHoverState.Ready ? 1 : 0.5;
-        status.Text = string.Format(app.L(state == StitchHoverState.Ready ? "Release to save {1} below {0} as a new image." : "Keep holding to stitch {1} below {0}…"),
-            System.IO.Path.GetFileName(target),System.IO.Path.GetFileName(source));
-        shown = (button,target,state);
-        // The timer only turns a held hover into Ready while the pointer rests.
-        if (state == StitchHoverState.Holding) hoverTimer.Start(); else hoverTimer.Stop();
-    }
-
-    private void Unmark() { if (marked is { } m) { m.Button.BorderBrush = m.Brush; m.Button.BorderThickness = m.Thickness; marked = null; } }
-
-    private void ClearHover()
-    {
-        bool showing = shown is not null;
-        hover.Reset(); hoverTimer.Stop(); Unmark(); shown = null;
-        stitchPreview.Visibility = Visibility.Collapsed; stitchPreview.Child = null;
-        if (showing) status.Text = "";
-    }
-
-    private async void Stitch(string top,string bottom)
-    {
-        CancelPrintGestures();
-        if (!CanStitch) return;
-        await app.RunActionAsync(new("clothesline.stitch","Stitch Images"),new[] { top,bottom },this,text => status.Text = text);
-    }
-
-    private void CancelPrintGestures() { foreach (var button in printButtons) button.CancelPending(); }
-    private void DisposePrintButtons() { foreach (var button in printButtons) button.Dispose(); printButtons.Clear(); }
-    private async void Run(string id,string title,string path)
-    {
-        CancelPrintGestures();
-        if (!IsVisible || !app.Prefs.IsOn(Feature.Clothesline)) return;
-        await app.RunActionAsync(new(id,title),new[] { path },this,text => status.Text = text);
     }
     private async void Hang(string[] paths) => await app.RunActionAsync(new("clothesline.add","Hang on Clothesline"),paths,this,text => status.Text = text);
 }
