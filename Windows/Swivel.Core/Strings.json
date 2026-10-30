@@ -17013,5 +17013,115 @@
     "样本时间相对于原速的保留片段。试听不含变速。应用后将在视频剪辑时使用这些设置，不保存 WAV。降噪后的声音编码为 AAC，替换原音轨。",
     "樣本時間相對於原速的保留片段。試聽不含變速。套用後將在影片剪輯時使用這些設定，不儲存 WAV。降噪後的聲音編碼為 AAC，取代原音軌。",
     "サンプル時刻は元の速度での保持部分の先頭から指定します。試聴には速度変更を適用しません。適用すると動画のトリミングに設定を使い、WAVは保存しません。処理後の音声をAACにエンコードして元の音声トラックを置き換えます。"
+  ],
+  "Upscale Video 2×…": [
+    "视频放大 2×…",
+    "影片放大 2×…",
+    "動画を 2× アップスケール…"
+  ],
+  "{0} h": [
+    "{0} 小时",
+    "{0} 小時",
+    "{0} 時間"
+  ],
+  "Upscale Video 2× takes videos up to 10 minutes and 300,000 model blocks (frames × blocks per frame). Trim the video first or use a smaller one.": [
+    "视频放大 2× 支持最长 10 分钟、最多 300,000 个模型块（帧数 × 每帧块数）的视频。请先剪短视频或使用更小的视频。",
+    "影片放大 2× 支援最長 10 分鐘、最多 300,000 個模型區塊（影格數 × 每格區塊數）的影片。請先剪短影片或使用較小的影片。",
+    "動画の 2× アップスケールは 10 分以内、モデルのブロック数 300,000 以内（フレーム数 × 1 フレームあたりのブロック数）の動画に対応します。先に動画を短くするか、小さい動画を使ってください。"
+  ],
+  "Windows could not read this video's frames. Choose an MP4, MOV or M4V file that plays in the Windows Media Player or Films & TV app.": [
+    "Windows 无法读取此视频的画面。请选择能在 Windows Media Player 或“电影和电视”应用中播放的 MP4、MOV 或 M4V 文件。",
+    "Windows 無法讀取此影片的畫面。請選擇能在 Windows Media Player 或「電影與電視」應用程式中播放的 MP4、MOV 或 M4V 檔案。",
+    "Windows でこの動画のフレームを読み取れませんでした。Windows Media Player または「映画 & テレビ」アプリで再生できる MP4、MOV、M4V ファイルを選んでください。"
+  ],
+  "Windows could not encode the upscaled video. No file was saved.": [
+    "Windows 无法编码放大后的视频。未保存任何文件。",
+    "Windows 無法編碼放大後的影片。未儲存任何檔案。",
+    "Windows でアップスケールした動画をエンコードできませんでした。ファイルは保存されていません。"
+  ],
+  "Windows could not prepare the video's sound, so no file was saved.": [
+    "Windows 无法处理视频的声音，因此未保存任何文件。",
+    "Windows 無法處理影片的聲音，因此未儲存任何檔案。",
+    "Windows で動画の音声を準備できなかったため、ファイルは保存されていません。"
+  ],
+  "This video is stored with a rotation flag (as phones often do). Upscale Video 2× reads the frames as stored, so the result would be turned; such videos aren't supported.": [
+    "此视频带有旋转标记存储（手机拍摄的视频常见）。视频放大 2× 按存储方向读取画面，结果会被转向，因此不支持这类视频。",
+    "此影片帶有旋轉標記儲存（手機拍攝的影片常見）。影片放大 2× 依儲存方向讀取畫面，結果會被轉向，因此不支援這類影片。",
+    "この動画は回転フラグ付きで保存されています（スマートフォンでよくあります）。動画の 2× アップスケールは保存されたままの向きでフレームを読むため結果が回転してしまうので、このような動画には対応していません。"
+  ],
+  "{0} × {1} becomes {2} × {3}. {4} long, about {5} frames of {6} model block(s) each.": [
+    "{0} × {1} 变为 {2} × {3}。时长 {4}，约 {5} 帧，每帧 {6} 个模型块。",
+    "{0} × {1} 變為 {2} × {3}。長度 {4}，約 {5} 格，每格 {6} 個模型區塊。",
+    "{0} × {1} が {2} × {3} になります。長さ {4}、約 {5} フレーム、1 フレームあたり {6} ブロック。"
+  ],
+  "One block of the first frame took {0} on this PC's graphics card.": [
+    "第一帧的一个块在这台电脑的显卡上用时 {0}。",
+    "第一格的一個區塊在這台電腦的顯示卡上用時 {0}。",
+    "最初のフレームの 1 ブロックは、この PC のグラフィックスカードで {0} かかりました。"
+  ],
+  "One block of the first frame took {0} on this PC's processor (Windows ML found no graphics card it can use).": [
+    "第一帧的一个块在这台电脑的处理器上用时 {0}（Windows ML 没有找到可用的显卡）。",
+    "第一格的一個區塊在這台電腦的處理器上用時 {0}（Windows ML 找不到可用的顯示卡）。",
+    "最初のフレームの 1 ブロックは、この PC のプロセッサで {0} かかりました（Windows ML が使えるグラフィックスカードは見つかりませんでした）。"
+  ],
+  "Estimated time: about {0}. Progress shows the time left as frames finish.": [
+    "预计用时：约 {0}。处理过程中会随帧完成显示剩余时间。",
+    "預估用時：約 {0}。處理過程中會隨影格完成顯示剩餘時間。",
+    "予想時間：約 {0}。フレームが終わるごとに残り時間を表示します。"
+  ],
+  "Saved as an H.264 MP4 with each frame at its original time; the sound is re-encoded as AAC. 8-bit SDR; metadata, chapters, subtitles and any other tracks are not kept.": [
+    "保存为 H.264 MP4，每帧保持原来的时间；声音重新编码为 AAC。8 位 SDR；不保留元数据、章节、字幕和其他轨道。",
+    "儲存為 H.264 MP4，每格保持原來的時間；聲音重新編碼為 AAC。8 位元 SDR；不保留中繼資料、章節、字幕和其他軌道。",
+    "各フレームを元の時刻のまま H.264 MP4 として保存し、音声は AAC で再エンコードします。8 ビット SDR で、メタデータ、チャプター、字幕、その他のトラックは保持しません。"
+  ],
+  "The result is saved beside the original as “name 2x.mp4” without replacing anything. Cancel stops within one block and saves nothing.": [
+    "结果以“名称 2x.mp4”保存在原文件旁边，不会替换任何文件。取消会在一个块内停止，且不保存任何文件。",
+    "結果以「名稱 2x.mp4」儲存在原檔案旁邊，不會取代任何檔案。取消會在一個區塊內停止，且不儲存任何檔案。",
+    "結果は「名前 2x.mp4」として元のファイルの隣に保存され、何も置き換えません。キャンセルすると 1 ブロック以内に止まり、何も保存しません。"
+  ],
+  "Loading the upscaling model and timing one block of the first frame…": [
+    "正在加载放大模型并测量第一帧一个块的用时…",
+    "正在載入放大模型並測量第一格一個區塊的用時…",
+    "アップスケールモデルを読み込み、最初のフレームの 1 ブロックの時間を測っています…"
+  ],
+  "Upscaling the video…": [
+    "正在放大视频…",
+    "正在放大影片…",
+    "動画をアップスケールしています…"
+  ],
+  "Upscaling the video: frame {0} of about {1}, about {2} left…": [
+    "正在放大视频：第 {0} 帧，共约 {1} 帧，约剩 {2}…",
+    "正在放大影片：第 {0} 格，共約 {1} 格，約剩 {2}…",
+    "動画をアップスケールしています：約 {1} フレーム中 {0} フレーム目、残り約 {2}…"
+  ],
+  "Upscaling the video: frame {0} of about {1}…": [
+    "正在放大视频：第 {0} 帧，共约 {1} 帧…",
+    "正在放大影片：第 {0} 格，共約 {1} 格…",
+    "動画をアップスケールしています：約 {1} フレーム中 {0} フレーム目…"
+  ],
+  "Encoding the sound…": [
+    "正在编码声音…",
+    "正在編碼聲音…",
+    "音声をエンコードしています…"
+  ],
+  "Upscale Video 2× takes videos from 32 × 32 up to 1920 pixels wide and 1080 pixels tall, so the result stays within 3840 × 2160 (the most Windows' H.264 encoder takes).": [
+    "视频放大 2× 支持 32 × 32 到宽 1920、高 1080 像素的视频，结果不超过 3840 × 2160（Windows H.264 编码器的上限）。",
+    "影片放大 2× 支援 32 × 32 到寬 1920、高 1080 像素的影片，結果不超過 3840 × 2160（Windows H.264 編碼器的上限）。",
+    "動画の 2× アップスケールは 32 × 32 から幅 1920・高さ 1080 ピクセルまでの動画に対応し、結果は 3840 × 2160 以内（Windows の H.264 エンコーダーの上限）になります。"
+  ],
+  "This video has too many frames per second for Windows' H.264 encoder at twice its size. Use a video with a lower frame rate (4K output takes up to 64 frames per second).": [
+    "对 Windows 的 H.264 编码器来说，此视频放大一倍后每秒帧数过多。请使用帧率更低的视频（4K 输出最多每秒 64 帧）。",
+    "對 Windows 的 H.264 編碼器而言，此影片放大一倍後每秒影格數過多。請使用影格率較低的影片（4K 輸出最多每秒 64 格）。",
+    "この動画は 2 倍のサイズでは Windows の H.264 エンコーダーにとって 1 秒あたりのフレーム数が多すぎます。フレームレートの低い動画を使ってください（4K 出力は毎秒 64 フレームまで）。"
+  ],
+  "This video has non-square pixels (anamorphic video). Upscale Video 2× writes square pixels, so the result would look squashed; such videos aren't supported.": [
+    "此视频使用非正方形像素（变形宽银幕视频）。视频放大 2× 输出正方形像素，结果会被压扁，因此不支持这类视频。",
+    "此影片使用非正方形像素（變形寬銀幕影片）。影片放大 2× 輸出正方形像素，結果會被壓扁，因此不支援這類影片。",
+    "この動画は正方形でないピクセル（アナモルフィック動画）です。動画の 2× アップスケールは正方形ピクセルで書き出すため結果がつぶれて見えるので、このような動画には対応していません。"
+  ],
+  "Takes videos up to 1920 pixels wide and 1080 tall, 10 minutes and 300,000 model blocks (4K output up to 64 frames per second). Videos stored with a rotation flag or with non-square pixels are not supported.": [
+    "支持宽不超过 1920、高不超过 1080 像素、最长 10 分钟、最多 300,000 个模型块的视频（4K 输出最多每秒 64 帧）。不支持带旋转标记存储或非正方形像素的视频。",
+    "支援寬不超過 1920、高不超過 1080 像素、最長 10 分鐘、最多 300,000 個模型區塊的影片（4K 輸出最多每秒 64 格）。不支援帶旋轉標記儲存或非正方形像素的影片。",
+    "幅 1920・高さ 1080 ピクセル以内、10 分以内、モデルのブロック数 300,000 以内の動画に対応します（4K 出力は毎秒 64 フレームまで）。回転フラグ付きで保存された動画や正方形でないピクセルの動画には対応していません。"
   ]
 }

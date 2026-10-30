@@ -214,6 +214,7 @@ public static class Catalog
         new("audio.transcribe", "Transcribe Speech…", SingleFile: true, Extensions: new[] { "wav", "mp3", "aac", "flac", "m4a" }),
         new("video.trim", "Trim Video…", SingleFile: true, Extensions: new[] { "mp4", "mov", "m4v", "wmv" }),
         new("video.subtitles", "Burn In Subtitles…", SingleFile: true, Extensions: new[] { "mp4", "mov", "m4v", "wmv" }),
+        new("video.upscale", "Upscale Video 2×…", SingleFile: true, Extensions: new[] { "mp4", "mov", "m4v" }),
         new("audio.g711", "Decode G.711 WAV…", Extensions: new[]{"wav"}, SingleFile: true),
         new("audio.floatpcm", "Convert Float WAV to PCM…", SingleFile: true, Extensions: new[] { "wav" }),
         new("audio.noise", "Reduce Audio Noise…", SingleFile: true, Extensions: new[] { "wav", "aif", "aiff", "aifc", "mp3", "aac", "flac", "m4a" }),
