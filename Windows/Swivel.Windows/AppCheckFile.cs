@@ -74,7 +74,12 @@ internal sealed class AppCheckFile : IDisposable
 
     /// Whole-chain revocation; Windows may contact the certificate authorities' servers.
     /// A failed online result stays recorded and blocks warning removal for this window.
-    internal TrustFacts CheckOnline() { var result = AppTrustReader.Verify(input.Stream.SafeFileHandle, input.Path, true); Online = result; return result; }
+    internal TrustFacts CheckOnline()
+    {
+        var result = AppTrustReader.Verify(input.Stream.SafeFileHandle, input.Path, true);
+        if (AppCheck.OnlineAllows(Online, DateTime.UtcNow)) Online = result; // a blocking result is never replaced
+        return result;
+    }
 
     internal bool CanRemoveWarning => AppCheck.CanRemoveWarning(AppCheck.Classify(Trust, DateTime.UtcNow), Zone) && AppCheck.OnlineAllows(Online, DateTime.UtcNow);
 
