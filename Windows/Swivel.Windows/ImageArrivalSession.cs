@@ -48,7 +48,8 @@ internal sealed class ImageArrivalSession : IImageArrivalSession
 
     // Call on a worker. Cancellation here governs creation; the window owns StopAsync
     // for its running session and joins any late-created session before closing.
-    public static ImageArrivalSession Create(string directory, CancellationToken cancellation)
+    public static ImageArrivalSession Create(string directory, CancellationToken cancellation) => Create(directory, cancellation, false);
+    public static ImageArrivalSession Create(string directory, CancellationToken cancellation, bool shareDelete)
     {
         cancellation.ThrowIfCancellationRequested();
         if (directory.Length > 3 && directory.EndsWith('\\')) directory = directory[..^1];
@@ -58,7 +59,7 @@ internal sealed class ImageArrivalSession : IImageArrivalSession
         var failures = new List<Exception>(3);
         try
         {
-            root = NativeFiles.DirectoryLease.Open(directory);
+            root = NativeFiles.DirectoryLease.Open(directory, shareDelete);
             cancellation.ThrowIfCancellationRequested();
             watcher = new FileSystemWatcher(directory)
             {
@@ -95,6 +96,15 @@ internal sealed class ImageArrivalSession : IImageArrivalSession
         catch (Exception error) { collector.FailWatcher(error); }
     }
     public Task StopAsync(ArrivalStopReason reason = ArrivalStopReason.User) => collector.StopAsync(reason);
+    /// The watched folder is still `expected` and that path still names it (not renamed or moved away).
+    internal bool StillAt(string expected)
+    {
+        lock (callbacks)
+        {
+            if (closing) return false;
+            return string.Equals(directory, expected, StringComparison.OrdinalIgnoreCase) && root.StillAt(directory);
+        }
+    }
     public void Dismiss(Guid id) => collector.Dismiss(id);
     public void ClearCards() => collector.ClearCards();
     private void Created(object sender, FileSystemEventArgs args) => Receive(args.Name, ArrivalKind.Created);

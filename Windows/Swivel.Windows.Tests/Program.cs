@@ -136,6 +136,7 @@ internal static class Program
             Group("CopyFilesNativeChecks", () => CopyFilesNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalNativeChecks", () => ImageArrivalNativeChecks.Run(directory,Check,Reject));
             Group("ImageArrivalWindowNativeChecks", () => ImageArrivalWindowNativeChecks.Run(Check,Reject));
+            Group("ScreenshotCardNativeChecks", () => ScreenshotCardNativeChecks.Run(directory,Check,Reject));
             Group("WheelGestureNativeChecks", () => WheelGestureNativeChecks.Run(Check,Reject));
             Group("WheelGestureLiveChecks", () => WheelGestureLiveChecks.Run(Check,Reject));
             Group("WheelGestureWindowNativeChecks", () => WheelGestureWindowNativeChecks.Run(Check,Reject));

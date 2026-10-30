@@ -214,6 +214,15 @@ public sealed class RopeEdgeTrigger
         return now - leftSince.Value >= LeaveDelay ? Hide(atEdge) : RopeEdgeAction.None;
     }
 
+    /// Shown from outside (a screenshot card was hung): the rope stays down for `linger`
+    /// before the ordinary leave delay applies, or longer while the pointer is on it.
+    public void Present(TimeSpan now,ScreenRect monitor,TimeSpan linger)
+    {
+        if (linger < LeaveDelay) linger = LeaveDelay;
+        Showing = true; Monitor = monitor; edgeSince = null; last = now;
+        leftSince = now + (linger - LeaveDelay);
+    }
+
     /// Hidden from outside (feature or setting turned off, Swivel quitting): no action is reported.
     public void Reset() { Showing = false; Monitor = null; edgeSince = null; leftSince = null; armed = true; }
 

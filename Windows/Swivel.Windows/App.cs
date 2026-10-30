@@ -93,6 +93,7 @@ public sealed partial class App : Application
         Home.Show();
         if (!hotkeys.Configure(Prefs)) Home.SetStatus(L("A shortcut is in use. Open the tool from the tray menu."));
         UpdateRope();
+        _ = UpdateScreenshotCards();
         if (failed) Home.SetStatus(L("Preferences could not be loaded. Defaults are in use; settings will be saved only when changed."));
     }
     private void SystemAppearanceChanged(object? sender,System.ComponentModel.PropertyChangedEventArgs args)
@@ -109,6 +110,7 @@ public sealed partial class App : Application
         if (!Prefs.IsOn(Feature.Shelf)) floatingShelf?.Close(); else floatingShelf?.Refresh();
         if (!Prefs.IsOn(Feature.Clothesline)) { clothesline?.Close(); imageArrivals?.Close(); } else clothesline?.Refresh();
         UpdateRope();
+        _ = UpdateScreenshotCards();
         if (workFeature.HasValue && !Prefs.IsOn(workFeature.Value)) CancelWork();
         foreach (var panel in panels.ToArray())
         {
@@ -251,7 +253,7 @@ public sealed partial class App : Application
         return RunActionAsync(new(id, "Preview File", SingleFile: true), files, owner, report, shelfPreview: true);
     }
 
-    public async Task RunActionAsync(ToolAction action, string[] files, Window owner, Action<string> report, QrEntry? qrEntry = null,string? assistantRequest=null,bool shelfPreview=false)
+    public async Task RunActionAsync(ToolAction action, string[] files, Window owner, Action<string> report, QrEntry? qrEntry = null,string? assistantRequest=null,bool shelfPreview=false,bool screenshotCard=false)
     {
         // Opening the independent watcher does not validate unrelated file input
         // or reserve the shared editor operation for a whole listening session.
@@ -942,7 +944,8 @@ public sealed partial class App : Application
                 });
                 token.ThrowIfCancellationRequested();
                 foreach (var print in loaded) Prints.Add(print);
-                OpenClothesline(); report(L("Images hung. Original files were not changed.")); return;
+                if (!(screenshotCard && Prefs.RopeAtTopEdge && PresentRope())) OpenClothesline();
+                report(L("Images hung. Original files were not changed.")); return;
             }
             if (action.Id == "file.assistantdraft")
             {
@@ -1836,6 +1839,7 @@ public sealed partial class App : Application
         CancelWork();
         await FinishWheelGestureAsync();
         await FinishImageArrivalsAsync();
+        await FinishScreenshotCardsAsync();
         if (work is not null) { Home.SetStatus(L("Finishing cancellation before quitting…")); await work; }
         Shutdown();
     }
