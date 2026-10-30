@@ -1330,7 +1330,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 ## Windows0.135 — merged B08 encrypted ZIP, C02 HEIC/AVIF, D03 video noise reduction (Codex) (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: B08 41005598842 (core 4,554,810, native 6,409; P2 fixed and rechecked, P3s left as follow-ups), C02 41006566804 (core 4,555,107, native 6,411; review P2s fixed and rechecked), D03 41004639705 (core 4,554,667, native 6,411; written by Codex, P2 fixed).
-- After merging all three: core 4,555,310 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- After merging all three: core 4,555,310 on Mac, native compiled 0 warnings/errors there. Windows CI 41011790429 on the merged branch passed (core 4,555,310, native 6,445).
 - Not tested: encrypted ZIPs made by WinRAR/7-Zip/Windows on a home PC, real HEIC/AVIF pixels (the runner has no HEVC/AV1 decoder), listening to denoised video sound.
 
 ## Windows0.134 — merged A05 screenshot cards, B05/B06 exFAT/FAT32, C06 location-only removal (Codex) (2026-10-30)
