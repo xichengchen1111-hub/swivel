@@ -24,18 +24,16 @@ try {
             Write-Host "DIAG range [$lo,$hi) exit $code secs $([int]((Get-Date)-$start).TotalSeconds) groups $($names.Count) first $($names | Select-Object -First 1) last $($names | Select-Object -Last 1)"
             return @{ Crash = ($code -eq -1073741811); Names = $names }
         }
-        $none = Try-Range 0 0
-        if ($none.Crash) { Write-Host 'DIAG crash without any group: inline checks' } else {
-            $lo = 0; $hi = 400
-            while ($hi - $lo -gt 1) {
-                $mid = [int][math]::Floor(($lo + $hi) / 2)
-                $r = Try-Range $lo $mid
-                if ($r.Crash) { $hi = $mid } else { $lo = $mid }
+        foreach ($idx in 99..119) {
+            $crashes = 0; $name = ''
+            foreach ($rep in 1..8) {
+                $env:SWIVEL_GROUP_LO = "$idx"; $env:SWIVEL_GROUP_HI = "$($idx + 1)"
+                $lines = & $diagExe.FullName 2>&1; $code = $LASTEXITCODE
+                $found = $lines | Where-Object { "$_" -match '^RUN: ' } | Select-Object -First 1
+                if ($found) { $name = "$found" -replace 'RUN: ','' }
+                if ($code -eq -1073741811) { $crashes++ }
             }
-            $final = Try-Range $lo ($lo + 1)
-            Write-Host "DIAG culprit index $lo $($final.Names) crash=$($final.Crash)"
-            $check = Try-Range $lo ($lo + 1)
-            Write-Host "DIAG culprit recheck crash=$($check.Crash)"
+            Write-Host "DIAG group $idx $name crashes $crashes of 8"
         }
         exit 0
         & dotnet run --project Swivel.Core.Tests -c Release
