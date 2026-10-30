@@ -242,7 +242,10 @@ internal static class FatVolumeNativeChecks
         }
         if (caseSensitive)
         {
-            Refused(() => FolderCopyWork.Open(sensitive, into, CancellationToken.None).Dispose(), FatRules.CaseClash, fs + ": names differing only in case are refused before copying", check);
+            // The folder walk already leaves the second name out and lists it, for every destination.
+            using (var caseCopy = FolderCopyWork.Open(sensitive, into, CancellationToken.None))
+                check(caseCopy.Plan.Items.Count(x => !x.Directory) == 1 && caseCopy.Plan.Skipped.Count == 1 && caseCopy.Plan.Skipped[0].Reason == "Same name as another item except for letter case",
+                    fs + ": of two names differing only in case, one is copied and the other listed as skipped, never silently lost");
             Fsutil("file setCaseSensitiveInfo \"" + sensitive + "\" disable");
         }
         else if (!Directory.Exists(sensitive) || Directory.GetFiles(sensitive).Length == 0) Console.WriteLine("SKIP: case-sensitive NTFS folders are not available here; the case-clash rule is covered by core checks.");
