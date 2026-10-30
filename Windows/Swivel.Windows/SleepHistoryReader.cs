@@ -46,8 +46,9 @@ internal static class SleepHistoryReader
                 var remaining = timeLimit - clock.Elapsed;
                 if (remaining <= TimeSpan.Zero || limit.IsCancellationRequested) { timedOut = true; break; }
                 EventRecord? next;
-                try { next = reader.ReadEvent(remaining); }
-                catch (Exception e) when (!token.IsCancellationRequested && (limit.IsCancellationRequested || (e is EventLogException && e.HResult == ErrorTimeout)))
+                // The token is the time limit; the native wait gets slack so it never races it.
+                try { next = reader.ReadEvent(remaining + TimeSpan.FromSeconds(2)); }
+                catch (Exception e) when (!token.IsCancellationRequested && (limit.IsCancellationRequested || (e is EventLogException && (e.HResult == ErrorTimeout || clock.Elapsed >= timeLimit - TimeSpan.FromMilliseconds(50)))))
                 { timedOut = true; break; }
                 using EventRecord? record = next;
                 token.ThrowIfCancellationRequested();
