@@ -19,6 +19,7 @@ public sealed class WaveDocument : IDisposable
     // audio Windows decoded from it. The original stays held; outputs go beside it.
     private readonly Stream source;
     public bool Decoded { get; }
+    public const string DecodedPreviewNotice = "Windows decoded this file to 16-bit PCM first (its codec can change precision, priming or padding; up to 128 MiB and two hours). Nothing is saved from this preview.";
     public const string DecodedNotice = "Windows decoded this file to 16-bit PCM first (its codec can change precision, priming or padding; up to 128 MiB and two hours). The cleaned result is saved as a new WAV file beside it.";
     private WaveDocument(NativeFiles.Input input,WaveInfo info,double[] peaks,Stream? prepared = null, bool windowsDecoded = false) { this.input = input; source = prepared ?? input.Stream; Decoded = windowsDecoded; Info = info; Peaks = peaks; }
     /// A compressed file (MP3, AAC, FLAC, M4A) decoded completely by Windows into PCM16 first, within

@@ -227,7 +227,7 @@ public sealed partial class App : Application
 
     internal Task PreviewShelfFileAsync(string[] files, Window owner, Action<string> report)
     {
-        string id = files.Length == 1 && Catalog.IsImage(files[0]) ? "image.preview" : "file.preview";
+        const string id = "file.preview";
         return RunActionAsync(new(id, "Preview File", SingleFile: true), files, owner, report, shelfPreview: true);
     }
 
@@ -938,13 +938,44 @@ public sealed partial class App : Application
             }
             if (action.Id == "file.preview")
             {
-                if (System.IO.Path.GetExtension(files[0]).Equals(".wav", StringComparison.OrdinalIgnoreCase))
+                var kind = FilePreview.Kind(files[0]);
+                if (kind == FilePreviewKind.Image)
+                {
+                    using var image = await OnSta(() => ImageTools.Open(files[0], token));
+                    token.ThrowIfCancellationRequested();
+                    ShowOperationDialog(new ImagePreviewDialog(this, image.Bitmap), owner, token);
+                }
+                else if (kind is FilePreviewKind.LocalAudio or FilePreviewKind.DecodedAudio)
                 {
                     report(L("Loading audio…"));
-                    using var document = await Task.Run(() => WaveDocument.Open(files[0], token), token);
+                    if (kind == FilePreviewKind.DecodedAudio) report(L("Decoding the complete local audio stream…"));
+                    WaveDocument opened;
+                    try
+                    {
+                        opened = kind == FilePreviewKind.DecodedAudio
+                            ? await Task.Run(() => WaveDocument.OpenDecodedAsync(files[0], token), token)
+                            : await Task.Run(() => WaveDocument.OpenNoise(files[0], token), token);
+                    }
+                    catch (UserError error) when (error.Message == WaveNoiseInput.Clipping) { throw new UserError(FilePreview.FloatClipping); }
+                    using var document = opened;
                     token.ThrowIfCancellationRequested(); var dialog = new WavePreviewDialog(this, document);
                     try { ShowOperationDialog(dialog, owner, token); }
                     finally { await dialog.FinishPreviewAsync(); }
+                }
+                else if (kind is FilePreviewKind.Subtitle or FilePreviewKind.Data)
+                {
+                    report(L("Reading document text…"));
+                    FileTextPreview? text = null;
+                    try { text = await Task.Run(() => FileTextPreview.Open(files[0], token), token); }
+                    // A malformed SRT/CSV/TSV is still plain text: show it through the document reader instead.
+                    catch (UserError) when (DocumentText.Extensions.Contains(System.IO.Path.GetExtension(files[0]).TrimStart('.').ToLowerInvariant())) { }
+                    if (text is not null)
+                        using (text) { token.ThrowIfCancellationRequested(); ShowOperationDialog(new FileTextPreviewDialog(this, text), owner, token); }
+                    else
+                    {
+                        using var document = await Task.Run(() => DocumentTextFile.Open(files[0], token), token);
+                        token.ThrowIfCancellationRequested(); ShowOperationDialog(new DocumentTextDialog(this, document, previewOnly: true), owner, token);
+                    }
                 }
                 else
                 {
