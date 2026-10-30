@@ -80,6 +80,7 @@ PhotoChecks.Run(Check, Reject);
 MarkupChecks.Run(Check, Reject);
 FileToolChecks.Run(Check, Reject);
 ZipExtractChecks.Run(Check, Reject);
+ZipEncryptChecks.Run(Check, Reject);
 TarExtractChecks.Run(Check, Reject);
 SevenZipExtractChecks.Run(Check, Reject);
 FolderStyleChecks.Run(Check, Reject);

@@ -100,8 +100,45 @@ public sealed class ZipExtractWork : IDisposable
         }
         catch { input.Dispose(); throw; }
     }
+    /// ZIP members that need a password (none for TAR and 7z).
+    public IReadOnlyList<ZipMember> Encrypted => Plan.Files.Where(file => file.Encryption != ZipEncryption.None).ToArray();
+
+    /// The quick check against the first encrypted member only (one key derivation), so the
+    /// extract dialog can ask again. The held archive is used by one caller at a time.
+    public bool PasswordMatchesFirst(ZipPassword password, CancellationToken token) =>
+        Plan.Files.FirstOrDefault(file => file.Encryption != ZipEncryption.None) is not { } first || ZipExtract.PasswordMatches(input.Stream, first, password, token);
+
+    /// Encrypted ZIP: every encrypted member's password check runs before the new folder
+    /// exists. A mismatch on the first one refuses the whole extraction; later mismatches
+    /// (archives using several passwords) are left out and listed in ZipOutcome.Refused.
+    public ZipOutcome Extract(CancellationToken token, Action<int, int>? progress, ZipPassword password)
+    {
+        if (Tar is not null || sevenZip is not null || Encrypted.Count == 0) return Extract(token, progress);
+        var refused = new HashSet<ZipMember>(ReferenceEqualityComparer.Instance);
+        bool first = true;
+        foreach (var member in Plan.Files)
+        {
+            token.ThrowIfCancellationRequested();
+            if (member.Encryption == ZipEncryption.None) continue;
+            bool matches = ZipExtract.PasswordMatches(input.Stream, member, password, token);
+            if (!matches && first) throw new UserError("The password is not correct. Nothing was extracted.");
+            if (!matches) refused.Add(member);
+            first = false;
+        }
+        var plan = refused.Count == 0 ? Plan : new ZipPlan
+        {
+            Files = Plan.Files.Where(file => !refused.Contains(file)).ToArray(), Directories = Plan.Directories,
+            TotalBytes = Plan.TotalBytes - refused.Sum(file => file.Size), LongestPath = Plan.LongestPath,
+        };
+        var outcome = NativeFiles.ExtractArchive(input, plan, stem, Zone, (member, output) => ZipExtract.Extract(input.Stream, member, output, token, password), token, progress);
+        outcome.FileCount = Plan.Files.Count;
+        outcome.Refused = Plan.Files.Where(refused.Contains).Select(file => file.Path).ToArray();
+        return outcome;
+    }
+
     public ZipOutcome Extract(CancellationToken token, Action<int, int>? progress)
     {
+        if (sevenZip is null && Tar is null && Encrypted.Count > 0) throw new UserError("This ZIP entry is encrypted and needs a password.");
         if (sevenZip is not null)
         {
             using var reader = SevenZipExtract.OpenSource(input.Stream, sevenZip);

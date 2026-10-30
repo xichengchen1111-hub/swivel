@@ -1068,11 +1068,19 @@ public sealed partial class App : Application
                 report(L("Reading archive…"));
                 using var archive = await Task.Run(() => ZipExtractWork.Open(files[0], token), token);
                 token.ThrowIfCancellationRequested();
-                if (!ShowOperationDialog(new ZipExtractDialog(this, archive), owner, token)) return;
+                var extractDialog = new ZipExtractDialog(this, archive);
+                bool accepted = ShowOperationDialog(extractDialog, owner, token);
+                // Kept in memory only for this extraction; cleared when it ends however it ends.
+                using var password = extractDialog.Password;
+                if (!accepted) return;
                 report(L("Processing…"));
-                var outcome = await Task.Run(() => archive.Extract(token, (done, total) =>
-                    Dispatcher.InvokeAsync(() => report(string.Format(L("Extracting file {0} of {1}…"), done, total)))), token);
+                Action<int, int> progress = (done, total) =>
+                    Dispatcher.InvokeAsync(() => report(string.Format(L("Extracting file {0} of {1}…"), done, total)));
+                var outcome = await Task.Run(() => password is null ? archive.Extract(token, progress) : archive.Extract(token, progress, password), token);
                 string summary = string.Format(L("Extracted {0} of {1} file(s) into a new folder beside the archive."), outcome.FilesWritten, outcome.FileCount);
+                if (outcome.Refused.Count > 0)
+                    summary += " " + string.Format(L("{0} encrypted file(s) were left out because the password did not match them: {1}"), outcome.Refused.Count,
+                        string.Join(", ", outcome.Refused.Take(5)) + (outcome.Refused.Count > 5 ? ", …" : ""));
                 if (outcome.Cancelled) summary += " " + L("Cancelled. Completed files were kept.");
                 else if (outcome.Error is not null) summary += " " + L("Extraction stopped. Files already extracted were kept; nothing was overwritten.");
                 report(summary); Home.ShowResults(new[] { outcome.Folder! }, summary);
