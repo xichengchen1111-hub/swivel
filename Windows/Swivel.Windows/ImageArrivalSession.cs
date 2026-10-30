@@ -48,7 +48,8 @@ internal sealed class ImageArrivalSession : IImageArrivalSession
 
     // Call on a worker. Cancellation here governs creation; the window owns StopAsync
     // for its running session and joins any late-created session before closing.
-    public static ImageArrivalSession Create(string directory, CancellationToken cancellation)
+    public static ImageArrivalSession Create(string directory, CancellationToken cancellation) => Create(directory, cancellation, false);
+    public static ImageArrivalSession Create(string directory, CancellationToken cancellation, bool shareDelete)
     {
         cancellation.ThrowIfCancellationRequested();
         if (directory.Length > 3 && directory.EndsWith('\\')) directory = directory[..^1];
@@ -58,7 +59,7 @@ internal sealed class ImageArrivalSession : IImageArrivalSession
         var failures = new List<Exception>(3);
         try
         {
-            root = NativeFiles.DirectoryLease.Open(directory);
+            root = NativeFiles.DirectoryLease.Open(directory, shareDelete);
             cancellation.ThrowIfCancellationRequested();
             watcher = new FileSystemWatcher(directory)
             {

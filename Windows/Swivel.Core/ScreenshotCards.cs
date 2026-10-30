@@ -19,6 +19,10 @@ public static class ScreenshotCards
     public static bool Reportable(ArrivalStopReason reason) =>
         reason is not (ArrivalStopReason.None or ArrivalStopReason.User or ArrivalStopReason.Closed or ArrivalStopReason.FeatureDisabled or ArrivalStopReason.Cancelled);
 
+    /// Session budgets reached in ordinary long use: a fresh session may start (at most once a minute).
+    public static bool Renewable(ArrivalStopReason reason) =>
+        reason is ArrivalStopReason.CardLimit or ArrivalStopReason.QueueLimit or ArrivalStopReason.NotificationLimit or ArrivalStopReason.ByteLimit;
+
     /// Top-left of a card resting in the bottom-right corner of `work` (device-independent units).
     public static (double Left,double Top) Corner(double workLeft,double workTop,double workRight,double workBottom,double width,double height,double margin)
     {

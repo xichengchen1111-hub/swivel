@@ -28,6 +28,11 @@ internal static class ScreenshotCardChecks
             "Stopping by the person, Quit or the feature switch is not reported as a problem");
         check(ScreenshotCards.Reportable(ArrivalStopReason.ByteLimit) && ScreenshotCards.Reportable(ArrivalStopReason.WatcherError) && ScreenshotCards.Reportable(ArrivalStopReason.CardLimit),"Limits and watcher failures are reported");
 
+        check(ScreenshotCards.Renewable(ArrivalStopReason.ByteLimit) && ScreenshotCards.Renewable(ArrivalStopReason.NotificationLimit) && ScreenshotCards.Renewable(ArrivalStopReason.CardLimit) && ScreenshotCards.Renewable(ArrivalStopReason.QueueLimit),
+            "Session budgets reached in long use allow a fresh session");
+        check(!ScreenshotCards.Renewable(ArrivalStopReason.WatcherError) && !ScreenshotCards.Renewable(ArrivalStopReason.ReadFailure) && !ScreenshotCards.Renewable(ArrivalStopReason.CleanupError) && !ScreenshotCards.Renewable(ArrivalStopReason.User),
+            "Watcher, read and cleanup failures are never restarted automatically");
+
         // Dismiss timing.
         var clock = new CardDismissClock();
         check(!clock.Due(T(0)) && clock.Deadline is null,"A clock that never showed a card is never due");

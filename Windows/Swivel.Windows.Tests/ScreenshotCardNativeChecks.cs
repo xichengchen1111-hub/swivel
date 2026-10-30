@@ -81,6 +81,8 @@ internal static class ScreenshotCardNativeChecks
         Wait(800);
         check(shown.Count == 1 && shown[0].Path == added,"A new file in the folder produces exactly one card");
         check(File.ReadAllBytes(added).SequenceEqual(png) && File.Exists(existing),"Showing a card leaves the screenshot files untouched");
+        Directory.Move(root,root + " live"); Directory.Move(root + " live",root);
+        check(Directory.Exists(root) && controller.Running,"While watching, the person can still rename or move the Screenshots folder");
         controller.Done(shown[0].Id);
         check(controller.Session!.Snapshot.Cards.Count == 0,"A finished card frees its slot in the session");
 

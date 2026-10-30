@@ -49,7 +49,7 @@ public sealed partial class App
     /// After a card was hung: the rope comes down on the pointer's monitor for a moment.
     private bool PresentRope()
     {
-        if (ropeWatcher is null || RopeEdgeWatcher.Native(true) is not { } sample) return false;
+        if (ropeWatcher is null || RopeEdgeWatcher.Native(true) is not { FullScreen: false } sample) return false;
         ropeWatcher.Present(sample,TimeSpan.FromSeconds(2.5));
         return true;
     }

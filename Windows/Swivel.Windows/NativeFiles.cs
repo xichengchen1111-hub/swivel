@@ -250,12 +250,15 @@ public static partial class NativeFiles
     internal sealed class DirectoryLease : IDisposable
     {
         private readonly List<SafeFileHandle> handles = new();
-        public static DirectoryLease Open(string directory)
+        private uint share = 3;
+        /// `shareDelete` lets the person rename, move or delete the folder and its ancestors while it is
+        /// held (for an always-on watcher); reads are then checked again at the reported path.
+        public static DirectoryLease Open(string directory, bool shareDelete = false)
         {
             string root = directory[..3];
             // Mapped SMB drives are rejected too, before opening a path on them.
             if (GetDriveType(root) is not 2 and not 3 and not 6) throw new UserError(LocalOnly);
-            var lease = new DirectoryLease();
+            var lease = new DirectoryLease { share = shareDelete ? 7u : 3u };
             try
             {
                 lease.Add(root);
@@ -275,7 +278,7 @@ public static partial class NativeFiles
             // without delete sharing the folder cannot be renamed or removed while held. It needs
             // no list permission. Write sharing stays on: publishing a child opens its parent
             // for write data.
-            var handle = NativeFiles.Open(path, ReadAttributes | Traverse, 3, 3, OpenReparse | BackupSemantics);
+            var handle = NativeFiles.Open(path, ReadAttributes | Traverse, share, 3, OpenReparse | BackupSemantics);
             handles.Add(handle);
             Check(handle, true);
         }

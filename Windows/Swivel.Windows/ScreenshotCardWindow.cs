@@ -32,7 +32,7 @@ internal sealed class ScreenshotCardWindow : Window
     private readonly Border plate = new() { CornerRadius = new CornerRadius(8), Padding = new Thickness(10), BorderThickness = new Thickness(1) };
     private readonly TranslateTransform shift = new();
     private readonly MotionSpring slide = new(0,.42,.86), fade = new(0,.3,1), lift = new(0,.38,.8);
-    private ArrivalCard<BitmapSource>? card;
+    private ArrivalCard<BitmapSource>? card, waiting;
     private ScreenRect work;
     private nint monitor;
     private uint dpi = 96;
@@ -59,6 +59,8 @@ internal sealed class ScreenshotCardWindow : Window
             SetWindowLongPtrW(handle,-20,(nint)RopeWindow.RopeStyle(GetWindowLongPtrW(handle,-20)));
             HwndSource.FromHwnd(handle)?.AddHook(Hook);
         };
+        // WPF applies the system's suggested size on a DPI change; put the card back to its own place after.
+        DpiChanged += (_,_) => Dispatcher.BeginInvoke(DispatcherPriority.Normal,new Action(Place));
         MouseEnter += (_,_) => clock.SetHover(true,Now);
         MouseLeave += (_,_) => { if (!pressing) clock.SetHover(false,Now); };
         MouseLeftButtonDown += Pressed;
@@ -78,12 +80,16 @@ internal sealed class ScreenshotCardWindow : Window
     /// Shows `next`, replacing any card still waiting.
     internal void Present(ArrivalCard<BitmapSource> next)
     {
+        // Never swap the card the person is holding or dragging out; show the newer one after.
+        if (pressing && card is { } held && held.Id != next.Id && !leaving) { if (waiting is { } skipped && skipped.Id != next.Id) done(skipped.Id); waiting = next; return; }
+        waiting = null;
         // Replacing a card, even one already on its way out, frees the old one now.
         StopFrames();
         if (card is { } previous && previous.Id != next.Id) done(previous.Id);
         if (IsMouseCaptured) ReleaseMouseCapture();
         card = next; leaving = false; pressing = false; gesture = CardGesture.Pending;
         picture.Source = next.Thumbnail;
+        caption.Text = app.L("Click or drag up to hang on the Clothesline. Drag elsewhere to use the file.");
         double scale = Math.Min(1,Math.Min((CardWidth - 20) / Math.Max(1,next.Thumbnail.PixelWidth),170.0 / Math.Max(1,next.Thumbnail.PixelHeight)));
         picture.Width = next.Thumbnail.PixelWidth * scale; picture.Height = next.Thumbnail.PixelHeight * scale;
         plate.Background = SystemColors.WindowBrush; plate.BorderBrush = SystemColors.ActiveBorderBrush; caption.Foreground = SystemColors.WindowTextBrush;
@@ -96,9 +102,10 @@ internal sealed class ScreenshotCardWindow : Window
         fade.Target = 0; fade.Snap(); fade.Target = 1;
         if (Reduced) { slide.Snap(); fade.Snap(); }
         Apply();
+        Place();
         if (!IsVisible) Show();
         Place();
-        clock.Show(Now); timer.Start(); Wake();
+        clock.Show(Now); clock.SetHover(IsMouseOver,Now); timer.Start(); Wake();
     }
 
     /// The monitor with the pointer, or the primary one.
@@ -107,10 +114,10 @@ internal sealed class ScreenshotCardWindow : Window
         GetCursorPos(out var point);
         monitor = MonitorFromPoint(point,1);
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        if (monitor != 0 && GetMonitorInfoW(monitor,ref info)) work = new(info.Work.Left,info.Work.Top,info.Work.Right,info.Work.Bottom);
-        else work = new(0,0,(int)SystemParameters.WorkArea.Width,(int)SystemParameters.WorkArea.Height);
+        work = monitor != 0 && GetMonitorInfoW(monitor,ref info) ? new(info.Work.Left,info.Work.Top,info.Work.Right,info.Work.Bottom) : default;
         dpi = monitor != 0 && GetDpiForMonitor(monitor,0,out uint x,out _) == 0 && x > 0 ? x : 96;
         double s = dpi / 96.0;
+        if (monitor == 0 || work.Width <= 0) work = new(0,0,(int)(SystemParameters.WorkArea.Width * s),(int)(SystemParameters.WorkArea.Height * s));
         pixelWidth = (int)Math.Ceiling(CardWidth * s); pixelHeight = (int)Math.Ceiling(Height * s);
         var (left,top) = ScreenshotCards.Corner(work.Left,work.Top,work.Right,work.Bottom,pixelWidth,pixelHeight,Math.Round(CornerMargin * s));
         cornerLeft = (int)left; cornerTop = (int)top;
@@ -168,7 +175,10 @@ internal sealed class ScreenshotCardWindow : Window
         clock.SetPressed(false,Now);
         if (!IsMouseOver) clock.SetHover(false,Now);
         if (result != DragDropEffects.None && ReferenceEquals(card,current)) Leave(false);
+        ShowWaiting();
     }
+
+    private void ShowWaiting() { if (!pressing && waiting is { } next) { waiting = null; Present(next); } }
 
     private void Released(object sender,MouseButtonEventArgs e)
     {
@@ -177,8 +187,8 @@ internal sealed class ScreenshotCardWindow : Window
         var was = gesture; pressing = false; gesture = CardGesture.Pending;
         double dy = lift.Value / (dpi / 96.0);
         ReleaseMouseCapture();
-        if (was == CardGesture.Pending || (was == CardGesture.Lift && CardGestures.Hangs(dy))) { Hang(); return; }
-        Cancel();
+        if (was == CardGesture.Pending || (was == CardGesture.Lift && CardGestures.Hangs(dy))) { Hang(); ShowWaiting(); return; }
+        Cancel(); ShowWaiting();
     }
 
     private void Cancel()
@@ -192,6 +202,9 @@ internal sealed class ScreenshotCardWindow : Window
     private void Hang()
     {
         if (card is not { } current || leaving) return;
+        // Another operation holds Swivel's work slot: keep the card and say so, rather than lose the print.
+        if (app.Busy || !app.Prefs.IsOn(Feature.Clothesline))
+        { caption.Text = app.L("Swivel is busy. Try again in a moment."); Cancel(); ShowWaiting(); return; }
         Leave(true);
         _ = HangAsync(current.Path);
     }

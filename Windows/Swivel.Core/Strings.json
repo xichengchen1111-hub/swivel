@@ -16633,5 +16633,15 @@
     "截图卡片已停止：无法读取某张图片。请关闭再打开此设置以重新监视。",
     "截圖卡片已停止：無法讀取某張圖片。請關閉再開啟此設定以重新監看。",
     "スクリーンショットカードが停止しました：画像を読み込めませんでした。設定をオフにしてからオンにし直すと再び監視します。"
+  ],
+  "The Screenshots folder is not a plain folder on this PC (for example, it is kept in OneDrive), so screenshot cards cannot watch it.": [
+    "“屏幕截图”文件夹不是这台电脑上的普通文件夹（例如保存在 OneDrive 中），因此截图卡片无法监视它。",
+    "「螢幕擷取畫面」資料夾不是這台電腦上的一般資料夾（例如儲存在 OneDrive 中），因此截圖卡片無法監看它。",
+    "「スクリーンショット」フォルダーがこの PC の通常のフォルダーではない（たとえば OneDrive に保存されている）ため、スクリーンショットカードで監視できません。"
+  ],
+  "Swivel is busy. Try again in a moment.": [
+    "Swivel 正忙。请稍后再试。",
+    "Swivel 正忙。請稍後再試。",
+    "Swivel は処理中です。少ししてからもう一度お試しください。"
   ]
 }

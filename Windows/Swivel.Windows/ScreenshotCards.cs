@@ -74,6 +74,7 @@ internal sealed class ScreenshotCardController
     private Task loop = Task.CompletedTask;
     private bool dirty, looping, halted;
     private Guid shown;
+    private DateTime? lastRenewal;
 
     internal ScreenshotCardController(Func<bool> desired,Func<CancellationToken,Task<IImageArrivalSession>> create,
         Action<ArrivalCard<BitmapSource>> show,Action hide,Action<string> report)
@@ -87,7 +88,7 @@ internal sealed class ScreenshotCardController
 
     internal Task Update()
     {
-        if (!desired()) { halted = false; try { starting?.Cancel(); } catch (ObjectDisposedException) { } }
+        if (!desired()) { halted = false; lastRenewal = null; try { starting?.Cancel(); } catch (ObjectDisposedException) { } }
         dirty = true;
         if (!looping) { looping = true; loop = Run(); }
         return loop;
@@ -120,8 +121,8 @@ internal sealed class ScreenshotCardController
         {
             created = await create(source.Token);
             if (source.IsCancellationRequested || !desired()) { await Join(created,ArrivalStopReason.Cancelled); return; }
-            session = created; created.Changed += Changed;
             created.Start();
+            session = created; created.Changed += Changed;
             _ = Observe(created);
         }
         catch (Exception error)
@@ -154,8 +155,14 @@ internal sealed class ScreenshotCardController
         if (!ReferenceEquals(session,active)) return; // Stopped on purpose; StopAsync tidies up.
         active.Changed -= Changed;
         var snapshot = active.Snapshot;
-        session = null; shown = Guid.Empty; halted = true;
-        if (ScreenshotCards.Reportable(snapshot.StopReason)) report(Reason(snapshot.StopReason));
+        session = null; shown = Guid.Empty;
+        // A long-running watcher reaches the session budgets in ordinary use: start afresh (there is
+        // no initial scan, so nothing is replayed), but at most once a minute so a flood stays stopped.
+        var now = DateTime.UtcNow;
+        if (ScreenshotCards.Renewable(snapshot.StopReason) && desired() && (lastRenewal is null || now - lastRenewal.Value >= TimeSpan.FromMinutes(1)))
+        { lastRenewal = now; _ = Update(); return; }
+        halted = true;
+        report(ScreenshotCards.Reportable(snapshot.StopReason) ? Reason(snapshot.StopReason) : "Screenshot cards are not running. Turn the setting off and on to try again.");
     }
 
     private void Changed()
@@ -191,6 +198,9 @@ internal sealed class ScreenshotCardController
     {
         var location = ScreenshotFolder.Resolve(token);
         if (location.Path is not { } path) throw new UserError(location.Issue ?? ScreenshotCards.Unreported);
-        return ImageArrivalSession.Create(path,token);
+        // Always on once enabled: never stop the person renaming or moving Screenshots or Pictures.
+        try { return ImageArrivalSession.Create(path,token,shareDelete: true); }
+        catch (UserError error) when (error.Message == NativeFiles.LocalOnly) { throw new UserError(NotLocal); }
     },token);
+    internal const string NotLocal = "The Screenshots folder is not a plain folder on this PC (for example, it is kept in OneDrive), so screenshot cards cannot watch it.";
 }
