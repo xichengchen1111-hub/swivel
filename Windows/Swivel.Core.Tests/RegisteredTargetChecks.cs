@@ -13,6 +13,19 @@ internal static class RegisteredTargetChecks
         check(Parse("\"C:\\Apps\\Foo\\foo.exe\" --flag \"arg value\"") == @"C:\Apps\Foo\foo.exe", "Quoted executable separated from arguments");
         check(Parse(@"C:\Apps\Foo\foo.exe --arg=C:\Outside\x.exe") == @"C:\Apps\Foo\foo.exe", "Arguments never establish executable ownership");
         check(Parse(@"%apphome%\foo.exe --flag") == @"C:\Apps\Foo\foo.exe", "Bounded explicit environment expansion");
+        // The task engine/service environment can point to Foo while Swivel's points elsewhere.
+        var otherEnvironment = new Dictionary<string,string> { ["APPHOME"] = @"C:\Apps\Other" };
+        foreach (string source in new[] { "Services", "Scheduled Tasks" })
+        {
+            var uncertain = RegisteredTargets.Resolve(new[] { new RegisteredCommand(source, "app", @"%APPHOME%\foo.exe", source == "Scheduled Tasks") }, Array.Empty<string>(), otherEnvironment, default);
+            var protectedFolder = RegisteredTargets.ForFolder(uncertain, @"C:\Apps\Foo", default);
+            check(uncertain.Targets.Single().Executable is null && protectedFolder.Unresolved.Count == 1 && !protectedFolder.CanTrash, "Another execution context's environment cannot authorize Trash: " + source);
+            reject(() => RegisteredTargets.RequireTrash(protectedFolder), "Unknown execution environment refuses move-time Trash: " + source);
+        }
+        var currentUser = RegisteredTargets.Resolve(new[] { new RegisteredCommand("Run / RunOnce", "app", @"%APPHOME%\foo.exe", ExpandEnvironment: true) }, Array.Empty<string>(), env, default);
+        check(RegisteredTargets.ForFolder(currentUser, @"C:\Apps\Foo", default).Matches.Count == 1, "Explicit current-user environment expansion still establishes lexical evidence");
+        var literalTarget = RegisteredTargets.Resolve(new[] { new RegisteredCommand("Services", "app", @"C:\Apps\Foo\foo.exe --arg=%UNKNOWN%") }, Array.Empty<string>(), otherEnvironment, default);
+        check(RegisteredTargets.ForFolder(literalTarget, @"C:\Apps\Foo", default).Matches.Count == 1, "Unknown environment in arguments does not hide an absolute executable target");
         foreach (var text in new[] { @"C:\Program Files\Foo\foo.exe --flag", @"foo.exe", @".\foo.exe", @"C:foo.exe", @"C:\APPS~1\foo.exe", @"C:\Apps\Foo\..\other.exe", @"%UNKNOWN%\foo.exe", "\"C:\\Apps\\foo.exe", "\"C:\\Apps\\foo.exe\"suffix", new string('a', 32768), "C:\\Apps\\foo.exe\0 --x", "C:\\Apps\\foo.exe \"unclosed" })
             check(Parse(text) is null, "Unresolved commands are never guessed: " + text[..Math.Min(40,text.Length)]);
         check(Parse("\"C:\\Apps\\😀\\foo.exe\" --arg=文字") == @"C:\Apps\😀\foo.exe" && RegisteredTargets.Contains(@"C:\Apps\😀", @"C:\Apps\😀\foo.exe"), "Valid Unicode surrogate pairs remain supported in normalized paths");

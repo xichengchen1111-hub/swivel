@@ -25,6 +25,12 @@ internal static class ScheduledTaskNativeChecks
         var actionNative = new Fake(); var actionReport = await ScheduledTaskReader.ReadAsync(default, actionNative, true);
         check(!actionReport.Partial && actionReport.Tasks.Single().Executables!.Single() == @"C:\Apps\Foo\foo.exe" && actionNative.Balanced && actionNative.Thread is { IsAlive: false }, "F08 explicitly reads executable action paths on the same owning worker, releasing definitions/actions/items before join");
         check(!actionNative.Calls.Any(x => new[] { "Arguments", "WorkingDirectory", "Xml", "Run", "Stop", "Delete" }.Contains(x.Split(':')[0])), "Task registration evidence never asks for arguments/scripts or mutation methods");
+        var variableNative = new Fake { ActionPath = @"%APPHOME%\foo.exe" };
+        var variableReport = await ScheduledTaskReader.ReadAsync(default, variableNative, true);
+        var variableCommands = variableReport.Tasks.Single().Executables!.Select(target => new RegisteredCommand("Scheduled Tasks", "app", target, true));
+        var variableTargets = RegisteredTargets.Resolve(variableCommands, Array.Empty<string>(), new Dictionary<string,string> { ["APPHOME"] = @"C:\Apps\Other" }, default);
+        var protectedFolder = RegisteredTargets.ForFolder(variableTargets, @"C:\Apps\Foo", default);
+        check(variableReport.Tasks.Single().Executables!.Single() == variableNative.ActionPath && protectedFolder.Unresolved.Count == 1 && !protectedFolder.CanTrash && variableNative.Balanced && variableNative.Thread is { IsAlive: false }, "Actual task reader retains variables without substituting Swivel's environment into another task context or authorizing Trash");
         for (int point = 1; point <= actionNative.Returns; point++)
         {
             using var cancelled = new CancellationTokenSource(); int at = point;
@@ -109,6 +115,7 @@ internal static class ScheduledTaskNativeChecks
         internal int Initializes, Uninitializes, Acquisitions, ReleaseCalls, Returns, PeakAliasCount, ItemAcquisitions, InitResult, RepeatedTasks = 1, ActionCount = 1;
         internal bool ConnectWasEmpty, FlagsWereZero = true, ItemWasOneBased = true, ReleaseFails, UninitializeFails;
         internal string? FailMember, ReturnComFor, ReplaceMember; internal object? Replacement;
+        internal string ActionPath = @"C:\Apps\Foo\foo.exe";
         internal Action<int, object?>? AfterReturn; internal Action<string>? BeforeInvoke; internal Action? DuringUninitialize;
         internal bool Balanced => new[] { service, folder, tasks, folders, task, definition, actions, action }.All(x => x.Refs == 0) && Acquisitions == ReleaseCalls;
         private void Here() => ThreadIds.Add(Environment.CurrentManagedThreadId);
@@ -131,7 +138,7 @@ internal static class ScheduledTaskNativeChecks
                 "Connect" => null, "GetFolder" => folder, "GetTasks" => tasks, "GetFolders" => folders,
                 "Definition" => definition, "Actions" => actions, "Type" => 0,
                 "Count" => com.Kind == "tasks" ? RepeatedTasks : com.Kind == "actions" ? ActionCount : 0, "Item" => com.Kind == "actions" ? action : task,
-                "Name" => "Task", "Path" => com.Kind == "action" ? @"C:\Apps\Foo\foo.exe" : @"\Task", "State" => -7, "Enabled" => false, "LastTaskResult" => -1,
+                "Name" => "Task", "Path" => com.Kind == "action" ? ActionPath : @"\Task", "State" => -7, "Enabled" => false, "LastTaskResult" => -1,
                 _ => throw new InvalidOperationException("Unexpected member")
             };
             return Returned(result);

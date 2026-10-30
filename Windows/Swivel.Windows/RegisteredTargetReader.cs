@@ -20,7 +20,7 @@ internal static class RegisteredTargetReader
         var run = StartupRecords.ScanWithClock(new StartupReader.Source(), () => watch.Elapsed, token);
         if (run.Partial) issues.Add(RegisteredTargets.RunFailed);
         foreach (var row in run.Records)
-            rows.Add(new("Run / RunOnce", StartupRecords.Origin(row.Location, s => s) + " · " + (row.Name ?? "?"), row.Issues == StartupIssue.None && row.Command.State == RegistrationValueState.Present ? row.Command.Value : null));
+            rows.Add(new("Run / RunOnce", StartupRecords.Origin(row.Location, s => s) + " · " + (row.Name ?? "?"), row.Issues == StartupIssue.None && row.Command.State == RegistrationValueState.Present ? row.Command.Value : null, ExpandEnvironment: true));
         if (!Stop())
         {
             var serviceIssues = new List<string>(); rows.AddRange(ServiceReader.Commands(token, Stop, serviceIssues));
@@ -79,7 +79,7 @@ internal static class RegisteredTargetReader
                     if (code != 0 || entry is null) { issues.Add(literal ? RegisteredTargets.AppPathsFailed : RegisteredTargets.ClassesFailed); rows.Add(new("Current-user App Paths / open commands", origin, null, literal)); continue; }
                     var value = InstalledAppsReader.ReadText(entry, ""); token.ThrowIfCancellationRequested();
                     if (value.State is RegistrationValueState.Missing or RegistrationValueState.Empty) continue;
-                    rows.Add(new("Current-user App Paths / open commands", origin, value.State == RegistrationValueState.Present ? value.Value : null, literal));
+                    rows.Add(new("Current-user App Paths / open commands", origin, value.State == RegistrationValueState.Present ? value.Value : null, literal, ExpandEnvironment: true));
                 }
             }
         }
