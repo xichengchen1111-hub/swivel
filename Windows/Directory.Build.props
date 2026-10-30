@@ -4,7 +4,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
-    <Version>0.135.0</Version>
+    <Version>0.136.0</Version>
     <Authors>Swivel contributors</Authors>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RestoreSources>https://api.nuget.org/v3/index.json</RestoreSources>

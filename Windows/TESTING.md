@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.136 — merged C11 video upscaling, E03 PDF export, F06 cache locations (Codex) (2026-10-30)
+
+- Each branch passed its own Windows CI and independent review before merging: C11 41014885271 (core 4,555,401, native 6,463; no remaining P1/P2), E03 41015120425 (core 4,555,438, native 6,486; review fixes rechecked), F06 41012418843 (core 4,555,417, native 6,447; written by Codex, review no P1/P2).
+- After merging all three: core 4,555,636 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- Not tested: upscaling real phone or long videos and their playback, PDFs opened in Acrobat/Edge from real documents, cache folders of real Opera/Canary/Insiders installs.
+
 ## Windows0.135 — merged B08 encrypted ZIP, C02 HEIC/AVIF, D03 video noise reduction (Codex) (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: B08 41005598842 (core 4,554,810, native 6,409; P2 fixed and rechecked, P3s left as follow-ups), C02 41006566804 (core 4,555,107, native 6,411; review P2s fixed and rechecked), D03 41004639705 (core 4,554,667, native 6,411; written by Codex, P2 fixed).

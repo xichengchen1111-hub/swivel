@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.136 合并第十一轮：C11 视频放大、E03 导出 PDF、F06 更多缓存（F06 由 Codex 编写）
+
+分支 `claude/win-c11-videoupscale-81ab63`（e59536b、bbb4dfe、305d390）、`claude/win-e03-pdf-302c7c`（1f256a9、4f7c156、8a67f09）、`codex/win-f06-caches`（a5a7059 由 Codex 编写）。Strings.json 三方 JSON 合并无同键冲突。
+
+- C11：Media Foundation 读帧，用 0.89 已校验的 Real-ESRGAN 模型与切块（2× 由 4× 结果缩小），H.264 编码按原帧时间，声音先准备并重编码为 AAC。先用第一帧的一块实测耗时给出估计；限制 32×32–1920×1080、10 分钟、30 万模型块、编码器尺寸/帧率上限；旋转标记与非方形像素拒绝。审查后无剩余 P1/P2；剩余 P3：没有编辑列表的源视频，声音可能有少量偏移。
+- E03：原创排版（段落、换行、制表符、按字形宽度整词换行、分页）、TrueType 子集（glyf/loca/hmtx/maxp/head/hhea/cmap，含复合字形依赖，大子集用 format 12 cmap，最小 name 表）与 PDF 写出（CIDFontType2/Identity-H，每字符一个 CID 加 CIDToGIDMap，ToUnicode）。只用 OS/2 fsType 允许嵌入的 Windows 自带字体；复杂/RTL 文字、无字形字符、受限字体、超过 2,000 页在写出前拒绝。审查修正：缓冲包装关闭暂存句柄、共享字形保留各自文字、在创建输出前生成子集、无轮廓字形转用下一个字体、后续损坏字体跳过、真正空白的字形保留。
+- F06：新增条目沿用现有缓存文件夹名称与规则（固定每用户路径、精确名称、以 Preferences 标记配置文件、应用运行时不提供）。审查无 P1/P2；P3：Opera 分成三项显示、“清理文件”预勾选已测缓存（既有行为）、共用 msedge/chrome 进程名使一个版本运行时阻止其他版本、旧品牌名无翻译行。
+
 ## 0.135 合并第十轮：B08 加密 ZIP、C02 HEIC/AVIF、D03 视频降噪（D03 由 Codex 编写）
 
 分支 `claude/win-b08-zipcrypto-9e02eb`（03fcea5、5b0eff5）、`claude/win-c02-heic-809235`（b7e5d26、209be7d、0adb0e0）、`codex/win-d03-video`（ec2727e 由 Codex 编写，Claude 按审查修正）。Strings.json 三方 JSON 合并无同键冲突。
