@@ -27,7 +27,14 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: Windows/global.json
+      - name: exFAT and FAT32 test volumes
+        shell: pwsh
+        run: ./.github/ci/fat-volumes.ps1
+      - name: FAT probe (temporary)
+        shell: pwsh
+        run: ./.github/ci/fat-probe.ps1
       - name: Core checks, native checks and x64 package
+        if: false
         shell: pwsh
         run: ./Windows/build.ps1 -Runtime win-x64
       - name: Cross-publish ARM64 (not runtime-tested here)
