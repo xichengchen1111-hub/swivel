@@ -12,7 +12,7 @@ namespace Swivel.Windows;
 internal sealed class RenameDialog : Window
 {
     public IReadOnlyList<RenamePair> Plan { get; private set; } = Array.Empty<RenamePair>();
-    public RenameDialog(App app, IReadOnlyList<string> paths)
+    public RenameDialog(App app, IReadOnlyList<string> paths, bool fat = false)
     {
         Title = app.L("Batch Rename"); Width = 850; Height = 700; MinWidth = 640; MinHeight = 550;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -36,7 +36,8 @@ internal sealed class RenameDialog : Window
         DockPanel.SetDock(controls, Dock.Top); root.Children.Add(controls);
         var footer = new StackPanel();
         var status = UI.Text(""); footer.Children.Add(status);
-        footer.Children.Add(UI.Text(app.L("NTFS regular files only. Case-only changes, swaps and chains use temporary names in the same folder. Conflicts never overwrite files. If rollback fails, review the recovery paths. A crash may leave temporary names; undo history lasts only for this session."), 12));
+        footer.Children.Add(UI.Text(app.L(RenameNotices.Scope), 12));
+        if (fat) footer.Children.Add(UI.Text(app.L(FatRules.UndoNote), 12));
         var buttons = new WrapPanel();
         var apply = UI.Button(app.L("Rename Files"), () => DialogResult = true); buttons.Children.Add(apply);
         var cancel = UI.Button(app.L("Cancel"), () => DialogResult = false); cancel.IsCancel = true; buttons.Children.Add(cancel);
@@ -62,14 +63,18 @@ internal sealed class RenameDialog : Window
         numbering.Click += (_, _) => Preview(); Preview();
     }
 }
+internal static class RenameNotices
+{
+    internal const string Scope = "Regular files on NTFS, exFAT and FAT32 drives only. Case-only changes, swaps and chains use temporary names in the same folder. Conflicts never overwrite files. If rollback fails, review the recovery paths. A crash may leave temporary names; undo history lasts only for this session.";
+}
 internal sealed class UndoRenameDialog : Window
 {
-    public UndoRenameDialog(App app, IReadOnlyList<RenameLocation> receipt)
+    public UndoRenameDialog(App app, IReadOnlyList<RenameLocation> receipt, bool fat = false)
     {
         Title = app.L("Undo Rename"); Width = 760; Height = 460; MinWidth = 560; MinHeight = 320;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Margin = new Thickness(20) };
-        var message = UI.Text(app.L("Review the names to restore. Undo refuses changed files and occupied original names."));
+        var message = UI.Text(app.L("Review the names to restore. Undo refuses changed files and occupied original names.") + (fat ? "\n" + app.L(FatRules.UndoNote) : ""));
         DockPanel.SetDock(message, Dock.Top); root.Children.Add(message);
         var row = new WrapPanel();
         row.Children.Add(UI.Button(app.L("Undo Rename"), () => DialogResult = true));

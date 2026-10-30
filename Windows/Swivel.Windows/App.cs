@@ -1624,7 +1624,15 @@ public sealed partial class App : Application
         token.ThrowIfCancellationRequested();
         var lines = new System.Collections.Generic.List<string> { string.Format(L("From: {0}"), work.Folder), string.Format(L("Into: {0}"), work.Destination) };
         if (crossDrive) lines.Insert(0, L("The destination is on another drive, so the folder will be copied instead of moved; the original folder stays."));
-        if (!ShowOperationDialog(new FolderPlanDialog(this, "Copy Folder to…", work.Plan.Name, lines, work.Plan, FolderCopy.Notice, "Copy Folder"), owner, token)) return;
+        string? consent = null;
+        if (work.IsFat)
+        {
+            lines.Add(L(FatRules.CopyNote) + " " + L(FatRules.NoCopyUndo));
+            if (work.ZoneMarked > 0) { lines.Add(string.Format(L(FatRules.ZoneWillBeLost), work.ZoneMarked)); consent = FatRules.ZoneConsent; }
+        }
+        var plan = new FolderPlanDialog(this, "Copy Folder to…", work.Plan.Name, lines, work.Plan, FolderCopy.Notice, "Copy Folder", null, consent);
+        if (!ShowOperationDialog(plan, owner, token)) return;
+        work.AcceptZoneLoss = plan.Consented;
         if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
         report(L("Processing…"));
         var outcome = await Task.Run(() => work.Execute(token, (done, total) =>
@@ -1664,13 +1672,14 @@ public sealed partial class App : Application
             if (sameVolume == false) { await RunCopyFolderAsync(folder, directory, owner, report, token, true); return; }
         }
         FolderMoveReceipt done;
-        using (var session = await OnSta(() => undo ? FolderMoveSession.ForUndo(receipt!, token) : FolderMoveSession.Open(folder, directory, token)))
+        using (var session = await OnSta(() => undo ? FolderMoveSession.ForUndo(receipt!, token, true) : FolderMoveSession.Open(folder, directory, token, true)))
         {
             token.ThrowIfCancellationRequested();
             var lines = undo
                 ? new[] { string.Format(L("Current place: {0}"), LibraryJson.Visible(session.Source)), string.Format(L("Back to: {0}"), LibraryJson.Visible(session.Planned)) }
                 : new[] { string.Format(L("From: {0}"), LibraryJson.Visible(session.Source)), string.Format(L("To: {0}"), LibraryJson.Visible(session.Planned)) };
-            string question = string.Join("\n", lines) + "\n\n" + L(undo ? "Undo puts the folder back only while it is still the same folder and its original name is free. Nothing is replaced." : FolderMove.Notice);
+            string question = string.Join("\n", lines) + "\n\n" + L(undo ? "Undo puts the folder back only while it is still the same folder and its original name is free. Nothing is replaced." : session.IsFat ? FatRules.FolderNotice : FolderMove.Notice);
+            if (session.IsFat && !undo) question += "\n\n" + L(FatRules.UndoNote);
             if (MessageBox.Show(owner, question, L(undo ? "Undo Folder Move" : "Move Folder to…"), MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
             token.ThrowIfCancellationRequested();
             if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
@@ -1679,6 +1688,7 @@ public sealed partial class App : Application
         }
         if (undo) FolderMoveHistory.RemoveAt(FolderMoveHistory.Count - 1);
         else FolderMoveHistory.Add(done);
+        ReleaseUnusedFatHolds();
         // Paths at or below the folder follow it (Undo: back again).
         string from = done.Original, to = done.Current;
         string Updated(string path) => FolderMove.UpdatePath(path, from, to);
@@ -1687,6 +1697,12 @@ public sealed partial class App : Application
         report(status); Home.SetStatus(status); Home.Refresh();
         Home.ShowResults(new[] { to }, status);
     }
+
+    /// Releases the references kept to exFAT/FAT32 items that no undo history still needs.
+    internal void ReleaseUnusedFatHolds() => NativeFiles.RetainFatHolds(
+        RenameHistory.SelectMany(batch => batch.Select(entry => entry.Stamp.Index))
+            .Concat(MoveHistory.SelectMany(batch => batch.Where(entry => entry.Stamp is { } stamp && stamp.Identity.High == NativeFiles.FatToken).Select(entry => entry.Stamp!.Value.Identity.Low)))
+            .Concat(FolderMoveHistory.Where(entry => entry.Identity.High == NativeFiles.FatToken).Select(entry => entry.Identity.Low)));
 
     /// Updates every remembered path (shelf, prints, panels, Home lists) after a folder moved.
     private void ApplyPathChanges(Func<string, string> updated)
@@ -1730,11 +1746,11 @@ public sealed partial class App : Application
         }
         MoveOutcome? outcome = null;
         IReadOnlyList<MovePair> plan;
-        var session = await OnSta(() => undo ? MoveSession.ForUndo(receipt, token) : MoveSession.Open(files, directory, token));
+        var session = await OnSta(() => undo ? MoveSession.ForUndo(receipt, token, true) : MoveSession.Open(files, directory, token, true));
         try
         {
             token.ThrowIfCancellationRequested(); plan = session.Plan;
-            if (!ShowOperationDialog(new MoveFilesDialog(this, plan, undo), owner, token)) return;
+            if (!ShowOperationDialog(new MoveFilesDialog(this, plan, undo, session.IsFat), owner, token)) return;
             token.ThrowIfCancellationRequested();
             if (!Prefs.IsOn(Feature.FileMoves)) throw new UserError("Enable Move Files in Settings first.");
             report(L("Processing…")); outcome = await OnSta(() => session.Execute(token));
@@ -1761,6 +1777,7 @@ public sealed partial class App : Application
         for (int i = 0; i < MoveHistory.Count; i++)
             MoveHistory[i] = MoveReceipts.RefreshHistory(MoveHistory[i], outcome, undo ? receipt : null);
         if (remainingHistory.Count > 0) MoveHistory.Add(remainingHistory);
+        ReleaseUnusedFatHolds();
         var changes = outcome.Locations.Where(x => x.Original != x.Current)
             .ToDictionary(x => x.Original, x => x.Current, StringComparer.Ordinal);
         var floatingSelection = floatingShelf?.SelectedPaths ?? Array.Empty<string>();
@@ -1786,18 +1803,18 @@ public sealed partial class App : Application
         if (!undo && RenameHistory.Count >= 20) throw new UserError("Undo or clear rename history before starting another batch (20 batches maximum).");
         var receipt = undo ? RenameHistory[^1] : Array.Empty<RenameLocation>();
         RenameOutcome outcome;
-        using (var session = await OnSta(() => undo ? RenameSession.ForUndo(receipt, token) : RenameSession.Open(files, token)))
+        using (var session = await OnSta(() => undo ? RenameSession.ForUndo(receipt, token, true) : RenameSession.Open(files, token, true)))
         {
             token.ThrowIfCancellationRequested();
             IReadOnlyList<RenamePair> plan;
             if (undo)
             {
-                if (!ShowOperationDialog(new UndoRenameDialog(this, receipt), owner, token)) return;
+                if (!ShowOperationDialog(new UndoRenameDialog(this, receipt, session.IsFat), owner, token)) return;
                 plan = receipt.Select(x => new RenamePair(x.Current, x.Original)).ToArray();
             }
             else
             {
-                var dialog = new RenameDialog(this, session.Paths);
+                var dialog = new RenameDialog(this, session.Paths, session.IsFat);
                 if (!ShowOperationDialog(dialog, owner, token)) return;
                 plan = dialog.Plan;
             }
@@ -1812,6 +1829,7 @@ public sealed partial class App : Application
             if (remaining.Length > 0) RenameHistory.Add(remaining);
         }
         else if (outcome.Remaining.Count > 0) RenameHistory.Add(outcome.Remaining);
+        ReleaseUnusedFatHolds();
         // Update references only after DELETE leases are released, so normal reads work.
         var changes = outcome.Locations.Where(x => x.Original != x.Current).ToArray();
         var floatingSelection = floatingShelf?.SelectedPaths ?? Array.Empty<string>();

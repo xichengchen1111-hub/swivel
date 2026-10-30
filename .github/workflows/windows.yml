@@ -27,6 +27,9 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: Windows/global.json
+      - name: exFAT and FAT32 test volumes
+        shell: pwsh
+        run: ./Windows/Swivel.Windows.Tests/fat-volumes.ps1
       - name: Core checks, native checks and x64 package
         shell: pwsh
         run: ./Windows/build.ps1 -Runtime win-x64

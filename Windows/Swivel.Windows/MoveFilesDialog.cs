@@ -14,6 +14,7 @@ internal static class MoveFilesNotices
 {
     internal const string Scope = "Move the listed original files to the displayed destinations. This is a move of the same file objects, not a copy. A move requires an unoccupied destination; files are never overwritten or automatically renamed to avoid a conflict.";
     internal const string Limits = "Choose 1–100 ordinary files on the same NTFS volume as the destination. When every selected file is on another drive, Swivel offers to copy them instead and keeps the originals; a mix of drives is refused. Read-only files stay read-only; moving a hard link moves only that name, and two names of one file cannot be moved together. Cloud placeholders and linked paths are not supported. Files already in the destination folder stay in place and are marked as unchanged.";
+    internal const string FatLimits = "Choose 1–100 ordinary files on the same exFAT or FAT32 drive as the destination. Each file moves by renaming it into the destination folder: contents are not read or copied. Files already in the destination folder stay in place and are marked as unchanged.";
     internal const string Streams = "File contents, download-origin markings and other attached file data stay with each file. Contents are not scanned or copied. Same-volume moves retain the original permissions; do not expect the files to inherit the destination folder's permissions.";
     internal const string Recovery = "If a move fails or is cancelled, Swivel attempts to restore earlier moves without replacing occupied names. Recovery can be partial: review the exact current paths in the results. A crash or power loss can leave files at their new locations; there is no automatic crash recovery.";
     internal const string History = "Undo holds up to 20 batches in this session only. Quitting loses that history. Undo rechecks file and directory identities and recorded metadata, and refuses detected changes or occupied original paths. These checks are not a content snapshot and may miss changes to contents or attached file data. Restoration is not guaranteed.";
@@ -28,7 +29,7 @@ internal sealed class MoveFilesDialog : Window
 {
     internal IReadOnlyList<MovePair> Plan { get; }
 
-    internal MoveFilesDialog(App app, IReadOnlyList<MovePair> plan, bool undo = false)
+    internal MoveFilesDialog(App app, IReadOnlyList<MovePair> plan, bool undo = false, bool fat = false)
     {
         Plan = MoveFilesLayout.Snapshot(plan);
         Title = app.L(undo ? "Undo File Move" : "Review File Move");
@@ -47,7 +48,9 @@ internal sealed class MoveFilesDialog : Window
         body.Children.Add(UI.Text(app.L(MoveFilesNotices.Selection), 12));
         MoveFilesLayout.Paths(app, body, Plan, undo ? "Current path" : "Source path",
             undo ? "Original path to restore" : "Destination path", false);
-        foreach (string notice in new[] { MoveFilesNotices.Limits, MoveFilesNotices.Streams, MoveFilesNotices.Recovery, MoveFilesNotices.History })
+        // exFAT/FAT32 moves stay within that drive; there is no attached file data to keep.
+        foreach (string notice in fat ? new[] { MoveFilesNotices.FatLimits, MoveFilesNotices.Recovery, MoveFilesNotices.History, FatRules.UndoNote }
+            : new[] { MoveFilesNotices.Limits, MoveFilesNotices.Streams, MoveFilesNotices.Recovery, MoveFilesNotices.History })
             body.Children.Add(UI.Text(app.L(notice), 12));
         root.Children.Add(UI.Scroll(body)); Content = root;
         Loaded += (_, _) => cancel.Focus();

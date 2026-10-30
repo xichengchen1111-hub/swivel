@@ -35,6 +35,13 @@ public sealed class FolderCopyWork : IDisposable
     public string Folder { get; }
     public string Destination { get; }
     public FolderZipPlan Plan { get; }
+    /// Set for an exFAT or FAT32 destination, which holds only main data streams.
+    public VolumeFormat? FatFormat { get; private set; }
+    public bool IsFat => FatFormat is not null;
+    /// How many files carry the download warning, which an exFAT/FAT32 copy cannot keep.
+    public int ZoneMarked { get; private set; }
+    /// The user explicitly accepted that those copies lose the download warning.
+    public bool AcceptZoneLoss { get; set; }
     private FolderCopyWork(string folder, string destination, NativeFiles.MetadataDirectory source, FolderZipPlan plan) { Folder = folder; Destination = destination; this.source = source; Plan = plan; }
 
     public static FolderCopyWork Open(string folder, string destination, CancellationToken token)
@@ -57,7 +64,9 @@ public sealed class FolderCopyWork : IDisposable
             // Compared again by the paths the file system reports, so another spelling of the same
             // place (a subst drive letter, a short 8.3 name) cannot put the copy inside the source.
             FolderCopy.CheckDestination(NativeFiles.FinalDirectoryPath(folder), NativeFiles.FinalDirectoryPath(destination));
-            NativeFiles.RequireNtfs(destination, FolderCopy.NeedsNtfs);
+            var format = NativeFiles.Format(destination);
+            if (FatRules.IsFat(format)) work.CheckFat(format, token);
+            else NativeFiles.RequireNtfs(destination, FolderCopy.NeedsNtfs);
             if (!NativeFiles.HasFreeSpace(destination, (ulong)work.Plan.Bytes + (ulong)work.Plan.Items.Count * 4096 + 64UL * 1024 * 1024))
                 throw new UserError("There is not enough free space in the destination folder.");
             return work;
@@ -65,7 +74,28 @@ public sealed class FolderCopyWork : IDisposable
         catch { if (work is not null) work.Dispose(); else root.Dispose(); throw; }
     }
 
-    public FolderCopyOutcome Execute(CancellationToken token, Action<int, int>? progress) => NativeFiles.CopyFolderTree(Folder, Destination, Plan, token, progress);
+    // Everything an exFAT/FAT32 destination cannot hold is refused before the first copy:
+    // names, names differing only in case, FAT32's size limit and extra streams. The download
+    // warning is counted, for the user to accept losing it.
+    private void CheckFat(VolumeFormat format, CancellationToken token)
+    {
+        FatFormat = format;
+        FatRules.CheckName(Plan.Name);
+        FatRules.CheckTree(System.Linq.Enumerable.Select(Plan.Items, x => x.RelativePath));
+        foreach (var item in Plan.Items)
+        {
+            token.ThrowIfCancellationRequested();
+            if (item.Directory || item.RelativePath.Length == 0) continue;
+            FatRules.CheckSize(format, (ulong)item.Length, item.RelativePath);
+            NativeFiles.Input input;
+            try { input = NativeFiles.OpenRead(Path.Combine(Folder, item.RelativePath)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or Win32Exception)
+            { throw new UserError(FolderCopy.Unreadable, item.RelativePath); }
+            using (input) if (FatRules.CheckStreams(NativeFiles.StreamsOf(input.Stream.SafeFileHandle), item.RelativePath)) ZoneMarked++;
+        }
+    }
+
+    public FolderCopyOutcome Execute(CancellationToken token, Action<int, int>? progress) => NativeFiles.CopyFolderTree(Folder, Destination, Plan, token, progress, FatFormat, AcceptZoneLoss);
 
     public void Dispose() { destination?.Dispose(); destination = null; source.Dispose(); }
 }
@@ -80,7 +110,8 @@ public static partial class NativeFiles
     }
 
     /// Stops at the first failure or cancellation; the new folder and completed copies stay.
-    internal static FolderCopyOutcome CopyFolderTree(string folder, string destination, FolderZipPlan plan, CancellationToken token, Action<int, int>? progress)
+    /// With `fat` (an exFAT or FAT32 destination) undo is not offered: nothing there can be recognised again.
+    internal static FolderCopyOutcome CopyFolderTree(string folder, string destination, FolderZipPlan plan, CancellationToken token, Action<int, int>? progress, VolumeFormat? fat = null, bool acceptZoneLoss = false)
     {
         token.ThrowIfCancellationRequested();
         var outcome = new FolderCopyOutcome { FileCount = plan.Files };
@@ -104,7 +135,8 @@ public static partial class NativeFiles
             outcome.Folder = root;
             var top = HoldCreated(root, target.Volume, held);
             CheckCreatedIn(top, parent, root);
-            outcome.RootIdentity = ReadIdentity(top).Identity;
+            if (fat is null) outcome.RootIdentity = ReadIdentity(top).Identity;
+            else outcome.Recorded = false;
             outcome.entries.Add(new("", true, 0, 0));
             folders[""] = top;
             int done = 0;
@@ -137,9 +169,9 @@ public static partial class NativeFiles
                 using (input)
                 {
                     if (input.Stream.Length != item.Length) throw new UserError(FolderCopy.Changed);
-                    var (copy, stamp, unverified) = CopyInto(input, System.IO.Path.GetDirectoryName(path)!, token, folders[container]);
+                    var (copy, stamp, unverified) = CopyInto(input, System.IO.Path.GetDirectoryName(path)!, token, folders[container], fat, acceptZoneLoss);
                     if (!string.Equals(copy, path, StringComparison.OrdinalIgnoreCase)) throw new UserError(FolderCopy.Interfered);
-                    if (stamp is null) outcome.Recorded = false;
+                    if (stamp is null || fat is not null) outcome.Recorded = false;
                     else outcome.entries.Add(new(item.RelativePath, false, stamp.Length, stamp.LastWrite));
                     // An unverified copy exists, so it is counted before stopping.
                     outcome.FilesCopied = ++done;

@@ -141,6 +141,7 @@ internal static class Program
             Group("WheelGestureLiveChecks", () => WheelGestureLiveChecks.Run(Check,Reject));
             Group("WheelGestureWindowNativeChecks", () => WheelGestureWindowNativeChecks.Run(Check,Reject));
             Group("RenameChecks", () => RenameChecks.Run(directory, Check, Reject));
+            Group("FatVolumeNativeChecks", () => FatVolumeNativeChecks.Run(directory, Check, Reject));
             Group("PhotoToolsChecks", () => PhotoToolsChecks.Run(directory, Check, Reject));
             Group("FileToolChecks", () => FileToolChecks.Run(directory, Check, Reject));
             Group("ImageExtraChecks", () => ImageExtraChecks.Run(directory, Check, Reject));

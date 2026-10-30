@@ -25,11 +25,14 @@ public sealed class FolderMoveSession : IDisposable
     public string Planned { get; }
     public MoveIdentity Identity { get; }
     public MoveIdentity DestinationIdentity => destination.Snapshot.LeafIdentity;
+    /// On an exFAT or FAT32 drive (Undo then needs the reference kept to the folder).
+    public bool IsFat => start.IsFat;
 
     private FolderMoveSession(string source, string planned, NativeFiles.MoveDirectoryLease start, NativeFiles.MoveDirectoryLease destination, SafeFileHandle folder, MoveIdentity identity, bool undo)
     { Source = source; Planned = planned; this.start = start; this.destination = destination; this.folder = folder; Identity = identity; this.undo = undo; }
 
-    public static FolderMoveSession Open(string suppliedFolder, string suppliedDestination, CancellationToken token)
+    /// `allowFat`: also within one exFAT or FAT32 drive (the app's own Move Folder, not agents).
+    public static FolderMoveSession Open(string suppliedFolder, string suppliedDestination, CancellationToken token, bool allowFat = false)
     {
         token.ThrowIfCancellationRequested();
         string source = MoveRules.DirectoryPath(suppliedFolder), target = MoveRules.DirectoryPath(suppliedDestination);
@@ -37,19 +40,22 @@ public sealed class FolderMoveSession : IDisposable
         NativeFiles.MoveDirectoryLease? parent = null, into = null; SafeFileHandle? handle = null;
         try
         {
-            parent = NativeFiles.MoveDirectoryLease.Open(MoveRules.Parent(source), token);
-            try { handle = NativeFiles.OpenFolderToMove(source); }
+            parent = NativeFiles.MoveDirectoryLease.Open(MoveRules.Parent(source), token, allowFat);
+            try { handle = NativeFiles.OpenFolderToMove(source, parent.IsFat); }
             catch (Win32Exception error) when (error.NativeErrorCode is 5 or 32) { throw new UserError(FolderMove.InUse); }
-            var identity = NativeFiles.FolderMoveIdentity(handle);
+            // exFAT/FAT32: the folder's identity is a token for the handle Swivel keeps (NativeFiles.Fat.cs).
+            if (parent.IsFat) NativeFiles.RequireExactFatName(handle, source);
+            var identity = parent.IsFat ? new MoveIdentity(NativeFiles.FatVolume(handle), NativeFiles.NewFatToken(), NativeFiles.FatToken) : NativeFiles.FolderMoveIdentity(handle);
             if (identity.Volume != parent.Snapshot.LeafIdentity.Volume) throw new UserError(FolderMove.NotPlain);
             // Compared again by the paths the file system reports, so another spelling of the same
             // place (a subst drive letter, a short 8.3 name) cannot put the folder inside itself.
             // Checked before the destination chain is held, which would otherwise hold the folder.
             NativeFiles.CheckFolderMoveTarget(handle, target);
-            into = NativeFiles.MoveDirectoryLease.Open(target, token);
-            if (into.Snapshot.LeafIdentity.Volume != identity.Volume) throw new UserError(FolderMove.OtherVolume);
+            into = NativeFiles.MoveDirectoryLease.Open(target, token, allowFat);
+            if (into.IsFat != parent.IsFat || into.Snapshot.LeafIdentity.Volume != identity.Volume) throw new UserError(FolderMove.OtherVolume);
             if (into.Snapshot.LeafIdentity == parent.Snapshot.LeafIdentity) throw new UserError(FolderMove.AlreadyThere);
-            foreach (var entry in into.Snapshot.Ancestors) if (entry.Identity == identity) throw new UserError(FolderMove.Inside);
+            var position = parent.IsFat ? NativeFiles.FatPositionIdentity(handle) : identity;
+            foreach (var entry in into.Snapshot.Ancestors) if (entry.Identity == position) throw new UserError(FolderMove.Inside);
             // The folder's name as stored (exact case, long name), not as it was typed or picked.
             source = MoveRules.Parent(source).TrimEnd('\\') + "\\" + NativeFiles.StoredLeaf(handle);
             string planned = FolderMove.Claim(source, target, path => !NativeFiles.FolderMoveNameTaken(into, path));
@@ -60,7 +66,7 @@ public sealed class FolderMoveSession : IDisposable
         finally { handle?.Dispose(); into?.Dispose(); parent?.Dispose(); }
     }
 
-    public static FolderMoveSession ForUndo(FolderMoveReceipt suppliedReceipt, CancellationToken token)
+    public static FolderMoveSession ForUndo(FolderMoveReceipt suppliedReceipt, CancellationToken token, bool allowFat = false)
     {
         token.ThrowIfCancellationRequested();
         var receipt = FolderMove.ForUndo(suppliedReceipt);
@@ -69,17 +75,28 @@ public sealed class FolderMoveSession : IDisposable
         {
             try
             {
-                parent = NativeFiles.MoveDirectoryLease.Open(receipt.CurrentParent.Path, token);
-                back = NativeFiles.MoveDirectoryLease.Open(receipt.OriginalParent.Path, token);
+                parent = NativeFiles.MoveDirectoryLease.Open(receipt.CurrentParent.Path, token, allowFat);
+                back = NativeFiles.MoveDirectoryLease.Open(receipt.OriginalParent.Path, token, allowFat);
             }
             catch (Exception error) when (error is Win32Exception or UserError) { throw new UserError(FolderMove.ParentsChanged); }
             if (!MoveRules.SameDirectory(receipt.CurrentParent, parent.Snapshot) || !MoveRules.SameDirectory(receipt.OriginalParent, back.Snapshot))
                 throw new UserError(FolderMove.ParentsChanged);
-            try { handle = NativeFiles.OpenFolderToMove(receipt.Current); }
-            catch (Win32Exception error) when (error.NativeErrorCode is 5 or 32) { throw new UserError(FolderMove.InUse); }
-            catch (Win32Exception) { throw new UserError(FolderMove.Replaced); }
-            catch (UserError error) when (error.Message == FolderMove.NotPlain) { throw new UserError(FolderMove.Replaced); }
-            if (NativeFiles.FolderMoveIdentity(handle) != receipt.Identity) throw new UserError(FolderMove.Replaced);
+            if (parent.IsFat)
+            {
+                // The very folder Swivel kept a reference to, still at the receipt's path.
+                if (!back.IsFat || receipt.Identity.High != NativeFiles.FatToken) throw new UserError(FatRules.Released);
+                handle = NativeFiles.ReopenFat(receipt.Identity.Low, receipt.Current, 0x10000 | 0x80, 3, true);
+                try { NativeFiles.CheckFolderToMove(handle); }
+                catch (UserError error) when (error.Message == FolderMove.NotPlain) { throw new UserError(FolderMove.Replaced); }
+            }
+            else
+            {
+                try { handle = NativeFiles.OpenFolderToMove(receipt.Current); }
+                catch (Win32Exception error) when (error.NativeErrorCode is 5 or 32) { throw new UserError(FolderMove.InUse); }
+                catch (Win32Exception) { throw new UserError(FolderMove.Replaced); }
+                catch (UserError error) when (error.Message == FolderMove.NotPlain) { throw new UserError(FolderMove.Replaced); }
+                if (NativeFiles.FolderMoveIdentity(handle) != receipt.Identity) throw new UserError(FolderMove.Replaced);
+            }
             if (NativeFiles.FolderMoveNameTaken(back, receipt.Original)) throw new UserError(FolderMove.OriginalTaken);
             token.ThrowIfCancellationRequested();
             var session = new FolderMoveSession(receipt.Current, receipt.Original, parent, back, handle, receipt.Identity, true);
@@ -98,7 +115,7 @@ public sealed class FolderMoveSession : IDisposable
         if (executed) throw new InvalidOperationException("A folder move preview can only be executed once.");
         executed = true; token.ThrowIfCancellationRequested();
         start.Verify(); destination.Verify();
-        if (NativeFiles.FolderMoveIdentity(folder) != Identity) throw new UserError(FolderMove.Replaced);
+        if (!IsFat && NativeFiles.FolderMoveIdentity(folder) != Identity) throw new UserError(FolderMove.Replaced);
         string current;
         if (undo || exact)
         {
@@ -113,6 +130,12 @@ public sealed class FolderMoveSession : IDisposable
                 if (error is 80 or 183) return false;
                 throw NativeFiles.FolderMoveError(error);
             });
+        if (IsFat)
+        {
+            // The name actually stored decides where the folder is; Undo needs a kept reference.
+            try { current = NativeFiles.FatCurrentPath(folder); NativeFiles.HoldFat(Identity.Low, folder, true); }
+            catch (Exception error) when (error is Win32Exception or UserError) { /* Undo then reports the reference as released. */ }
+        }
         // Cached snapshots: the result never depends on a query after the rename.
         return new FolderMoveReceipt(Source, current, Identity, start.Snapshot, destination.Snapshot);
     }
@@ -129,19 +152,23 @@ public static partial class NativeFiles
 {
     // A folder to move: no link, cloud placeholder or system folder. DELETE access for the rename,
     // without delete sharing so nothing else renames or removes it while it is held.
-    internal static SafeFileHandle OpenFolderToMove(string path)
+    internal static SafeFileHandle OpenFolderToMove(string path, bool allowFat = false)
     {
         WindowsPathPolicy.Validate(path);
         var handle = Open(path, DeleteAccess | ReadAttributes, 3, 3, OpenReparse | BackupSemantics);
         try
         {
-            if (GetFileType(handle) != 1 || !GetFileInformationByHandle(handle, out var info) || (info.Attributes & 0x10) == 0
-                || (info.Attributes & (UnsafeAttributes | 0x4 | 0x40)) != 0)
-                throw new UserError(FolderMove.NotPlain);
-            RequireMoveNtfs(handle);
+            CheckFolderToMove(handle);
+            if (!(allowFat && FatRules.IsFat(Format(handle)))) RequireMoveNtfs(handle);
             return handle;
         }
         catch { handle.Dispose(); throw; }
+    }
+    internal static void CheckFolderToMove(SafeFileHandle handle)
+    {
+        if (GetFileType(handle) != 1 || !GetFileInformationByHandle(handle, out var info) || (info.Attributes & 0x10) == 0
+            || (info.Attributes & (UnsafeAttributes | 0x4 | 0x40)) != 0)
+            throw new UserError(FolderMove.NotPlain);
     }
 
     internal static MoveIdentity FolderMoveIdentity(SafeFileHandle handle) => ReadMoveIdentity(handle);
@@ -218,7 +245,7 @@ public static partial class NativeFiles
                 path = MoveRules.DirectoryPath(path);
                 if (GetDriveType(path[..3]) is not 2 and not 3 and not 6) throw new UserError(LocalOnly);
                 using var handle = Open(path, ReadAttributes, 7, 3, OpenReparse | BackupSemantics);
-                return ReadIdentity(handle).Volume;
+                return VolumeKey(handle);
             }
             return Volume(folder) == Volume(destination);
         }
