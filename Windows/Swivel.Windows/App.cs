@@ -503,6 +503,15 @@ public sealed partial class App : Application
                 ShowOperationDialog(new ServiceDialog(this,snapshot),owner,token);
                 report(token.IsCancellationRequested?L("Cancelled."):L("Service inspection closed. No service was changed."));return;
             }
+            if(action.Id=="doctor.nettest")
+            {
+                if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
+                workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();
+                // Opening the window contacts nothing; only its labelled buttons use the network.
+                var dialog=new NetworkTestDialog(this,token);
+                try{ShowOperationDialog(dialog,owner,token);}finally{await dialog.FinishAsync();}
+                report(token.IsCancellationRequested?L("Cancelled."):L("Internet connection test closed. Nothing was changed or saved."));return;
+            }
             if(action.Id=="doctor.sleepstates")
             {
                 if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
