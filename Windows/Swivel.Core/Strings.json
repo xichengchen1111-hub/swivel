@@ -16118,5 +16118,390 @@
     "只读显示字幕或数据源文本，由现有格式读取器验证。仅接受严格 UTF-8 或带 BOM 的 UTF-16。字幕上限为 8 MiB，并沿用条目及文本限制；数据文件上限为 32 MiB，并沿用结构限制。二进制 plist 显示为生成的 YAML。不执行、不获取外部内容、不导出。源文件将保持占用直至窗口关闭。",
     "唯讀顯示字幕或資料來源文字，由現有格式讀取器驗證。僅接受嚴格 UTF-8 或含 BOM 的 UTF-16。字幕上限為 8 MiB，並沿用項目及文字限制；資料檔案上限為 32 MiB，並沿用結構限制。二進位 plist 顯示為產生的 YAML。不執行、不擷取外部內容、不匯出。來源檔案將保持持有直到視窗關閉。",
     "既存の形式リーダーで検証した字幕またはデータのソーステキストを読み取り専用で表示します。厳密なUTF-8またはBOM付きUTF-16のみ受け付けます。字幕は8 MiBと既存の字幕数・テキスト制限、データは32 MiBと既存の構造制限に従います。バイナリplistは生成したYAMLで表示します。実行、外部取得、書き出しは行いません。ウィンドウを閉じるまで元ファイルを保持します。"
+  ],
+  "Test Internet Connection…": [
+    "测试互联网连接…",
+    "測試網際網路連線…",
+    "インターネット接続をテスト…"
+  ],
+  "Read adapter IP, DNS, gateway and current-user proxy configuration in the basic snapshot; addresses stay hidden by default. Test Internet Connection opens a window whose buttons contact fixed Microsoft servers to check the gateway, name resolution, sign-in pages and secure connections, and optionally sample download speed. No repair; effective app-specific proxy diagnosis remains incomplete.": [
+    "在基本快照中读取网卡 IP、DNS、网关和当前用户代理配置；地址默认隐藏。“测试互联网连接”会打开一个窗口，其中的按钮会联系固定的微软服务器，检查网关、域名解析、登录页面和安全连接，并可选择抽样测量下载速度。不进行修复；针对具体应用的实际代理诊断仍不完整。",
+    "在基本快照中讀取網路介面卡 IP、DNS、閘道和目前使用者 Proxy 設定；位址預設隱藏。「測試網際網路連線」會開啟一個視窗，其中的按鈕會聯絡固定的 Microsoft 伺服器，檢查閘道、名稱解析、登入頁面和安全連線，並可選擇抽樣測量下載速度。不進行修復；針對個別應用程式的實際 Proxy 診斷仍不完整。",
+    "基本スナップショットでアダプターの IP、DNS、ゲートウェイ、現在のユーザーのプロキシ設定を読み取ります。アドレスは既定で非表示です。「インターネット接続をテスト」はウィンドウを開き、そのボタンで固定の Microsoft サーバーに接続して、ゲートウェイ、名前解決、サインインページ、安全な接続を確認し、任意でダウンロード速度を計測します。修復は行いません。アプリごとの実際のプロキシ診断はまだ不完全です。"
+  ],
+  "A single test from this PC at this moment. A gateway that ignores ping is common and not a fault by itself. A firewall, VPN, proxy or security software can affect each step differently. Windows' own network status may use other checks.": [
+    "这只是此电脑此刻的一次测试。网关不响应 ping 很常见，本身并不是故障。防火墙、VPN、代理或安全软件可能对每一步产生不同影响。Windows 自身的网络状态可能使用其他检查。",
+    "這只是此電腦此刻的一次測試。閘道不回應 ping 很常見，本身並不是故障。防火牆、VPN、Proxy 或安全性軟體可能對每個步驟產生不同影響。Windows 本身的網路狀態可能使用其他檢查。",
+    "この PC から今この時点で行う 1 回のテストです。ゲートウェイが ping に応答しないのはよくあることで、それだけでは障害ではありません。ファイアウォール、VPN、プロキシ、セキュリティソフトは各ステップに異なる影響を与えることがあります。Windows 自身のネットワーク状態は別の確認方法を使う場合があります。"
+  ],
+  "About {0} Mbit/s ({1} MB in {2} s, {3}) · {4}": [
+    "约 {0} Mbit/s（{2} 秒 {1} MB，{3}）· {4}",
+    "約 {0} Mbit/s（{2} 秒 {1} MB，{3}）· {4}",
+    "約 {0} Mbit/s（{2} 秒で {1} MB、{3}）· {4}"
+  ],
+  "Answered": [
+    "有响应",
+    "有回應",
+    "応答あり"
+  ],
+  "Answered {0} of {1} pings; best {2} ms": [
+    "{1} 次 ping 中响应 {0} 次；最快 {2} 毫秒",
+    "{1} 次 ping 中回應 {0} 次；最快 {2} 毫秒",
+    "{1} 回の ping のうち {0} 回応答、最速 {2} ms"
+  ],
+  "Connection failed": [
+    "连接失败",
+    "連線失敗",
+    "接続に失敗しました"
+  ],
+  "Connectivity check (HTTP)": [
+    "连通性检查（HTTP）",
+    "連線能力檢查（HTTP）",
+    "接続確認（HTTP）"
+  ],
+  "Default gateway": [
+    "默认网关",
+    "預設閘道",
+    "デフォルトゲートウェイ"
+  ],
+  "Direct (no proxy)": [
+    "直接连接（无代理）",
+    "直接連線（無 Proxy）",
+    "直接（プロキシなし）"
+  ],
+  "Download speed": [
+    "下载速度",
+    "下載速度",
+    "ダウンロード速度"
+  ],
+  "Downloading up to 25 MB from builds.dotnet.microsoft.com…": [
+    "正在从 builds.dotnet.microsoft.com 下载最多 25 MB…",
+    "正在從 builds.dotnet.microsoft.com 下載最多 25 MB…",
+    "builds.dotnet.microsoft.com から最大 25 MB をダウンロードしています…"
+  ],
+  "Expected text received": [
+    "收到预期文本",
+    "收到預期文字",
+    "想定どおりのテキストを受信しました"
+  ],
+  "Fetching Windows' connectivity check page…": [
+    "正在获取 Windows 的连通性检查页面…",
+    "正在取得 Windows 的連線能力檢查頁面…",
+    "Windows の接続確認ページを取得しています…"
+  ],
+  "HTTP {0} from builds.dotnet.microsoft.com · {1}": [
+    "builds.dotnet.microsoft.com 返回 HTTP {0} · {1}",
+    "builds.dotnet.microsoft.com 傳回 HTTP {0} · {1}",
+    "builds.dotnet.microsoft.com から HTTP {0} · {1}"
+  ],
+  "HTTP {0} from www.microsoft.com after {1} ms · {2}": [
+    "{1} 毫秒后 www.microsoft.com 返回 HTTP {0} · {2}",
+    "{1} 毫秒後 www.microsoft.com 傳回 HTTP {0} · {2}",
+    "{1} ms 後に www.microsoft.com から HTTP {0} · {2}"
+  ],
+  "HTTP {0} from www.microsoft.com in {1} ms · {2}": [
+    "www.microsoft.com 在 {1} 毫秒内返回 HTTP {0} · {2}",
+    "www.microsoft.com 在 {1} 毫秒內傳回 HTTP {0} · {2}",
+    "www.microsoft.com から {1} ms で HTTP {0} · {2}"
+  ],
+  "HTTP {0} instead of Microsoft's expected text · {1}": [
+    "收到 HTTP {0}，而不是微软的预期文本 · {1}",
+    "收到 HTTP {0}，而不是 Microsoft 的預期文字 · {1}",
+    "Microsoft の想定テキストではなく HTTP {0} · {1}"
+  ],
+  "HTTP {0}, but the page was not Microsoft's expected text · {1}": [
+    "HTTP {0}，但页面不是微软的预期文本 · {1}",
+    "HTTP {0}，但頁面不是 Microsoft 的預期文字 · {1}",
+    "HTTP {0} ですが、ページは Microsoft の想定テキストではありません · {1}"
+  ],
+  "HTTP {0}: redirected to {1} · {2}": [
+    "HTTP {0}：被重定向到 {1} · {2}",
+    "HTTP {0}：被重新導向至 {1} · {2}",
+    "HTTP {0}：{1} にリダイレクトされました · {2}"
+  ],
+  "Internet Connection Test": [
+    "互联网连接测试",
+    "網際網路連線測試",
+    "インターネット接続テスト"
+  ],
+  "Internet connection test closed. Nothing was changed or saved.": [
+    "互联网连接测试已关闭。没有更改或保存任何内容。",
+    "網際網路連線測試已關閉。沒有變更或儲存任何內容。",
+    "インターネット接続テストを閉じました。何も変更・保存されていません。"
+  ],
+  "Internet names could not be resolved. The DNS server may be unreachable or misconfigured. Restarting the router or checking DNS settings may help.": [
+    "无法解析互联网域名。DNS 服务器可能无法访问或配置有误。重启路由器或检查 DNS 设置可能有帮助。",
+    "無法解析網際網路名稱。DNS 伺服器可能無法連線或設定錯誤。重新啟動路由器或檢查 DNS 設定可能有幫助。",
+    "インターネットの名前を解決できませんでした。DNS サーバーに到達できないか、設定が誤っている可能性があります。ルーターの再起動や DNS 設定の確認が役立つ場合があります。"
+  ],
+  "Measure Download Speed (Downloads up to 25 MB)": [
+    "测量下载速度（最多下载 25 MB）",
+    "測量下載速度（最多下載 25 MB）",
+    "ダウンロード速度を計測（最大 25 MB をダウンロード）"
+  ],
+  "Measure Download Speed downloads up to 25 MB, for at most 15 seconds, of a fixed .NET runtime package from builds.dotnet.microsoft.com. The data is discarded, not saved. The result is a single rough sample of download speed from that server, not your plan's speed, upload speed or latency under load.": [
+    "“测量下载速度”会从 builds.dotnet.microsoft.com 下载一个固定的 .NET 运行时安装包，最多 25 MB、最长 15 秒。数据会被丢弃，不会保存。结果只是从该服务器下载速度的一次粗略抽样，不代表你的宽带套餐速度、上传速度或负载下的延迟。",
+    "「測量下載速度」會從 builds.dotnet.microsoft.com 下載一個固定的 .NET 執行階段套件，最多 25 MB、最長 15 秒。資料會被捨棄，不會儲存。結果只是從該伺服器下載速度的一次粗略抽樣，不代表你的寬頻方案速度、上傳速度或負載下的延遲。",
+    "「ダウンロード速度を計測」は、builds.dotnet.microsoft.com から固定の .NET ランタイムパッケージを最大 25 MB、最長 15 秒ダウンロードします。データは破棄され、保存されません。結果はそのサーバーからのダウンロード速度の大まかな 1 回の計測であり、契約回線の速度、アップロード速度、負荷時の遅延ではありません。"
+  ],
+  "Microsoft's expected text arrived in {0} ms · {1}": [
+    "{0} 毫秒内收到微软的预期文本 · {1}",
+    "{0} 毫秒內收到 Microsoft 的預期文字 · {1}",
+    "Microsoft の想定テキストを {0} ms で受信 · {1}"
+  ],
+  "Name could not be resolved": [
+    "无法解析域名",
+    "無法解析名稱",
+    "名前を解決できませんでした"
+  ],
+  "Name resolution": [
+    "域名解析",
+    "名稱解析",
+    "名前解決"
+  ],
+  "No answer": [
+    "无响应",
+    "無回應",
+    "応答なし"
+  ],
+  "No answer to {0} pings. Many routers ignore ping, so this alone does not prove a fault.": [
+    "{0} 次 ping 均无响应。许多路由器会忽略 ping，因此仅凭这一点不能证明有故障。",
+    "{0} 次 ping 均無回應。許多路由器會忽略 ping，因此僅憑這一點不能證明有故障。",
+    "{0} 回の ping に応答がありません。多くのルーターは ping を無視するため、これだけでは障害とは言えません。"
+  ],
+  "No answer to {0} pings. Many routers ignore ping; the Internet was still reachable, so this is not a fault.": [
+    "{0} 次 ping 均无响应。许多路由器会忽略 ping；互联网仍可访问，因此这不是故障。",
+    "{0} 次 ping 均無回應。許多路由器會忽略 ping；網際網路仍可連線，因此這不是故障。",
+    "{0} 回の ping に応答がありません。多くのルーターは ping を無視します。インターネットには接続できたため、障害ではありません。"
+  ],
+  "No default gateway reported": [
+    "未报告默认网关",
+    "未回報預設閘道",
+    "デフォルトゲートウェイが報告されていません"
+  ],
+  "No default gateway was found and names could not be resolved. This PC does not seem to be connected to a network. Check Wi-Fi or the cable.": [
+    "未找到默认网关，且无法解析域名。此电脑似乎没有连接到网络。请检查 Wi-Fi 或网线。",
+    "找不到預設閘道，且無法解析名稱。此電腦似乎沒有連線到網路。請檢查 Wi-Fi 或網路線。",
+    "デフォルトゲートウェイが見つからず、名前も解決できませんでした。この PC はネットワークに接続されていないようです。Wi-Fi またはケーブルを確認してください。"
+  ],
+  "No error": [
+    "无错误",
+    "無錯誤",
+    "エラーなし"
+  ],
+  "Not run": [
+    "未运行",
+    "未執行",
+    "未実行"
+  ],
+  "Note": [
+    "提示",
+    "提示",
+    "注意"
+  ],
+  "Nothing has been tested yet. Opening this window contacted nothing.": [
+    "尚未进行任何测试。打开此窗口时没有联系任何服务器。",
+    "尚未進行任何測試。開啟此視窗時沒有聯絡任何伺服器。",
+    "まだ何もテストしていません。このウィンドウを開いただけでは何にも接続していません。"
+  ],
+  "OK": [
+    "正常",
+    "正常",
+    "OK"
+  ],
+  "Pinging the default gateway…": [
+    "正在 ping 默认网关…",
+    "正在 ping 預設閘道…",
+    "デフォルトゲートウェイに ping を送信しています…"
+  ],
+  "Plain web requests worked but the secure (HTTPS) request failed. Check the date and time, security software that inspects HTTPS, or a firewall that blocks secure connections.": [
+    "普通网页请求成功，但安全（HTTPS）请求失败。请检查日期和时间、会检查 HTTPS 的安全软件，或阻止安全连接的防火墙。",
+    "一般網頁要求成功，但安全（HTTPS）要求失敗。請檢查日期和時間、會檢查 HTTPS 的安全性軟體，或封鎖安全連線的防火牆。",
+    "通常の Web 要求は成功しましたが、安全な（HTTPS）要求は失敗しました。日付と時刻、HTTPS を検査するセキュリティソフト、安全な接続をブロックするファイアウォールを確認してください。"
+  ],
+  "Problem": [
+    "问题",
+    "問題",
+    "問題あり"
+  ],
+  "Proxy failed": [
+    "代理失败",
+    "Proxy 失敗",
+    "プロキシエラー"
+  ],
+  "Proxy use unknown": [
+    "未知是否使用代理",
+    "不確定是否使用 Proxy",
+    "プロキシ使用は不明"
+  ],
+  "Request failed": [
+    "请求失败",
+    "要求失敗",
+    "要求に失敗しました"
+  ],
+  "Requesting https://www.microsoft.com…": [
+    "正在请求 https://www.microsoft.com…",
+    "正在要求 https://www.microsoft.com…",
+    "https://www.microsoft.com に要求しています…"
+  ],
+  "Resolved": [
+    "已解析",
+    "已解析",
+    "解決済み"
+  ],
+  "Resolving www.msftconnecttest.com…": [
+    "正在解析 www.msftconnecttest.com…",
+    "正在解析 www.msftconnecttest.com…",
+    "www.msftconnecttest.com を解決しています…"
+  ],
+  "Secure connection (HTTPS)": [
+    "安全连接（HTTPS）",
+    "安全連線（HTTPS）",
+    "安全な接続（HTTPS）"
+  ],
+  "Secure connection failed": [
+    "安全连接失败",
+    "安全連線失敗",
+    "安全な接続に失敗しました"
+  ],
+  "Speed sample finished. The downloaded data was discarded.": [
+    "速度抽样完成。下载的数据已丢弃。",
+    "速度抽樣完成。下載的資料已捨棄。",
+    "速度の計測が完了しました。ダウンロードしたデータは破棄されました。"
+  ],
+  "Speed sample stopped. The downloaded data was discarded.": [
+    "速度抽样已停止。下载的数据已丢弃。",
+    "速度抽樣已停止。下載的資料已捨棄。",
+    "速度の計測を停止しました。ダウンロードしたデータは破棄されました。"
+  ],
+  "Test Connection (Contacts the Internet)": [
+    "测试连接（会联系互联网）",
+    "測試連線（會聯絡網際網路）",
+    "接続をテスト（インターネットに接続します）"
+  ],
+  "Test Connection contacts the Internet: it pings your default gateway, resolves www.msftconnecttest.com, fetches Windows' own connectivity check page from that host over HTTP and requests a small icon from www.microsoft.com over HTTPS. Requests use the Windows proxy settings, as other apps do, send no cookies or user information and follow no redirects. Nothing is saved or sent anywhere else, and nothing is repaired.": [
+    "“测试连接”会联系互联网：它会 ping 你的默认网关，解析 www.msftconnecttest.com，通过 HTTP 从该主机获取 Windows 自身的连通性检查页面，并通过 HTTPS 向 www.microsoft.com 请求一个小图标。请求像其他应用一样使用 Windows 代理设置，不发送 Cookie 或用户信息，也不跟随重定向。不会保存任何内容，也不会发送到其他地方，不进行任何修复。",
+    "「測試連線」會聯絡網際網路：它會 ping 你的預設閘道，解析 www.msftconnecttest.com，透過 HTTP 從該主機取得 Windows 本身的連線能力檢查頁面，並透過 HTTPS 向 www.microsoft.com 要求一個小圖示。要求像其他應用程式一樣使用 Windows Proxy 設定，不傳送 Cookie 或使用者資訊，也不跟隨重新導向。不會儲存任何內容，也不會傳送到其他地方，不進行任何修復。",
+    "「接続をテスト」はインターネットに接続します。デフォルトゲートウェイに ping を送り、www.msftconnecttest.com を名前解決し、そのホストから HTTP で Windows 自身の接続確認ページを取得し、HTTPS で www.microsoft.com に小さなアイコンを要求します。要求は他のアプリと同様に Windows のプロキシ設定を使い、Cookie やユーザー情報は送らず、リダイレクトには従いません。何も保存せず、ほかの場所にも送らず、修復も行いません。"
+  ],
+  "Test Result": [
+    "测试结果",
+    "測試結果",
+    "テスト結果"
+  ],
+  "Test finished. Nothing was changed.": [
+    "测试完成。没有更改任何内容。",
+    "測試完成。沒有變更任何內容。",
+    "テストが完了しました。何も変更されていません。"
+  ],
+  "Test stopped. Steps that did not finish show no result.": [
+    "测试已停止。未完成的步骤不显示结果。",
+    "測試已停止。未完成的步驟不顯示結果。",
+    "テストを停止しました。完了していないステップには結果が表示されません。"
+  ],
+  "The Internet could not be reached. Check the network connection and test again.": [
+    "无法访问互联网。请检查网络连接后再测试。",
+    "無法連線到網際網路。請檢查網路連線後再測試。",
+    "インターネットに接続できませんでした。ネットワーク接続を確認して、もう一度テストしてください。"
+  ],
+  "The Internet requests timed out. The connection may be very slow, overloaded or blocked by a firewall.": [
+    "互联网请求超时。连接可能非常慢、过载或被防火墙阻止。",
+    "網際網路要求逾時。連線可能非常慢、過載或被防火牆封鎖。",
+    "インターネットへの要求がタイムアウトしました。接続が非常に遅いか、混雑しているか、ファイアウォールでブロックされている可能性があります。"
+  ],
+  "The local network answered but the Internet could not be reached. The router or the Internet connection beyond it may be down.": [
+    "本地网络有响应，但无法访问互联网。路由器或其后的互联网连接可能已中断。",
+    "區域網路有回應，但無法連線到網際網路。路由器或其後的網際網路連線可能已中斷。",
+    "ローカルネットワークは応答しましたが、インターネットには接続できませんでした。ルーターまたはその先のインターネット接続が停止している可能性があります。"
+  ],
+  "The network answered with a different page instead of Microsoft's connectivity check. This usually means a sign-in page (hotel, airport, office Wi-Fi) or a filter. Open a browser and sign in, then test again.": [
+    "网络返回了另一个页面，而不是微软的连通性检查页面。这通常意味着有登录页面（酒店、机场、办公室 Wi-Fi）或过滤器。请打开浏览器登录后再测试。",
+    "網路傳回了另一個頁面，而不是 Microsoft 的連線能力檢查頁面。這通常表示有登入頁面（飯店、機場、辦公室 Wi-Fi）或過濾器。請開啟瀏覽器登入後再測試。",
+    "ネットワークは Microsoft の接続確認ではなく別のページを返しました。通常、サインインページ（ホテル、空港、オフィスの Wi-Fi）やフィルターがあることを意味します。ブラウザーを開いてサインインしてから、もう一度テストしてください。"
+  ],
+  "The proxy asked for a sign-in. This test does not send your Windows account to a proxy, so it cannot pass; apps that sign in to the proxy may still work. Ask whoever manages this network if apps also fail.": [
+    "代理要求登录。此测试不会把你的 Windows 账户发送给代理，因此无法通过；会登录代理的应用可能仍能正常工作。如果应用也失败，请询问此网络的管理员。",
+    "Proxy 要求登入。此測試不會把你的 Windows 帳戶傳送給 Proxy，因此無法通過；會登入 Proxy 的應用程式可能仍能正常運作。如果應用程式也失敗，請詢問此網路的管理員。",
+    "プロキシがサインインを求めました。このテストは Windows アカウントをプロキシに送らないため通過できません。プロキシにサインインするアプリは動作する場合があります。アプリも失敗する場合は、このネットワークの管理者に問い合わせてください。"
+  ],
+  "The proxy selected by the Windows proxy settings did not answer. Check the proxy settings or ask whoever manages this network.": [
+    "Windows 代理设置选择的代理没有响应。请检查代理设置或询问此网络的管理员。",
+    "Windows Proxy 設定所選的 Proxy 沒有回應。請檢查 Proxy 設定或詢問此網路的管理員。",
+    "Windows のプロキシ設定で選ばれたプロキシが応答しませんでした。プロキシ設定を確認するか、このネットワークの管理者に問い合わせてください。"
+  ],
+  "This PC reached the Internet. Plain and secure web requests both worked.": [
+    "此电脑可以访问互联网。普通和安全网页请求都成功了。",
+    "此電腦可以連線到網際網路。一般和安全網頁要求都成功了。",
+    "この PC はインターネットに接続できました。通常と安全な Web 要求の両方が成功しました。"
+  ],
+  "Through a proxy": [
+    "通过代理",
+    "透過 Proxy",
+    "プロキシ経由"
+  ],
+  "Timed out": [
+    "超时",
+    "逾時",
+    "タイムアウト"
+  ],
+  "Too little data arrived to estimate a speed": [
+    "收到的数据太少，无法估算速度",
+    "收到的資料太少，無法估算速度",
+    "受信したデータが少なすぎて速度を推定できません"
+  ],
+  "Unexpected or no answer": [
+    "意外响应或无响应",
+    "非預期回應或無回應",
+    "想定外の応答または応答なし"
+  ],
+  "Unexpected response": [
+    "意外的响应",
+    "非預期的回應",
+    "想定外の応答"
+  ],
+  "stopped at the 15 second limit": [
+    "到 15 秒上限时停止",
+    "到 15 秒上限時停止",
+    "15 秒の上限で停止"
+  ],
+  "stopped at the 25 MB limit": [
+    "到 25 MB 上限时停止",
+    "到 25 MB 上限時停止",
+    "25 MB の上限で停止"
+  ],
+  "stopped by an error": [
+    "因错误停止",
+    "因錯誤停止",
+    "エラーで停止"
+  ],
+  "whole file": [
+    "整个文件",
+    "整個檔案",
+    "ファイル全体"
+  ],
+  "{0} after {1} MB · {2}": [
+    "{1} MB 后{0} · {2}",
+    "{1} MB 後{0} · {2}",
+    "{1} MB 後に{0} · {2}"
+  ],
+  "{0} after {1} ms · {2}": [
+    "{1} 毫秒后{0} · {2}",
+    "{1} 毫秒後{0} · {2}",
+    "{1} ms 後に{0} · {2}"
+  ],
+  "{0} resolved to {1} address(es) in {2} ms": [
+    "{0} 在 {2} 毫秒内解析为 {1} 个地址",
+    "{0} 在 {2} 毫秒內解析為 {1} 個位址",
+    "{0} を {2} ms で {1} 個のアドレスに解決"
+  ],
+  "{0}: {1} after {2} ms": [
+    "{0}：{2} 毫秒后{1}",
+    "{0}：{2} 毫秒後{1}",
+    "{0}：{2} ms 後に{1}"
+  ],
+  "{0}: {1} after {2} ms. Requests still worked through the proxy, which resolves names itself.": [
+    "{0}：{2} 毫秒后{1}。请求仍通过代理成功，代理会自行解析域名。",
+    "{0}：{2} 毫秒後{1}。要求仍透過 Proxy 成功，Proxy 會自行解析名稱。",
+    "{0}：{2} ms 後に{1}。プロキシが名前を自分で解決するため、要求はプロキシ経由で成功しました。"
   ]
 }

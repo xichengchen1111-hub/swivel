@@ -153,6 +153,7 @@ internal static class Program
             Group("MountedDriveNativeChecks", () => MountedDriveNativeChecks.Run(Check,Reject));
             Group("PowerPlanNativeChecks", () => PowerPlanNativeChecks.Run(Check,Reject));
             Group("SleepCapabilityNativeChecks", () => SleepCapabilityNativeChecks.Run(Check,Reject));
+            Group("NetworkTestNativeChecks", () => NetworkTestNativeChecks.Run(Check,Reject));
             Group("ServiceNativeChecks", () => ServiceNativeChecks.Run(Check,Reject));
             Group("ScheduledTaskNativeChecks", () => ScheduledTaskNativeChecks.Run(Check,Reject));
             Group("ScheduledTaskLiveChecks", () => ScheduledTaskLiveChecks.Run(Check,Reject));
