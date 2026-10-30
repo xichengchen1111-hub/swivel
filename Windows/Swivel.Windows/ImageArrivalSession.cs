@@ -96,6 +96,15 @@ internal sealed class ImageArrivalSession : IImageArrivalSession
         catch (Exception error) { collector.FailWatcher(error); }
     }
     public Task StopAsync(ArrivalStopReason reason = ArrivalStopReason.User) => collector.StopAsync(reason);
+    /// The watched folder is still `expected` and that path still names it (not renamed or moved away).
+    internal bool StillAt(string expected)
+    {
+        lock (callbacks)
+        {
+            if (closing) return false;
+            return string.Equals(directory, expected, StringComparison.OrdinalIgnoreCase) && root.StillAt(directory);
+        }
+    }
     public void Dismiss(Guid id) => collector.Dismiss(id);
     public void ClearCards() => collector.ClearCards();
     private void Created(object sender, FileSystemEventArgs args) => Receive(args.Name, ArrivalKind.Created);

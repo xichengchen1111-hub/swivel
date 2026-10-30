@@ -30,8 +30,8 @@ internal static class ScreenshotCardChecks
 
         check(ScreenshotCards.Renewable(ArrivalStopReason.ByteLimit) && ScreenshotCards.Renewable(ArrivalStopReason.NotificationLimit) && ScreenshotCards.Renewable(ArrivalStopReason.CardLimit) && ScreenshotCards.Renewable(ArrivalStopReason.QueueLimit),
             "Session budgets reached in long use allow a fresh session");
-        check(!ScreenshotCards.Renewable(ArrivalStopReason.WatcherError) && !ScreenshotCards.Renewable(ArrivalStopReason.ReadFailure) && !ScreenshotCards.Renewable(ArrivalStopReason.CleanupError) && !ScreenshotCards.Renewable(ArrivalStopReason.User),
-            "Watcher, read and cleanup failures are never restarted automatically");
+        check(ScreenshotCards.Renewable(ArrivalStopReason.WatcherError) && !ScreenshotCards.Renewable(ArrivalStopReason.ReadFailure) && !ScreenshotCards.Renewable(ArrivalStopReason.CleanupError) && !ScreenshotCards.Renewable(ArrivalStopReason.User),
+            "A lost watcher may be renewed; read and cleanup failures are never restarted automatically");
 
         // Dismiss timing.
         var clock = new CardDismissClock();

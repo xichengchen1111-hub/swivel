@@ -283,6 +283,18 @@ public static partial class NativeFiles
             Check(handle, true);
         }
         public void Dispose() { for (int i = handles.Count - 1; i >= 0; i--) handles[i].Dispose(); handles.Clear(); }
+        /// The held folder is still at `directory` (compared by its final path, case-insensitively).
+        internal bool StillAt(string directory)
+        {
+            if (handles.Count == 0) return false;
+            try
+            {
+                string final = FinalPath(handles[^1]);
+                if (final.StartsWith(@"\\?\", StringComparison.Ordinal)) final = final[4..];
+                return string.Equals(final.TrimEnd('\\'), directory.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) && Directory.Exists(directory);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or UserError or System.ComponentModel.Win32Exception) { return false; }
+        }
     }
 
     // Read-only accounting enumerates held directories, never child file data.

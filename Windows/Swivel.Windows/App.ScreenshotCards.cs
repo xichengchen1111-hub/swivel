@@ -18,7 +18,8 @@ public sealed partial class App
             ScreenshotCardController.Native,
             ShowScreenshotCard,
             () => screenshotCard?.Close(),
-            message => { Home.SetStatus(L(message)); Home.Refresh(); });
+            message => { Home.SetStatus(L(message)); Home.Refresh(); },
+            ScreenshotCardController.NativeFolderReady,ScreenshotCardController.NativeStillValid);
         return screenshotCards.Update();
     }
 

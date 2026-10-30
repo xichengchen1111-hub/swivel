@@ -16609,11 +16609,6 @@
     "點按或向上拖曳以掛到曬衣繩上。拖到別處以使用該檔案。",
     "クリックするか上にドラッグすると物干しロープに掛かります。ほかの場所へドラッグするとファイルを使えます。"
   ],
-  "Windows has no Screenshots folder yet. Take a screenshot with Windows+Print Screen once (it creates the folder), then turn this setting off and on.": [
-    "Windows 还没有“屏幕截图”文件夹。请先用 Windows+Print Screen 截一次图（这会创建该文件夹），然后关闭再打开此设置。",
-    "Windows 還沒有「螢幕擷取畫面」資料夾。請先用 Windows+Print Screen 擷取一次（這會建立該資料夾），然後關閉再開啟此設定。",
-    "Windows にはまだ「スクリーンショット」フォルダーがありません。Windows+Print Screen で一度スクリーンショットを撮って（フォルダーが作成されます）、この設定をオフにしてからオンにし直してください。"
-  ],
   "Windows did not report a Screenshots folder.": [
     "Windows 未报告“屏幕截图”文件夹。",
     "Windows 未回報「螢幕擷取畫面」資料夾。",
@@ -16643,5 +16638,10 @@
     "Swivel 正忙。请稍后再试。",
     "Swivel 正忙。請稍後再試。",
     "Swivel は処理中です。少ししてからもう一度お試しください。"
+  ],
+  "Windows has no Screenshots folder yet. Cards start once it exists: take a screenshot with Windows+Print Screen (it creates the folder).": [
+    "Windows 还没有“屏幕截图”文件夹。文件夹出现后卡片就会开始：用 Windows+Print Screen 截一次图即可（这会创建该文件夹）。",
+    "Windows 還沒有「螢幕擷取畫面」資料夾。資料夾出現後卡片就會開始：用 Windows+Print Screen 擷取一次即可（這會建立該資料夾）。",
+    "Windows にはまだ「スクリーンショット」フォルダーがありません。フォルダーができるとカードが始まります。Windows+Print Screen でスクリーンショットを撮ってください（フォルダーが作成されます）。"
   ]
 }

@@ -68,7 +68,7 @@ internal static class ScreenshotCardNativeChecks
         byte[] png = Png();
         string existing = Path.Combine(root,"Screenshot (1).png"); File.WriteAllBytes(existing,png);
         bool want = true; var shown = new List<ArrivalCard<BitmapSource>>(); var reports = new List<string>(); int hides = 0, creates = 0;
-        Func<CancellationToken,Task<IImageArrivalSession>> real = token => { creates++; return Task.Run<IImageArrivalSession>(() => ImageArrivalSession.Create(root,token),token); };
+        Func<CancellationToken,Task<IImageArrivalSession>> real = token => { creates++; return Task.Run<IImageArrivalSession>(() => ImageArrivalSession.Create(root,token,shareDelete: true),token); };
         Func<CancellationToken,Task<IImageArrivalSession>> factory = real;
         var controller = new ScreenshotCardController(() => want,token => factory(token),shown.Add,() => hides++,reports.Add);
 
@@ -106,7 +106,7 @@ internal static class ScreenshotCardNativeChecks
 
         // Off while the folder is still being opened: the late session is joined, never kept.
         IImageArrivalSession? late = null;
-        factory = async token => { await Task.Delay(300); late = ImageArrivalSession.Create(root,CancellationToken.None); return late; };
+        factory = async token => { await Task.Delay(300); late = ImageArrivalSession.Create(root,CancellationToken.None,shareDelete: true); return late; };
         want = true; var slow = controller.Update(); want = false; var cancel = controller.Update();
         Until(() => slow.IsCompleted && cancel.IsCompleted,"late start");
         check(late is not null && late.Completion.IsCompleted && controller.Session is null,"A session created after the setting went off is stopped and joined");
@@ -122,6 +122,29 @@ internal static class ScreenshotCardNativeChecks
         want = true; var on = controller.Update(); Until(() => on.IsCompleted,"on");
         check(!controller.Halted && controller.Running,"Off and on again tries once more");
         want = false; var end = controller.Update(); Until(() => end.IsCompleted,"end");
+
+        // Missing folder with a readiness check: reported once, then started when it appears; a moved folder is replaced.
+        bool ready = false; reports.Clear(); int made = 0;
+        Func<CancellationToken,Task<IImageArrivalSession>> guarded = token =>
+        { if (!ready) throw new UserError(ScreenshotCards.NoFolder); made++; return Task.Run<IImageArrivalSession>(() => ImageArrivalSession.Create(root,token,shareDelete: true),token); };
+        var waiting = new ScreenshotCardController(() => want,guarded,shown.Add,() => hides++,reports.Add,() => ready,s => ((ImageArrivalSession)s).StillAt(root));
+        want = true; var w1 = waiting.Update(); Until(() => w1.IsCompleted,"waiting start");
+        check(waiting.WaitingForFolder && !waiting.Halted && waiting.Session is null && reports.Count(r => r == ScreenshotCards.NoFolder) == 1,"A missing folder is reported once and waited for, never created");
+        waiting.Recheck(); Until(() => waiting.Idle.IsCompleted,"still missing");
+        check(waiting.WaitingForFolder && reports.Count == 1 && made == 0,"While the folder is missing, rechecks stay quiet");
+        ready = true; waiting.Recheck(); Until(() => waiting.Idle.IsCompleted && waiting.Running,"folder appears");
+        check(waiting.Running && made == 1,"Cards start once the folder exists");
+        var old = waiting.Session!;
+        waiting.Recheck(); Until(() => waiting.Idle.IsCompleted,"valid recheck");
+        check(ReferenceEquals(old,waiting.Session),"An unmoved folder keeps its session");
+        Directory.Move(root,root + " renamed"); Directory.CreateDirectory(root);
+        waiting.Recheck(); Until(() => waiting.Idle.IsCompleted && waiting.Running && !ReferenceEquals(old,waiting.Session),"renewal");
+        check(old.Completion.IsCompleted && made == 2,"A renamed folder is noticed: the old session is joined and the folder at the reported path is watched");
+        string fresh = Path.Combine(root,"Screenshot (9).png"); int before = shown.Count; File.WriteAllBytes(fresh,png);
+        Until(() => shown.Count > before,"card after renewal");
+        check(shown[^1].Path == fresh,"A screenshot in the recreated folder produces a card");
+        want = false; var w2 = waiting.Update(); Until(() => w2.IsCompleted,"waiting end");
+        Directory.Delete(root + " renamed",true);
         Directory.Move(root,root + " released");
         check(Directory.Exists(root + " released"),"All screenshot watcher leases are released at the end");
     }

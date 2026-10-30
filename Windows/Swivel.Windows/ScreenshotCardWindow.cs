@@ -66,7 +66,7 @@ internal sealed class ScreenshotCardWindow : Window
         MouseLeftButtonDown += Pressed;
         MouseMove += Moved;
         MouseLeftButtonUp += Released;
-        LostMouseCapture += (_,_) => { if (pressing && gesture != CardGesture.HandOut) Cancel(); };
+        LostMouseCapture += (_,_) => { if (pressing && gesture != CardGesture.HandOut) { Cancel(); ShowWaiting(); } };
         MouseRightButtonUp += (_,_) => Leave(false);
         timer.Tick += (_,_) => { if (IsVisible && !leaving && clock.Due(Now)) Leave(false); };
         Closed += (_,_) => { timer.Stop(); StopFrames(); };
@@ -204,7 +204,7 @@ internal sealed class ScreenshotCardWindow : Window
         if (card is not { } current || leaving) return;
         // Another operation holds Swivel's work slot: keep the card and say so, rather than lose the print.
         if (app.Busy || !app.Prefs.IsOn(Feature.Clothesline))
-        { caption.Text = app.L("Swivel is busy. Try again in a moment."); Cancel(); ShowWaiting(); return; }
+        { caption.Text = app.L("Swivel is busy. Try again in a moment."); Cancel(); clock.Show(Now); clock.SetHover(IsMouseOver,Now); ShowWaiting(); return; }
         Leave(true);
         _ = HangAsync(current.Path);
     }

@@ -9,7 +9,7 @@ public static class ScreenshotCards
 {
     /// FOLDERID_Screenshots.
     public static readonly Guid FolderId = new("b7bede81-df94-4682-a7d8-57a52620b86f");
-    public const string NoFolder = "Windows has no Screenshots folder yet. Take a screenshot with Windows+Print Screen once (it creates the folder), then turn this setting off and on.";
+    public const string NoFolder = "Windows has no Screenshots folder yet. Cards start once it exists: take a screenshot with Windows+Print Screen (it creates the folder).";
     public const string Unreported = "Windows did not report a Screenshots folder.";
 
     /// The watcher runs only while Clothesline and this setting are both on and Swivel is not quitting.
@@ -19,9 +19,10 @@ public static class ScreenshotCards
     public static bool Reportable(ArrivalStopReason reason) =>
         reason is not (ArrivalStopReason.None or ArrivalStopReason.User or ArrivalStopReason.Closed or ArrivalStopReason.FeatureDisabled or ArrivalStopReason.Cancelled);
 
-    /// Session budgets reached in ordinary long use: a fresh session may start (at most once a minute).
+    /// Session budgets reached in ordinary long use, or notifications lost (the folder was deleted, say):
+    /// a fresh session may start (at most once a minute).
     public static bool Renewable(ArrivalStopReason reason) =>
-        reason is ArrivalStopReason.CardLimit or ArrivalStopReason.QueueLimit or ArrivalStopReason.NotificationLimit or ArrivalStopReason.ByteLimit;
+        reason is ArrivalStopReason.WatcherError or ArrivalStopReason.CardLimit or ArrivalStopReason.QueueLimit or ArrivalStopReason.NotificationLimit or ArrivalStopReason.ByteLimit;
 
     /// Top-left of a card resting in the bottom-right corner of `work` (device-independent units).
     public static (double Left,double Top) Corner(double workLeft,double workTop,double workRight,double workBottom,double width,double height,double margin)

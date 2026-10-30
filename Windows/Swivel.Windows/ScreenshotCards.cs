@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Swivel.Core;
 
 namespace Swivel.Windows;
@@ -60,8 +61,10 @@ internal static class ScreenshotFolder
 /// Runs one arrival session against the Screenshots folder while the setting is on.
 /// All members are called on the UI thread. Turning the setting on, off and on again
 /// is serialized: a new session starts only after the previous one finished cleanup.
-/// A session that stops by itself (a limit, a watcher error, no folder) is not restarted
-/// until the setting is turned off and on again.
+/// A session that reached its budgets or lost its notifications starts afresh at most once a
+/// minute; a missing folder is waited for (checked every few seconds, never created); a session
+/// whose folder was renamed or moved, or whose known-folder location changed, is replaced.
+/// Other failures stop it until the setting is turned off and on again.
 internal sealed class ScreenshotCardController
 {
     private readonly Func<bool> desired;
@@ -72,13 +75,22 @@ internal sealed class ScreenshotCardController
     private IImageArrivalSession? session;
     private CancellationTokenSource? starting;
     private Task loop = Task.CompletedTask;
-    private bool dirty, looping, halted;
+    private bool dirty, looping, halted, renew, waitingForFolder;
+    private readonly Func<bool>? folderReady;
+    private readonly Func<IImageArrivalSession,bool>? stillValid;
+    private DispatcherTimer? check;
+    internal static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(5);
     private Guid shown;
     private DateTime? lastRenewal;
 
     internal ScreenshotCardController(Func<bool> desired,Func<CancellationToken,Task<IImageArrivalSession>> create,
-        Action<ArrivalCard<BitmapSource>> show,Action hide,Action<string> report)
-    { this.desired = desired; this.create = create; this.show = show; this.hide = hide; this.report = report; }
+        Action<ArrivalCard<BitmapSource>> show,Action hide,Action<string> report,
+        Func<bool>? folderReady = null,Func<IImageArrivalSession,bool>? stillValid = null)
+    {
+        this.desired = desired; this.create = create; this.show = show; this.hide = hide; this.report = report;
+        this.folderReady = folderReady; this.stillValid = stillValid;
+    }
+    internal bool WaitingForFolder => waitingForFolder;
 
     internal IImageArrivalSession? Session => session;
     internal bool Running => session?.Snapshot.Status == ArrivalStatus.Running;
@@ -88,10 +100,27 @@ internal sealed class ScreenshotCardController
 
     internal Task Update()
     {
-        if (!desired()) { halted = false; lastRenewal = null; try { starting?.Cancel(); } catch (ObjectDisposedException) { } }
+        if (!desired()) { halted = false; waitingForFolder = false; renew = false; lastRenewal = null; check?.Stop(); try { starting?.Cancel(); } catch (ObjectDisposedException) { } }
+        else if (folderReady is not null || stillValid is not null)
+        {
+            check ??= new DispatcherTimer(CheckInterval,DispatcherPriority.Background,(_,_) => Recheck(),System.Windows.Threading.Dispatcher.CurrentDispatcher);
+            check.Start();
+        }
         dirty = true;
         if (!looping) { looping = true; loop = Run(); }
         return loop;
+    }
+
+    /// Every few seconds while wanted: start once a missing folder exists; replace a session whose folder moved.
+    internal void Recheck()
+    {
+        if (looping || !desired() || halted) return;
+        try
+        {
+            if (session is null && waitingForFolder && folderReady?.Invoke() == true) { waitingForFolder = false; _ = Update(); }
+            else if (session is { } active && active.Snapshot.Status == ArrivalStatus.Running && stillValid is not null && !stillValid(active)) { renew = true; _ = Update(); }
+        }
+        catch { } // A failed check tries again next time.
     }
 
     /// The card is gone (hung, handed out, dismissed): free its slot in the session's card limit.
@@ -105,7 +134,8 @@ internal sealed class ScreenshotCardController
             {
                 dirty = false;
                 bool want = desired();
-                if (want && session is null && !halted) await StartAsync();
+                if (want && renew && session is { } moved) { renew = false; await StopAsync(moved,ArrivalStopReason.Cancelled); dirty = true; }
+                else if (want && session is null && !halted && !waitingForFolder) await StartAsync();
                 else if (!want && session is { } active) await StopAsync(active,ArrivalStopReason.FeatureDisabled);
             }
         }
@@ -128,7 +158,12 @@ internal sealed class ScreenshotCardController
         catch (Exception error)
         {
             if (created is not null && !ReferenceEquals(created,session)) await Join(created,ArrivalStopReason.Cancelled);
-            if (!source.IsCancellationRequested && desired()) { halted = true; report(error is UserError user ? user.Message : error.Message); }
+            if (!source.IsCancellationRequested && desired())
+            {
+                // No folder yet: wait for Windows to create it (with the next Windows+Print Screen), say so once.
+                if (error is UserError { Message: ScreenshotCards.NoFolder } && folderReady is not null) { if (!waitingForFolder) report(ScreenshotCards.NoFolder); waitingForFolder = true; }
+                else { halted = true; report(error is UserError user ? user.Message : error.Message); }
+            }
         }
         finally { starting = null; }
     }
@@ -192,6 +227,12 @@ internal sealed class ScreenshotCardController
         ArrivalStopReason.CleanupError => ImageArrivalRules.CleanupFailed,
         _ => "Screenshot cards stopped: an image could not be read. Turn the setting off and on to watch again."
     };
+
+    /// The folder Windows reports now exists (never created here).
+    internal static bool NativeFolderReady() => ScreenshotFolder.Resolve(CancellationToken.None).Path is not null;
+    /// The session still watches the folder Windows reports now: not renamed, moved or relocated.
+    internal static bool NativeStillValid(IImageArrivalSession active) =>
+        active is ImageArrivalSession real && ScreenshotFolder.Resolve(CancellationToken.None).Path is { } now && real.StillAt(now);
 
     /// The real session: resolve the folder, then the existing arrival watcher on it (no initial scan).
     internal static Task<IImageArrivalSession> Native(CancellationToken token) => Task.Run<IImageArrivalSession>(() =>
