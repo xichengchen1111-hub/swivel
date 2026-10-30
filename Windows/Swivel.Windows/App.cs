@@ -514,6 +514,24 @@ public sealed partial class App : Application
                 try{ShowOperationDialog(dialog,owner,token);}finally{await dialog.FinishAsync();}
                 report(token.IsCancellationRequested?L("Cancelled."):L("Internet connection test closed. Nothing was changed or saved."));return;
             }
+            if(action.Id=="doctor.battery")
+            {
+                if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
+                workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();report(L("Reading reported battery information…"));
+                var snapshot=await AwaitDoctorReadAsync(Task.Run(()=>BatteryReader.Read(token),token),token);token.ThrowIfCancellationRequested();
+                ShowOperationDialog(new BatteryHealthDialog(this,snapshot),owner,token);
+                report(token.IsCancellationRequested?L("Cancelled."):L("Battery inspection closed. No battery or power setting was changed."));return;
+            }
+            if(action.Id=="doctor.sleephistory")
+            {
+                if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
+                workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();report(L("Reading sleep and wake events…"));
+                // Keep Awake belongs to the UI thread; capture it before the background read.
+                bool keepAwake=Awake?.Active==true,keepDisplay=Awake?.Display==true;var keepUntil=Awake?.Until;
+                var read=await AwaitDoctorReadAsync(Task.Run(()=>(SleepHistoryReader.ReadStayAwake(keepAwake,keepDisplay,keepUntil,token),SleepHistoryReader.ReadHistory(token)),token),token);token.ThrowIfCancellationRequested();
+                ShowOperationDialog(new SleepHistoryDialog(this,read.Item1,read.Item2),owner,token);
+                report(token.IsCancellationRequested?L("Cancelled."):L("Sleep and wake history closed. No command was run and nothing was changed."));return;
+            }
             if(action.Id=="doctor.sleepstates")
             {
                 if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");

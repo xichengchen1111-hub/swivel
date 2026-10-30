@@ -114,6 +114,7 @@ WindowsDoctorChecks.Run(Check,Reject);
 MountedDriveChecks.Run(Check,Reject);
 PowerPlanChecks.Run(Check,Reject);
 SleepCapabilityChecks.Run(Check,Reject);
+BatterySleepChecks.Run(Check,Reject);
 ServiceChecks.Run(Check,Reject);
 ScheduledTasksChecks.Run(Check,Reject);
 ScheduledTaskIntegrationChecks.Run(Check);

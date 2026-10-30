@@ -22,6 +22,6 @@ internal static class PowerPlanChecks
         reject(()=>new PowerPlanSnapshot(null,5,null,2,false,null,new[]{new PowerTimeout(IdlePowerSetting.Sleep,null,0,null,null)},default),"Missing value without error is not fabricated as zero");
         reject(()=>new PowerPlanSnapshot(null,5,null,2,false,null,new[]{new PowerTimeout(IdlePowerSetting.Sleep,0,0,5,null)},default),"Ambiguous success-and-error snapshot refused");
         var prefs=new Prefs();var action=Catalog.Actions.Single(x=>x.Id=="doctor.power");check(action.Feature==Feature.Doctor&&!action.RequiresFiles&&!Catalog.Available(prefs,Array.Empty<string>()).Any(x=>x.Id==action.Id),"Power check independently default-off and does not need unrelated files");
-        prefs.Set(Feature.Doctor,true);check(Catalog.Available(prefs,Array.Empty<string>()).Any(x=>x.Id==action.Id)&&WindowsDoctor.Areas.Single(a=>a.Id=="power").ActionIds.SequenceEqual(new[]{"doctor.power","doctor.sleepstates","doctor.check"}),"Power area retains Home-only basic snapshot and adds explicit dedicated check");
+        prefs.Set(Feature.Doctor,true);check(Catalog.Available(prefs,Array.Empty<string>()).Any(x=>x.Id==action.Id)&&WindowsDoctor.Areas.Single(a=>a.Id=="power").ActionIds.SequenceEqual(new[]{"doctor.battery","doctor.sleephistory","doctor.power","doctor.sleepstates","doctor.check"}),"Power area retains Home-only basic snapshot and adds explicit dedicated check");
     }
 }
