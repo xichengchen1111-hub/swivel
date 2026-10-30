@@ -20,12 +20,15 @@ internal static class Program
     // An unexpected exception fails its group only; later groups still run and report.
     private static void Group(string name, Action run) { Console.WriteLine("RUN: " + name); try { run(); } catch (Exception error) { failures.Add(name + " threw " + error.GetType().Name + ": " + error.Message); Console.Error.WriteLine(name + " threw: " + error); } }
     private static void Reject(Action action, string name) { bool failed = false; try { action(); } catch { failed = true; } Check(failed, name); }
+    private const string ExitGuardFixture = "--exit-guard-fixture";
     [STAThread]
-    public static int Main(string[] args)
+    public static int Main(string[] args) => ProcessExitGuard.Finish(RunAll(args));
+    private static int RunAll(string[] args)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Run these tests on Windows.");
         // Child processes started by AppQuitNativeChecks run only their small window fixture.
         if (AppQuitNativeChecks.Fixture(args) is int fixture) return fixture;
+        if (args is [ExitGuardFixture]) { System.Runtime.InteropServices.NativeLibrary.Load(Path.Combine(Environment.SystemDirectory, "Windows.Data.Pdf.dll")); return 7; }
         string directory = Path.Combine(Path.GetTempPath(), "swivel-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var validationApp=new App(validationHost:true);
@@ -190,6 +193,11 @@ internal static class Program
             Group("AppMemoryNativeChecks", () => AppMemoryNativeChecks.Run(Check,Reject));
             Group("AppMemoryHelperNativeChecks", () => AppMemoryHelperNativeChecks.Run(Check,Reject));
             Group("AppQuitNativeChecks", () => AppQuitNativeChecks.Run(Check,Reject));
+            Group("ProcessExitGuard", () =>
+            {
+                using var child = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false, ArgumentList = { ExitGuardFixture } })!;
+                Check(child.WaitForExit(60_000) && child.ExitCode == 7, "A process with the PDF library loaded still reports its own exit code");
+            });
             Group("InstalledAppsNativeChecks", () => InstalledAppsNativeChecks.Run(Check,Reject));
             Group("StorePackagesNativeChecks", () => StorePackagesNativeChecks.Run(Check,Reject));
             Group("StorePackageRemovalNativeChecks", () => StorePackageRemovalNativeChecks.Run(directory,Check,Reject));

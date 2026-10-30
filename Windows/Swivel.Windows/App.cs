@@ -62,9 +62,9 @@ public sealed partial class App : Application
     {
         // Exactly `--mcp` starts the agent server on stdin/stdout; every other argument is
         // ignored and the normal app starts. There is no other command-line execution.
-        if (args.Length == 1 && args[0] == "--mcp") return McpHost.Run();
+        if (args.Length == 1 && args[0] == "--mcp") return ProcessExitGuard.Finish(McpHost.Run());
         new App().Run();
-        return 0;
+        return ProcessExitGuard.Finish(0);
     }
     protected override void OnStartup(StartupEventArgs e)
     {
