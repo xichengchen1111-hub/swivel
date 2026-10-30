@@ -19,14 +19,27 @@ internal static class NetworkTestChecks
         Verdict(ok with { Gateway = gateway with { Replies = 0, BestMs = null } }, NetVerdict.Online, "gateway ignores ping but the Internet works");
         var noPing = NetworkTest.Steps(ok with { Gateway = gateway with { Replies = 0, BestMs = null } })[0];
         check(noPing.Status == NetStepStatus.Warning && noPing.Format.Contains("not a fault"), "Silent gateway is a note, not a problem, when the Internet works");
-        check(NetworkTest.Steps(ok with { Gateway = gateway with { Replies = 0 }, Connect = failed })[0].Status == NetStepStatus.Failed, "Silent gateway is a problem when nothing else worked");
+        check(NetworkTest.Steps(ok with { Gateway = gateway with { Replies = 0 }, Connect = failed, Secure = failed })[0].Status == NetStepStatus.Failed, "Silent gateway is a problem when nothing else worked");
         Verdict(ok with { Connect = connect with { Status = 302, BodyMatches = false, RedirectHost = "login.hotel.example" } }, NetVerdict.CaptivePortal, "redirect to a sign-in host");
         Verdict(ok with { Connect = connect with { BodyMatches = false } }, NetVerdict.CaptivePortal, "200 with a different body");
         Verdict(ok with { Connect = connect with { Status = 403, BodyMatches = false }, Secure = failed }, NetVerdict.CaptivePortal, "filter page blocks the check");
         Verdict(ok with { Connect = connect with { Status = 407, BodyMatches = false } }, NetVerdict.ProxyAuthentication, "proxy sign-in on HTTP");
-        Verdict(ok with { Secure = secure with { Status = 407 } }, NetVerdict.ProxyAuthentication, "proxy sign-in on HTTPS");
+        Verdict(ok with { Secure = new(null, false, null, 30, NetError.ProxyAuthentication, true) }, NetVerdict.ProxyAuthentication, "proxy refuses the HTTPS tunnel with 407 (thrown, not returned)");
+        Verdict(ok with { Secure = new(null, false, null, 30, NetError.Proxy, true) }, NetVerdict.ProxyProblem, "proxy allows HTTP but refuses the HTTPS tunnel");
         Verdict(ok with { Secure = new(null, false, null, 50, NetError.SecureConnection, false) }, NetVerdict.SecureFailed, "TLS failure while HTTP works");
-        Verdict(ok with { Secure = secure with { Status = 500 } }, NetVerdict.SecureFailed, "HTTPS server error while HTTP works");
+        Verdict(ok with { Secure = secure with { Status = 403 } }, NetVerdict.Online, "any HTTPS status proves the secure connection worked");
+        check(NetworkTest.Steps(ok with { Secure = secure with { Status = 403 } })[3].Status == NetStepStatus.Warning, "Non-2xx HTTPS answer is a note, not a TLS problem");
+        Verdict(ok with { Secure = new(null, false, null, 10000, NetError.Timeout, false) }, NetVerdict.SecureFailed, "HTTPS times out while HTTP works");
+        var sinkholed = ok with { Connect = new(null, false, null, 4, NetError.Connection, false) };
+        Verdict(sinkholed, NetVerdict.HttpBlocked, "blocklist sinkholes the HTTP check host while HTTPS works");
+        Verdict(ok with { Dns = new(false, 0, 3, NetError.NameResolution), Connect = noName }, NetVerdict.HttpBlocked, "NXDOMAIN blocklist for the check host while HTTPS works");
+        Verdict(ok with { Connect = failed }, NetVerdict.HttpBlocked, "port 80 dropped while HTTPS works");
+        var blockedSteps = NetworkTest.Steps(ok with { Dns = new(false, 0, 3, NetError.NameResolution), Connect = noName, Gateway = gateway with { Replies = 0 } });
+        check(blockedSteps.Take(3).All(x => x.Status == NetStepStatus.Warning) && blockedSteps[3].Status == NetStepStatus.Passed, "Blocked HTTP check and its name are notes when HTTPS reached the Internet");
+        check(blockedSteps[1].Format.Contains("intermittent") && !blockedSteps[1].Format.Contains("proxy"), "Direct DNS note does not mention a proxy");
+        Verdict(ok with { Connect = connect with { Status = 502, BodyMatches = false, ProxyUsed = true }, Secure = failed with { ProxyUsed = true } }, NetVerdict.ProxyProblem, "proxy answers 502 for its upstream");
+        Verdict(ok with { Connect = new(null, false, null, 4, NetError.NameResolution, true), Secure = new(null, false, null, 4, NetError.NameResolution, true) }, NetVerdict.ProxyProblem, "proxy host name does not resolve");
+        Verdict(ok with { Connect = new(null, false, null, 4, NetError.Protocol, false), Secure = failed }, NetVerdict.CaptivePortal, "garbage from a middlebox is treated as interception");
         Verdict(new(new(0, 0, 0, null), new(false, 0, 2, NetError.NameResolution), noName, noName), NetVerdict.NoGateway, "no gateway and no names");
         Verdict(new(new(0, 0, 0, null), dns, failed, failed), NetVerdict.TimedOut, "no gateway reported but names resolved (VPN) and requests timed out");
         Verdict(ok with { Dns = new(false, 0, 5000, NetError.Timeout), Connect = noName, Secure = noName }, NetVerdict.DnsFailure, "DNS failure");
@@ -39,7 +52,7 @@ internal static class NetworkTestChecks
         Verdict(ok with { Connect = failed, Secure = failed }, NetVerdict.TimedOut, "direct requests time out");
         Verdict(ok with { Connect = new(null, false, null, 4, NetError.Connection, false), Secure = failed }, NetVerdict.LocalOnly, "gateway answers, Internet refused");
         Verdict(new(gateway with { Replies = 0 }, dns, new(null, false, null, 4, NetError.Connection, false), failed), NetVerdict.Offline, "nothing answered");
-        Verdict(ok with { Connect = new(null, false, null, 4, NetError.Connection, null) }, NetVerdict.LocalOnly, "unknown proxy use does not invent a proxy fault");
+        Verdict(ok with { Connect = new(null, false, null, 4, NetError.Connection, null), Secure = failed }, NetVerdict.LocalOnly, "unknown proxy use does not invent a proxy fault");
 
         foreach (var verdict in Enum.GetValues<NetVerdict>()) check(Strings.Table.ContainsKey(NetworkTest.Summary(verdict)), "Verdict translated: " + verdict);
         foreach (var error in Enum.GetValues<NetError>()) check(Strings.Table.ContainsKey(NetworkTest.ErrorText(error)), "Error class translated: " + error);
@@ -53,7 +66,7 @@ internal static class NetworkTestChecks
             ok, ok with { Gateway = new(0, 0, 0, null) }, ok with { Gateway = gateway with { Replies = 0 } }, ok with { Gateway = gateway with { Replies = 0 }, Connect = failed },
             ok with { Dns = new(false, 0, 9, NetError.Other) }, ok with { Dns = new(false, 0, 9, NetError.None), Connect = failed },
             ok with { Connect = connect with { Status = 302, BodyMatches = false, RedirectHost = "portal.example‮" } }, ok with { Connect = connect with { BodyMatches = false } },
-            ok with { Connect = connect with { Status = 500, BodyMatches = false } }, ok with { Secure = secure with { Status = 403 } }, ok with { Secure = failed }
+            ok with { Connect = connect with { Status = 500, BodyMatches = false } }, ok with { Secure = secure with { Status = 403 } }, ok with { Secure = failed }, sinkholed, ok with { Dns = new(false, 0, 9, NetError.Timeout) }
         };
         foreach (var shape in shapes)
             foreach (var step in NetworkTest.Steps(shape))

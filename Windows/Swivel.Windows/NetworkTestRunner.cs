@@ -49,7 +49,7 @@ internal sealed class NetworkTestRunner : IDisposable
         try
         {
             gateways = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(x => x.OperationalStatus == OperationalStatus.Up && x.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel))
+                .Where(x => x.OperationalStatus == OperationalStatus.Up && x.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel or NetworkInterfaceType.Ppp))
                 .SelectMany(x => { try { return x.GetIPProperties().GatewayAddresses.Select(g => g.Address).ToArray(); } catch (NetworkInformationException) { return Array.Empty<IPAddress>(); } })
                 .Where(x => !x.Equals(IPAddress.Any) && !x.Equals(IPAddress.IPv6Any)).Distinct().ToArray();
         }
@@ -106,12 +106,15 @@ internal sealed class NetworkTestRunner : IDisposable
             return new(status, matches, redirect, clock.ElapsedMilliseconds, NetError.None, viaProxy);
         }
         catch (OperationCanceledException) when (!token.IsCancellationRequested) { return new(null, false, null, clock.ElapsedMilliseconds, NetError.Timeout, viaProxy); }
+        // The time limit can surface as an I/O error on a cancelled stream.
+        catch (Exception error) when (!token.IsCancellationRequested && limit.IsCancellationRequested && Map(error) is not null) { return new(null, false, null, clock.ElapsedMilliseconds, NetError.Timeout, viaProxy); }
         catch (Exception error) when (!token.IsCancellationRequested && Map(error) is NetError mapped) { return new(null, false, null, clock.ElapsedMilliseconds, mapped, viaProxy); }
         // A cancelled stream may surface as an I/O error; the user stopped it either way.
         catch (Exception error) when (token.IsCancellationRequested && error is not OperationCanceledException && Map(error) is not null) { throw new OperationCanceledException(token); }
     }
 
-    internal async Task<SpeedProbe> SpeedAsync(CancellationToken token)
+    /// <param name="received">Called after each read with the running byte count (tests use it to cancel mid-download).</param>
+    internal async Task<SpeedProbe> SpeedAsync(CancellationToken token, Action<long>? received = null)
     {
         token.ThrowIfCancellationRequested();
         bool? viaProxy = ProxyUsed(NetworkTest.SpeedUrl); long bytes = 0; int? status = null; var clock = new Stopwatch();
@@ -131,6 +134,7 @@ internal sealed class NetworkTestRunner : IDisposable
                 int read = await stream.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, NetworkTest.MaxSpeedBytes - bytes)), body.Token);
                 if (read == 0) return new(status, bytes, clock.Elapsed.TotalSeconds, SpeedStop.EndOfFile, NetError.None, viaProxy);
                 bytes += read;
+                received?.Invoke(bytes);
             }
             return new(status, bytes, clock.Elapsed.TotalSeconds, SpeedStop.ByteLimit, NetError.None, viaProxy);
         }
@@ -138,6 +142,7 @@ internal sealed class NetworkTestRunner : IDisposable
         {
             return clock.IsRunning ? new(status, bytes, clock.Elapsed.TotalSeconds, SpeedStop.TimeLimit, NetError.None, viaProxy) : new(status, 0, 0, SpeedStop.Error, NetError.Timeout, viaProxy);
         }
+        catch (Exception error) when (!token.IsCancellationRequested && body.IsCancellationRequested && clock.IsRunning && Map(error) is not null) { return new(status, bytes, clock.Elapsed.TotalSeconds, SpeedStop.TimeLimit, NetError.None, viaProxy); }
         catch (Exception error) when (!token.IsCancellationRequested && Map(error) is NetError mapped) { return new(status, bytes, clock.Elapsed.TotalSeconds, SpeedStop.Error, mapped, viaProxy); }
         // A cancelled stream may surface as an I/O error; the user stopped it either way.
         catch (Exception error) when (token.IsCancellationRequested && error is not OperationCanceledException && Map(error) is not null) { throw new OperationCanceledException(token); }
@@ -154,7 +159,7 @@ internal sealed class NetworkTestRunner : IDisposable
     internal static NetError? Map(Exception error) => error switch {
         HttpRequestException http => http.HttpRequestError switch {
             HttpRequestError.NameResolutionError => NetError.NameResolution, HttpRequestError.ConnectionError => NetError.Connection,
-            HttpRequestError.SecureConnectionError => NetError.SecureConnection, HttpRequestError.ProxyTunnelError => NetError.Proxy,
+            HttpRequestError.SecureConnectionError => NetError.SecureConnection, HttpRequestError.ProxyTunnelError => http.StatusCode == HttpStatusCode.ProxyAuthenticationRequired ? NetError.ProxyAuthentication : NetError.Proxy,
             HttpRequestError.InvalidResponse or HttpRequestError.ResponseEnded or HttpRequestError.ConfigurationLimitExceeded or HttpRequestError.HttpProtocolError => NetError.Protocol,
             _ => http.InnerException is System.Security.Authentication.AuthenticationException ? NetError.SecureConnection : NetError.Other },
         IOException or SocketException => NetError.Connection,

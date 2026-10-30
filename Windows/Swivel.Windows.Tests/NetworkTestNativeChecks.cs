@@ -32,16 +32,16 @@ internal static class NetworkTestNativeChecks
             Console.WriteLine("Network test on this runner: " + verdict + " · gateway " + gateway + " · dns " + dns + " · http " + connect + " · https " + secure);
             check(dns.Resolved && dns.Addresses > 0, "System resolver resolves the fixed host on an Internet-connected runner");
             check(connect.Status == 200 && connect.BodyMatches && connect.RedirectHost is null, "Microsoft's connectivity check page returns its exact text");
-            check(secure.Status is >= 200 and < 400, "HTTPS request to www.microsoft.com completes");
+            check(NetworkTest.SecureOk(secure), "HTTPS request to www.microsoft.com completes");
             check(verdict == NetVerdict.Online, "Internet-connected runner is classified Online");
             check(NetworkTest.Steps(probes).Skip(1).All(x => x.Status == NetStepStatus.Passed), "Name, HTTP and HTTPS steps pass; a silent gateway may be a note");
             check(connect.ProxyUsed == runner.ProxyUsed(NetworkTest.ConnectUrl), "Proxy use is reported from the Windows proxy settings");
 
             // Cancelling mid-download stops promptly and reports cancellation, not a speed.
-            using var stop = new CancellationTokenSource(TimeSpan.FromMilliseconds(1500));
+            using var stop = new CancellationTokenSource(); long atCancel = 0, last = 0;
             var clock = System.Diagnostics.Stopwatch.StartNew(); bool cancelled = false;
-            try { runner.SpeedAsync(stop.Token).GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
-            check(cancelled && clock.Elapsed < TimeSpan.FromSeconds(12), "Cancelling the speed sample stops it promptly");
+            try { runner.SpeedAsync(stop.Token, bytes => { last = bytes; if (atCancel == 0) { atCancel = bytes; stop.Cancel(); } }).GetAwaiter().GetResult(); } catch (OperationCanceledException) { cancelled = true; }
+            check(cancelled && atCancel > 0 && last == atCancel && clock.Elapsed < TimeSpan.FromSeconds(12), "Cancelling mid-download stops reading at once and reports cancellation, not a speed");
 
             var speed = runner.SpeedAsync(default).GetAwaiter().GetResult();
             Console.WriteLine("Speed sample on this runner: " + speed);

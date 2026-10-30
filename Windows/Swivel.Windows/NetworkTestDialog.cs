@@ -22,7 +22,7 @@ internal sealed class NetworkTestDialog : Window
     private readonly NetworkTestRunner runner = new();
     private Task pending = Task.CompletedTask;
     private CancellationTokenSource? run;
-    private bool closed;
+    private bool closed, finished;
     private DateTimeOffset captured = DateTimeOffset.Now;
     internal NetVerdict? Verdict { get; private set; }
     internal IReadOnlyList<NetStepLine> Steps { get; private set; } = Array.Empty<NetStepLine>();
@@ -62,7 +62,7 @@ internal sealed class NetworkTestDialog : Window
         body.Children.Add(UI.Text(app.L(NetworkTest.SpeedScope), 12));
         body.Children.Add(UI.Text(app.L(NetworkTest.Limits), 12));
         cancellation.Token.Register(() => Dispatcher.BeginInvoke(new Action(() => { if (!closed) Close(); })));
-        Closed += (_, _) => { closed = true; run?.Cancel(); cancellation.Cancel(); };
+        Closed += (_, _) => { closed = true; if (!finished) { run?.Cancel(); cancellation.Cancel(); } };
         SourceInitialized += (_, _) => WebRouteLayout.Fit(this, Owner ?? this); DpiChanged += (_, _) => WebRouteLayout.Fit(this, this);
     }
 
@@ -123,7 +123,10 @@ internal sealed class NetworkTestDialog : Window
     internal async Task FinishAsync()
     {
         run?.Cancel(); cancellation.Cancel();
-        try { await pending; } catch (OperationCanceledException) { }
-        runner.Dispose();
+        try { await pending; }
+        catch (OperationCanceledException) { }
+        // Errors while the window was open were shown there; after Close nothing is left to report.
+        catch (Exception) when (closed) { }
+        finally { finished = true; runner.Dispose(); run?.Dispose(); cancellation.Dispose(); }
     }
 }

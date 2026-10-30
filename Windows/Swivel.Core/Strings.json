@@ -16379,11 +16379,6 @@
     "測試連線（會聯絡網際網路）",
     "接続をテスト（インターネットに接続します）"
   ],
-  "Test Connection contacts the Internet: it pings your default gateway, resolves www.msftconnecttest.com, fetches Windows' own connectivity check page from that host over HTTP and requests a small icon from www.microsoft.com over HTTPS. Requests use the Windows proxy settings, as other apps do, send no cookies or user information and follow no redirects. Nothing is saved or sent anywhere else, and nothing is repaired.": [
-    "“测试连接”会联系互联网：它会 ping 你的默认网关，解析 www.msftconnecttest.com，通过 HTTP 从该主机获取 Windows 自身的连通性检查页面，并通过 HTTPS 向 www.microsoft.com 请求一个小图标。请求像其他应用一样使用 Windows 代理设置，不发送 Cookie 或用户信息，也不跟随重定向。不会保存任何内容，也不会发送到其他地方，不进行任何修复。",
-    "「測試連線」會聯絡網際網路：它會 ping 你的預設閘道，解析 www.msftconnecttest.com，透過 HTTP 從該主機取得 Windows 本身的連線能力檢查頁面，並透過 HTTPS 向 www.microsoft.com 要求一個小圖示。要求像其他應用程式一樣使用 Windows Proxy 設定，不傳送 Cookie 或使用者資訊，也不跟隨重新導向。不會儲存任何內容，也不會傳送到其他地方，不進行任何修復。",
-    "「接続をテスト」はインターネットに接続します。デフォルトゲートウェイに ping を送り、www.msftconnecttest.com を名前解決し、そのホストから HTTP で Windows 自身の接続確認ページを取得し、HTTPS で www.microsoft.com に小さなアイコンを要求します。要求は他のアプリと同様に Windows のプロキシ設定を使い、Cookie やユーザー情報は送らず、リダイレクトには従いません。何も保存せず、ほかの場所にも送らず、修復も行いません。"
-  ],
   "Test Result": [
     "测试结果",
     "測試結果",
@@ -16503,5 +16498,30 @@
     "{0}：{2} 毫秒后{1}。请求仍通过代理成功，代理会自行解析域名。",
     "{0}：{2} 毫秒後{1}。要求仍透過 Proxy 成功，Proxy 會自行解析名稱。",
     "{0}：{2} ms 後に{1}。プロキシが名前を自分で解決するため、要求はプロキシ経由で成功しました。"
+  ],
+  "Test Connection contacts the Internet: it pings your default gateway, resolves www.msftconnecttest.com, fetches Windows' own connectivity check page from that host over HTTP and requests a small icon from www.microsoft.com over HTTPS. Requests use the Windows proxy settings, as other apps do; when those settings use automatic proxy detection or a setup script, Windows may also contact this network's proxy-script server. Requests send no cookies or user information and follow no redirects. Nothing is saved or sent anywhere else, and nothing is repaired.": [
+    "“测试连接”会联系互联网：它会 ping 你的默认网关，解析 www.msftconnecttest.com，通过 HTTP 从该主机获取 Windows 自身的连通性检查页面，并通过 HTTPS 向 www.microsoft.com 请求一个小图标。请求像其他应用一样使用 Windows 代理设置；如果这些设置使用自动检测代理或设置脚本，Windows 也可能联系此网络的代理脚本服务器。请求不发送 Cookie 或用户信息，也不跟随重定向。不会保存任何内容，也不会发送到其他地方，不进行任何修复。",
+    "「測試連線」會聯絡網際網路：它會 ping 你的預設閘道，解析 www.msftconnecttest.com，透過 HTTP 從該主機取得 Windows 本身的連線能力檢查頁面，並透過 HTTPS 向 www.microsoft.com 要求一個小圖示。要求像其他應用程式一樣使用 Windows Proxy 設定；如果這些設定使用自動偵測 Proxy 或設定指令碼，Windows 也可能聯絡此網路的 Proxy 指令碼伺服器。要求不傳送 Cookie 或使用者資訊，也不跟隨重新導向。不會儲存任何內容，也不會傳送到其他地方，不進行任何修復。",
+    "「接続をテスト」はインターネットに接続します。デフォルトゲートウェイに ping を送り、www.msftconnecttest.com を名前解決し、そのホストから HTTP で Windows 自身の接続確認ページを取得し、HTTPS で www.microsoft.com に小さなアイコンを要求します。要求は他のアプリと同様に Windows のプロキシ設定を使います。その設定でプロキシの自動検出やセットアップスクリプトを使う場合、Windows がこのネットワークのプロキシスクリプトサーバーにも接続することがあります。要求は Cookie やユーザー情報を送らず、リダイレクトには従いません。何も保存せず、ほかの場所にも送らず、修復も行いません。"
+  ],
+  "The secure (HTTPS) request reached the Internet, but Microsoft's plain HTTP connectivity check got no answer. A DNS blocklist, filter or firewall may block that check; most apps should still work, though Windows may show No Internet for the same reason.": [
+    "安全（HTTPS）请求已访问互联网，但微软的普通 HTTP 连通性检查没有收到响应。DNS 拦截列表、过滤器或防火墙可能阻止了该检查；大多数应用应仍可正常使用，不过 Windows 可能因此显示“无 Internet”。",
+    "安全（HTTPS）要求已連線到網際網路，但 Microsoft 的一般 HTTP 連線能力檢查沒有收到回應。DNS 封鎖清單、過濾器或防火牆可能封鎖了該檢查；大多數應用程式應仍可正常使用，不過 Windows 可能因此顯示「沒有網際網路」。",
+    "安全な（HTTPS）要求はインターネットに届きましたが、Microsoft の通常の HTTP 接続確認には応答がありませんでした。DNS ブロックリスト、フィルター、ファイアウォールがその確認をブロックしている可能性があります。ほとんどのアプリは動作するはずですが、同じ理由で Windows が「インターネットなし」と表示することがあります。"
+  ],
+  "Proxy sign-in required": [
+    "代理要求登录",
+    "Proxy 要求登入",
+    "プロキシのサインインが必要"
+  ],
+  "HTTP {0} from www.microsoft.com in {1} ms. The secure connection itself worked · {2}": [
+    "www.microsoft.com 在 {1} 毫秒内返回 HTTP {0}。安全连接本身正常 · {2}",
+    "www.microsoft.com 在 {1} 毫秒內傳回 HTTP {0}。安全連線本身正常 · {2}",
+    "www.microsoft.com から {1} ms で HTTP {0}。安全な接続自体は成功しました · {2}"
+  ],
+  "{0}: {1} after {2} ms. Later requests still reached the Internet, so name resolution may be slow or intermittent.": [
+    "{0}：{2} 毫秒后{1}。之后的请求仍访问到了互联网，因此域名解析可能较慢或时断时续。",
+    "{0}：{2} 毫秒後{1}。之後的要求仍連線到網際網路，因此名稱解析可能較慢或時斷時續。",
+    "{0}：{2} ms 後に{1}。その後の要求はインターネットに届いたため、名前解決が遅いか断続的な可能性があります。"
   ]
 }
