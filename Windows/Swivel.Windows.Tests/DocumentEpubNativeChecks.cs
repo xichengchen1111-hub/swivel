@@ -40,7 +40,7 @@ internal static class DocumentEpubNativeChecks
             var body=(StackPanel)root.Children.OfType<ScrollViewer>().Single().Content;
             check(body.Children.OfType<TextBlock>().Any(x=>x.Text==app.L(DocumentNotices.Epub))&&!body.Children.OfType<TextBlock>().Any(x=>x.Text==app.L(DocumentNotices.Html)),"EPUB notice shown in the native scroll body, without the HTML-file notice");
             check(dialog.ExportFormat==TextExport.Utf8,"EPUB input keeps the plain TXT default export");dialog.Close();
-            foreach(var format in Enum.GetValues<TextExport>())
+            foreach(var format in Enum.GetValues<TextExport>().Where(x=>x!=TextExport.Pdf))
             {
                 string saved=file.Save(format,default);check(Path.GetDirectoryName(saved)==folder&&saved!=path,"EPUB source creates exclusive plain copies beside original");
                 using var generated=File.OpenRead(saved);var result=DocumentText.Read(generated,Path.GetExtension(saved).TrimStart('.'),default);

@@ -65,7 +65,7 @@ internal static class DocumentTextNativeChecks
                 check(dialog.ExportFormat==TextExport.Utf8,"Native text export defaults to UTF8 without BOM");
                 var body=(StackPanel)root.Children.OfType<ScrollViewer>().Single().Content;
                 var formats=body.Children.OfType<ComboBox>().Single();
-                check(formats.Items.Count==5,"Native text selector offers all five explicit copy formats");
+                check(formats.Items.Count==6,"Native text selector offers all six explicit copy formats");
                 formats.SelectedIndex=2;check(dialog.ExportFormat==TextExport.Docx,"Native DOCX selection maps to package export");
                 formats.SelectedIndex=3;check(dialog.ExportFormat==TextExport.Html,"Native HTML selection maps to static text export");
                 formats.SelectedIndex=4;check(dialog.ExportFormat==TextExport.Odt,"Native ODT selection maps to minimal package export");
@@ -93,7 +93,7 @@ internal static class DocumentTextNativeChecks
         {
             check(file.Document.Odt&&!file.Document.Docx&&file.Document.Text=="中文 ODT   end\n","Native ODT input uses normalized ordinary and preserved explicit spaces");
             reject(()=>File.Move(odtPath,odtPath+".moved"),"ODT source pinned through inspection and copy export");
-            foreach(var format in Enum.GetValues<TextExport>())
+            foreach(var format in Enum.GetValues<TextExport>().Where(x=>x!=TextExport.Pdf))
             {
                 string output=file.Save(format,default);check(File.Exists(output),"ODT extracted text supports every existing explicit export format");
                 if(format==TextExport.Utf8)check(File.ReadAllText(output)==file.Document.Text,"ODT TXT export uses full bounded body text");
@@ -114,7 +114,7 @@ internal static class DocumentTextNativeChecks
             check(file.Document.Rtf&&file.Document.Text=="Chinese 中 😀\nend","Native RTF byte lexer is used without an Office renderer");
             reject(()=>File.Move(rtfPath,rtfPath+" moved"),"RTF source pinned through preview and exports");
             reject(()=>Directory.Move(directory,directory+" moved"),"RTF ancestors remain pinned");
-            foreach(var format in Enum.GetValues<TextExport>())
+            foreach(var format in Enum.GetValues<TextExport>().Where(x=>x!=TextExport.Pdf))
             {
                 string output=file.Save(format,default);check(File.Exists(output),"RTF body can use every existing explicit copy format");
                 if(format==TextExport.Utf8)check(File.ReadAllText(output)==file.Document.Text,"RTF complete text preserved in UTF8 copy");

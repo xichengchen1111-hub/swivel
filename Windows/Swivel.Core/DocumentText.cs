@@ -13,7 +13,7 @@ namespace Swivel.Core;
 
 public sealed record TextDocument(string Text,string Encoding,bool Docx,bool Odt=false,bool Rtf=false,bool Html=false,bool Epub=false,bool Doc=false);
 public sealed record TextStatistics(int Words,int TextElements,int Scalars,int Lines,int Utf8Bytes);
-public enum TextExport { Utf8, Rtf, Docx, Html, Odt }
+public enum TextExport { Utf8, Rtf, Docx, Html, Odt, Pdf }
 
 // Explicit, bounded text decoding. No system document sniffing, extraction,
 // browser/Office renderer, attachment loading or external resource resolution.
@@ -139,6 +139,8 @@ public static class DocumentText
     public static void Write(Stream output,string text,TextExport format,CancellationToken token)
     {
         Validate(text,token);if(!Enum.IsDefined(format))throw new ArgumentOutOfRangeException(nameof(format));
+        // PDF needs installed fonts and a layout prepared before the output exists: DocumentPdf.
+        if(format==TextExport.Pdf)throw new ArgumentException("PDF text export uses DocumentPdf.Prepare.",nameof(format));
         if(format==TextExport.Odt){DocumentOdtExport.Write(output,text,token);return;}
         if(format==TextExport.Docx){DocumentTextPackages.WriteDocx(output,text,token);return;}
         if(format==TextExport.Html){DocumentTextPackages.WriteHtml(output,text,token);return;}

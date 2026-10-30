@@ -25,9 +25,16 @@ public sealed class DocumentTextFile : IDisposable
         }
         catch{input.Dispose();throw;}
     }
-    public string Save(TextExport format,CancellationToken token)
+    /// `language` (the app language, or "system") orders the East Asian PDF fonts.
+    public string Save(TextExport format,CancellationToken token,string? language=null)
     {
         token.ThrowIfCancellationRequested();if(!Enum.IsDefined(format))throw new ArgumentOutOfRangeException(nameof(format));
+        if(format==TextExport.Pdf)
+        {
+            // Fonts, layout and the page limit are settled before the output file exists.
+            var pdf=DocumentPdf.Prepare(Document.Text,PdfFonts.For(Document.Text,PdfFonts.Resolve(language)),token);
+            return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+" text","pdf",output=>pdf.Write(output,token),token);
+        }
         return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+" text",format switch { TextExport.Utf8=>"txt",TextExport.Rtf=>"rtf",TextExport.Docx=>"docx",TextExport.Html=>"html",TextExport.Odt=>"odt",_=>throw new ArgumentOutOfRangeException(nameof(format)) },output=>DocumentText.Write(output,Document.Text,format,token),token);
     }
     public void Dispose()=>input.Dispose();

@@ -17123,5 +17123,45 @@
     "支持宽不超过 1920、高不超过 1080 像素、最长 10 分钟、最多 300,000 个模型块的视频（4K 输出最多每秒 64 帧）。不支持带旋转标记存储或非正方形像素的视频。",
     "支援寬不超過 1920、高不超過 1080 像素、最長 10 分鐘、最多 300,000 個模型區塊的影片（4K 輸出最多每秒 64 格）。不支援帶旋轉標記儲存或非正方形像素的影片。",
     "幅 1920・高さ 1080 ピクセル以内、10 分以内、モデルのブロック数 300,000 以内の動画に対応します（4K 出力は毎秒 64 フレームまで）。回転フラグ付きで保存された動画や正方形でないピクセルの動画には対応していません。"
+  ],
+  "PDF (text) lays out only the extracted text on A4 pages (20 mm margins, 11 pt type, tab stops every 0.5 inch) as real, selectable and searchable text. Fonts are subsets of fonts that ship with Windows, tried in a fixed order: Segoe UI and Arial, then Microsoft YaHei or JhengHei, Yu Gothic, Meiryo, MS Gothic and Malgun Gothic (ordered by the text and app language), SimSun, Segoe UI Symbol and Segoe UI Emoji outlines without color. Fonts whose license forbids embedding or subsetting are never used. Lines wrap at spaces and between East Asian characters; there is no hyphenation, kerning, ligatures, justification, bold, italics, tables, images or links. Right-to-left and complex scripts (such as Arabic, Hebrew, Indic and Thai), combining marks and characters no listed font has are refused instead of being drawn as boxes. Zero-width joiners, variation selectors and soft hyphens are not drawn, so emoji sequences appear as separate symbols. At most 2,000 pages, checked before anything is written.": [
+    "PDF（文字）只把提取出的文字排在 A4 页面上（页边距 20 毫米、11 磅字号、每 0.5 英寸一个制表位），是真实、可选择、可搜索的文字。字体是 Windows 自带字体的子集，按固定顺序尝试：Segoe UI 和 Arial，然后是 Microsoft YaHei 或 JhengHei、Yu Gothic、Meiryo、MS Gothic 和 Malgun Gothic（按文字和应用语言排序）、SimSun、Segoe UI Symbol，以及不带颜色的 Segoe UI Emoji 轮廓。许可禁止嵌入或子集化的字体一律不用。行在空格处和东亚字符之间换行；没有断词连字符、字距调整、连字、两端对齐、粗体、斜体、表格、图片或链接。从右到左的文字和复杂文字（例如阿拉伯文、希伯来文、印度系文字和泰文）、组合附加符号以及所列字体都没有的字符会被拒绝，而不是画成方框。零宽连接符、变体选择符和软连字符不绘制，因此表情序列会显示为分开的符号。最多 2,000 页，在写入任何内容之前检查。",
+    "PDF（文字）只把擷取出的文字排在 A4 頁面上（邊界 20 公釐、11 點字級、每 0.5 英吋一個定位停駐點），是真實、可選取、可搜尋的文字。字型是 Windows 內建字型的子集，按固定順序嘗試：Segoe UI 和 Arial，然後是 Microsoft YaHei 或 JhengHei、Yu Gothic、Meiryo、MS Gothic 和 Malgun Gothic（依文字和應用程式語言排序）、SimSun、Segoe UI Symbol，以及不帶顏色的 Segoe UI Emoji 外框。授權禁止內嵌或子集化的字型一律不用。行在空格處和東亞字元之間換行；沒有斷字連字號、字距調整、合字、左右對齊、粗體、斜體、表格、圖片或連結。由右至左的文字和複雜文字（例如阿拉伯文、希伯來文、印度系文字和泰文）、組合附加符號以及所列字型都沒有的字元會被拒絕，而不是畫成方框。零寬連接符、變體選擇符和軟連字號不繪製，因此表情符號序列會顯示為分開的符號。最多 2,000 頁，在寫入任何內容之前檢查。",
+    "PDF（テキスト）は抽出したテキストだけを A4 ページ（余白 20 mm、11 pt、タブ位置 0.5 インチごと）に配置し、選択・検索できる本物のテキストとして書き出します。フォントは Windows に付属するフォントのサブセットで、決まった順に試します：Segoe UI と Arial、次に Microsoft YaHei または JhengHei、Yu Gothic、Meiryo、MS Gothic、Malgun Gothic（テキストとアプリの言語で並べ替え）、SimSun、Segoe UI Symbol、色なしの Segoe UI Emoji のアウトライン。ライセンスで埋め込みやサブセット化が禁止されたフォントは使いません。行はスペースと東アジアの文字の間で折り返します。ハイフネーション、カーニング、合字、両端揃え、太字、斜体、表、画像、リンクはありません。右から左に書く文字や複雑な文字（アラビア文字、ヘブライ文字、インド系文字、タイ文字など）、結合記号、どのフォントにもない文字は、四角で描かずに拒否します。ゼロ幅接合子、異体字セレクター、ソフトハイフンは描かないため、絵文字の組み合わせは別々の記号になります。最大 2,000 ページで、書き込む前に確認します。"
+  ],
+  "PDF (text) — A4, embedded Windows fonts": [
+    "PDF（文字）— A4，嵌入 Windows 字体",
+    "PDF（文字）— A4，內嵌 Windows 字型",
+    "PDF（テキスト）— A4、Windows フォントを埋め込み"
+  ],
+  "PDF (text) supports at most 65,000 different characters per font. Nothing was saved; choose TXT, RTF, DOCX, HTML or ODT.": [
+    "PDF（文字）每种字体最多支持 65,000 个不同的字符。未保存任何文件；请选择 TXT、RTF、DOCX、HTML 或 ODT。",
+    "PDF（文字）每種字型最多支援 65,000 個不同的字元。未儲存任何檔案；請選擇 TXT、RTF、DOCX、HTML 或 ODT。",
+    "PDF（テキスト）は 1 つのフォントにつき異なる文字を 65,000 種類までしか扱えません。何も保存されていません。TXT・RTF・DOCX・HTML・ODT を選んでください。"
+  ],
+  "PDF (text) export is limited to 2,000 pages. This text needs more; nothing was saved. Choose TXT, RTF, DOCX, HTML or ODT.": [
+    "PDF（文字）导出最多 2,000 页。此文字需要更多页，未保存任何文件。请选择 TXT、RTF、DOCX、HTML 或 ODT。",
+    "PDF（文字）匯出最多 2,000 頁。此文字需要更多頁，未儲存任何檔案。請選擇 TXT、RTF、DOCX、HTML 或 ODT。",
+    "PDF（テキスト）の書き出しは 2,000 ページまでです。このテキストはそれを超えるため、何も保存されていません。TXT・RTF・DOCX・HTML・ODT を選んでください。"
+  ],
+  "A font Swivel tried to embed in the PDF is damaged or not a TrueType-outline font.": [
+    "Swivel 尝试嵌入 PDF 的字体已损坏，或不是 TrueType 轮廓字体。",
+    "Swivel 嘗試內嵌到 PDF 的字型已損壞，或不是 TrueType 外框字型。",
+    "Swivel が PDF に埋め込もうとしたフォントが壊れているか、TrueType アウトラインのフォントではありません。"
+  ],
+  "No embeddable font among those Swivel uses for PDF has a glyph for {0}. Nothing was saved; choose TXT, RTF, DOCX, HTML or ODT.": [
+    "Swivel 用于 PDF 的可嵌入字体中没有一个包含 {0} 的字形。未保存任何文件；请选择 TXT、RTF、DOCX、HTML 或 ODT。",
+    "Swivel 用於 PDF 的可內嵌字型中沒有一個包含 {0} 的字符。未儲存任何檔案；請選擇 TXT、RTF、DOCX、HTML 或 ODT。",
+    "Swivel が PDF に使う埋め込み可能なフォントのどれにも {0} のグリフがありません。何も保存されていません。TXT・RTF・DOCX・HTML・ODT を選んでください。"
+  ],
+  "PDF (text) can't lay out {0}: right-to-left and complex scripts (such as Arabic, Hebrew, Indic or Thai) and combining marks need text shaping, which this plain export doesn't do. Nothing was saved; choose TXT, RTF, DOCX, HTML or ODT.": [
+    "PDF（文字）无法排版 {0}：从右到左的文字和复杂文字（例如阿拉伯文、希伯来文、印度系文字或泰文）以及组合附加符号需要文字整形，而这种纯文字导出不做整形。未保存任何文件；请选择 TXT、RTF、DOCX、HTML 或 ODT。",
+    "PDF（文字）無法排版 {0}：由右至左的文字和複雜文字（例如阿拉伯文、希伯來文、印度系文字或泰文）以及組合附加符號需要文字塑形，而這種純文字匯出不做塑形。未儲存任何檔案；請選擇 TXT、RTF、DOCX、HTML 或 ODT。",
+    "PDF（テキスト）では {0} をレイアウトできません。右から左に書く文字や複雑な文字（アラビア文字、ヘブライ文字、インド系文字、タイ文字など）と結合記号には文字の整形が必要ですが、このプレーンな書き出しでは行いません。何も保存されていません。TXT・RTF・DOCX・HTML・ODT を選んでください。"
+  ],
+  "Inspect strict UTF-8/BOM UTF-16 text, bounded RTF or UTF-8 static HTML source body text, DOCX/ODT body XML, EPUB spine XHTML and the main text of unencrypted Word 97-2003 DOC files. Count whitespace segments and Unicode text elements; save plain TXT, RTF, DOCX, ODT, HTML or a plain-text A4 PDF with embedded Windows font subsets beside the source. HTML requires explicit balanced markup and refuses scripts; browser rendering, formatting fidelity, right-to-left/complex-script PDF layout and full Office conversion remain pending.": [
+    "检查严格 UTF-8/带 BOM 的 UTF-16 文字、有限的 RTF 或 UTF-8 静态 HTML 源码正文、DOCX/ODT 正文 XML、EPUB 阅读顺序中的 XHTML，以及未加密 Word 97-2003 DOC 文件的主文档文字。统计以空白分隔的片段和 Unicode 文本元素；在原件旁另存纯 TXT、RTF、DOCX、ODT、HTML，或嵌入 Windows 字体子集的纯文字 A4 PDF。HTML 需要显式成对的标记并拒绝脚本；浏览器渲染、格式保真、从右到左/复杂文字的 PDF 排版和完整的 Office 转换仍待完成。",
+    "檢查嚴格 UTF-8/帶 BOM 的 UTF-16 文字、有限的 RTF 或 UTF-8 靜態 HTML 原始碼正文、DOCX/ODT 正文 XML、EPUB 閱讀順序中的 XHTML，以及未加密 Word 97-2003 DOC 檔案的主文件文字。統計以空白分隔的片段和 Unicode 文字元素；在原件旁另存純 TXT、RTF、DOCX、ODT、HTML，或內嵌 Windows 字型子集的純文字 A4 PDF。HTML 需要明確成對的標記並拒絕指令碼；瀏覽器轉譯、格式保真、由右至左/複雜文字的 PDF 排版和完整的 Office 轉換仍待完成。",
+    "厳密な UTF-8／BOM 付き UTF-16 テキスト、限定的な RTF または UTF-8 静的 HTML ソース本文、DOCX/ODT 本文 XML、EPUB の読み順の XHTML、暗号化されていない Word 97-2003 DOC ファイルのメイン文書テキストを調べます。空白区切りの区間と Unicode テキスト要素を数え、プレーンな TXT・RTF・DOCX・ODT・HTML、または Windows フォントのサブセットを埋め込んだプレーンテキストの A4 PDF を元ファイルの横に保存します。HTML は明示的に対応したタグが必要でスクリプトは拒否します。ブラウザー表示、書式の再現、右から左に書く文字や複雑な文字の PDF レイアウト、完全な Office 変換は今後の予定です。"
   ]
 }

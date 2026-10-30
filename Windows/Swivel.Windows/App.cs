@@ -1395,7 +1395,8 @@ public sealed partial class App : Application
                 if (!ShowOperationDialog(dialog,owner,token)) return;
                 token.ThrowIfCancellationRequested();var format = dialog.ExportFormat;
                 report(L("Processing…"));result = new BatchResult();
-                result.Outputs.Add(await Task.Run(() => document.Save(format,token),token));
+                string language = Prefs.Language;
+                result.Outputs.Add(await Task.Run(() => document.Save(format,token,language),token));
             }
             else if (SubtitleFormats.ForId(action.Id) is { } || DataFileFormats.ForId(action.Id) is { } || FontFileFormats.ForId(action.Id) is { })
             {

@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows10.0.22000.0</TargetFramework><UseWPF>true</UseWPF></PropertyGroup>
   <ItemGroup><ProjectReference Include="../Swivel.Windows/Swivel.Windows.csproj" /></ItemGroup>
-  <ItemGroup><Compile Include="../Swivel.Core.Tests/HeifChecks.cs" Link="HeifChecks.cs" /><None Include="../Swivel.Core.Tests/Fixtures/7z/*.7z" Link="Fixtures/7z/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /><None Include="../Swivel.Core.Tests/Fixtures/webp/*.webp;../Swivel.Core.Tests/Fixtures/webp/*.rgba" Link="Fixtures/webp/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
+  <ItemGroup><Compile Include="../Swivel.Core.Tests/HeifChecks.cs" Link="HeifChecks.cs" /><Compile Include="../Swivel.Core.Tests/DocumentPdfChecks.cs" Link="DocumentPdfChecks.cs" /><None Include="../Swivel.Core.Tests/Fixtures/7z/*.7z" Link="Fixtures/7z/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /><None Include="../Swivel.Core.Tests/Fixtures/webp/*.webp;../Swivel.Core.Tests/Fixtures/webp/*.rgba" Link="Fixtures/webp/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>
