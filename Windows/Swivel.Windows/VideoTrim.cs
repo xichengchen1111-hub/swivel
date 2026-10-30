@@ -249,7 +249,7 @@ public sealed class VideoTrimmer : IDisposable
                     Mp4Retime.Apply(retime, plan.Speed);
                 }
                 catch (IOException) { throw new UserError(Failed); }
-            if (stretch) await SoundAsync(plan, rendered, decoded, stretched, encoded, progress, token).ConfigureAwait(false);
+            long soundLength = stretch ? await SoundAsync(plan, rendered, decoded, stretched, encoded, progress, token).ConfigureAwait(false) : 0;
             return NativeFiles.WriteBeside(input, System.IO.Path.GetFileNameWithoutExtension(input.Path) + (plan.Edited ? " edited" : " trimmed"), "mp4", stream =>
             {
                 using var source = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
@@ -257,7 +257,7 @@ public sealed class VideoTrimmer : IDisposable
                 if (stretch)
                 {
                     using var audio = new FileStream(encoded, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
-                    Mp4AudioMux.Write(source, audio, stream, token);
+                    Mp4AudioMux.Write(source, audio, stream, token, (soundLength, soundFormat.Rate));
                     return;
                 }
                 var buffer = new byte[1 << 20]; int read;
@@ -276,7 +276,7 @@ public sealed class VideoTrimmer : IDisposable
     /// stretched to exactly the retimed video's length with its pitch kept, then encoded as AAC.
     /// Any step Windows refuses stops the save with VideoEdit.SoundFailed rather than saving a
     /// video whose sound is missing or out of step.
-    private async Task SoundAsync(VideoTrimPlan plan, string rendered, string decoded, string stretched, string encoded, Action<double>? progress, CancellationToken token)
+    private async Task<long> SoundAsync(VideoTrimPlan plan, string rendered, string decoded, string stretched, string encoded, Action<double>? progress, CancellationToken token)
     {
         var (rate, channels) = soundFormat;
         var folder = await NativeAsync.Join(StorageFolder.GetFolderFromPathAsync(workspace), token).ConfigureAwait(false);
@@ -297,6 +297,7 @@ public sealed class VideoTrimmer : IDisposable
         token.ThrowIfCancellationRequested();
 
         // Stretched to the retimed video's movie length, so both tracks end together.
+        long frames;
         try
         {
             ulong duration; uint timescale;
@@ -306,7 +307,8 @@ public sealed class VideoTrimmer : IDisposable
             if (info.Rate != rate || info.Channels != channels || info.Bits != 16 || !VideoEdit.SoundMatches(info.Frames, rate, plan.Length)) throw new UserError(VideoEdit.SoundFailed);
             input.Position = 0;
             using var output = new FileStream(stretched, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1 << 16);
-            VideoEdit.StretchSound(input, output, plan.Speed, VideoEdit.SoundFrames(duration, timescale, rate), token);
+            frames = VideoEdit.SoundFrames(duration, timescale, rate);
+            VideoEdit.StretchSound(input, output, plan.Speed, frames, Fps, token);
         }
         catch (IOException) { throw new UserError(VideoEdit.SoundFailed); }
         progress?.Invoke(.9);
@@ -324,6 +326,7 @@ public sealed class VideoTrimmer : IDisposable
         }
         catch (Exception error) when (error is not OperationCanceledException and not UserError) { throw new UserError(VideoEdit.SoundFailed); }
         token.ThrowIfCancellationRequested();
+        return frames;
     }
 
     public void Dispose()

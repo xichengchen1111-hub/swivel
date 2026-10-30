@@ -45,8 +45,11 @@ internal static class SpeedSoundNativeChecks
                 var (seconds, sound) = VideoTrimNativeChecks.Probe(output);
                 check(sound && Math.Abs(seconds - expected) <= 0.1 + expected * 0.03 && VideoTrimNativeChecks.Colours(output, seconds) == colours,
                     $"Windows reads {what} back with sound and the planned picture: {seconds:0.000} s, {VideoTrimNativeChecks.Colours(output, seconds)} (expected {colours})");
-                var (hz, decoded) = Decode(output, root);
+                var (hz, decoded, onset) = Decode(output, root);
                 check(Math.Abs(hz / 440 - 1) < 0.02 && Math.Abs(decoded - picturePart.Seconds) <= 0.1, $"The sound of {what} is still 440 Hz (pitch kept): {hz:0.0} Hz, {decoded:0.000} s decoded");
+                // The tone plays from the source's start, so a cut from 0 must sound at once (a loose bound: priming samples of two AAC encodes).
+                Console.WriteLine($"INFO: {what}: tone heard from {onset * 1000:0.0} ms");
+                if (start == 0) check(onset <= 0.1, $"The sound of {what} starts with the picture: tone heard from {onset * 1000:0.0} ms");
             }
 
             // Cancelled once the sound is being prepared: nothing is saved.
@@ -68,12 +71,25 @@ internal static class SpeedSoundNativeChecks
         check(SHA256.HashData(File.ReadAllBytes(source)).SequenceEqual(original), "Speed changes with sound leave the original byte for byte the same");
     }
 
-    // Each track's handler and length (media duration / media timescale).
+    // Each track's handler and played length: its edit list's segments in the movie timescale, or
+    // else its media duration in the media timescale.
     private static List<(string Handler, double Seconds)> Tracks(byte[] b)
     {
         var list = new List<(string, double)>();
         foreach (var moov in Kids(b, 0, b.Length).Where(k => k.Type == "moov"))
+        {
+            int mvhd = Kids(b, moov.Start, moov.End).Single(k => k.Type == "mvhd").Start;
+            double movieScale = BinaryPrimitives.ReadUInt32BigEndian(b.AsSpan(mvhd + (b[mvhd] == 1 ? 20 : 12)));
             foreach (var trak in Kids(b, moov.Start, moov.End).Where(k => k.Type == "trak"))
+            {
+                double? edits = null;
+                foreach (var edts in Kids(b, trak.Start, trak.End).Where(k => k.Type == "edts"))
+                    foreach (var elst in Kids(b, edts.Start, edts.End).Where(k => k.Type == "elst"))
+                    {
+                        bool wide = b[elst.Start] == 1; int n = (int)BinaryPrimitives.ReadUInt32BigEndian(b.AsSpan(elst.Start + 4)); double sum = 0;
+                        for (int i = 0; i < n; i++) { int e = elst.Start + 8 + i * (wide ? 20 : 12); bool empty = wide ? BinaryPrimitives.ReadInt64BigEndian(b.AsSpan(e + 8)) == -1 : BinaryPrimitives.ReadInt32BigEndian(b.AsSpan(e + 4)) == -1; if (!empty) sum += wide ? BinaryPrimitives.ReadUInt64BigEndian(b.AsSpan(e)) : BinaryPrimitives.ReadUInt32BigEndian(b.AsSpan(e)); }
+                        edits = sum / movieScale;
+                    }
                 foreach (var mdia in Kids(b, trak.Start, trak.End).Where(k => k.Type == "mdia"))
                 {
                     var kids = Kids(b, mdia.Start, mdia.End);
@@ -81,8 +97,10 @@ internal static class SpeedSoundNativeChecks
                     bool v1 = b[md] == 1;
                     double scale = BinaryPrimitives.ReadUInt32BigEndian(b.AsSpan(md + (v1 ? 20 : 12)));
                     double duration = v1 ? BinaryPrimitives.ReadUInt64BigEndian(b.AsSpan(md + 24)) : BinaryPrimitives.ReadUInt32BigEndian(b.AsSpan(md + 16));
-                    list.Add((Encoding.ASCII.GetString(b, hd + 8, 4), duration / scale));
+                    list.Add((Encoding.ASCII.GetString(b, hd + 8, 4), edits ?? duration / scale));
                 }
+            }
+        }
         return list;
     }
 
@@ -99,7 +117,7 @@ internal static class SpeedSoundNativeChecks
     }
 
     // Windows decodes the saved video's sound to mono 48 kHz PCM16; its tone frequency and length.
-    private static (double Hz, double Seconds) Decode(string path, string root)
+    private static (double Hz, double Seconds, double Onset) Decode(string path, string root)
     {
         string wav = Path.Combine(root, "decoded-" + Guid.NewGuid().ToString("N") + ".wav");
         var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
@@ -107,7 +125,7 @@ internal static class SpeedSoundNativeChecks
         var target = folder.CreateFileAsync(Path.GetFileName(wav), CreationCollisionOption.FailIfExists).AsTask().GetAwaiter().GetResult();
         var profile = MediaEncodingProfile.CreateWav(AudioEncodingQuality.Auto); profile.Audio = AudioEncodingProperties.CreatePcm(48000, 1, 16); profile.Video = null;
         var prepared = new MediaTranscoder { AlwaysReencode = true, HardwareAccelerationEnabled = false }.PrepareFileTranscodeAsync(file, target, profile).AsTask().GetAwaiter().GetResult();
-        if (!prepared.CanTranscode) { File.Delete(wav); return (0, 0); }
+        if (!prepared.CanTranscode) { File.Delete(wav); return (0, 0, double.MaxValue); }
         prepared.TranscodeAsync().AsTask().GetAwaiter().GetResult();
         try
         {
@@ -115,14 +133,15 @@ internal static class SpeedSoundNativeChecks
             var info = PcmWave.Read(stream, default);
             stream.Position = info.DataOffset; var data = new byte[info.DataBytes]; stream.ReadExactly(data);
             // Rising zero crossings, away from the first and last 50 ms.
-            long skip = info.Rate / 20, first = -1, last = -1, count = 0; short previous = 0;
+            long skip = info.Rate / 20, first = -1, last = -1, count = 0, loud = -1; short previous = 0;
+            for (long i = 0; i < info.Frames && loud < 0; i++) if (Math.Abs((int)BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan((int)(i * info.Block)))) > 2000) loud = i;
             for (long i = skip; i < info.Frames - skip; i++)
             {
                 short v = BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan((int)(i * info.Block)));
                 if (previous < 0 && v >= 0) { if (first < 0) first = i; else count++; last = i; }
                 previous = v;
             }
-            return (count == 0 ? 0 : count * (double)info.Rate / (last - first), info.Frames / (double)info.Rate);
+            return (count == 0 ? 0 : count * (double)info.Rate / (last - first), info.Frames / (double)info.Rate, loud < 0 ? double.MaxValue : loud / (double)info.Rate);
         }
         finally { File.Delete(wav); }
     }

@@ -56,15 +56,21 @@ internal static class SpeedSoundChecks
             foreach (long frames in new[] { natural, natural + rate / 50, natural - rate / 50 })
             {
                 using var input = new MemoryStream(wav, false); using var output = new MemoryStream();
-                VideoEdit.StretchSound(input, output, percent, frames, default);
+                VideoEdit.StretchSound(input, output, percent, frames, 30, default);
                 output.Position = 0; var info = PcmWave.Read(output, default);
                 double found = Peak(output, info);
                 check(info.Frames == frames && info.Rate == rate && info.Channels == channels && info.Bits == 16 && Math.Abs(found / hz - 1) < 0.01,
                     $"{rate} Hz {channels} ch at {percent}% is stretched to exactly {frames} frames ({info.Frames}) with its {hz} Hz tone kept ({found:0.0} Hz)");
             }
-            reject(() => VideoEdit.StretchSound(new MemoryStream(wav, false), new MemoryStream(), percent, natural + rate / 2, default), $"At {percent}% a length half a second from the stretched sound's is refused");
+            reject(() => VideoEdit.StretchSound(new MemoryStream(wav, false), new MemoryStream(), percent, natural + rate / 2 + rate * 200 / (30 * percent), 30, default), $"At {percent}% a length half a second from the stretched sound's is refused");
         }
-        reject(() => VideoEdit.StretchSound(new MemoryStream(Tone(48000, 2, 4800, 440), false), new MemoryStream(), 100, 4800, default), "1× is never stretched");
+        // A 24 fps cut of 0.8 s is 19.2 frames; a video of 20 frames at 25% is 0.13 s longer than the stretched cut.
+        {
+            var wav = Tone(48000, 2, 38400, 440); long natural = 38400 * 4; long frames = VideoEdit.SoundFrames(20 * 4, 24, 48000);
+            using var output = new MemoryStream(); VideoEdit.StretchSound(new MemoryStream(wav, false), output, 25, frames, 24, default);
+            output.Position = 0; check(PcmWave.Read(output, default).Frames == frames && frames - natural == 6400, "A video a whole frame longer than the cut still gets its stretched sound at 0.25×");
+        }
+        reject(() => VideoEdit.StretchSound(new MemoryStream(Tone(48000, 2, 4800, 440), false), new MemoryStream(), 100, 4800, 30, default), "1× is never stretched");
 
         Mux(check, reject);
     }
@@ -104,13 +110,13 @@ internal static class SpeedSoundChecks
 
     // A silent video like Windows' retimed output: ftyp, (uuid), mdat with three chunks, moov with one
     // video track. `moovFirst` puts the movie box before the media data; `toEnd` gives mdat size 0.
-    private static byte[] Video(bool moovFirst, bool toEnd, bool wide = false, uint next = 2, string handler = "vide", byte[]? extraTrak = null, byte[]? extraTop = null)
+    private static byte[] Video(bool moovFirst, bool toEnd, bool wide = false, uint next = 2, string handler = "vide", byte[]? extraTrak = null, byte[]? extraTop = null, bool emptyChunks = false)
     {
         var payload = Enumerable.Range(0, 96).Select(i => (byte)(0x80 | i)).ToArray();
         byte[] Make(long mdatPayload)
         {
             uint[] offsets = { (uint)mdatPayload, (uint)mdatPayload + 32, (uint)mdatPayload + 64 };
-            var chunk = wide ? Box("co64", U32(0), U32(3), U64(offsets[0]), U64(offsets[1]), U64(offsets[2])) : Box("stco", U32(0), U32(3), U32(offsets[0]), U32(offsets[1]), U32(offsets[2]));
+            var chunk = emptyChunks ? Box("stco") : wide ? Box("co64", U32(0), U32(3), U64(offsets[0]), U64(offsets[1]), U64(offsets[2])) : Box("stco", U32(0), U32(3), U32(offsets[0]), U32(offsets[1]), U32(offsets[2]));
             var stbl = Box("stbl", Box("stsd", U32(0), U32(1), Box("avc1", new byte[78])), Box("stts", U32(0), U32(1), U32(3), U32(1000)), Box("stsc", U32(0), U32(1), U32(1), U32(1), U32(1)), Box("stsz", U32(0), U32(32), U32(3)), chunk);
             var minf = Box("minf", Box("vmhd", new byte[12]), Box("dinf", Box("dref", U32(0), U32(1), Box("url ", U32(1)))), stbl);
             var mdia = Box("mdia", Box("mdhd", U32(0), U32(0), U32(0), U32(61318), U32(92988), new byte[4]), Box("hdlr", U32(0), U32(0), Encoding.ASCII.GetBytes(handler), new byte[13]), minf);
@@ -204,6 +210,18 @@ internal static class SpeedSoundChecks
                 }
         }
 
+        // An exact sound length: an edit list ends the (padded) audio there, never past its media.
+        {
+            var plain = M4aChecks.Build(new M4aChecks.Spec { Rate = 48000 });
+            using var v = new MemoryStream(Video(false, false), false); using var a = new MemoryStream(plain, false); using var o = new MemoryStream();
+            Mp4AudioMux.Write(v, a, o, default, (36000, 48000));
+            var bytes = o.ToArray(); var track = Parse(bytes).Tracks[1]; int elst = Find(bytes, "elst");
+            check(track.Duration == 22994 && elst > 0 && BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(elst + 12)) == 1 && BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(elst + 16)) == 22994 && BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(elst + 20)) == 0 && BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(elst + 24)) == 0x10000,
+                $"0.75 s of sound gets an edit list of exactly 0.75 s from media time 0 ({track.Duration}/30659)");
+            using var v2 = new MemoryStream(Video(false, false), false); using var a2 = new MemoryStream(plain, false); using var o2 = new MemoryStream();
+            Mp4AudioMux.Write(v2, a2, o2, default, (96000, 48000));
+            check(Parse(o2.ToArray()).Tracks[1].Duration == 30659, "A requested length past the encoded sound is held to the sound's own length");
+        }
         // Edit list on the audio: its segments set the track length.
         var edited = M4aChecks.Build(new M4aChecks.Spec { TrakExtra = new[] { Box("edts", Box("elst", U32(0), U32(1), U32(500), U32(1024), U32(0x10000))) } });
         var withEdits = Parse(MuxBytes(Video(false, false), edited));
@@ -229,6 +247,24 @@ internal static class SpeedSoundChecks
         Refused(Video(false, false)[..^4], good, "A truncated video is refused");
         var badOffset = Video(false, false); { int stco = Find(badOffset, "stco"); BinaryPrimitives.WriteUInt32BigEndian(badOffset.AsSpan(stco + 16), 5); }
         Refused(badOffset, good, "A video chunk outside its media data is refused");
+        long allocated = GC.GetTotalAllocatedBytes(true);
+        Refused(Video(false, false, emptyChunks: true), good, "A chunk-offset box too short for its count is refused");
+        check(GC.GetTotalAllocatedBytes(true) - allocated < 16 << 20, "…without reading a count from the next box (no large allocation)");
+
+        // Box sizes shrunk or grown inside the movie box: refused or muxed, nothing else, and little memory.
+        {
+            var source = Video(false, false); int moov = IndexOf(source, "moov"); var sizes = new List<int>();
+            for (int i = moov + 8; i + 8 <= source.Length; i++) if (source.Skip(i + 4).Take(4).All(c => c is >= (byte)'a' and <= (byte)'z' or (byte)' ' or >= (byte)'0' and <= (byte)'9') && BinaryPrimitives.ReadUInt32BigEndian(source.AsSpan(i)) is >= 8 and < 4096) sizes.Add(i);
+            int fine = 0, odd = 0; long before = GC.GetTotalAllocatedBytes(true);
+            foreach (int at in sizes)
+                foreach (int delta in new[] { -1, -4, -8, -12, 4 })
+                {
+                    var v = (byte[])source.Clone(); uint size = BinaryPrimitives.ReadUInt32BigEndian(v.AsSpan(at));
+                    BinaryPrimitives.WriteUInt32BigEndian(v.AsSpan(at), (uint)Math.Max(0, size + delta));
+                    try { MuxBytes(v, good); fine++; } catch (UserError) { fine++; } catch (Exception) { odd++; }
+                }
+            check(odd == 0 && sizes.Count > 15 && GC.GetTotalAllocatedBytes(true) - before < 256 << 20, $"{sizes.Count * 5} shrunk or grown box sizes are muxed or refused with little memory ({odd} other)");
+        }
 
         // Random corruption: either a valid result or the muxer's own refusal, nothing else.
         var random = new Random(9001); int ok = 0, refused = 0, other = 0;

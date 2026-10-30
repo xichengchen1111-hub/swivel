@@ -149,14 +149,20 @@ public static class VideoEdit
 
     /// Time-stretches a PCM WAV to `frames` sample frames at `percent` speed keeping its pitch
     /// (WaveStretch), as 16-bit PCM; `frames` comes from the retimed video so both end together.
-    public static void StretchSound(Stream input, Stream output, int percent, long frames, CancellationToken token)
+    /// `fps` is the source's frame rate: the video's length is whole frames, so it may differ from
+    /// the cut by up to a frame, which the speed change stretches by 100/percent.
+    public static void StretchSound(Stream input, Stream output, int percent, long frames, double fps, CancellationToken token)
     {
         ValidateSpeed(percent);
         var source = PcmWave.Read(input, token);
         if (percent == 100 || source.Bits != 16 || frames < 1) throw new UserError(SoundFailed);
-        long natural = new WaveSpeed(percent, true).Frames(source);
-        // The video's length and the stretched sound's agree to a tenth of a second (or 2%).
-        if (Math.Abs(frames - natural) > Math.Max(source.Rate / 10, natural / 50)) throw new UserError(SoundFailed);
+        long natural;
+        try { natural = new WaveSpeed(percent, true).Frames(source); } catch (UserError) { throw new UserError(SoundTooLong); }
+        // The video's length and the stretched sound's agree to a tenth of a second (or 2%) plus
+        // two source frames at the new speed.
+        double frame = double.IsFinite(fps) && fps >= 1 ? 1 / fps : 1;
+        double slack = Math.Max(source.Rate / 10.0, natural / 50.0) + 2 * frame * source.Rate * 100 / percent;
+        if (Math.Abs(frames - natural) > slack) throw new UserError(SoundFailed);
         if (frames * source.Block + 44 > PcmWave.MaxBytes || frames > (long)source.Rate * PcmWave.MaxSeconds) throw new UserError(SoundTooLong);
         WaveStretch.Export(input, output, source, percent, frames, token, false);
     }

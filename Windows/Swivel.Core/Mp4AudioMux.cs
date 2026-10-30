@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Threading;
 
@@ -32,8 +33,10 @@ public static class Mp4AudioMux
         Fail(); return default;
     }
 
-    /// Writes video + audio to `output` and returns the bytes written.
-    public static long Write(Stream video, Stream audio, Stream output, CancellationToken token)
+    /// Writes video + audio to `output` and returns the bytes written. With `length` (sample frames
+    /// at a rate), an audio track without an edit list gets one that plays exactly that long from
+    /// its first sample, since AAC pads its last packet (up to 1024 frames, 21 ms at 48 kHz).
+    public static long Write(Stream video, Stream audio, Stream output, CancellationToken token, (long Frames, int Rate)? length = null)
     {
         token.ThrowIfCancellationRequested();
         try { audio.Position = 0; M4aAudio.Inspect(audio, token); } catch (UserError) { Fail(); }
@@ -117,7 +120,7 @@ public static class Mp4AudioMux
         foreach (int field in Offsets(audioMovie, at2)) newOffsets.Add(AudioOffset(Read(audioMovie, field, at2.Wide ? 8 : 4)));
         bool wide = false; foreach (long o in newOffsets) if (o > uint.MaxValue) wide = true;
         // Its length in the video's movie timescale: the edit list's segments, or else the media's duration.
-        ulong audioDuration = 0;
+        ulong audioDuration = 0; bool trimmed = false;
         {
             ulong? edits = null, media = null; uint mediaScale = 0;
             foreach (var (type, s, e) in Children(audioMovie, audioTrak, audioTrakEnd))
@@ -127,7 +130,7 @@ public static class Mp4AudioMux
                         if (t2 == "elst")
                         {
                             if (edits is not null) Fail();
-                            Need(audioMovie, s2, 8); bool v1 = audioMovie[s2] == 1; if (audioMovie[s2] > 1) Fail();
+                            if (e2 - s2 < 8) Fail(); bool v1 = audioMovie[s2] == 1; if (audioMovie[s2] > 1) Fail();
                             int entry = v1 ? 20 : 12; ulong n = Read(audioMovie, s2 + 4, 4);
                             if (n == 0 || n > (ulong)((e2 - s2 - 8) / entry)) Fail();
                             ulong sum = 0;
@@ -135,10 +138,10 @@ public static class Mp4AudioMux
                             edits = sum;
                         }
                 if (type == "mdia")
-                    foreach (var (t2, s2, _) in Children(audioMovie, s, e))
+                    foreach (var (t2, s2, e2) in Children(audioMovie, s, e))
                         if (t2 == "mdhd")
                         {
-                            Need(audioMovie, s2, 1); bool v1 = audioMovie[s2] == 1; if (audioMovie[s2] > 1) Fail();
+                            Need(audioMovie, s2, 1); bool v1 = audioMovie[s2] == 1; if (audioMovie[s2] > 1 || e2 - s2 < (v1 ? 32 : 20)) Fail();
                             mediaScale = (uint)Read(audioMovie, s2 + (v1 ? 20 : 12), 4); media = Read(audioMovie, s2 + (v1 ? 24 : 16), v1 ? 8 : 4);
                         }
             }
@@ -149,6 +152,15 @@ public static class Mp4AudioMux
                 if (r >= uint.MaxValue) Fail();
                 audioDuration = (ulong)r;
             }
+            if (edits is null && length is { } exact)
+            {
+                if (exact.Frames < 1 || exact.Rate < 1) Fail();
+                BigInteger r = ((BigInteger)exact.Frames * videoScale + exact.Rate / 2) / exact.Rate;
+                if (r < 1 || r >= uint.MaxValue) Fail();
+                // Never longer than the encoded sound.
+                audioDuration = Math.Min(audioDuration, (ulong)r);
+                trimmed = true;
+            }
             if (audioDuration == 0) Fail();
         }
         byte[] Leaf(string type, int start, int end)
@@ -156,16 +168,25 @@ public static class Mp4AudioMux
             var copy = audioMovie.AsSpan(start - 8, end - start + 8).ToArray(); int body = 8;
             if (type == "tkhd")
             {
-                bool v1 = copy[body] == 1; if (copy[body] > 1) Fail();
+                Need(copy, body, 4); bool v1 = copy[body] == 1; if (copy[body] > 1) Fail();
                 copy[body + 3] |= 3; // enabled, in movie
                 int id = body + (v1 ? 20 : 12), duration = body + (v1 ? 28 : 20);
                 Need(copy, duration, v1 ? 8 : 4);
                 Write(copy, id, 4, audioId);
                 Write(copy, duration, v1 ? 8 : 4, audioDuration);
+                if (trimmed)
+                {
+                    // edts { elst v0: one segment of the exact length from media time 0 at normal rate }
+                    var edts = new byte[36];
+                    Write(edts, 0, 4, 36); edts[4] = (byte)'e'; edts[5] = (byte)'d'; edts[6] = (byte)'t'; edts[7] = (byte)'s';
+                    Write(edts, 8, 4, 28); edts[12] = (byte)'e'; edts[13] = (byte)'l'; edts[14] = (byte)'s'; edts[15] = (byte)'t';
+                    Write(edts, 20, 4, 1); Write(edts, 24, 4, audioDuration); Write(edts, 28, 4, 0); Write(edts, 32, 4, 0x10000);
+                    return copy.Concat(edts).ToArray();
+                }
             }
             else if (type == "elst")
             {
-                Need(copy, body, 8); bool v1 = copy[body] == 1; if (copy[body] > 1) Fail();
+                if (copy.Length - body < 8) Fail(); bool v1 = copy[body] == 1; if (copy[body] > 1) Fail();
                 int entry = v1 ? 20 : 12; long n = Read(copy, body + 4, 4) is var c && c <= (ulong)((copy.Length - body - 8) / entry) ? (long)c : -1;
                 if (n < 0) Fail();
                 for (int i = 0; i < n; i++) { int e = body + 8 + i * entry; Write(copy, e, v1 ? 8 : 4, Rescale(Read(copy, e, v1 ? 8 : 4))); }
@@ -238,14 +259,14 @@ public static class Mp4AudioMux
 
     private static void Track(byte[] b, int start, int end, out TrackInfo info)
     {
-        info = new TrackInfo(); int? tkhd = null;
+        info = new TrackInfo(); int? tkhd = null; int tkhdEnd = 0;
         foreach (var (type, s, e) in Children(b, start, end))
         {
-            if (type == "tkhd") { if (tkhd is not null) Fail(); tkhd = s; }
+            if (type == "tkhd") { if (tkhd is not null) Fail(); tkhd = s; tkhdEnd = e; }
             else if (type == "mdia")
                 foreach (var (t2, s2, e2) in Children(b, s, e))
                 {
-                    if (t2 == "hdlr") { Need(b, s2, 12); info.Handler = Type(b, s2 + 8); }
+                    if (t2 == "hdlr") { if (e2 - s2 < 12) Fail(); info.Handler = Type(b, s2 + 8); }
                     else if (t2 == "minf")
                         foreach (var (t3, s3, e3) in Children(b, s2, e2))
                             if (t3 == "stbl")
@@ -254,14 +275,15 @@ public static class Mp4AudioMux
                 }
         }
         if (tkhd is not { } th || info.ChunkOffsets < 0) { Fail(); return; }
-        Need(b, th, 1); bool v1 = b[th] == 1; if (b[th] > 1) Fail();
+        Need(b, th, 1); bool v1 = b[th] == 1; if (b[th] > 1 || tkhdEnd - th < (v1 ? 24 : 16)) Fail();
         Need(b, th + (v1 ? 20 : 12), 4); info.Id = (uint)Read(b, th + (v1 ? 20 : 12), 4);
     }
 
     // Each chunk offset field of a track.
     private static List<int> Offsets(byte[] b, TrackInfo t)
     {
-        Need(b, t.ChunkOffsets, 8); if (b[t.ChunkOffsets] != 0) Fail();
+        // Counts are bounded by the box itself, never by the bytes after it.
+        if (t.ChunkOffsetsEnd - t.ChunkOffsets < 8 || b[t.ChunkOffsets] != 0) Fail();
         ulong count = Read(b, t.ChunkOffsets + 4, 4); int width = t.Wide ? 8 : 4;
         if (count > (ulong)((t.ChunkOffsetsEnd - t.ChunkOffsets - 8) / width)) Fail();
         var list = new List<int>((int)count);
