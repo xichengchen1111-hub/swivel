@@ -150,11 +150,21 @@ public static class VideoEdit
     /// Cleans at the original speed before the existing stretch. The caller supplies a
     /// private seekable scratch stream, so a long cleaned recording need not live in RAM.
     /// With no noise settings the existing speed path is used without any change.
+    public const string NoiseFailed = "Windows could not prepare the sound for noise reduction. Nothing was saved. Turn noise reduction off to save without it.";
+    /// A sample that ends up to 100 ms past the decoded sound (the decoder's length can differ
+    /// from the cut by that much) moves back to end at the sound's end, keeping its length.
+    public static WaveNoise FitNoise(WaveNoise noise, WaveInfo info)
+    {
+        double over = noise.End - info.Seconds;
+        if (over <= 0 || over > .1 || noise.Start < over) return noise;
+        return noise with { Start = noise.Start - over, End = info.Seconds };
+    }
     public static long PrepareSound(Stream input, Stream output, Stream? cleaned, WaveNoise? noise, int percent, long frames, double fps, CancellationToken token)
     {
         if (noise is not null)
         {
             if (cleaned is null) throw new ArgumentNullException(nameof(cleaned));
+            noise = FitNoise(noise, PcmWave.Read(input, token));
             WaveDenoiser.Export(input, cleaned, noise, token);
             cleaned.Position = 0;
             input = cleaned;

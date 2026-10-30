@@ -118,7 +118,7 @@ internal sealed class TrimVideoDialog : Window
                 finally { await dialog.FinishPreviewAsync(); }
             }
             catch (OperationCanceledException) { }
-            catch (Exception error) { failure = app.L(error is UserError ? error.Message : VideoEdit.SoundFailed); }
+            catch (Exception error) { failure = app.L(error is UserError && error.Message != VideoEdit.SoundFailed ? error.Message : VideoEdit.NoiseFailed); }
             finally
             {
                 if (document is not null)

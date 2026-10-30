@@ -82,9 +82,10 @@ public static class VideoTrim
         if (picture is not null) { VideoEdit.Validate(picture); if (picture.IsIdentity) picture = null; }
         if (start < 0 || end > duration || end - start < MinLength) throw new UserError(OutOfRange);
         if (!keepSound || !hasSound) noise = null;
-        // Sample seconds belong to the kept part at its original speed. The decoder's
-        // actual frame boundaries are checked again before processing.
-        noise?.Range(new WaveInfo(soundRate, 1, 16, 44, (long)Math.Round((end - start) * soundRate / 1000.0, MidpointRounding.AwayFromZero) * 2));
+        // Sample seconds belong to the kept part at its original speed. The decoder may return
+        // up to 100 ms more or less than the cut (VideoEdit.SoundMatches), so only the shape is
+        // checked here with that tolerance; the exact bound is applied to the decoded sound.
+        noise?.Range(new WaveInfo(soundRate, 1, 16, 44, (long)Math.Round((end - start + 100) * soundRate / 1000.0, MidpointRounding.AwayFromZero) * 2));
         bool edited = picture is not null || speed != 100 || noise is not null;
         if (start == 0 && end == duration && !edited && (keepSound || !hasSound)) throw new UserError(hasSound ? Unchanged : UnchangedSilent);
         return new VideoTrimPlan(start, end, keepSound && hasSound, picture, speed, noise);
