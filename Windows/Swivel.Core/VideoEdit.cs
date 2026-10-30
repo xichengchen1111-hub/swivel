@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Numerics;
+using System.Threading;
 
 namespace Swivel.Core;
 
@@ -115,6 +116,50 @@ public static class VideoEdit
 
     /// Bits a second to ask the encoder for, so the retimed video stays within `cap` when played.
     public static double EncodeBitrate(double wanted, int percent, double cap = 100_000_000) => Math.Min(wanted, cap * 100 / Math.Max(100, percent));
+
+    public const string SoundTooLong = "At this speed the sound of the kept part would be too long to time-stretch (more than two hours or 512 MB of PCM). Remove the sound or keep a shorter part.";
+    public const string SoundFailed = "Windows could not prepare the sound at this speed, so no file was saved. Remove the sound to save the video without it.";
+
+    /// The PCM format the sound is decoded to before it is time-stretched: Windows' AAC encoder
+    /// takes 44.1 or 48 kHz, so 44.1 kHz stays and anything else becomes 48 kHz; mono stays
+    /// mono and anything else becomes stereo.
+    public static (int Rate, int Channels) SoundFormat(uint rate, uint channels) => (rate == 44100 ? 44100 : 48000, channels == 1 ? 1 : 2);
+
+    /// Sample frames lasting as long as `duration` in `timescale` (a movie's length), rounded.
+    public static long SoundFrames(ulong duration, uint timescale, int rate)
+    {
+        if (timescale == 0 || rate <= 0) throw new ArgumentOutOfRangeException(nameof(timescale));
+        return checked((long)(((Int128)duration * rate + timescale / 2) / timescale));
+    }
+
+    /// Refuses a kept sound whose decoded or stretched PCM16 would pass the WAV limits.
+    public static void CheckSound(long length, int percent, int rate, int channels)
+    {
+        ValidateSpeed(percent);
+        foreach (long ms in new[] { length, OutputLength(length, percent) })
+        {
+            long frames = (long)(((Int128)ms * rate + 999) / 1000) + rate; // a second to spare for decoder rounding
+            if (ms > PcmWave.MaxSeconds * 1000L || frames * channels * 2 + 44 > PcmWave.MaxBytes) throw new UserError(SoundTooLong);
+        }
+    }
+
+    /// Whether decoded sound of `frames` at `rate` is the kept part of `length` milliseconds, within
+    /// a tenth of a second (Windows' cut ends within a millisecond on the CI runner).
+    public static bool SoundMatches(long frames, int rate, long length) => Math.Abs(frames * 1000.0 / rate - length) <= 100;
+
+    /// Time-stretches a PCM WAV to `frames` sample frames at `percent` speed keeping its pitch
+    /// (WaveStretch), as 16-bit PCM; `frames` comes from the retimed video so both end together.
+    public static void StretchSound(Stream input, Stream output, int percent, long frames, CancellationToken token)
+    {
+        ValidateSpeed(percent);
+        var source = PcmWave.Read(input, token);
+        if (percent == 100 || source.Bits != 16 || frames < 1) throw new UserError(SoundFailed);
+        long natural = new WaveSpeed(percent, true).Frames(source);
+        // The video's length and the stretched sound's agree to a tenth of a second (or 2%).
+        if (Math.Abs(frames - natural) > Math.Max(source.Rate / 10, natural / 50)) throw new UserError(SoundFailed);
+        if (frames * source.Block + 44 > PcmWave.MaxBytes || frames > (long)source.Rate * PcmWave.MaxSeconds) throw new UserError(SoundTooLong);
+        WaveStretch.Export(input, output, source, percent, frames, token, false);
+    }
 
     /// Milliseconds of output for `length` milliseconds of source at `percent` speed.
     public static long OutputLength(long length, int percent)

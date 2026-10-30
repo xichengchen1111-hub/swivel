@@ -60,7 +60,7 @@ internal static class VideoEditNativeChecks
                 var (seconds, sound) = VideoTrimNativeChecks.Probe(output);
                 var (w, h) = Size(output);
                 double expected = plan.OutputLength / 1000.0;
-                check(Path.GetFileName(output) == name && w == g.Width && h == g.Height && Math.Abs(seconds - expected) <= 0.1 + expected * 0.03 && sound == (keep && speed == 100) && progress is > 0 and <= 1.0001,
+                check(Path.GetFileName(output) == name && w == g.Width && h == g.Height && Math.Abs(seconds - expected) <= 0.1 + expected * 0.03 && sound == keep && progress is > 0 and <= 1.0001,
                     $"{picture?.ToString() ?? "No picture change"} at {speed}% is saved as “{Path.GetFileName(output)}”, {w}×{h} (expected {g.Width}×{g.Height}), {seconds:0.000} s (expected {expected:0.000}), sound {sound}");
                 foreach (double at in new[] { 0.25, 0.75 })
                 {

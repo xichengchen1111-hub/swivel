@@ -16,7 +16,7 @@ namespace Swivel.Core;
 public static class Mp4AudioMux
 {
     public const int MaxMovie = 64 << 20;
-    public const string Failed = "Windows' sound for this speed could not be added to the video. No file was saved. Remove the sound to save the video without it.";
+    public const string Failed = VideoEdit.SoundFailed;
     private static readonly HashSet<string> TopLevel = new() { "ftyp", "moov", "mdat", "free", "skip", "wide", "uuid" };
     private static readonly HashSet<string> Containers = new() { "trak", "mdia", "minf", "stbl", "edts" };
 
@@ -116,7 +116,41 @@ public static class Mp4AudioMux
         var newOffsets = new List<long>();
         foreach (int field in Offsets(audioMovie, at2)) newOffsets.Add(AudioOffset(Read(audioMovie, field, at2.Wide ? 8 : 4)));
         bool wide = false; foreach (long o in newOffsets) if (o > uint.MaxValue) wide = true;
+        // Its length in the video's movie timescale: the edit list's segments, or else the media's duration.
         ulong audioDuration = 0;
+        {
+            ulong? edits = null, media = null; uint mediaScale = 0;
+            foreach (var (type, s, e) in Children(audioMovie, audioTrak, audioTrakEnd))
+            {
+                if (type == "edts")
+                    foreach (var (t2, s2, e2) in Children(audioMovie, s, e))
+                        if (t2 == "elst")
+                        {
+                            if (edits is not null) Fail();
+                            Need(audioMovie, s2, 8); bool v1 = audioMovie[s2] == 1; if (audioMovie[s2] > 1) Fail();
+                            int entry = v1 ? 20 : 12; ulong n = Read(audioMovie, s2 + 4, 4);
+                            if (n == 0 || n > (ulong)((e2 - s2 - 8) / entry)) Fail();
+                            ulong sum = 0;
+                            for (int i = 0; i < (int)n; i++) { ulong d = Read(audioMovie, s2 + 8 + i * entry, v1 ? 8 : 4); if (d >= uint.MaxValue) Fail(); sum += d; }
+                            edits = sum;
+                        }
+                if (type == "mdia")
+                    foreach (var (t2, s2, _) in Children(audioMovie, s, e))
+                        if (t2 == "mdhd")
+                        {
+                            Need(audioMovie, s2, 1); bool v1 = audioMovie[s2] == 1; if (audioMovie[s2] > 1) Fail();
+                            mediaScale = (uint)Read(audioMovie, s2 + (v1 ? 20 : 12), 4); media = Read(audioMovie, s2 + (v1 ? 24 : 16), v1 ? 8 : 4);
+                        }
+            }
+            if (edits is { } total) audioDuration = Rescale(total);
+            else if (media is { } m && mediaScale != 0 && m != uint.MaxValue && m != ulong.MaxValue)
+            {
+                BigInteger r = ((BigInteger)m * videoScale + mediaScale / 2) / mediaScale;
+                if (r >= uint.MaxValue) Fail();
+                audioDuration = (ulong)r;
+            }
+            if (audioDuration == 0) Fail();
+        }
         byte[] Leaf(string type, int start, int end)
         {
             var copy = audioMovie.AsSpan(start - 8, end - start + 8).ToArray(); int body = 8;
@@ -127,8 +161,7 @@ public static class Mp4AudioMux
                 int id = body + (v1 ? 20 : 12), duration = body + (v1 ? 28 : 20);
                 Need(copy, duration, v1 ? 8 : 4);
                 Write(copy, id, 4, audioId);
-                ulong d = Read(copy, duration, v1 ? 8 : 4); if (d == (v1 ? ulong.MaxValue : uint.MaxValue)) Fail();
-                audioDuration = Rescale(d); Write(copy, duration, v1 ? 8 : 4, audioDuration);
+                Write(copy, duration, v1 ? 8 : 4, audioDuration);
             }
             else if (type == "elst")
             {
@@ -150,7 +183,6 @@ public static class Mp4AudioMux
             return copy;
         }
         byte[] audioTrack = Rebuild(audioMovie, "trak", audioTrak, audioTrakEnd, Leaf);
-        if (audioDuration == 0) Fail();
 
         // Movie header: the longer duration and the next free track ID.
         {

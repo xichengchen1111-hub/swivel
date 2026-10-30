@@ -74,8 +74,8 @@ public static class VideoTrim
     public static long Duration(double seconds) =>
         double.IsFinite(seconds) && seconds > 0 ? (long)Math.Floor(seconds * 1000) : throw new UserError(SubtitleBurn.Unsupported);
 
-    /// A video without sound has nothing to remove, so keeping all of it changes nothing. At any
-    /// speed but 100% the sound is removed (Windows' editing API can't retime it here).
+    /// A video without sound has nothing to remove, so keeping all of it changes nothing. At
+    /// another speed a kept sound is time-stretched to the new length with its pitch kept.
     public static VideoTrimPlan Plan(long start, long end, long duration, bool keepSound, bool hasSound = true, VideoPicture? picture = null, int speed = 100)
     {
         VideoEdit.ValidateSpeed(speed);
@@ -83,6 +83,6 @@ public static class VideoTrim
         if (start < 0 || end > duration || end - start < MinLength) throw new UserError(OutOfRange);
         bool edited = picture is not null || speed != 100;
         if (start == 0 && end == duration && !edited && (keepSound || !hasSound)) throw new UserError(hasSound ? Unchanged : UnchangedSilent);
-        return new VideoTrimPlan(start, end, keepSound && hasSound && speed == 100, picture, speed);
+        return new VideoTrimPlan(start, end, keepSound && hasSound, picture, speed);
     }
 }

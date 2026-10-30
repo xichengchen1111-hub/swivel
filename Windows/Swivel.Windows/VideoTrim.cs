@@ -18,12 +18,16 @@ namespace Swivel.Windows;
 /// a private temporary folder, which is published beside the original as `name trimmed.mp4`.
 /// Picture changes go through Windows' built-in video transform effect (crop, quarter turns,
 /// mirror), which the media editing API refuses (0xC00DA7FC on the CI runner), so those are
-/// encoded with MediaTranscoder and its trim times instead; another speed rewrites the encoded file's timescales (Mp4Retime) before publishing,
-/// without the sound. Either is saved as `name edited.mp4`.
+/// encoded with MediaTranscoder and its trim times instead; another speed rewrites the encoded file's timescales (Mp4Retime) before publishing.
+/// A kept sound at another speed is decoded separately (the same cut, MediaComposition to PCM16 WAV),
+/// time-stretched to the retimed video's exact length with its pitch kept (WaveStretch), encoded
+/// as an AAC M4A by Windows and added to the video as a second track (Mp4AudioMux) without
+/// re-encoding the picture. Either is saved as `name edited.mp4`.
 public sealed class VideoTrimmer : IDisposable
 {
     public const string Failed = "Windows could not encode the trimmed video. No file was saved.";
     public const string NoPictureChanges = "This video is stored with a rotation flag (as phones often do). Windows can trim it and change its speed, but not turn, flip or crop it here.";
+    public const string StretchNote = "At this speed the sound is time-stretched to the new length with its pitch kept (Swivel's own method, not the Mac's): slowed sound can echo a little and sped-up sound can soften sharp sounds such as claps. Windows then encodes it as AAC beside the unchanged picture.";
     private static readonly Guid RotationKey = new("C380465D-2271-428C-9B83-ECEA3B4A85C1"); // MF_MT_VIDEO_ROTATION
     private readonly NativeFiles.Input input;
     private readonly StorageFile file;
@@ -36,6 +40,8 @@ public sealed class VideoTrimmer : IDisposable
     /// Whole milliseconds.
     public long Duration { get; }
     public bool HasSound { get; }
+    /// The PCM format a kept sound is decoded to before a speed change (VideoEdit.SoundFormat).
+    private readonly (int Rate, int Channels) soundFormat;
     /// Windows' transcoder (which applies picture changes) reads the stored frames and doesn't turn
     /// a phone video stored with a rotation flag upright, so picture changes are refused when the
     /// stored size differs from the upright one or an MP4/MOV video track's matrix isn't identity.
@@ -48,6 +54,12 @@ public sealed class VideoTrimmer : IDisposable
         this.input = input; this.file = file; this.workspace = workspace;
         frames = new MediaComposition(); frames.Clips.Add(clip);
         Width = (int)video.Width; Height = (int)video.Height; Duration = duration; HasSound = clip.EmbeddedAudioTracks.Count > 0;
+        if (HasSound)
+        {
+            AudioEncodingProperties? audio = null;
+            try { audio = clip.EmbeddedAudioTracks[0].GetAudioEncodingProperties(); } catch (Exception error) when (error is not OperationCanceledException) { }
+            soundFormat = VideoEdit.SoundFormat(audio?.SampleRate ?? 0, audio?.ChannelCount ?? 0);
+        }
         frameNumerator = video.FrameRate.Numerator; frameDenominator = video.FrameRate.Denominator; bitrate = video.Bitrate;
     }
 
@@ -92,6 +104,12 @@ public sealed class VideoTrimmer : IDisposable
             if (workspace is not null) try { Directory.Delete(workspace, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             throw;
         }
+    }
+
+    /// Refuses a kept sound at another speed that would be too long to stretch (VideoEdit.CheckSound).
+    public void CheckSound(VideoTrimPlan plan)
+    {
+        if (plan.KeepSound && HasSound && plan.Speed != 100) VideoEdit.CheckSound(plan.Length, plan.Speed, soundFormat.Rate, soundFormat.Channels);
     }
 
     /// The frame rate Windows reports (30 when it reports none), used to find frames.
@@ -179,15 +197,21 @@ public sealed class VideoTrimmer : IDisposable
         var geometry = plan.Picture is null ? null : VideoEdit.Geometry(Width, Height, plan.Picture);
         int width = geometry?.Width ?? Width, height = geometry?.Height ?? Height;
         if (plan.Speed != 100) VideoEdit.CheckRate(width, height, Fps, plan.Speed);
+        // The sound is stretched separately after the picture; the picture's encoding gets 80% of the progress.
+        bool stretch = plan.KeepSound && HasSound && plan.Speed != 100;
+        CheckSound(plan);
+        Action<double>? pictureProgress = stretch && progress is not null ? value => progress(value * .8) : progress;
         string rendered = System.IO.Path.Combine(workspace, "trimmed.mp4");
+        string decoded = System.IO.Path.Combine(workspace, "sound.wav"), stretched = System.IO.Path.Combine(workspace, "stretched.wav"), encoded = System.IO.Path.Combine(workspace, "sound.m4a");
         try
         {
             var clip = await NativeAsync.Join(MediaClip.CreateFromFileAsync(file), token).ConfigureAwait(false);
             clip.TrimTimeFromStart = TimeSpan.FromMilliseconds(plan.Start);
             var tail = clip.OriginalDuration - TimeSpan.FromMilliseconds(plan.End);
             clip.TrimTimeFromEnd = tail > TimeSpan.Zero ? tail : TimeSpan.Zero;
-            // Without sound the profile has no audio stream at all.
-            bool sound = plan.KeepSound && HasSound;
+            // Without sound the profile has no audio stream at all; at another speed the
+            // picture is encoded alone and the stretched sound is added afterwards.
+            bool sound = plan.KeepSound && HasSound && plan.Speed == 100;
             var composition = new MediaComposition();
             composition.Clips.Add(clip);
             var profile = MediaEncodingProfile.CreateMp4(VideoEncodingQuality.HD1080p);
@@ -204,14 +228,14 @@ public sealed class VideoTrimmer : IDisposable
             TranscodeFailureReason reason;
             try
             {
-                if (geometry is null) reason = await NativeAsync.Join(composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, profile), value => progress?.Invoke(value / 100), token).ConfigureAwait(false);
+                if (geometry is null) reason = await NativeAsync.Join(composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, profile), value => pictureProgress?.Invoke(value / 100), token).ConfigureAwait(false);
                 else
                 {
                     var transcoder = new MediaTranscoder { AlwaysReencode = true, TrimStartTime = TimeSpan.FromMilliseconds(plan.Start), TrimStopTime = TimeSpan.FromMilliseconds(plan.End) };
                     foreach (var effect in Effects(geometry, Width, Height)) transcoder.AddVideoEffect(effect.ActivatableClassId, true, effect.Properties);
                     var prepared = await NativeAsync.Join(transcoder.PrepareFileTranscodeAsync(file, target, profile), token).ConfigureAwait(false);
                     reason = prepared.CanTranscode ? TranscodeFailureReason.None : prepared.FailureReason;
-                    if (prepared.CanTranscode) await NativeAsync.Join(prepared.TranscodeAsync(), value => progress?.Invoke(Math.Clamp(value / 100, 0, 1)), token).ConfigureAwait(false);
+                    if (prepared.CanTranscode) await NativeAsync.Join(prepared.TranscodeAsync(), value => pictureProgress?.Invoke(Math.Clamp(value / 100, 0, 1)), token).ConfigureAwait(false);
                 }
             }
             catch (Exception error) when (error is not OperationCanceledException) { throw new UserError(Failed); }
@@ -225,15 +249,81 @@ public sealed class VideoTrimmer : IDisposable
                     Mp4Retime.Apply(retime, plan.Speed);
                 }
                 catch (IOException) { throw new UserError(Failed); }
+            if (stretch) await SoundAsync(plan, rendered, decoded, stretched, encoded, progress, token).ConfigureAwait(false);
             return NativeFiles.WriteBeside(input, System.IO.Path.GetFileNameWithoutExtension(input.Path) + (plan.Edited ? " edited" : " trimmed"), "mp4", stream =>
             {
                 using var source = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
                 if (source.Length == 0) throw new UserError(Failed);
+                if (stretch)
+                {
+                    using var audio = new FileStream(encoded, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
+                    Mp4AudioMux.Write(source, audio, stream, token);
+                    return;
+                }
                 var buffer = new byte[1 << 20]; int read;
                 while ((read = source.Read(buffer)) > 0) { token.ThrowIfCancellationRequested(); stream.Write(buffer, 0, read); }
             }, token);
         }
-        finally { try { File.Delete(rendered); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
+        finally
+        {
+            foreach (var temporary in new[] { rendered, decoded, stretched, encoded })
+                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    /// The kept part's sound for a speed change: decoded with the same cut as the picture
+    /// (MediaComposition, precise trimming, measured within a millisecond on the CI runner),
+    /// stretched to exactly the retimed video's length with its pitch kept, then encoded as AAC.
+    /// Any step Windows refuses stops the save with VideoEdit.SoundFailed rather than saving a
+    /// video whose sound is missing or out of step.
+    private async Task SoundAsync(VideoTrimPlan plan, string rendered, string decoded, string stretched, string encoded, Action<double>? progress, CancellationToken token)
+    {
+        var (rate, channels) = soundFormat;
+        var folder = await NativeAsync.Join(StorageFolder.GetFolderFromPathAsync(workspace), token).ConfigureAwait(false);
+        try
+        {
+            var clip = await NativeAsync.Join(MediaClip.CreateFromFileAsync(file), token).ConfigureAwait(false);
+            clip.TrimTimeFromStart = TimeSpan.FromMilliseconds(plan.Start);
+            var tail = clip.OriginalDuration - TimeSpan.FromMilliseconds(plan.End);
+            clip.TrimTimeFromEnd = tail > TimeSpan.Zero ? tail : TimeSpan.Zero;
+            var composition = new MediaComposition(); composition.Clips.Add(clip);
+            var wav = MediaEncodingProfile.CreateWav(AudioEncodingQuality.Auto);
+            wav.Audio = AudioEncodingProperties.CreatePcm((uint)rate, (uint)channels, 16); wav.Video = null;
+            var target = await NativeAsync.Join(folder.CreateFileAsync(System.IO.Path.GetFileName(decoded), CreationCollisionOption.FailIfExists), token).ConfigureAwait(false);
+            var reason = await NativeAsync.Join(composition.RenderToFileAsync(target, MediaTrimmingPreference.Precise, wav), value => progress?.Invoke(.8 + Math.Clamp(value / 100, 0, 1) * .05), token).ConfigureAwait(false);
+            if (reason != TranscodeFailureReason.None) throw new UserError(VideoEdit.SoundFailed);
+        }
+        catch (Exception error) when (error is not OperationCanceledException and not UserError) { throw new UserError(VideoEdit.SoundFailed); }
+        token.ThrowIfCancellationRequested();
+
+        // Stretched to the retimed video's movie length, so both tracks end together.
+        try
+        {
+            ulong duration; uint timescale;
+            using (var video = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read)) (duration, timescale) = Mp4AudioMux.Length(video);
+            using var input = new FileStream(decoded, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
+            var info = PcmWave.Read(input, token);
+            if (info.Rate != rate || info.Channels != channels || info.Bits != 16 || !VideoEdit.SoundMatches(info.Frames, rate, plan.Length)) throw new UserError(VideoEdit.SoundFailed);
+            input.Position = 0;
+            using var output = new FileStream(stretched, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1 << 16);
+            VideoEdit.StretchSound(input, output, plan.Speed, VideoEdit.SoundFrames(duration, timescale, rate), token);
+        }
+        catch (IOException) { throw new UserError(VideoEdit.SoundFailed); }
+        progress?.Invoke(.9);
+        token.ThrowIfCancellationRequested();
+
+        try
+        {
+            var source = await NativeAsync.Join(StorageFile.GetFileFromPathAsync(stretched), token).ConfigureAwait(false);
+            var target = await NativeAsync.Join(folder.CreateFileAsync(System.IO.Path.GetFileName(encoded), CreationCollisionOption.FailIfExists), token).ConfigureAwait(false);
+            var m4a = MediaEncodingProfile.CreateM4a(AudioEncodingQuality.High);
+            m4a.Audio.SampleRate = (uint)rate; m4a.Audio.ChannelCount = (uint)channels;
+            var prepared = await NativeAsync.Join(new MediaTranscoder { AlwaysReencode = true }.PrepareFileTranscodeAsync(source, target, m4a), token).ConfigureAwait(false);
+            if (!prepared.CanTranscode) throw new UserError(VideoEdit.SoundFailed);
+            await NativeAsync.Join(prepared.TranscodeAsync(), value => progress?.Invoke(.9 + Math.Clamp(value / 100, 0, 1) * .1), token).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is not OperationCanceledException and not UserError) { throw new UserError(VideoEdit.SoundFailed); }
+        token.ThrowIfCancellationRequested();
     }
 
     public void Dispose()

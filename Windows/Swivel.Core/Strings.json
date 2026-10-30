@@ -15624,11 +15624,6 @@
     "依此速度，新影片每秒顯示的畫面會超過 3840 × 2160 像素 60 次，許多播放器無法解碼。請選擇較低的速度或較小的裁剪。",
     "この速度では新しい動画が 1 秒間に 3840 × 2160 ピクセルを 60 回より多く表示することになり、多くのプレーヤーでデコードできません。速度を下げるか、切り抜きを小さくしてください。"
   ],
-  "At any speed but 1× the sound is removed: Windows' editing API used here can't change its speed.": [
-    "速度不是 1× 时会去掉声音：这里使用的 Windows 编辑接口无法改变声音的速度。",
-    "速度不是 1× 時會移除聲音：這裡使用的 Windows 編輯介面無法改變聲音的速度。",
-    "1× 以外の速度では音声を削除します。ここで使う Windows の編集 API は音声の速度を変えられません。"
-  ],
   "Flip upside down": [
     "上下翻转",
     "上下翻轉",
@@ -15858,5 +15853,20 @@
     "一次最多选择 32 个应用退出。",
     "一次最多選擇 32 個 App 結束。",
     "一度に終了できるアプリは最大 32 個です。"
+  ],
+  "At this speed the sound is time-stretched to the new length with its pitch kept (Swivel's own method, not the Mac's): slowed sound can echo a little and sped-up sound can soften sharp sounds such as claps. Windows then encodes it as AAC beside the unchanged picture.": [
+    "在此速度下，声音会按新长度进行时间拉伸并保持音调（Swivel 自己的方法，与 Mac 版不同）：放慢的声音可能略有回声，加快的声音可能让拍手等清脆声音变柔和。随后由 Windows 编码为 AAC，与未改动的画面放在一起。",
+    "在此速度下，聲音會依新長度進行時間伸縮並保持音調（Swivel 自己的方法，與 Mac 版不同）：放慢的聲音可能略有回音，加快的聲音可能讓拍手等清脆聲音變柔和。隨後由 Windows 編碼為 AAC，與未改動的畫面放在一起。",
+    "この速度では、音声は音程を保ったまま新しい長さにタイムストレッチされます（Mac 版とは異なる Swivel 独自の方法）。遅くした音声はわずかにエコーがかかり、速くした音声では拍手のような鋭い音が柔らかくなることがあります。その後 Windows が AAC にエンコードし、変更していない映像と組み合わせます。"
+  ],
+  "At this speed the sound of the kept part would be too long to time-stretch (more than two hours or 512 MB of PCM). Remove the sound or keep a shorter part.": [
+    "在此速度下，保留部分的声音太长，无法进行时间拉伸（超过两小时或 512 MB 的 PCM）。请移除声音或保留更短的部分。",
+    "在此速度下，保留部分的聲音太長，無法進行時間伸縮（超過兩小時或 512 MB 的 PCM）。請移除聲音或保留更短的部分。",
+    "この速度では、残す部分の音声が長すぎてタイムストレッチできません（2 時間または PCM で 512 MB を超えます）。音声を削除するか、残す部分を短くしてください。"
+  ],
+  "Windows could not prepare the sound at this speed, so no file was saved. Remove the sound to save the video without it.": [
+    "Windows 无法按此速度准备声音，因此没有保存任何文件。移除声音即可保存不带声音的视频。",
+    "Windows 無法依此速度準備聲音，因此沒有儲存任何檔案。移除聲音即可儲存不含聲音的影片。",
+    "Windows はこの速度の音声を準備できなかったため、ファイルは保存されていません。音声を削除すると、音声なしで動画を保存できます。"
   ]
 }

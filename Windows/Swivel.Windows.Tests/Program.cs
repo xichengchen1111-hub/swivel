@@ -31,7 +31,6 @@ internal static class Program
         var validationApp=new App(validationHost:true);
         try
         {
-            Group("SpeedSoundProbe", () => SpeedSoundProbe.Run(directory)); if (Environment.GetEnvironmentVariable("CI") == "true") { Console.WriteLine("PROBE done"); return 1; }
             string source = Path.Combine(directory, "图像 🦜.png");
             Save(source, new PngBitmapEncoder(), PixelFormats.Bgra32, 40, 20);
             byte[] original = File.ReadAllBytes(source);
@@ -130,6 +129,7 @@ internal static class Program
             Group("RotatedVideoNativeChecks", () => RotatedVideoNativeChecks.Run(directory,Check));
             Group("VideoTrimNativeChecks", () => VideoTrimNativeChecks.Run(directory,Check));
             Group("VideoEditNativeChecks", () => VideoEditNativeChecks.Run(directory,Check));
+            Group("SpeedSoundNativeChecks", () => SpeedSoundNativeChecks.Run(directory,Check));
             Group("SubtitleConvertNativeChecks", () => SubtitleConvertNativeChecks.Run(directory,Check));
             Group("ReadOnlyImageNativeChecks", () => ReadOnlyImageNativeChecks.Run(directory,Check));
             Group("CopyFilesNativeChecks", () => CopyFilesNativeChecks.Run(directory,Check,Reject));

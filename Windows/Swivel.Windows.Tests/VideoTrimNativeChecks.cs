@@ -102,7 +102,7 @@ internal static class VideoTrimNativeChecks
     }
 
     // The colours of the first and last frame of a video.
-    private static string Colours(string path, double seconds)
+    internal static string Colours(string path, double seconds)
     {
         var file = StorageFile.GetFileFromPathAsync(path).AsTask().GetAwaiter().GetResult();
         var clip = MediaClip.CreateFromFileAsync(file).AsTask().GetAwaiter().GetResult();

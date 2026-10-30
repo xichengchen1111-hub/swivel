@@ -131,7 +131,7 @@ internal static class VideoEditChecks
             "Speed-ups ask for fewer bits only when the played rate would pass 100 Mbit/s");
         var picture = new VideoPicture(QuarterTurns: 1);
         var plan = VideoTrim.Plan(0, 10_000, 10_000, true, true, picture, 200);
-        check(plan.Picture == picture && plan.Speed == 200 && !plan.KeepSound && plan.Edited && plan.OutputLength == 5_000, "At 2× the whole video can be edited; its sound is removed");
+        check(plan.Picture == picture && plan.Speed == 200 && plan.KeepSound && plan.Edited && plan.OutputLength == 5_000, "At 2× the whole video can be edited, keeping its sound");
         plan = VideoTrim.Plan(0, 10_000, 10_000, true, true, new VideoPicture(Aspect: VideoAspect.Square));
         check(plan.KeepSound && plan.Edited && plan.Speed == 100, "A crop alone keeps the sound");
         plan = VideoTrim.Plan(1_000, 3_000, 10_000, true, true, new VideoPicture(Position: 0.2));
