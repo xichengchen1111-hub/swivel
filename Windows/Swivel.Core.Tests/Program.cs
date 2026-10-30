@@ -148,6 +148,7 @@ DocumentEpubChecks.Run(Check, Reject);
 DocumentDocChecks.Run(Check, Reject);
 DocumentRtfChecks.Run(Check, Reject);
 DocumentOdtExportChecks.Run(Check, Reject);
+DocumentPdfChecks.Run(Check, Reject);
 AppRouteChecks.Run(Check, Reject);
 AssistantDraftChecks.Run(Check, Reject);
 PngMetadataChecks.Run(Check, Reject);
