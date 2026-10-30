@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.132 — merged D04 speed-change sound, F08 Store uninstall, A04 Preview File (Codex) (2026-10-30)
+
+- Each branch passed its own Windows CI and independent review before merging: D04 40980786519 (core 4,553,063, native 6,088; review fixes and an exact sound length), F08 40979198060 (core 4,553,170, native 6,097, including a real test-package install/uninstall round trip; no P1/P2 left), A04 40977928721 (core 4,553,221, native 6,112; written by Codex, review no P1/P2, four P3s fixed).
+- After merging all three: core 4,553,516 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- Not tested: listening to speed-changed sound, real phone videos, uninstalling real Store apps on a home PC, previews in the real Windows UI.
+
 ## Windows0.131 — merged D04 video edits, D03 noise inputs (Codex), F07 quit apps, G02 Agent tools (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: D04 40896894909 (core 4,552,340, native 5,762), D03 40899837787 (core 4,552,658, native 5,971; written by Codex, independent review no P1/P2, one P3 fixed), F07 40901348838 (core 4,552,510, native 5,784; no P1, P2 and nine P3s fixed, three minor P3s left), G02 40901769284 (core 4,552,473, native 5,774; review fixes included).

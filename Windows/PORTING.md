@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.132 合并第七轮：D04 变速声音、F08 Store 卸载、A04 预览（A04 由 Codex 编写）
+
+分支 `claude/win-d04-speedsound-1f2400`（c1208b3、fee7e4e、bdf6fe0、3e85790，另有两个已删除的临时 CI 探测提交）、`claude/win-f08-storeuninstall-e58da2`（802d041、345417d）、`codex/win-a04-preview`（0f68883 由 Codex 编写，Claude 加预览专用解码说明；审查修正提交）。Strings.json 三方 JSON 合并无同键冲突。
+
+- D04：保留部分的声音以同样的剪切解码，用既有 WSOLA 拉伸到重定时视频的精确长度，编码为 AAC，由新的原创 MP4 混流（Mp4AudioMux）作为第二条轨道加入，画面不再重编码。审查修正：块偏移数量受自身盒限定（短 stco 曾导致预留数 GB）、hdlr/tkhd/mdhd/elst 读取留在盒内、0.25× 时允许两源帧误差、AAC 末包填充用编辑列表截到拉伸长度（CI 上 4× 时多 15.8 ms）、拒绝没有编辑列表的音频编辑盒、更严格的起始检查。
+- F08：可卸载判定排除框架/资源/捆绑/系统签名/状态非 OK/被依赖/受保护（含 Windows App SDK 运行时、winget）与 Swivel；确认后重新读取列表与运行进程，`RemovePackageAsync` 仅当前用户，结果再读列表；之后对已不再安装的家族提供 Local\Packages 文件夹经回收站会话移走与撤销（仅当 Windows 自身清理后仍存在）。CI 上实际安装并卸载一个测试包。审查修正：运行检查跳过读不到包身份的进程（CI 显示否则总拒绝）、卸载专用读取不计入列表扫描时限、系统调用后任何失败都附新列表、卸载期间禁用撤销、更新隐私说明。
+- A04：`FilePreview.Kind` 按扩展名路由到既有读取器；图片走与 image.preview 相同的 OnSta 打开；本地音频经 `WaveNoiseInput`，压缩音频经 `OpenDecodedAsync`（在后台线程开始）；字幕/数据经严格读取器（二进制 plist→YAML），格式有误的 SRT/CSV/TSV 退回文档文字读取；超范围浮点 WAV 给出预览专用说明。审查（无 P1/P2）未修的 P3：图片同时有“预览图片”和“预览文件”两个入口；声明非 UTF 编码的 XML plist 验证与显示解释可能不同（影响小）。
+
 ## 0.131 合并 D04 视频、第六轮 D03/F07/G02（D03 由 Codex 编写）
 
 分支 `claude/win-d04-video-de4eb5`（7e91b9a、2d086d8、42c9c45、da4b789、42e29f4，另有已删除的 CI 诊断提交）、`codex/win-d03-float`（bc1a494 由 Codex 编写，Claude 审查与 P3 修正）、`claude/win-f07-quitapp-334968`（5d3145f、d2c1303）、`claude/win-g02-mcp-0be75b`（94330af、f3b9cc6）。Strings.json 三方 JSON 合并无同键冲突。合并时曾有一次其他工作区并发重新打包引起的 packfile 索引警告，随后仓库读取正常。
