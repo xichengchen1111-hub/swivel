@@ -258,6 +258,8 @@ internal sealed class RopeEdgeWatcher : IDisposable
     internal void Start() { if (!timer.IsEnabled) timer.Start(); }
     /// Stops polling and forgets the rope's state; the caller hides or closes the window.
     internal void Stop() { timer.Stop(); trigger.Reset(); }
+    /// Lowers the rope on `s`'s monitor without the edge gesture, for `linger` or while the pointer is on it.
+    internal void Present(RopeSample s,TimeSpan linger) { trigger.Present(clock.Elapsed,s.Monitor,linger); show(s); }
 
     internal RopeEdgeAction Step(TimeSpan now)
     {

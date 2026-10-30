@@ -54,6 +54,9 @@ public sealed class Prefs
     /// Clothesline's top-edge rope; off by default and omitted from saved settings while off.
     public bool RopeAtTopEdge { get; private set; }
     public void SetRopeAtTopEdge(bool on) { if (RopeAtTopEdge == on) return; RopeAtTopEdge = on; Changed?.Invoke(); }
+    /// Clothesline's screenshot cards; off by default and omitted from saved settings while off.
+    public bool ScreenshotCards { get; private set; }
+    public void SetScreenshotCards(bool on) { if (ScreenshotCards == on) return; ScreenshotCards = on; Changed?.Invoke(); }
     private readonly MenuPalette?[] palettes = new MenuPalette?[5];
     public MenuPalette? Palette(MenuTemplate template) => Enum.IsDefined(template) ? palettes[(int)template] : throw new ArgumentOutOfRangeException(nameof(template));
     public void SetPalette(MenuTemplate template,MenuPalette? palette)
@@ -105,7 +108,7 @@ public sealed class Prefs
     {
         if (presets.RemoveAll(x => x.Id == id) > 0) { customActions = customActions.Where(x => x != "preset." + id).ToArray(); Changed?.Invoke(); }
     }
-    public string Serialize() => JsonSerializer.Serialize(new Saved(2, Language, enabled.Select(x => x.ToString()).Order().ToArray(), presets.ToArray(), customActions, Shortcuts, apps.ToArray(), MenuTemplate, AnimateMenus, qrCodes.ToArray(),palettes.ToArray(),Assistant,RopeAtTopEdge ? true : null));
+    public string Serialize() => JsonSerializer.Serialize(new Saved(2, Language, enabled.Select(x => x.ToString()).Order().ToArray(), presets.ToArray(), customActions, Shortcuts, apps.ToArray(), MenuTemplate, AnimateMenus, qrCodes.ToArray(),palettes.ToArray(),Assistant,RopeAtTopEdge ? true : null,ScreenshotCards ? true : null));
     public static Prefs Parse(string json)
     {
         if (json.Length > MaxJsonLength) throw new FormatException("Invalid preferences.");
@@ -124,6 +127,7 @@ public sealed class Prefs
         prefs.Language = saved.Language;
         if(saved.Assistant is not null)prefs.SaveAssistant(saved.Assistant);
         prefs.RopeAtTopEdge = saved.RopeAtTopEdge == true;
+        prefs.ScreenshotCards = saved.ScreenshotCards == true;
         if (saved.Version == 2)
             foreach (var preset in saved.Presets!)
             {
@@ -158,7 +162,7 @@ public sealed class Prefs
         }
         return prefs;
     }
-    public sealed record Saved(int Version, string Language, string[] Enabled, ImagePreset[]? Presets = null, string[]? CustomActions = null, ShortcutSet? Shortcuts = null, AppRoute[]? Apps = null, MenuTemplate? Template = null, bool? AnimateMenus = null, QrEntry[]? QrCodes = null, MenuPalette?[]? Palettes = null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] AssistantSettings? Assistant=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] bool? RopeAtTopEdge=null);
+    public sealed record Saved(int Version, string Language, string[] Enabled, ImagePreset[]? Presets = null, string[]? CustomActions = null, ShortcutSet? Shortcuts = null, AppRoute[]? Apps = null, MenuTemplate? Template = null, bool? AnimateMenus = null, QrEntry[]? QrCodes = null, MenuPalette?[]? Palettes = null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] AssistantSettings? Assistant=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] bool? RopeAtTopEdge=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] bool? ScreenshotCards=null);
 }
 
 public sealed record ToolAction(string Id, string Title, Feature? Feature = null, bool ImageOnly = false, bool SingleFile = false, bool SrtOnly = false, string[]? Extensions = null, bool RequiresFiles = true, bool WebPage = false);
@@ -346,7 +350,7 @@ public static class Compatibility
         new("File Shelf", "Preview", "A floating shelf and main-window shelf share session references and copy drag. Explicit single-file preview supports existing SDR PNG/JPEG/BMP/TIFF/GIF/TGA/PSD/WebP images; extracted TXT/TEXT/MD/MARKDOWN/LOG/DOC/DOCX/ODT/RTF/HTML/HTM/EPUB text; strict SRT/VTT/ASS/SSA/LRC/SBV and JSON/JSONL/NDJSON/PLIST/CSV/TSV source text (binary plist as YAML); integer PCM WAV directly; in-range float WAV, G.711 WAV and integer AIFF/AIFC converted in memory; and MP3, ADTS AAC, FLAC and audio-only M4A via Windows decoding (128 MiB, two hours). Malformed SRT/CSV/TSV fall back to plain text. Audio playback is manual and limited to the first 10 seconds. Shelf refresh never reads previews. Folders, virtual/cloud items, other formats (including ICO), system preview handlers and non-activating focus remain planned; real Windows acceptance is pending."),
         new("Quick Actions", "Preview", "Search supplied-file actions. The opt-in assistant shows complete requests and only selects a row for manual Return. Custom action labels need per-request permission. Doctor explains reviewed redacted basic/static snapshots or one frozen CPU/memory sample; selected reported labels need separate explicit consent and may contain private text. No automatic fixes, requests or copying. Monitoring stays paused until Resume. Real Windows/service acceptance remains pending."),
         new("Keep Awake", "Preview", "Timed system or display wake requests. Turning the feature off or quitting releases the request."),
-        new("Clothesline", "Partial", "Manually hang up to 12 images, or explicitly start a folder arrival session. New or renamed image paths are read as they exist when processed; thumbnails are snapshots and notifications may be missed. No initial folder scan, screenshot takeover or clipboard reading. An optional top-edge rope lowers with gentle spring motion; screenshot takeover remains planned."),
+        new("Clothesline", "Partial", "Manually hang up to 12 images, or explicitly start a folder arrival session. New or renamed image paths are read as they exist when processed; thumbnails are snapshots and notifications may be missed. No initial folder scan, system screenshot setting change or clipboard reading. An optional top-edge rope lowers with gentle spring motion, and optional screenshot cards watch the Windows Screenshots folder."),
         new("Text Capture", "Partial", "Windows OCR requires an installed signed MSIX identity and installed OCR languages. The portable ZIP is explicitly unavailable for this system feature. A default-off local image workflow recognizes only on request, then offers editable text and explicit copy; packaged runtime accuracy and UI acceptance remain pending."),
         new("JPEG Metadata", "Partial", "Remove JPEG APP1, APP13 and comments without recompressing supported baseline/progressive scans. Other data including ICC profiles and thumbnails remain and may contain private information. Orientation, color or display can change. APP11/non-ICC APP2 and unsupported coding are refused; this is not complete privacy or HDR/credential detection."),
         new("PNG Metadata", "Partial", "Remove PNG text, EXIF and time chunks without recompressing image data. Other chunks, color profiles and unknown ancillary data are retained and may contain private information. EXIF orientation removal may change display. Static SDR PNG only, up to 32 MiB; full privacy sanitization, selective tags and TIFF metadata editing remain pending. JPEG has a separate limited tool."),

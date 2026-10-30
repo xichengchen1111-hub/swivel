@@ -55,7 +55,7 @@ internal sealed class ClotheslineWindow : Window
         row.Children.Add(UI.Button(app.L("Cancel Operation"),app.CancelWork));
         var stay = new CheckBox { Content = app.L("Stay on top"),IsChecked = Topmost,VerticalAlignment = VerticalAlignment.Center }; stay.Click += (_,_) => Topmost = stay.IsChecked == true; row.Children.Add(stay);
         top.Children.Add(row); DockPanel.SetDock(top,Dock.Top); root.Children.Add(top);
-        var footer = new StackPanel(); footer.Children.Add(UI.Text(app.L("Manual images, folder arrival cards and the optional top-edge rope (Settings) are available. Screenshot takeover is still planned."),12)); footer.Children.Add(status); if (prints.StitchPreview.Parent is Panel old) old.Children.Remove(prints.StitchPreview); footer.Children.Add(prints.StitchPreview); DockPanel.SetDock(footer,Dock.Bottom); root.Children.Add(footer);
+        var footer = new StackPanel(); footer.Children.Add(UI.Text(app.L("Manual images, folder arrival cards, screenshot cards and the optional top-edge rope (Settings) are available."),12)); footer.Children.Add(status); if (prints.StitchPreview.Parent is Panel old) old.Children.Remove(prints.StitchPreview); footer.Children.Add(prints.StitchPreview); DockPanel.SetDock(footer,Dock.Bottom); root.Children.Add(footer);
         var canvas = new Canvas { Width = 1000,Height = 400 };
         var palette = MenuColors.Active(app,MenuTemplate.Clothesline);
         foreach (double y in new[] { 34d,219d }) canvas.Children.Add(new Line { X1 = 5,Y1 = y,X2 = 995,Y2 = y,Stroke = palette is null ? SystemColors.ControlDarkBrush : MenuColors.Brush(palette.Rope),StrokeThickness = 2 });

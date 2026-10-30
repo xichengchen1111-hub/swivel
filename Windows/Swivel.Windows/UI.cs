@@ -448,7 +448,11 @@ public sealed class MainWindow : Window
         page.Children.Add(UI.Button(app.L("Open Clothesline"),app.OpenClothesline));
         var ropeEdge = new CheckBox { Content = app.L("Show the rope when the pointer touches the top edge"), IsChecked = app.Prefs.RopeAtTopEdge, IsEnabled = app.Prefs.IsOn(Feature.Clothesline), Margin = new Thickness(0,8,0,0) };
         ropeEdge.Click += (_,_) => app.Prefs.SetRopeAtTopEdge(ropeEdge.IsChecked == true); page.Children.Add(ropeEdge);
-        page.Children.Add(UI.Text(app.L("Needs Clothesline on. Rest the pointer at the very top of a screen: the rope lowers there with your prints and lifts a second after the pointer leaves. It never takes focus and stays away while a full-screen app is in front. Screenshot takeover is still planned."), 12));
+        page.Children.Add(UI.Text(app.L("Needs Clothesline on. Rest the pointer at the very top of a screen: the rope lowers there with your prints and lifts a second after the pointer leaves. It never takes focus and stays away while a full-screen app is in front."), 12));
+        var screenshots = new CheckBox { Content = app.L("Show new screenshots as cards"), IsChecked = app.Prefs.ScreenshotCards, IsEnabled = app.Prefs.IsOn(Feature.Clothesline), Margin = new Thickness(0,8,0,0) };
+        screenshots.Click += (_,_) => app.Prefs.SetScreenshotCards(screenshots.IsChecked == true); page.Children.Add(screenshots);
+        page.Children.Add(UI.Text(app.L("Needs Clothesline on. Watches the Windows Screenshots folder (where Windows+Print Screen saves) for new images only; existing files are not scanned. A card waits in the bottom-right corner: click it or drag it up to hang it on the Clothesline, drag it elsewhere to use the file. The file is never moved, changed or deleted, and no Windows setting is changed. Snipping Tool captures appear only while its automatic saving is on."), 12));
+        if (app.Prefs.ScreenshotCards && app.ScreenshotCardsHalted) page.Children.Add(UI.Text(app.L("Screenshot cards are not running. Turn the setting off and on to try again."), 12));
         page.Children.Add(UI.Button(app.L("Image Arrival Cards…"),app.OpenImageArrivalCards));
         page.Children.Add(UI.Text(app.L("Menu Style"), 18));
         var style = new ComboBox { ItemsSource = new[] { app.L("Wheel"), app.L("List"), app.L("Bookshelf"), app.L("Sticky Notes"), app.L("Clothesline") }, SelectedIndex = (int)app.Prefs.MenuTemplate, MinHeight = 30 };
