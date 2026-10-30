@@ -60,7 +60,7 @@ public static class StorePackages
     public static readonly TimeSpan SoftTimeLimit=TimeSpan.FromSeconds(10);
     public const string Scope="Explicit read-only list of MSIX and Microsoft Store packages registered for the current Windows user, read from the system package manager. Up to 4,096 packages, 1,024 UTF-16 units per text field and about 10 seconds. A blocked system call can return after the soft time limit.";
     public const string Limits="Only the current user's registered packages are listed: other users' packages and packages provisioned for new users are not read. Reported display names can be unresolved resource references. Framework, resource, bundle and development (sideloaded or registered from a folder) flags are as reported by Windows. Install locations, files, sizes, signatures, Store licences and update state are not inspected. This does not prove app publisher identity, that a package works, or that it is safe to remove.";
-    public const string Privacy="Reported names, publishers and versions appear in the list and explicit copies. Package family names are hidden by default; select Show Package Family Names to include them in selected details and copies. No automatic refresh, report saving, network, elevation, package removal or settings changes. Copy Report is limited to 4 MiB of UTF-8 text; oversized copies are refused whole.";
+    public const string Privacy="Reported names, publishers and versions appear in the list and explicit copies. Package family names are hidden by default; select Show Package Family Names to include them in selected details and copies. No automatic refresh, report saving, network, elevation or settings changes, and no package removal unless you choose Uninstall… and confirm. Copy Report is limited to 4 MiB of UTF-8 text; oversized copies are refused whole.";
     public const string ReportLimit="The package report exceeds 4 MiB of UTF-8 text. Copy one selected package instead.";
     public static StorePackagesSnapshot Scan(IStorePackageSource source,CancellationToken token)
     {var clock=Stopwatch.StartNew();return ScanWithClock(source,()=>clock.Elapsed,token);}
@@ -68,19 +68,25 @@ public static class StorePackages
     {
         ArgumentNullException.ThrowIfNull(source);ArgumentNullException.ThrowIfNull(elapsed);token.ThrowIfCancellationRequested();
         var rows=new List<StorePackageRecord>();var issue=PackageListIssue.None;
+        // Time spent on removal-only fields is kept out of the listed scan's budget, so the list
+        // reads exactly as far as before; those fields have their own soft budget.
+        var removal=TimeSpan.Zero;TimeSpan Listed()=>elapsed()-removal;
         using(var list=source.Open())
         {
             token.ThrowIfCancellationRequested();
             if(list is null)issue|=PackageListIssue.Unavailable;
             else for(int index=0;;index++)
             {
-                if(elapsed()>=SoftTimeLimit){issue|=PackageListIssue.TimeLimit;break;}
+                if(Listed()>=SoftTimeLimit){issue|=PackageListIssue.TimeLimit;break;}
                 if(index==MaxPackages){issue|=PackageListIssue.Limit;break;}
                 var next=list.Next();token.ThrowIfCancellationRequested();
                 if(next.Kind==PackageNextKind.End)break;
                 if(next.Kind!=PackageNextKind.Item||next.Entry is null){issue|=PackageListIssue.EnumerationFailed;break;}
-                rows.Add(Read(next.Entry,index,elapsed,token));
-                if(rows[^1].TimeLimited){issue|=PackageListIssue.TimeLimit;break;}
+                var row=Read(next.Entry,index,Listed,token);
+                if(!row.TimeLimited&&removal<SoftTimeLimit)
+                {var start=elapsed();row=ReadRemoval(next.Entry,row,token);removal+=elapsed()-start;}
+                rows.Add(row);
+                if(row.TimeLimited){issue|=PackageListIssue.TimeLimit;break;}
             }
         }
         token.ThrowIfCancellationRequested();
@@ -97,11 +103,18 @@ public static class StorePackages
         var version=Get(entry.Version);var architecture=Get(entry.Architecture);
         bool? framework=Get(()=>entry.Flag(PackageFlag.Framework)),resource=Get(()=>entry.Flag(PackageFlag.Resource)),bundle=Get(()=>entry.Flag(PackageFlag.Bundle)),development=Get(()=>entry.Flag(PackageFlag.Development));
         var installed=Get(entry.Installed);var family=Text(PackageTextField.FamilyName);
-        // Removal-only fields, after the listed ones so a time limit never hides a listed field earlier.
-        var fullName=Text(PackageTextField.FullName);var signature=Get(entry.Signature);var statusOk=Get(entry.StatusOk);
-        IReadOnlyList<string>? depends=null;
-        if(!Stop()){var raw=entry.Dependencies();token.ThrowIfCancellationRequested();depends=StorePackageRemoval.Dependencies(raw);}
-        return new(index,name,publisher,version,architecture,framework,resource,bundle,development,installed,family,timed,fullName,signature,statusOk,depends);
+        return new(index,name,publisher,version,architecture,framework,resource,bundle,development,installed,family,timed);
+    }
+    // Fields only Uninstall… uses. Rows read after their budget ran out keep them null, so
+    // nothing is offered from that list (StorePackageRemoval treats missing dependencies as an
+    // incomplete list).
+    private static StorePackageRecord ReadRemoval(IStorePackageEntry entry,StorePackageRecord row,CancellationToken token)
+    {
+        var fullName=Validate(entry.Text(PackageTextField.FullName));token.ThrowIfCancellationRequested();
+        var signature=entry.Signature();token.ThrowIfCancellationRequested();
+        var statusOk=entry.StatusOk();token.ThrowIfCancellationRequested();
+        var depends=StorePackageRemoval.Dependencies(entry.Dependencies());token.ThrowIfCancellationRequested();
+        return row with{FullName=fullName,Signature=signature,StatusOk=statusOk,DependsOn=depends};
     }
     public static PackageText Validate(string? value)
     {

@@ -14619,11 +14619,6 @@
     "套件管理員未提供",
     "パッケージ マネージャーから取得できません"
   ],
-  "Reported names, publishers and versions appear in the list and explicit copies. Package family names are hidden by default; select Show Package Family Names to include them in selected details and copies. No automatic refresh, report saving, network, elevation, package removal or settings changes. Copy Report is limited to 4 MiB of UTF-8 text; oversized copies are refused whole.": [
-    "报告的名称、发布者和版本会显示在列表和你明确复制的内容中。包系列名称默认隐藏；勾选“显示包系列名称”才会包含在所选详情和复制内容中。不自动刷新、不保存报告、不联网、不提权、不移除包、不更改设置。“复制报告”最多 4 MiB 的 UTF-8 文本，超出时整体拒绝。",
-    "報告的名稱、發行者和版本會顯示在清單和你明確複製的內容中。套件系列名稱預設隱藏；勾選「顯示套件系列名稱」才會包含在所選詳細資料和複製內容中。不自動重新整理、不儲存報告、不連網、不提升權限、不移除套件、不變更設定。「複製報告」最多 4 MiB 的 UTF-8 文字，超出時整體拒絕。",
-    "報告された名前、発行元、バージョンは一覧と明示的なコピーに表示されます。パッケージ ファミリ名は既定で非表示です。「パッケージ ファミリ名を表示」を選ぶと選択した詳細とコピーに含まれます。自動更新、レポート保存、ネットワーク、昇格、パッケージ削除、設定変更は行いません。「レポートをコピー」は UTF-8 テキスト 4 MiB までで、超える場合は全体を拒否します。"
-  ],
   "Unrecognized architecture value {0}": [
     "无法识别的架构值 {0}",
     "無法辨識的架構值 {0}",
@@ -16049,11 +16044,6 @@
     "解除安裝…",
     "アンインストール…"
   ],
-  "Uninstall… removes one selected app package for your Windows account with the system package manager, after a confirmation. Frameworks, resource packages, bundles, system-signed packages, packages whose status is not OK, packages other listed packages depend on, Store and App Installer, Edge, Windows Security, Windows' own packages and Swivel itself are never offered, and nothing is offered while the list is incomplete. Just before removal the package list is read again: if the package's full name, version or kind changed, or the app is running, nothing is removed. Removal cannot be undone from Swivel.": [
-    "“卸载…”在确认后用系统包管理器为你的 Windows 账户删除一个所选应用包。框架包、资源包、捆绑包、系统签名的包、状态不正常的包、列表中其他包依赖的包、Microsoft Store 和应用安装程序、Edge、Windows 安全中心、Windows 自身的包以及 Swivel 本身都不会提供；列表不完整时不提供任何包。删除前会再次读取包列表：如果包的完整名称、版本或类型已更改，或应用正在运行，则不删除任何内容。删除无法在 Swivel 中撤销。",
-    "「解除安裝…」在確認後用系統套件管理員為你的 Windows 帳戶移除一個所選應用程式套件。架構套件、資源套件、套件組合、系統簽署的套件、狀態不正常的套件、清單中其他套件相依的套件、Microsoft Store 和應用程式安裝程式、Edge、Windows 安全性、Windows 本身的套件以及 Swivel 本身都不會提供；清單不完整時不提供任何套件。移除前會再次讀取套件清單：如果套件的完整名稱、版本或類型已變更，或應用程式正在執行，則不移除任何內容。移除無法在 Swivel 中復原。",
-    "「アンインストール…」は、確認後にシステムのパッケージ マネージャーで、選択したアプリ パッケージ 1 つをあなたの Windows アカウントから削除します。フレームワーク、リソース パッケージ、バンドル、システム署名のパッケージ、状態が正常でないパッケージ、一覧の他のパッケージが依存するパッケージ、Store とアプリ インストーラー、Edge、Windows セキュリティ、Windows 自身のパッケージ、Swivel 自身は対象外で、一覧が不完全な間は何も対象になりません。削除の直前にパッケージ一覧をもう一度読み取り、完全名、バージョン、種類が変わっていたりアプリが実行中だったりした場合は何も削除しません。削除は Swivel では元に戻せません。"
-  ],
   "Windows removes the app and the data it keeps for this app for your account. This cannot be undone from Swivel: to get the app back, install it again from the Microsoft Store or from where it came from. Only your account is changed: other Windows users and copies provisioned for new users are not. Swivel does not ask for administrator rights and does not close the app: if it starts again before the removal finishes, Windows may close it.": [
     "Windows 会为你的账户删除该应用及其保留的数据。此操作无法在 Swivel 中撤销：如需找回应用，请从 Microsoft Store 或原来的来源重新安装。只会更改你的账户：其他 Windows 用户和为新用户预配的副本不受影响。Swivel 不会请求管理员权限，也不会关闭该应用：如果它在删除完成前再次启动，Windows 可能会将其关闭。",
     "Windows 會為你的帳戶移除該應用程式及其保留的資料。此操作無法在 Swivel 中復原：如需取回應用程式，請從 Microsoft Store 或原來的來源重新安裝。只會變更你的帳戶：其他 Windows 使用者和為新使用者佈建的副本不受影響。Swivel 不會要求系統管理員權限，也不會關閉該應用程式：如果它在移除完成前再次啟動，Windows 可能會將其關閉。",
@@ -16073,5 +16063,15 @@
     "本地应用数据（Packages）下没有此应用残留的数据文件夹。",
     "本機應用程式資料（Packages）下沒有此應用程式殘留的資料夾。",
     "ローカル アプリ データ (Packages) にこのアプリのデータ フォルダーは残っていません。"
+  ],
+  "Reported names, publishers and versions appear in the list and explicit copies. Package family names are hidden by default; select Show Package Family Names to include them in selected details and copies. No automatic refresh, report saving, network, elevation or settings changes, and no package removal unless you choose Uninstall… and confirm. Copy Report is limited to 4 MiB of UTF-8 text; oversized copies are refused whole.": [
+    "报告的名称、发布者和版本会显示在列表和你明确复制的内容中。包系列名称默认隐藏；勾选“显示包系列名称”才会包含在所选详情和复制内容中。不自动刷新、不保存报告、不联网、不提权、不更改设置；除非你选择“卸载…”并确认，否则不移除包。“复制报告”最多 4 MiB 的 UTF-8 文本，超出时整体拒绝。",
+    "報告的名稱、發行者和版本會顯示在清單和你明確複製的內容中。套件系列名稱預設隱藏；勾選「顯示套件系列名稱」才會包含在所選詳細資料和複製內容中。不自動重新整理、不儲存報告、不連網、不提升權限、不變更設定；除非你選擇「解除安裝…」並確認，否則不移除套件。「複製報告」最多 4 MiB 的 UTF-8 文字，超出時整體拒絕。",
+    "報告された名前、発行元、バージョンは一覧と明示的なコピーに表示されます。パッケージ ファミリ名は既定で非表示です。「パッケージ ファミリ名を表示」を選ぶと選択した詳細とコピーに含まれます。自動更新、レポート保存、ネットワーク、昇格、設定変更は行わず、「アンインストール…」を選んで確認しない限りパッケージを削除しません。「レポートをコピー」は UTF-8 テキスト 4 MiB までで、超える場合は全体を拒否します。"
+  ],
+  "Uninstall… removes one selected app package for your Windows account with the system package manager, after a confirmation. Frameworks, resource packages, bundles, system-signed packages, packages whose status is not OK, packages other listed packages depend on, Store and App Installer, Edge, Windows Security, Windows' own packages and Swivel itself are never offered, and nothing is offered while the list is incomplete. Just before removal the package list is read again: if the package's full name, version or kind changed, or a process of the app that Swivel can query is running, nothing is removed. Removal cannot be undone from Swivel.": [
+    "“卸载…”在确认后用系统包管理器为你的 Windows 账户删除一个所选应用包。框架包、资源包、捆绑包、系统签名的包、状态不正常的包、列表中其他包依赖的包、Microsoft Store 和应用安装程序、Edge、Windows 安全中心、Windows 自身的包以及 Swivel 本身都不会提供；列表不完整时不提供任何包。删除前会再次读取包列表：如果包的完整名称、版本或类型已更改，或 Swivel 能查询到的该应用进程正在运行，则不删除任何内容。删除无法在 Swivel 中撤销。",
+    "「解除安裝…」在確認後用系統套件管理員為你的 Windows 帳戶移除一個所選應用程式套件。架構套件、資源套件、套件組合、系統簽署的套件、狀態不正常的套件、清單中其他套件相依的套件、Microsoft Store 和應用程式安裝程式、Edge、Windows 安全性、Windows 本身的套件以及 Swivel 本身都不會提供；清單不完整時不提供任何套件。移除前會再次讀取套件清單：如果套件的完整名稱、版本或類型已變更，或 Swivel 能查詢到的該應用程式處理程序正在執行，則不移除任何內容。移除無法在 Swivel 中復原。",
+    "「アンインストール…」は、確認後にシステムのパッケージ マネージャーで、選択したアプリ パッケージ 1 つをあなたの Windows アカウントから削除します。フレームワーク、リソース パッケージ、バンドル、システム署名のパッケージ、状態が正常でないパッケージ、一覧の他のパッケージが依存するパッケージ、Store とアプリ インストーラー、Edge、Windows セキュリティ、Windows 自身のパッケージ、Swivel 自身は対象外で、一覧が不完全な間は何も対象になりません。削除の直前にパッケージ一覧をもう一度読み取り、完全名、バージョン、種類が変わっていたりSwivel が照会できるアプリのプロセスが実行中だったりした場合は何も削除しません。削除は Swivel では元に戻せません。"
   ]
 }

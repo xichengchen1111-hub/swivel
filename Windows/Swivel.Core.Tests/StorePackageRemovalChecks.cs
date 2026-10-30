@@ -27,7 +27,7 @@ internal static class StorePackageRemovalChecks
         foreach(uint s in new uint[]{0,1,2,3}){var x=Row("Contoso.Notes",signature:s);check(StorePackageRemoval.Check(x,Snap(x),null)==RemovalBlock.None,"Non-system signature kinds offered: "+s);}
         foreach(bool? ok in new bool?[]{false,null}){var x=Row("Contoso.Notes",ok:ok);check(StorePackageRemoval.Check(x,Snap(x),null)==RemovalBlock.Status,"Status not OK or unknown never offered");}
         check(StorePackageRemoval.Check(app,snap,"contoso.notes_"+Pub)==RemovalBlock.Swivel&&StorePackageRemoval.Check(app,snap,"Other_"+Pub)==RemovalBlock.None,"Swivel's own family never offered (case-insensitive), others unaffected");
-        foreach(string name in new[]{"Microsoft.WindowsStore","Microsoft.DesktopAppInstaller","Microsoft.MicrosoftEdge.Stable","Microsoft.SecHealthUI","Microsoft.Windows.Photos","MicrosoftWindows.Client.CBS","windows.immersivecontrolpanel","Microsoft.VCLibs.140.00","Microsoft.UI.Xaml.2.8","Microsoft.NET.Native.Runtime.2.2"})
+        foreach(string name in new[]{"Microsoft.WindowsStore","Microsoft.DesktopAppInstaller","Microsoft.MicrosoftEdge.Stable","Microsoft.SecHealthUI","Microsoft.Windows.Photos","MicrosoftWindows.Client.CBS","windows.immersivecontrolpanel","Microsoft.VCLibs.140.00","Microsoft.UI.Xaml.2.8","Microsoft.NET.Native.Runtime.2.2","Microsoft.WinAppRuntime.DDLM.5001.311.2039.0-x6","MicrosoftCorporationII.WinAppRuntime.Main.1.6","MicrosoftCorporationII.WinAppRuntime.Singleton","Microsoft.Winget.Source"})
         {var x=Row(name);check(StorePackageRemoval.Check(x,Snap(x),null)==RemovalBlock.Protected,"Protected package never offered: "+name);}
         check(StorePackageRemoval.Check(Row("Microsoft.WindowsCalculator"),Snap(Row("Microsoft.WindowsCalculator")),null)==RemovalBlock.None,"Ordinary Microsoft Store app (Calculator) is offered");
         // Identity consistency.
@@ -45,6 +45,15 @@ internal static class StorePackageRemovalChecks
         var duplicate=app with{Ordinal=1};check(StorePackageRemoval.Check(app,Snap(app,duplicate),null)==RemovalBlock.ListIncomplete,"Duplicate full name in the list offers nothing");
         var framework=Row("Microsoft.VCLibs.140.00",framework:true);var user=Row("Contoso.Notes",depends:new[]{"Microsoft.VCLibs.140.00_14.0.33519.0_x64__"+Pub});
         check(StorePackageRemoval.Check(framework,Snap(framework,user),null)!=RemovalBlock.None&&StorePackageRemoval.Check(user,Snap(framework,user),null)==RemovalBlock.None,"App using a framework is offered; the framework is not");
+        // Removal-only fields use their own budget: the listed scan reads as far as before.
+        var clock=TimeSpan.Zero;
+        var slowRows=Enumerable.Range(0,4).Select(i=>new SlowEntry("App"+i,()=>clock+=TimeSpan.FromSeconds(4))).ToArray();
+        var budget=StorePackages.ScanWithClock(new Source(slowRows),()=>clock,default);
+        check(budget.Records.Count==4&&budget.Issues==PackageListIssue.None&&!budget.Records.Any(x=>x.TimeLimited)&&!budget.Partial,"Slow removal-only reads never time-limit or shorten the listed scan");
+        check(budget.Records.Count(x=>x.DependsOn is not null)==3&&budget.Records.Count(x=>x.FullName is null)==1,"Rows after the removal budget keep removal fields unread");
+        check(budget.Records.All(x=>StorePackageRemoval.Check(x,budget,null)!=RemovalBlock.None),"A list whose removal fields ran out of budget offers nothing");
+        var quick=StorePackages.ScanWithClock(new Source(Enumerable.Range(0,2).Select(i=>new SlowEntry("App"+i,()=>{})).ToArray()),()=>TimeSpan.Zero,default);
+        check(quick.Records.All(x=>StorePackageRemoval.Check(x,quick,null)==RemovalBlock.None),"Removal fields read through the scan make packages offerable");
         // Name validation.
         check(StorePackageRemoval.ValidFamily("Microsoft.WindowsCalculator_"+Pub)&&!StorePackageRemoval.ValidFamily("a_"+Pub)&&!StorePackageRemoval.ValidFamily("..x_"+Pub)&&!StorePackageRemoval.ValidFamily("App_8WEKYB3D8BBWE")&&!StorePackageRemoval.ValidFamily("App_8wekyb3d8bbwi")
             &&!StorePackageRemoval.ValidFamily("A\\b_"+Pub)&&!StorePackageRemoval.ValidFamily("App_x_"+Pub)&&!StorePackageRemoval.ValidFamily(null)&&!StorePackageRemoval.ValidFamily("App"),"Family names validated strictly (name chars, 13-char lowercase publisher ID, one underscore)");
@@ -95,5 +104,13 @@ internal static class StorePackageRemovalChecks
             .Concat(Enum.GetValues<RemovalOutcome>().Select(o=>StorePackageRemoval.OutcomeText(o,x=>x)))
             .Concat(new[]{"The package is unchanged.","The package is no longer installed for your account. Nothing was removed.","The package changed since the list was read (for example it was updated). Nothing was removed. Read the package list again.","Nothing was removed."}))
             check(Strings.Table.TryGetValue(text,out var row)&&row.Length==3&&row.All(t=>t.Length>0&&(!text.Contains("{0}")||t.Contains("{0}"))&&(!text.Contains("{1}")||t.Contains("{1}"))),"Uninstall text translated: "+text[..Math.Min(40,text.Length)]);
+    }
+    private sealed class Source(SlowEntry[] rows):IStorePackageSource{public IStorePackageList? Open()=>new List(rows);}
+    private sealed class List(SlowEntry[] rows):IStorePackageList{int at;public PackageNext Next()=>at<rows.Length?new(PackageNextKind.Item,rows[at++]):new(PackageNextKind.End);public void Dispose(){}}
+    private sealed class SlowEntry(string name,Action removalRead):IStorePackageEntry
+    {
+        public string? Text(PackageTextField field)=>field switch{PackageTextField.FamilyName=>name+"_"+Pub,PackageTextField.FullName=>name+"_1.0.0.0_x64__"+Pub,_=>name};
+        public PackageVersion? Version()=>new(1,0,0,0);public uint? Architecture()=>9;public bool? Flag(PackageFlag flag)=>false;public DateTimeOffset? Installed()=>DateTimeOffset.UnixEpoch;
+        public uint? Signature(){removalRead();return 3;}public bool? StatusOk()=>true;public IReadOnlyList<string>? Dependencies()=>Array.Empty<string>();
     }
 }

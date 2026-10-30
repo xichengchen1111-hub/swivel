@@ -599,9 +599,11 @@ public sealed partial class App : Application
                     report(moved > 0 ? string.Format(L("Leftover review finished. Folders moved to the Recycle Bin or removed: {0}"), moved) : L("Leftover review closed. No folder from this window is in the Recycle Bin now."));
                     if (!back) break;
                 }
-                if (storeUninstalled > 0 || storeData > 0) { report(string.Format(L("Store packages uninstalled: {0} · app data folders moved to the Recycle Bin or removed: {1}"), storeUninstalled, storeData)); return; }
-                report(token.IsCancellationRequested ? L("Cancelled.") : moved > 0 ? string.Format(L("Leftover review finished. Folders moved to the Recycle Bin or removed: {0}"), moved)
-                    : searched ? L("Leftover review closed. No folder from this window is in the Recycle Bin now.") : L("Read-only installation-record inspection finished. No apps or files were changed.")); return;
+                string final = token.IsCancellationRequested ? L("Cancelled.") : moved > 0 ? string.Format(L("Leftover review finished. Folders moved to the Recycle Bin or removed: {0}"), moved)
+                    : searched ? L("Leftover review closed. No folder from this window is in the Recycle Bin now.") : storeUninstalled + storeData == 0 ? L("Read-only installation-record inspection finished. No apps or files were changed.") : "";
+                // Store results never replace the other outcomes of the same session.
+                if (storeUninstalled > 0 || storeData > 0) final = string.Format(L("Store packages uninstalled: {0} · app data folders moved to the Recycle Bin or removed: {1}"), storeUninstalled, storeData) + (final.Length > 0 ? " · " + final : "");
+                report(final); return;
             }
             if (action.Id == "doctor.appmemory")
             {

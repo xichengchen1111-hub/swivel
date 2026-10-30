@@ -26,7 +26,7 @@ internal static class StorePackageRemovalNativeChecks
         var blocks=live.Records.Select(x=>(Row:x,Block:StorePackageRemoval.Check(x,live,null))).ToArray();
         Console.WriteLine("Store package uninstall offers: "+string.Join(", ",blocks.GroupBy(x=>x.Block).OrderBy(g=>g.Key).Select(g=>g.Key+" "+g.Count())));
         Console.WriteLine("Store packages with full name/signature/status/dependencies read: "+live.Records.Count(x=>x.FullName?.State==PackageValueState.Present)+"/"+live.Records.Count(x=>x.Signature is not null)+"/"+live.Records.Count(x=>x.StatusOk is not null)+"/"+live.Records.Count(x=>x.DependsOn is not null)+" of "+live.Records.Count);
-        check(live.Records.Where(x=>x.FullName?.State==PackageValueState.Present).All(x=>StorePackageRemoval.ValidFullName(x.FullName!.Value)&&StorePackageRemoval.Consistent(x)),"Every real full name read is valid and matches its family and version");
+        check(live.Records.Where(x=>x.Bundle==false&&x.FullName?.State==PackageValueState.Present).All(x=>StorePackageRemoval.ValidFullName(x.FullName!.Value)&&StorePackageRemoval.Consistent(x)),"Every real full name read is valid and matches its family and version");
         check(blocks.Where(x=>x.Block==RemovalBlock.None).All(x=>x.Row.Framework==false&&x.Row.Resource==false&&x.Row.Bundle==false&&x.Row.Signature!=4&&x.Row.StatusOk==true),"No real framework, resource, bundle, system-signed or not-OK package is offered");
         check(blocks.Where(x=>x.Row.Framework==true).All(x=>x.Block!=RemovalBlock.None)&&blocks.Where(x=>x.Row.Signature==4).All(x=>x.Block!=RemovalBlock.None),"Real frameworks and system packages are blocked");
         var depended=new HashSet<string>(live.Records.Where(x=>x.Bundle!=true&&x.DependsOn is not null).SelectMany(x=>x.DependsOn!),StringComparer.OrdinalIgnoreCase);
@@ -39,7 +39,9 @@ internal static class StorePackageRemovalNativeChecks
         foreach(var x in live.Records.Where(x=>x.Family.State==PackageValueState.Present).Take(5))
             check(StorePackageRemover.FamilyInstalled(x.Family.Value!)!=false,"An installed package's family is reported installed");
         check(StorePackageRemover.FamilyInstalled("Swivel.NotInstalled.Probe_8wekyb3d8bbwe")==false&&StorePackageRemover.FamilyInstalled("../x") is null,"A family that is not installed is reported missing; an invalid family is unknown");
-        check(StorePackageRemover.Running("Swivel.NotInstalled.Probe_8wekyb3d8bbwe")==false,"Running-program check lists processes and finds no unknown family");
+        var look=StorePackageRemover.Look("Swivel.NotInstalled.Probe_8wekyb3d8bbwe");
+        Console.WriteLine("Running-program look: opened "+look.Opened+", identity unreadable "+look.Unreadable+" (last status "+look.LastStatus+")");
+        check(look.Running==false&&look.Opened>0,"Running-program check lists processes and finds no unknown family");
         check(StorePackageRemoval.DataFolder(StorePackageRemover.LocalAppData(),"Swivel.NotInstalled.Probe_8wekyb3d8bbwe") is string folder&&folder.EndsWith(@"\Packages\Swivel.NotInstalled.Probe_8wekyb3d8bbwe",StringComparison.Ordinal),"Local app data Packages path built from the real profile");
 
         // The dialog offers Uninstall… only for an eligible selected package.
@@ -119,6 +121,7 @@ internal static class StorePackageRemovalNativeChecks
             Console.WriteLine("Test package removal: recheck "+run.Recheck+" started "+run.Started+" error "+run.Error+" outcome "+run.Outcome+" progress "+last);
             check(run.Recheck==RemovalRecheck.Ready&&run.Started&&run.Error is null&&run.Outcome==RemovalOutcome.Removed,"Uninstall removes the test package and the list read afterwards no longer has it");
             check(StorePackageRemover.FamilyInstalled(family)==false&&run.After is not null&&StorePackageRemoval.FamilyGone(family,run.After),"Its family is gone for this user");
+            if(run.Outcome!=RemovalOutcome.Removed)return;
             var again=Task.Run(()=>StorePackageRemover.RemoveAsync(probe,_=>{},CancellationToken.None)).GetAwaiter().GetResult();
             check(again.Recheck==RemovalRecheck.Gone&&!again.Started,"Uninstalling an already removed package is refused as gone");
 

@@ -33,27 +33,36 @@ internal static class StorePackageRemover
         catch(Exception error)when(error is DllNotFoundException or EntryPointNotFoundException){return null;}
     }
 
-    /// Whether a process with this package family runs (any of the current user's processes that
-    /// can be opened for limited queries), or null when the processes could not be listed.
-    internal static bool? Running(string family)
+    /// What one look at the running processes found: Running is null when the processes could
+    /// not be listed. Unreadable counts processes that were opened but whose package identity
+    /// could not be read (often a process exiting during the look); they are skipped, like
+    /// processes that cannot be opened at all.
+    internal sealed record ProcessLook(bool? Running,int Opened,int Unreadable,int LastStatus);
+
+    /// Whether a process with this package family runs (any process that can be opened for
+    /// limited queries), or null when the processes could not be listed.
+    internal static bool? Running(string family)=>Look(family).Running;
+    internal static ProcessLook Look(string family)
     {
         try
         {
             var ids=new uint[AppMemory.MaxProcesses];uint bytes=(uint)ids.Length*4;
-            if(!K32EnumProcesses(ids,bytes,out uint written)||written==0||written>bytes||written%4!=0||written==bytes)return null;
+            if(!K32EnumProcesses(ids,bytes,out uint written)||written==0||written>bytes||written%4!=0||written==bytes)return new(null,0,0,0);
+            int opened=0,unreadable=0,last=0;
             for(int i=0;i<written/4;i++)
             {
                 if(ids[i]==0)continue;
                 using var handle=OpenProcess(0x1000,false,ids[i]);if(handle.IsInvalid)continue;
+                opened++;
                 uint length=256;var name=new StringBuilder(256);
                 int status=GetPackageFamilyName(handle,ref length,name);
                 if(status==15700)continue; // APPMODEL_ERROR_NO_PACKAGE
-                if(status!=0)return null;
-                if(string.Equals(name.ToString(),family,StringComparison.OrdinalIgnoreCase))return true;
+                if(status!=0){unreadable++;last=status;continue;}
+                if(string.Equals(name.ToString(),family,StringComparison.OrdinalIgnoreCase))return new(true,opened,unreadable,last);
             }
-            return false;
+            return new(false,opened,unreadable,last);
         }
-        catch(Exception error)when(error is DllNotFoundException or EntryPointNotFoundException){return null;}
+        catch(Exception error)when(error is DllNotFoundException or EntryPointNotFoundException){return new(null,0,0,0);}
     }
 
     /// Whether any package of this family is installed for the current user, or null when the
@@ -84,21 +93,19 @@ internal static class StorePackageRemover
         if(await Task.Run(()=>Running(family),cancel)!=false)return new(state,block,true,false,false,null,null,null,now);
         cancel.ThrowIfCancellationRequested();
         int? error=null;string? errorText=null;bool cancelled=false;
-        IAsyncOperationWithProgress<DeploymentResult,DeploymentProgress> operation=new PackageManager().RemovePackageAsync(full);
+        IAsyncOperationWithProgress<DeploymentResult,DeploymentProgress>? operation=null;
         try
         {
-            operation.Progress=(_,value)=>progress(value.percentage);
-            using var registration=cancel.Register(()=>{cancelled=true;try{operation.Cancel();}catch(Exception){/* A completed operation may reject cancellation. */}});
-            try
-            {
-                var result=await operation.AsTask();
-                if(result.ExtendedErrorCode is Exception extended&&extended.HResult!=0){error=extended.HResult;errorText=result.ErrorText;}
-            }
-            catch(TaskCanceledException){cancelled=true;}
-            catch(Exception failure)when(failure is COMException or UnauthorizedAccessException or InvalidOperationException or System.IO.IOException or ArgumentException)
-            {error=failure.HResult;errorText=failure.Message;}
+            var running=operation=new PackageManager().RemovePackageAsync(full);
+            running.Progress=(_,value)=>progress(value.percentage);
+            using var registration=cancel.Register(()=>{cancelled=true;try{running.Cancel();}catch(Exception){/* A completed operation may reject cancellation. */}});
+            var result=await running.AsTask();
+            if(result.ExtendedErrorCode is Exception extended&&extended.HResult!=0){error=extended.HResult;errorText=result.ErrorText;}
         }
-        finally{operation.Close();}
+        catch(OperationCanceledException){cancelled=true;}
+        // Once the system call was made, any failure is reported and the list is read again.
+        catch(Exception failure)when(failure is not OutOfMemoryException){error=failure.HResult;errorText=failure.Message;}
+        finally{operation?.Close();}
         var after=await Task.Run(()=>StorePackagesReader.Read(CancellationToken.None));
         return new(state,block,false,true,cancelled,error,errorText,StorePackageRemoval.Outcome(full,after),after);
     }

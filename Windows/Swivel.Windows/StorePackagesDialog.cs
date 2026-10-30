@@ -107,7 +107,7 @@ internal sealed class StorePackagesDialog:Window
         var block=SelectedBlock;removal.Text=block is RemovalBlock b?StorePackageRemoval.Reason(b,app.L):"";
         uninstall.IsEnabled=!Busy&&bin.Idle&&block==RemovalBlock.None;packages.IsEnabled=!Busy;
         cancelUninstall.Visibility=Busy?Visibility.Visible:Visibility.Collapsed;
-        bin.UpdateButtons();
+        bin.UpdateButtons();if(Busy)bin.Undo.IsEnabled=false;
     }
     private async Task UninstallAsync()
     {
@@ -120,13 +120,24 @@ internal sealed class StorePackagesDialog:Window
         StoreRemovalRun? run=null;string? failed=null;
         try{run=await StorePackageRemover.RemoveAsync(record,percent=>Dispatcher.BeginInvoke(()=>{if(removing==cancel)removalStatus.Text=StorePackageRemoval.Progress(percent,app.L);}),cancel.Token);}
         catch(OperationCanceledException){failed=app.L("Cancelled before removal started. Nothing was removed.");}
-        catch(Exception error)when(StorePackagesReader.Unavailable(error)){failed=app.L("The package list could not be read again. Nothing was removed.");}
-        finally{removing=null;cancel.Dispose();}
-        removalStatus.Text=failed??Describe(run!,record);
+        // Before the system call nothing was changed; after it, RemoveAsync reports failures itself.
+        catch(Exception error)when(error is not OutOfMemoryException){failed=app.L("The package list could not be read again. Nothing was removed.");}
+        if(failed is not null){removing=null;cancel.Dispose();removalStatus.Text=failed;Refresh();if(closeRequested)Close();return;}
+        // Windows' deployment service may still be deleting the family's data folder: look again
+        // for up to about 3 seconds and offer it only if it is still there.
+        string? kept=null;
+        if(run is {Outcome:RemovalOutcome.Removed,After:{} done}&&StorePackageRemoval.FamilyGone(record.Family.Value!,done)
+            &&StorePackageRemoval.DataFolder(StorePackageRemover.LocalAppData(),record.Family.Value!) is string path)
+        {
+            kept=path;
+            for(int look=0;look<6&&kept is not null;look++){await Task.Delay(500);if(!System.IO.Directory.Exists(path))kept=null;}
+        }
+        removing=null;cancel.Dispose();
+        removalStatus.Text=failed??Describe(run!,record,kept);
         if(run?.After is StorePackagesSnapshot after)Show(after);else Refresh();
         if(closeRequested)Close();
     }
-    private string Describe(StoreRemovalRun run,StorePackageRecord record)
+    private string Describe(StoreRemovalRun run,StorePackageRecord record,string? path)
     {
         if(run.Recheck!=RemovalRecheck.Ready)return StorePackageRemoval.RecheckText(run.Recheck,run.Block,app.L);
         if(run.RunningRefused)return app.L(StorePackageRemoval.Running);
@@ -137,14 +148,14 @@ internal sealed class StorePackagesDialog:Window
         if(run.Outcome==RemovalOutcome.Removed)
         {
             uninstalled.Add(StorePackages.Value(record.Name,app.L)+" · "+AppMemory.Visible(record.FullName!.Value!));
-            string? path=StorePackageRemoval.FamilyGone(familyName,run.After!)?StorePackageRemoval.DataFolder(StorePackageRemover.LocalAppData(),familyName):null;
-            if(path is not null&&System.IO.Directory.Exists(path)&&!data.Any(x=>string.Equals(x.Path,path,StringComparison.OrdinalIgnoreCase)))
+            bool looked=StorePackageRemoval.FamilyGone(familyName,run.After!)&&StorePackageRemoval.DataFolder(StorePackageRemover.LocalAppData(),familyName) is not null;
+            if(path is not null&&!data.Any(x=>string.Equals(x.Path,path,StringComparison.OrdinalIgnoreCase)))
             {
                 data.Add(new(familyName,path));bin.Move.Visibility=Visibility.Visible;bin.Undo.Visibility=Visibility.Visible;dataText.Visibility=Visibility.Visible;
                 dataText.Text=app.L(StorePackageRemoval.DataNotice)+Environment.NewLine+string.Join(Environment.NewLine,data.Select(x=>AppMemory.Visible(x.Path)));
                 lines.Add(app.L("A data folder Windows kept for this app is still there; it is listed below."));
             }
-            else lines.Add(app.L(path is null?"Leftover data was not looked for: another package of this family may still be installed, or the list or the Local app data path could not be read.":"No data folder for this app remains under Local app data (Packages)."));
+            else lines.Add(app.L(!looked?"Leftover data was not looked for: another package of this family may still be installed, or the list or the Local app data path could not be read.":"No data folder for this app remains under Local app data (Packages)."));
         }
         return string.Join(Environment.NewLine,lines);
     }

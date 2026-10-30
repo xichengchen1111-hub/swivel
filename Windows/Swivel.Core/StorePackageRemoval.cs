@@ -22,7 +22,7 @@ public static class StorePackageRemoval
     public const int MaxDependencies=64;
     public const string Confirm="Uninstall this package for your Windows account?";
     public const string Warning="Windows removes the app and the data it keeps for this app for your account. This cannot be undone from Swivel: to get the app back, install it again from the Microsoft Store or from where it came from. Only your account is changed: other Windows users and copies provisioned for new users are not. Swivel does not ask for administrator rights and does not close the app: if it starts again before the removal finishes, Windows may close it.";
-    public const string Notice="Uninstall… removes one selected app package for your Windows account with the system package manager, after a confirmation. Frameworks, resource packages, bundles, system-signed packages, packages whose status is not OK, packages other listed packages depend on, Store and App Installer, Edge, Windows Security, Windows' own packages and Swivel itself are never offered, and nothing is offered while the list is incomplete. Just before removal the package list is read again: if the package's full name, version or kind changed, or the app is running, nothing is removed. Removal cannot be undone from Swivel.";
+    public const string Notice="Uninstall… removes one selected app package for your Windows account with the system package manager, after a confirmation. Frameworks, resource packages, bundles, system-signed packages, packages whose status is not OK, packages other listed packages depend on, Store and App Installer, Edge, Windows Security, Windows' own packages and Swivel itself are never offered, and nothing is offered while the list is incomplete. Just before removal the package list is read again: if the package's full name, version or kind changed, or a process of the app that Swivel can query is running, nothing is removed. Removal cannot be undone from Swivel.";
     public const string DataNotice="After an uninstall, the folder Windows keeps for that package family under Local app data (Packages) is offered only when no package of that family is installed for your account any more and the folder is still there; Windows usually removes it itself. It can be moved to the Recycle Bin after a confirmation, only while the family is still not installed, and Undo Move puts it back while this window is open unless the app was installed again.";
     public const string Running="The app is running, or Swivel could not list the running programs, so nothing was removed. Close the app, including any copy in the background, and try again.";
     public const string ReinstalledData="A package of this family is installed for your account again, or Swivel could not check, so the folder was left alone.";
@@ -34,9 +34,12 @@ public static class StorePackageRemoval
     private static readonly HashSet<string> ProtectedNames=new(StringComparer.OrdinalIgnoreCase)
     {
         "Microsoft.WindowsStore","Microsoft.StorePurchaseApp","Microsoft.DesktopAppInstaller","Microsoft.MicrosoftEdge","Microsoft.MicrosoftEdge.Stable","Microsoft.MicrosoftEdgeDevToolsClient",
-        "Microsoft.SecHealthUI","Microsoft.Services.Store.Engagement","Microsoft.WinAppRuntime.DDLM","Microsoft.WindowsAppRuntime",
+        "Microsoft.SecHealthUI","Microsoft.Services.Store.Engagement","Microsoft.WindowsAppRuntime",
     };
-    private static readonly string[] ProtectedPrefixes={"Microsoft.Windows.","MicrosoftWindows.","Windows.","Microsoft.WindowsAppRuntime.","Microsoft.VCLibs.","Microsoft.UI.Xaml.","Microsoft.NET."};
+    private static readonly string[] ProtectedPrefixes={"Microsoft.Windows.","MicrosoftWindows.","Windows.","Microsoft.WindowsAppRuntime.","Microsoft.VCLibs.","Microsoft.UI.Xaml.","Microsoft.NET.",
+        // Windows App SDK runtime main/singleton/DDLM packages and winget sources: apps rely on
+        // them without declaring a package dependency.
+        "Microsoft.WinAppRuntime.","MicrosoftCorporationII.WinAppRuntime.","Microsoft.Winget."};
 
     /// A dependency list as read: every entry a valid package full name, at most 64; else null.
     public static IReadOnlyList<string>? Dependencies(IReadOnlyList<string>? raw)
