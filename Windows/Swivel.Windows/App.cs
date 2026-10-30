@@ -27,6 +27,8 @@ public sealed partial class App : Application
     private Hotkeys? hotkeys;
     private FloatingShelf? floatingShelf;
     private ClotheslineWindow? clothesline;
+    private RopeWindow? rope;
+    private RopeEdgeWatcher? ropeWatcher;
     internal ObservableCollection<HungPrint> Prints { get; } = new();
     private Mutex? mutex;
     private readonly List<ActionWindow> panels = new();
@@ -90,6 +92,7 @@ public sealed partial class App : Application
         UpdateTray();
         Home.Show();
         if (!hotkeys.Configure(Prefs)) Home.SetStatus(L("A shortcut is in use. Open the tool from the tray menu."));
+        UpdateRope();
         if (failed) Home.SetStatus(L("Preferences could not be loaded. Defaults are in use; settings will be saved only when changed."));
     }
     private void SystemAppearanceChanged(object? sender,System.ComponentModel.PropertyChangedEventArgs args)
@@ -105,6 +108,7 @@ public sealed partial class App : Application
         if (!Prefs.IsOn(Feature.Wheel)) wheelGesture?.Close();
         if (!Prefs.IsOn(Feature.Shelf)) floatingShelf?.Close(); else floatingShelf?.Refresh();
         if (!Prefs.IsOn(Feature.Clothesline)) { clothesline?.Close(); imageArrivals?.Close(); } else clothesline?.Refresh();
+        UpdateRope();
         if (workFeature.HasValue && !Prefs.IsOn(workFeature.Value)) CancelWork();
         foreach (var panel in panels.ToArray())
         {
@@ -141,6 +145,22 @@ public sealed partial class App : Application
         if (floatingShelf is null) { var window = new FloatingShelf(this); floatingShelf = window; window.Closed += (_,_) => { if (ReferenceEquals(floatingShelf,window)) floatingShelf = null; }; }
         floatingShelf.Show(); if (floatingShelf.WindowState == WindowState.Minimized) floatingShelf.WindowState = WindowState.Normal; floatingShelf.Activate();
     });
+    /// The top-edge rope polls the cursor only while Clothesline and its own setting are both on.
+    private void UpdateRope()
+    {
+        bool on = !validationHost && !exiting && Prefs.IsOn(Feature.Clothesline) && Prefs.RopeAtTopEdge;
+        if (on)
+        {
+            ropeWatcher ??= new RopeEdgeWatcher(RopeEdgeWatcher.Native,sample => {
+                if (rope is null) { var window = new RopeWindow(this); rope = window; window.Closed += (_,_) => { if (ReferenceEquals(rope,window)) rope = null; }; }
+                rope.ShowOn(sample.Work,sample.Handle);
+            },() => rope?.Lift(),() => rope?.ActiveArea(),() => rope?.Engaged == true);
+            ropeWatcher.Start();
+            return;
+        }
+        ropeWatcher?.Stop(); ropeWatcher = null;
+        rope?.Close();
+    }
     public void ShowHome() { Home.Show(); Home.WindowState = WindowState.Normal; Home.Activate(); }
     public void OpenClothesline() => Try(() => {
         if (!Prefs.IsOn(Feature.Clothesline)) throw new UserError("Enable Clothesline in Settings first.");
@@ -1803,6 +1823,7 @@ public sealed partial class App : Application
     {
         if (exiting) return;
         exiting = true;
+        UpdateRope();
         CancelWork();
         await FinishWheelGestureAsync();
         await FinishImageArrivalsAsync();

@@ -4709,11 +4709,6 @@
     "手動掛圖和繩索介面仍待實作；自動收集截圖需要另行設計 Windows 方案，目前不變更截圖設定。",
     "手動で画像を吊るす機能とロープ UI は実装予定です。自動スクリーンショット収集には Windows 用の設計が必要です。設定は変更しません。"
   ],
-  "Manual images and explicitly started folder arrival cards are available. Screen-edge activation and full rope physics are still planned.": [
-    "支持手动挂图和明确启动的文件夹图片到达卡片。顶边唤出和完整绳索物理仍待实现。",
-    "支援手動掛圖與明確啟動的資料夾圖片到達卡片。頂邊喚出和完整繩索物理仍待實作。",
-    "手動の画像と、明示的に開始するフォルダー到着カードを利用できます。画面上端での表示とロープの完全な物理表現は今後対応予定です。"
-  ],
   "Manual images only. Automatic screenshot collection and screen-edge activation are still planned.": [
     "目前仅支持手动添加图片。自动收集截图和屏幕边缘唤出仍待实现。",
     "目前僅支援手動新增圖片。自動收集截圖及螢幕邊緣喚出仍待實作。",
@@ -4728,11 +4723,6 @@
     "手动悬挂最多12张图片，可复制、预览和拖出。缩略图是会话快照；自动截图、顶边唤出和完整绳索物理仍待实现。",
     "手動懸掛最多12張圖片，可複製、預覽及拖出。縮圖為工作階段快照；自動截圖、頂端喚出及完整繩索物理仍待實作。",
     "手動で最大12枚の画像を掛け、コピー、プレビュー、ドラッグできます。サムネイルはセッションのスナップショットです。自動スクリーンショット、画面端での表示、完全なロープ物理は今後対応予定です。"
-  ],
-  "Manually hang up to 12 images, or explicitly start a folder arrival session. New or renamed image paths are read as they exist when processed; thumbnails are snapshots and notifications may be missed. No initial folder scan, screenshot takeover or clipboard reading. Screen-edge activation and full rope physics remain planned.": [
-    "可手动挂最多12张图片，或明确启动文件夹图片到达会话。新增或改名图片路径会读取处理时的当前内容；缩略图是快照，通知可能遗漏。不初始扫描文件夹、不接管截图、不读取剪贴板。顶边唤出和完整绳索物理仍待实现。",
-    "可手動掛最多12張圖片，或明確啟動資料夾圖片到達工作階段。新增或重新命名圖片路徑會讀取處理時的目前內容；縮圖是快照，通知可能遺漏。不初始掃描資料夾、不接管截圖、不讀取剪貼簿。頂邊喚出和完整繩索物理仍待實作。",
-    "最大12枚を手動で掛けるか、明示的にフォルダーの画像到着セッションを開始できます。追加・名前変更された画像パスの処理時点の内容を読みます。サムネイルはスナップショットで、通知を見逃す場合があります。初回走査、スクリーンショットの制御、クリップボードの読み取りはしません。画面上端での表示とロープの完全な物理表現は今後対応予定です。"
   ],
   "Manually hang up to 12 images. Click to copy, double-click or hold to preview, and drag out. Thumbnails are session snapshots. Automatic screenshots, screen-edge activation and full rope physics are still planned.": [
     "手动挂起最多 12 张图片。单击复制、双击或长按预览，并可拖出。缩略图是会话快照。自动截图、屏幕顶边唤出及完整绳索物理仍待实现。",
@@ -16118,5 +16108,30 @@
     "只读显示字幕或数据源文本，由现有格式读取器验证。仅接受严格 UTF-8 或带 BOM 的 UTF-16。字幕上限为 8 MiB，并沿用条目及文本限制；数据文件上限为 32 MiB，并沿用结构限制。二进制 plist 显示为生成的 YAML。不执行、不获取外部内容、不导出。源文件将保持占用直至窗口关闭。",
     "唯讀顯示字幕或資料來源文字，由現有格式讀取器驗證。僅接受嚴格 UTF-8 或含 BOM 的 UTF-16。字幕上限為 8 MiB，並沿用項目及文字限制；資料檔案上限為 32 MiB，並沿用結構限制。二進位 plist 顯示為產生的 YAML。不執行、不擷取外部內容、不匯出。來源檔案將保持持有直到視窗關閉。",
     "既存の形式リーダーで検証した字幕またはデータのソーステキストを読み取り専用で表示します。厳密なUTF-8またはBOM付きUTF-16のみ受け付けます。字幕は8 MiBと既存の字幕数・テキスト制限、データは32 MiBと既存の構造制限に従います。バイナリplistは生成したYAMLで表示します。実行、外部取得、書き出しは行いません。ウィンドウを閉じるまで元ファイルを保持します。"
+  ],
+  "Manually hang up to 12 images, or explicitly start a folder arrival session. New or renamed image paths are read as they exist when processed; thumbnails are snapshots and notifications may be missed. No initial folder scan, screenshot takeover or clipboard reading. An optional top-edge rope lowers with gentle spring motion; screenshot takeover remains planned.": [
+    "可手动挂最多12张图片，或明确启动文件夹图片到达会话。新增或改名图片路径会读取处理时的当前内容；缩略图是快照，通知可能遗漏。不初始扫描文件夹、不接管截图、不读取剪贴板。可选的屏幕顶边绳子会以柔和的弹簧动画放下；截图接管仍待实现。",
+    "可手動掛最多12張圖片，或明確啟動資料夾圖片到達工作階段。新增或重新命名圖片路徑會讀取處理時的目前內容；縮圖是快照，通知可能遺漏。不初始掃描資料夾、不接管截圖、不讀取剪貼簿。可選的螢幕頂邊繩子會以柔和的彈簧動畫放下；截圖接管仍待實作。",
+    "最大12枚を手動で掛けるか、明示的にフォルダーの画像到着セッションを開始できます。追加・名前変更された画像パスの処理時点の内容を読みます。サムネイルはスナップショットで、通知を見逃す場合があります。初回走査、スクリーンショットの制御、クリップボードの読み取りはしません。オプションの画面上端ロープは穏やかなばねの動きで下ります。スクリーンショットの制御は今後対応予定です。"
+  ],
+  "Show the rope when the pointer touches the top edge": [
+    "指针碰到屏幕顶边时显示绳子",
+    "指標碰到螢幕頂邊時顯示繩子",
+    "ポインターが画面の上端に触れたらロープを表示"
+  ],
+  "Needs Clothesline on. Rest the pointer at the very top of a screen: the rope lowers there with your prints and lifts a second after the pointer leaves. It never takes focus and stays away while a full-screen app is in front. Screenshot takeover is still planned.": [
+    "需要先打开晾衣绳。把指针停在屏幕最顶端：绳子会带着已挂的图片在那里放下，指针离开一秒后收起。它不会抢走焦点，全屏应用在前台时不会出现。截图接管仍待实现。",
+    "需要先開啟曬衣繩。把指標停在螢幕最頂端：繩子會帶著已掛的圖片在那裡放下，指標離開一秒後收起。它不會搶走焦點，全螢幕應用程式在前景時不會出現。截圖接管仍待實作。",
+    "物干しロープをオンにする必要があります。ポインターを画面の一番上に置くと、掛けた画像と一緒にロープがそこに下り、ポインターが離れて1秒後に上がります。フォーカスを奪わず、全画面アプリが前面にあるときは表示されません。スクリーンショットの制御は今後対応予定です。"
+  ],
+  "No prints yet. Hang images from the Clothesline window.": [
+    "还没有图片。请在晾衣绳窗口中挂上图片。",
+    "還沒有圖片。請在曬衣繩視窗中掛上圖片。",
+    "まだ画像がありません。物干しロープのウィンドウから画像を掛けてください。"
+  ],
+  "Manual images, folder arrival cards and the optional top-edge rope (Settings) are available. Screenshot takeover is still planned.": [
+    "可使用手动挂图、文件夹到达卡片和可选的顶边绳子（设置）。截图接管仍待实现。",
+    "可使用手動掛圖、資料夾到達卡片和可選的頂邊繩子（設定）。截圖接管仍待實作。",
+    "手動の画像、フォルダー到着カード、オプションの上端ロープ（設定）が使えます。スクリーンショットの制御は今後対応予定です。"
   ]
 }

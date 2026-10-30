@@ -153,6 +153,7 @@ PdfStructureChecks.Run(Check, Reject);
 ExifOrientationChecks.Run(Check, Reject);
 MenuChecks.Run(Check, Reject);
 ClotheslineChecks.Run(Check, Reject);
+RopeMotionChecks.Run(Check, Reject);
 PdfChecks.Run(Check, Reject);
 RetouchChecks.Run(Check, Reject);
 QrChecks.Run(Check, Reject);

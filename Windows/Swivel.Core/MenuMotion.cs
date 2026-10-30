@@ -35,6 +35,14 @@ public sealed class MotionSpring
     }
     public bool Settled => Math.Abs(Value - Target) < .0001 && Math.Abs(Velocity) < .0001;
     public void Snap() { Value = Target; Velocity = 0; }
+    /// Adds velocity (units per second) without moving the value: a push, not a jump.
+    public void Nudge(double velocity) { if (!double.IsFinite(velocity)) throw new ArgumentException("Finite velocity required."); Velocity += velocity; }
+    /// Snaps once the motion is below what anyone can see, so a frame loop can stop.
+    public bool SettleWithin(double position,double velocity)
+    {
+        if (Math.Abs(Value - Target) < position && Math.Abs(Velocity) < velocity) Snap();
+        return Value == Target && Velocity == 0;
+    }
     public void Advance(double seconds)
     {
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
