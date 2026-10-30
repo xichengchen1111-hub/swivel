@@ -234,7 +234,7 @@ internal static class Program
             return 0;
         }
         catch (Exception error) { Console.Error.WriteLine(error); foreach (string failure in failures) Console.Error.WriteLine("Earlier FAIL: " + failure); return 1; }
-        finally { try { Directory.Delete(directory, true); } finally { validationApp.Shutdown(); } }
+        finally { try { Directory.Delete(directory, true); } catch (Exception e) { Console.WriteLine("DIAG delete " + e); throw; } finally { Console.WriteLine("DIAG shutdown"); validationApp.Shutdown(); Console.WriteLine("DIAG shutdown done"); } }
     }
     private static BitmapFrame Decode(string path)
     {
