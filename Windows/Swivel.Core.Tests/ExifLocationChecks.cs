@@ -77,10 +77,10 @@ internal static class ExifLocationChecks
         {
             var source=Fixture(le);var rebuilt=ExifLocation.Rebuild(source,default,out var reason)!;
             check(rebuilt is not null&&reason is null&&rebuilt[0]==source[0],"Location EXIF same byte order, available "+le);
-            var expected=Values(source).Where(v=>!v.Key.StartsWith("IFD0/34853/")&&!v.Key.EndsWith("/37500")).ToDictionary(v=>v.Key,v=>v.Value);
-            var actual=Values(rebuilt!);check(actual.Count==expected.Count,"All retained EXIF entries preserved, GPS/MakerNote omitted");
+            var expected=Values(source).Where(v=>!v.Key.StartsWith("IFD0/34853/")&&!v.Key.EndsWith("/37500")&&!v.Key.StartsWith("IFD1/")).ToDictionary(v=>v.Key,v=>v.Value);
+            var actual=Values(rebuilt!);check(actual.Count==expected.Count,"All retained EXIF entries preserved, GPS/MakerNote/thumbnail omitted");
             foreach(var pair in expected)check(actual.TryGetValue(pair.Key,out var value)&&value==pair.Value,"Exact retained type/count/value: "+pair.Key+" "+le);
-            check(!actual.Keys.Any(k=>k.StartsWith("IFD0/34853/")||k.EndsWith("/37500")),"GPS and MakerNote absent");
+            check(!actual.Keys.Any(k=>k.StartsWith("IFD0/34853/")||k.EndsWith("/37500")||k.StartsWith("IFD1/")),"GPS, MakerNote and the thumbnail absent");
             check(ExifOrientation.Read(rebuilt!)==new ExifOrientationInfo(ExifOrientationStatus.Found,6),"Orientation retained");
             check(ExifLocation.Rebuild(rebuilt!,default,out _)!.SequenceEqual(rebuilt!),"Compact EXIF parses and rebuilds identically");
             var jpeg=JpegMetadataChecks.Jpeg(app0,Exif(source),xmp,ext,iptc,other,com,frame,scan,entropy);
@@ -90,10 +90,11 @@ internal static class ExifLocationChecks
             check(JpegMetadata.Read(new MemoryStream(jo.ToArray()),default).CanRemoveLocation,"Location JPEG parses");
             var cleaned=JpegMetadataChecks.Jpeg(app0,frame,scan,entropy);check(JpegMetadataChecks.Clean(jp).SequenceEqual(cleaned),"Full JPEG removal unchanged");
             var chunk=PngMetadataChecks.Chunk("eXIf",source);
-            var png=PngMetadataChecks.Png(PngMetadataChecks.Header(),chunk,text,itxt,xml,zippedXml,time,idat,end);
+            var rawExif=PngMetadataChecks.Chunk("zTXt","Raw profile type exif\0\0x"u8.ToArray());var rawXmp=PngMetadataChecks.Chunk("tEXt","Raw profile type xmp\0\n xmp\n"u8.ToArray());var textXml=PngMetadataChecks.Chunk("tEXt","XML:com.adobe.xmp\0GPS"u8.ToArray());
+            var png=PngMetadataChecks.Png(PngMetadataChecks.Header(),chunk,text,itxt,xml,zippedXml,rawExif,rawXmp,textXml,time,idat,end);
             var pp=PngMetadata.Read(new MemoryStream(png),default);using var po=new MemoryStream();pp.WriteLocationOnly(po,default);
             var expectedPng=PngMetadataChecks.Png(PngMetadataChecks.Header(),PngMetadataChecks.Chunk("eXIf",rebuilt!),text,itxt,time,idat,end);
-            check(pp.CanRemoveLocation&&po.ToArray().SequenceEqual(expectedPng),"PNG exact retained chunks/CRCs/IDAT/text/time; both XMP iTXt forms removed");
+            check(pp.CanRemoveLocation&&po.ToArray().SequenceEqual(expectedPng),"PNG exact retained chunks/CRCs/IDAT/text/time; XMP in iTXt/tEXt and Raw profile copies removed");
             check(PngMetadata.Read(new MemoryStream(po.ToArray()),default).CanRemoveLocation,"Location PNG parses");
             check(PngMetadataChecks.Clean(pp).SequenceEqual(PngMetadataChecks.Png(PngMetadataChecks.Header(),idat,end)),"Full PNG removal unchanged");
             void Set(byte[] b,int at,uint n){if(le)BinaryPrimitives.WriteUInt32LittleEndian(b.AsSpan(at),n);else BinaryPrimitives.WriteUInt32BigEndian(b.AsSpan(at),n);}
@@ -122,7 +123,7 @@ internal static class ExifLocationChecks
                 reject(()=>j.WriteLocationOnly(new MemoryStream(),default),"Unavailable location write refused");
             }
             var invalidThumb=(byte[])source.Clone();Set(invalidThumb,1200+2+2*12+8,99999);
-            var noThumb=ExifLocation.Rebuild(invalidThumb,default,out reason);check(noThumb is not null&&reason is null&&!Values(noThumb).Keys.Any(k=>k.StartsWith("IFD1/")),"Invalid thumbnail bounds drop IFD1 only");
+            var noThumb=ExifLocation.Rebuild(invalidThumb,default,out reason);check(noThumb is not null&&reason is null&&!Values(noThumb).Keys.Any(k=>k.StartsWith("IFD1/")),"Invalid thumbnail bounds still leave a rebuilt EXIF without IFD1");
             var nonJpeg=(byte[])source.Clone();
             if(le){BinaryPrimitives.WriteUInt16LittleEndian(nonJpeg.AsSpan(1200+2+2*12),273);BinaryPrimitives.WriteUInt16LittleEndian(nonJpeg.AsSpan(1200+2+3*12),279);}
             else{BinaryPrimitives.WriteUInt16BigEndian(nonJpeg.AsSpan(1200+2+2*12),273);BinaryPrimitives.WriteUInt16BigEndian(nonJpeg.AsSpan(1200+2+3*12),279);}
@@ -131,6 +132,16 @@ internal static class ExifLocationChecks
             check(!duplicateJ.CanRemoveLocation&&duplicateJ.LocationUnavailableReason==ExifLocation.Missing&&JpegMetadataChecks.Clean(duplicateJ).SequenceEqual(JpegMetadataChecks.Jpeg(frame,scan,entropy)),"Duplicate JPEG EXIF disables only location");
             var duplicateP=PngMetadata.Read(new MemoryStream(PngMetadataChecks.Png(PngMetadataChecks.Header(),chunk,chunk,idat,end)),default);
             check(!duplicateP.CanRemoveLocation&&duplicateP.LocationUnavailableReason==ExifLocation.Missing&&PngMetadataChecks.Clean(duplicateP).SequenceEqual(PngMetadataChecks.Png(PngMetadataChecks.Header(),idat,end)),"Duplicate PNG EXIF disables only location");
+            // XMP (700), IPTC (33723) and Photoshop (34377) stored inside EXIF are removed too.
+            var embedded=new byte[64];
+            void P16(int at,int n){if(le)BinaryPrimitives.WriteUInt16LittleEndian(embedded.AsSpan(at),(ushort)n);else BinaryPrimitives.WriteUInt16BigEndian(embedded.AsSpan(at),(ushort)n);}
+            embedded[0]=embedded[1]=(byte)(le?'I':'M');P16(2,42);Set(embedded,4,8);P16(8,3);
+            P16(10,0x0112);P16(12,3);Set(embedded,14,1);P16(18,6);
+            P16(22,700);P16(24,1);Set(embedded,26,8);Set(embedded,30,50);
+            P16(34,33723);P16(36,1);Set(embedded,38,4);"IPTC"u8.CopyTo(embedded.AsSpan(42));
+            Set(embedded,46,0);"GPS=48N!"u8.CopyTo(embedded.AsSpan(50));
+            var noEmbedded=ExifLocation.Rebuild(embedded,default,out reason);
+            check(noEmbedded is not null&&reason is null&&!Values(noEmbedded).Keys.Any(k=>k.EndsWith("/700")||k.EndsWith("/33723"))&&ExifOrientation.Read(noEmbedded)==new ExifOrientationInfo(ExifOrientationStatus.Found,6),"XMP/IPTC tags inside EXIF removed, orientation kept "+le);
             var random=new Random(711);for(int i=0;i<1000;i++){var b=(byte[])source.Clone();b[random.Next(b.Length)]=(byte)random.Next(256);ExifLocation.Rebuild(b,default,out _);}
             check(true,"1000 EXIF mutations do not escape parser error boundary "+le);
         }

@@ -16604,11 +16604,6 @@
     "無法僅移除位置：EXIF 存在不支援的類型或結構、重複標籤、循環、區域重疊、過多項目或越界值。仍可全部移除。",
     "位置情報のみの削除は利用できません。EXIF に未対応の型や構造、重複タグ、循環、領域の重複、過剰な項目数、または範囲外の値があります。全削除は引き続き利用できます。"
   ],
-  "Location mode rebuilds EXIF in its source byte order, removes GPS and MakerNote, and removes XMP and IPTC blocks entirely. Other EXIF values and a bounded JPEG thumbnail are kept. Other retained data and image pixels may still reveal location; this is not complete privacy sanitization.": [
-    "位置模式按源字节序重建 EXIF，移除 GPS 和 MakerNote，并完整移除 XMP 和 IPTC 块。保留其他 EXIF 值及范围有效的 JPEG 缩略图。其他保留数据和图像像素仍可能透露位置；这不是完整的隐私清理。",
-    "位置模式依來源位元組順序重建 EXIF，移除 GPS 和 MakerNote，並完整移除 XMP 和 IPTC 區塊。保留其他 EXIF 值及範圍有效的 JPEG 縮圖。其他保留資料和影像像素仍可能透露位置；這不是完整的隱私清理。",
-    "位置モードは元のバイト順で EXIF を再構築し、GPS と MakerNote、XMP と IPTC ブロック全体を削除します。他の EXIF 値と範囲が有効な JPEG サムネイルは保持します。他の保持データや画素から位置が分かる場合があり、完全なプライバシー保護ではありません。"
-  ],
   "The location-only copy could not be validated by the native decoder. Full removal is still available.": [
     "系统解码器无法验证仅移除位置的副本。仍可全部移除。",
     "系統解碼器無法驗證僅移除位置的副本。仍可全部移除。",
@@ -16624,14 +16619,19 @@
     "JPEG 位置模式移除標準及擴充 XMP APP1 和全部 APP13 區塊。註解、其他 APP1 區塊及所有其他區段和壓縮掃描資料逐位元組不變。",
     "JPEG 位置モードは標準・拡張 XMP APP1 とすべての APP13 ブロックを削除します。コメント、他の APP1、その他の全セグメントと圧縮スキャンはバイト単位で保持します。"
   ],
-  "PNG location mode removes iTXt chunks whose keyword is XML:com.adobe.xmp, including compressed XMP. Other text, time and all other chunks and image data stay byte-identical.": [
-    "PNG 位置模式移除关键字为 XML:com.adobe.xmp 的 iTXt 块，包括压缩 XMP。其他文本、时间及所有其他块和图像数据逐字节不变。",
-    "PNG 位置模式移除關鍵字為 XML:com.adobe.xmp 的 iTXt 區塊，包括壓縮 XMP。其他文字、時間及所有其他區塊和影像資料逐位元組不變。",
-    "PNG 位置モードは、圧縮 XMP を含むキーワード XML:com.adobe.xmp の iTXt チャンクを削除します。他のテキスト、時刻、その他の全チャンクと画像データはバイト単位で保持します。"
-  ],
   "The rebuilt copy is validated with the native decoder, which may interpret retained metadata. Save creates a new copy beside the original using the existing output name rule, without replacing any file.": [
     "重建副本由系统解码器验证，解码器可能解释保留的元数据。保存沿用现有命名规则，在原件旁创建新副本，不替换任何文件。",
     "重建副本由系統解碼器驗證，解碼器可能解讀保留的中繼資料。儲存沿用現有命名規則，在原件旁建立新副本，不取代任何檔案。",
     "再構築したコピーはシステムデコーダーで検証します。保持したメタデータが解釈される場合があります。保存は既存の命名規則で元ファイルの隣に新しいコピーを作成し、ファイルを置き換えません。"
+  ],
+  "Location mode rebuilds EXIF in its source byte order without GPS, MakerNote, the embedded thumbnail and any XMP, IPTC or Photoshop data stored inside EXIF, and removes the separate XMP and IPTC blocks entirely. Other EXIF values are kept. Retained text (such as titles, comments or keywords) and image pixels may still reveal location; this is not complete privacy sanitization.": [
+    "位置模式按源字节序重建 EXIF，去掉 GPS、MakerNote、内嵌缩略图以及存放在 EXIF 内的 XMP、IPTC 或 Photoshop 数据，并完整删除单独的 XMP 和 IPTC 块。其他 EXIF 值保留。保留的文字（如标题、注释或关键字）和图像内容本身仍可能透露位置；这不是完整的隐私清理。",
+    "位置模式按來源位元組順序重建 EXIF，去掉 GPS、MakerNote、內嵌縮圖以及存放在 EXIF 內的 XMP、IPTC 或 Photoshop 資料，並完整刪除單獨的 XMP 和 IPTC 區塊。其他 EXIF 值保留。保留的文字（如標題、註解或關鍵字）和影像內容本身仍可能透露位置；這不是完整的隱私清理。",
+    "位置モードは元のバイト順で EXIF を再構築し、GPS、MakerNote、埋め込みサムネイル、EXIF 内に格納された XMP・IPTC・Photoshop データを除き、独立した XMP と IPTC ブロックを完全に削除します。その他の EXIF 値は保持します。保持されるテキスト（タイトル、コメント、キーワードなど）や画像そのものから位置がわかる場合があり、完全なプライバシー消去ではありません。"
+  ],
+  "PNG location mode removes tEXt, zTXt and iTXt chunks whose keyword is XML:com.adobe.xmp or starts with \"Raw profile type\" (copies of EXIF, XMP or IPTC written by some converters). Other text, time and all other chunks and image data stay byte-identical.": [
+    "PNG 位置模式删除关键字为 XML:com.adobe.xmp 或以“Raw profile type”开头的 tEXt、zTXt 和 iTXt 块（某些转换工具写入的 EXIF、XMP 或 IPTC 副本）。其他文字、时间及所有其他块和图像数据保持字节不变。",
+    "PNG 位置模式刪除關鍵字為 XML:com.adobe.xmp 或以「Raw profile type」開頭的 tEXt、zTXt 和 iTXt 區塊（某些轉換工具寫入的 EXIF、XMP 或 IPTC 副本）。其他文字、時間及所有其他區塊和影像資料保持位元組不變。",
+    "PNG の位置モードは、キーワードが XML:com.adobe.xmp または「Raw profile type」で始まる tEXt・zTXt・iTXt チャンク（一部の変換ツールが書き込む EXIF・XMP・IPTC のコピー）を削除します。その他のテキスト、時刻、その他すべてのチャンクと画像データはバイト単位で変わりません。"
   ]
 }

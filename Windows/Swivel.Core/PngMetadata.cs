@@ -75,7 +75,14 @@ public static class PngMetadata
             }
             token.ThrowIfCancellationRequested();
         }
-        private bool IsXmp(Chunk c)=>c.Type=="iTXt"&&source.AsSpan(c.Offset+8,c.Length-12).StartsWith("XML:com.adobe.xmp\0"u8);
+        // XMP may also be written as tEXt/zTXt; "Raw profile type exif/xmp/iptc/APP1/8bim" chunks
+        // (ImageMagick and others) hold hex copies of EXIF, XMP or IPTC, GPS included.
+        private bool IsXmp(Chunk c)
+        {
+            if(c.Type is not ("tEXt" or "zTXt" or "iTXt"))return false;
+            var data=source.AsSpan(c.Offset+8,c.Length-12);
+            return data.StartsWith("XML:com.adobe.xmp\0"u8)||data.StartsWith("Raw profile type "u8);
+        }
         public void Write(Stream output,CancellationToken token)=>Write(output,false,token);
         // keepOrientation writes one new eXIf chunk (only IFD0 Orientation) where the source
         // eXIf stood, or just before the first IDAT if the source placed it later.

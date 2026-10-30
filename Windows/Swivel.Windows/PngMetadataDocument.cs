@@ -81,7 +81,7 @@ internal sealed class PngMetadataDocument : IDisposable
         if(!locationOnly&&keepOrientation&&kept is null)throw new InvalidOperationException("No source orientation to keep.");
         var cleaned=locationOnly?location!:keepOrientation?kept!:this.cleaned;
         if(Plan.RemovedCount==0)throw new UserError("No matching PNG text, EXIF or time chunks were found. No copy was saved.");
-        return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+" text-exif removed","png",output=>{
+        return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+(locationOnly?" location removed":" text-exif removed"),"png",output=>{
             for(int at=0;at<cleaned.Length;)
             {token.ThrowIfCancellationRequested();int count=Math.Min(65536,cleaned.Length-at);output.Write(cleaned.AsSpan(at,count));at+=count;}
             token.ThrowIfCancellationRequested();

@@ -82,7 +82,7 @@ internal sealed class JpegMetadataDocument : IDisposable
         if(!locationOnly&&keepOrientation&&kept is null)throw new InvalidOperationException("No source orientation to keep.");
         var cleaned=locationOnly?location!:keepOrientation?kept!:this.cleaned;
         if(Plan.RemovedCount==0)throw new UserError("No JPEG APP1, APP13 or comment segments were found. No copy was saved.");
-        return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+" exif-comments removed","jpg",output=>{
+        return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+(locationOnly?" location removed":" exif-comments removed"),"jpg",output=>{
             for(int at=0;at<cleaned.Length;)
             {token.ThrowIfCancellationRequested();int count=Math.Min(65536,cleaned.Length-at);output.Write(cleaned.AsSpan(at,count));at+=count;}
             token.ThrowIfCancellationRequested();

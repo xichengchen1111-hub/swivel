@@ -64,6 +64,7 @@ internal static class PngMetadataNativeChecks
             using var locationExpected=new MemoryStream();document.Plan.WriteLocationOnly(locationExpected,default);
             string location1=document.Save(false,true,default),location2=document.Save(true,true,default);
             check(location1!=location2&&File.ReadAllBytes(location1).SequenceEqual(locationExpected.ToArray())&&File.ReadAllBytes(location2).SequenceEqual(locationExpected.ToArray())&&File.ReadAllBytes(rotated).SequenceEqual(source),"Native location saves are exclusive, independent of orientation checkbox, and preserve source");
+            check(Path.GetFileName(location1).Contains(" location removed")&&Path.GetFileName(location2).Contains(" location removed"),"Location-only copies are named location removed");
             int beforeLocationCancel=Directory.GetFiles(folder).Length;reject(()=>document.Save(false,true,new CancellationToken(true)),"Canceled native location save refused");
             check(Directory.GetFiles(folder).Length==beforeLocationCancel,"Canceled location save publishes nothing");
         }

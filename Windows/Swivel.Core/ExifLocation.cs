@@ -14,9 +14,9 @@ public static class ExifLocation
 {
     public const string Missing="Remove location only requires exactly one source EXIF block.";
     public const string Invalid="Remove location only is unavailable: EXIF has unsupported types or structure, duplicate tags, cycles, overlapping areas, excessive entries or out-of-range values. Full removal is still available.";
-    public const string Notice="Location mode rebuilds EXIF in its source byte order, removes GPS and MakerNote, and removes XMP and IPTC blocks entirely. Other EXIF values and a bounded JPEG thumbnail are kept. Other retained data and image pixels may still reveal location; this is not complete privacy sanitization.";
+    public const string Notice="Location mode rebuilds EXIF in its source byte order without GPS, MakerNote, the embedded thumbnail and any XMP, IPTC or Photoshop data stored inside EXIF, and removes the separate XMP and IPTC blocks entirely. Other EXIF values are kept. Retained text (such as titles, comments or keywords) and image pixels may still reveal location; this is not complete privacy sanitization.";
     public const string JpegScope="JPEG location mode removes standard and extended XMP APP1 and every APP13 block. Comments, other APP1 blocks and all other segments and compressed scans stay byte-identical.";
-    public const string PngScope="PNG location mode removes iTXt chunks whose keyword is XML:com.adobe.xmp, including compressed XMP. Other text, time and all other chunks and image data stay byte-identical.";
+    public const string PngScope="PNG location mode removes tEXt, zTXt and iTXt chunks whose keyword is XML:com.adobe.xmp or starts with \"Raw profile type\" (copies of EXIF, XMP or IPTC written by some converters). Other text, time and all other chunks and image data stay byte-identical.";
     public const string Export="The rebuilt copy is validated with the native decoder, which may interpret retained metadata. Save creates a new copy beside the original using the existing output name rule, without replacing any file.";
     public const string Validation="The location-only copy could not be validated by the native decoder. Full removal is still available.";
     private sealed record Entry(int Tag,int Type,uint Count,byte[] Value);
@@ -89,11 +89,13 @@ public static class ExifLocation
         }
         var root=Read(U32(4),0);
         var ordered=ranges.OrderBy(r=>r.Start).ToArray();for(int i=1;i<ordered.Length;i++)Require(ordered[i].Start>=ordered[i-1].End);
-        if(root.Next?.Thumbnail is null)root.Next=null;
+        // The thumbnail (IFD1) is never kept: it can carry its own EXIF/XMP with GPS, or show
+        // content cropped out of the main image. It was still parsed above for structure checks.
+        root.Next=null;
         var nodes=new List<Ifd>();
         void Collect(Ifd node){nodes.Add(node);if(node.Exif is not null)Collect(node.Exif);if(node.Interop is not null)Collect(node.Interop);if(node.Next is not null)Collect(node.Next);}
         Collect(root);
-        foreach(var node in nodes)node.Entries.RemoveAll(e=>e.Tag is 0x8825 or 0x927c);
+        foreach(var node in nodes)node.Entries.RemoveAll(e=>e.Tag is 0x8825 or 0x927c or 700 or 33723 or 34377);
         int cursor=8;
         foreach(var node in nodes){node.Offset=cursor;cursor+=2+12*node.Entries.Count+4;}
         using var output=new MemoryStream();output.SetLength(cursor);output.Position=0;
