@@ -3,6 +3,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Swivel.Core;
 using Swivel.Windows;
 
@@ -71,6 +74,51 @@ internal static class FolderStyleNativeChecks
 
         if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
         {
+            for (int color = 0; color < FolderStyles.Colors.Count; color++)
+            foreach (string mark in new[] { "", "A", "工作", "👩‍💻" })
+            {
+                var legacy = new FolderStyle(color, mark);
+                check(FolderStyleIcons.Icon(legacy).SequenceEqual(LegacyFolderStyleIcons.Icon(legacy)), "Existing WPF icon bytes unchanged: " + color + "/" + mark);
+            }
+            foreach (FolderSurface surface in Enum.GetValues<FolderSurface>())
+            {
+                var style = new FolderStyle(2, Emoji: "👩🏽‍💻", Surface: surface);
+                byte[] rich = FolderStyleIcons.Icon(style);
+                check(BitConverter.ToUInt16(rich, 4) == FolderStyles.IconSizes.Length, "Emoji/surface icon includes every size: " + surface);
+                for (int i = 0; i < FolderStyles.IconSizes.Length; i++)
+                {
+                    int size = FolderStyles.IconSizes[i], entry = 6 + i * 16;
+                    int count = BitConverter.ToInt32(rich, entry + 8), offset = BitConverter.ToInt32(rich, entry + 12);
+                    using var png = new MemoryStream(rich, offset, count);
+                    var decoder = new PngBitmapDecoder(png, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                    check(decoder.Frames[0].PixelWidth == size && decoder.Frames[0].PixelHeight == size, "Emoji/surface PNG size: " + surface + "/" + size);
+                    byte[] actual = new byte[size * size * 4], plainPixels = new byte[actual.Length];
+                    FolderStyleIcons.Bitmap(style, size).CopyPixels(actual, size * 4, 0);
+                    FolderStyleIcons.Bitmap(style with { Emoji = "" }, size).CopyPixels(plainPixels, size * 4, 0);
+                    check(!actual.SequenceEqual(plainPixels), "Emoji visible even on small icons: " + size);
+                }
+                NativeFiles.ApplyFolderStyle(plain, rich, default);
+                var richIni = FolderStyles.ParseOurs(File.ReadAllBytes(ini))!;
+                check(File.ReadAllBytes(Path.Combine(plain, richIni.Icon)).SequenceEqual(rich), "Rich icon published intact through safe writer: " + surface);
+                NativeFiles.ApplyFolderStyle(plain, rich, default);
+                check(Directory.GetFiles(plain, ".swivel-folder-*.ico").Length == 1, "Rich restyle replaces only its old icon");
+                NativeFiles.RemoveFolderStyle(plain, default);
+                check(!File.Exists(ini) && !Directory.GetFiles(plain, ".swivel-folder-*.ico").Any() &&
+                    File.ReadAllText(Path.Combine(plain, "keep.txt")) == "keep" && (File.GetAttributes(plain) & FileAttributes.ReadOnly) == 0,
+                    "Rich restore leaves user files and original attributes intact: " + surface);
+            }
+            foreach (string emoji in new[] { "😀", "❤️", "👍🏽", "👨‍👩‍👧‍👦" })
+            {
+                // Inspect emoji alone: the folder's own gradient must not fool the colour assertion.
+                var visual = new DrawingVisual();
+                using (var dc = visual.RenderOpen())
+                    FolderEmojiDrawing.Draw(dc, new FormattedText(emoji, System.Globalization.CultureInfo.InvariantCulture,
+                        FlowDirection.LeftToRight, new Typeface("Segoe UI Emoji"), 64, Brushes.White, 1), new Point(0, 0));
+                var bitmap = new RenderTargetBitmap(128, 128, 96, 96, PixelFormats.Pbgra32); bitmap.Render(visual);
+                byte[] pixels = new byte[128 * 128 * 4]; bitmap.CopyPixels(pixels, 128 * 4, 0);
+                check(Enumerable.Range(0, 128 * 128).Any(i => pixels[i * 4 + 3] > 100 &&
+                    (pixels[i * 4] != pixels[i * 4 + 1] || pixels[i * 4 + 1] != pixels[i * 4 + 2])), "Installed emoji font renders coloured glyph layers: " + emoji);
+            }
             byte[] drawn = FolderStyleIcons.Icon(new FolderStyle(3, "旅"));
             check(BitConverter.ToUInt16(drawn, 4) == FolderStyles.IconSizes.Length && drawn.Length > 1000, "Native folder icon renders every size as PNG: " + drawn.Length + " bytes");
         }

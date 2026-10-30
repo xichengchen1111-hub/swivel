@@ -17238,5 +17238,100 @@
     "Opera GX 本地缓存",
     "Opera GX 本機快取",
     "Opera GX ローカルキャッシュ"
+  ],
+  "Choose one of the folder surfaces.": [
+    "请选择一种文件夹纹理。",
+    "請選擇一種資料夾紋理。",
+    "フォルダーの表面模様を選んでください。"
+  ],
+  "Choose either a text mark or an emoji badge.": [
+    "文字标记和表情徽章只能选择一种。",
+    "文字標記和表情徽章只能選擇一種。",
+    "文字マークか絵文字バッジのどちらかを選んでください。"
+  ],
+  "Enter exactly one emoji, without text or spaces.": [
+    "请只输入一个表情符号，不要包含文字或空格。",
+    "請只輸入一個表情符號，不要包含文字或空格。",
+    "文字や空白を含めず、絵文字を1つだけ入力してください。"
+  ],
+  "This emoji cannot be drawn in colour with the installed Segoe UI Emoji font. Choose another emoji.": [
+    "已安装的 Segoe UI Emoji 字体无法彩色绘制此表情，请选择其他表情。",
+    "已安裝的 Segoe UI Emoji 字型無法彩色繪製此表情，請選擇其他表情。",
+    "インストール済みの Segoe UI Emoji フォントではこの絵文字をカラー描画できません。別の絵文字を選んでください。"
+  ],
+  "Swivel notifies Explorer after applying or restoring. Explorer's icon cache may still show the old icon until it refreshes.": [
+    "应用或恢复后，Swivel 会通知资源管理器。图标缓存刷新之前，资源管理器可能仍显示旧图标。",
+    "套用或還原後，Swivel 會通知檔案總管。圖示快取重新整理之前，檔案總管可能仍顯示舊圖示。",
+    "適用や復元後、Swivel はエクスプローラーに通知します。アイコンキャッシュが更新されるまで古いアイコンが表示される場合があります。"
+  ],
+  "Folder surface": [
+    "文件夹纹理",
+    "資料夾紋理",
+    "フォルダーの表面模様"
+  ],
+  "Plain": [
+    "无纹理",
+    "無紋理",
+    "模様なし"
+  ],
+  "Linen": [
+    "亚麻",
+    "亞麻",
+    "リネン"
+  ],
+  "Paper grain": [
+    "纸张颗粒",
+    "紙張顆粒",
+    "紙の粒子"
+  ],
+  "Wood stripes": [
+    "木纹条纹",
+    "木紋條紋",
+    "木目"
+  ],
+  "Dots": [
+    "圆点",
+    "圓點",
+    "ドット"
+  ],
+  "Gradient": [
+    "渐变",
+    "漸層",
+    "グラデーション"
+  ],
+  "Brushed metal": [
+    "拉丝金属",
+    "髮絲紋金屬",
+    "ヘアライン金属"
+  ],
+  "Stars": [
+    "星星",
+    "星星",
+    "星"
+  ],
+  "Text mark": [
+    "文字标记",
+    "文字標記",
+    "文字マーク"
+  ],
+  "Emoji badge": [
+    "表情徽章",
+    "表情徽章",
+    "絵文字バッジ"
+  ],
+  "Badge type": [
+    "徽章类型",
+    "徽章類型",
+    "バッジの種類"
+  ],
+  "Enter one emoji or choose below": [
+    "输入一个表情，或从下方选择",
+    "輸入一個表情，或從下方選擇",
+    "絵文字を1つ入力するか、下から選んでください"
+  ],
+  "Emoji availability and colour depend on the installed Segoe UI Emoji font.": [
+    "可用表情及其颜色取决于已安装的 Segoe UI Emoji 字体。",
+    "可用表情及其顏色取決於已安裝的 Segoe UI Emoji 字型。",
+    "利用できる絵文字と色は、インストール済みの Segoe UI Emoji フォントによって異なります。"
   ]
 }

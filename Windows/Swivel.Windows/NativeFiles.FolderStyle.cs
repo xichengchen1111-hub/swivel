@@ -227,7 +227,11 @@ public static partial class NativeFiles
     private static void NotifyShell(string folder)
     {
         IntPtr path = Marshal.StringToHGlobalUni(folder);
-        try { SHChangeNotify(0x00002000, 0x0005, path, IntPtr.Zero); } // SHCNE_UPDATEITEM, SHCNF_PATHW
+        try
+        {
+            SHChangeNotify(0x00001000, 0x0005, path, IntPtr.Zero); // SHCNE_UPDATEDIR, SHCNF_PATHW
+            SHChangeNotify(0x00002000, 0x0005, path, IntPtr.Zero); // SHCNE_UPDATEITEM, SHCNF_PATHW
+        }
         finally { Marshal.FreeHGlobal(path); }
     }
 

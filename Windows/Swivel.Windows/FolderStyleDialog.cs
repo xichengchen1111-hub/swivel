@@ -14,7 +14,7 @@ using Swivel.Core;
 
 namespace Swivel.Windows;
 
-/// Draws Swivel's original folder icon: a tinted folder with an optional short badge.
+/// Draws Swivel's original folder icon, with optional procedural surface and mark or emoji.
 internal static class FolderStyleIcons
 {
     public static byte[] Icon(FolderStyle style)
@@ -22,6 +22,7 @@ internal static class FolderStyleIcons
 
     public static BitmapSource Bitmap(FolderStyle style, int size)
     {
+        style.Validate();
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen()) Draw(context, style, size);
         var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
@@ -64,6 +65,27 @@ internal static class FolderStyleIcons
         var front = new RectangleGeometry(new Rect(s * 0.06, s * 0.36, s * 0.88, s * 0.48), corner, corner);
         var fill = new LinearGradientBrush(Shade(rgb, 1.12), Shade(rgb, 0.96), 90);
         context.DrawGeometry(fill, null, front);
+        if (style.Surface != FolderSurface.Plain)
+        {
+            int size = (int)s;
+            byte[] pixels = FolderSurfaces.Pixels(style.Surface, size);
+            var overlay = BitmapSource.Create(size, size, 96, 96, PixelFormats.Pbgra32, null, pixels, size * 4);
+            overlay.Freeze();
+            context.PushClip(front);
+            context.DrawImage(overlay, new Rect(0, 0, s, s));
+            context.Pop();
+        }
+        if (style.Emoji.Length != 0)
+        {
+            var emoji = new FormattedText(style.Emoji, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                new Typeface(new FontFamily("Segoe UI Emoji"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal),
+                s * 0.26, Brushes.White, 1.0);
+            double fit = Math.Min(1, s * 0.76 / Math.Max(1, emoji.Width));
+            context.PushTransform(new ScaleTransform(fit, fit, s / 2, s * 0.60));
+            FolderEmojiDrawing.Draw(context, emoji, new Point((s - emoji.Width) / 2, s * 0.60 - emoji.Height / 2));
+            context.Pop();
+            return;
+        }
         if (style.Badge.Length == 0 || s < 24) return;
         var text = new FormattedText(style.Badge, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             new Typeface(new FontFamily("Segoe UI Emoji, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal),
@@ -79,7 +101,10 @@ internal static class FolderStyleIcons
 internal sealed class FolderStyleDialog : Window
 {
     public bool Restore { get; private set; }
-    public FolderStyle Chosen => new(color, badge.Text);
+    public FolderStyle Chosen => new(color, emojiMode ? "" : badge.Text, emojiMode ? emoji.Text : "", surface);
+    private bool emojiMode;
+    private FolderSurface surface;
+    private readonly TextBox emoji = new() { MaxLength = FolderStyles.MaxEmojiUnits, Width = 180, FontFamily = new FontFamily("Segoe UI Emoji"), FontSize = 20, HorizontalAlignment = HorizontalAlignment.Left };
     private int color;
     private readonly TextBox badge = new() { MaxLength = FolderStyles.MaxBadgeUnits, Width = 120, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 8) };
     private readonly Image preview = new() { Width = 96, Height = 96, Margin = new Thickness(0, 4, 16, 8) };
@@ -93,7 +118,7 @@ internal sealed class FolderStyleDialog : Window
         var buttons = new WrapPanel();
         var apply = UI.Button(app.L("Apply Style"), () =>
         {
-            try { Chosen.Validate(); DialogResult = true; }
+            try { if (emojiMode) FolderStyles.ValidateEmoji(emoji.Text); _ = FolderStyleIcons.Icon(Chosen); DialogResult = true; }
             catch (UserError error) { problem.Text = app.L(error.Message); }
         });
         var restore = UI.Button(app.L("Restore Default"), () => { Restore = true; DialogResult = true; });
@@ -104,13 +129,17 @@ internal sealed class FolderStyleDialog : Window
         buttons.Children.Add(apply); buttons.Children.Add(restore); buttons.Children.Add(cancel);
         DockPanel.SetDock(buttons, Dock.Bottom); root.Children.Add(buttons);
 
+        var body = new StackPanel();
+        var scroll = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        root.Children.Add(scroll);
         var top = new StackPanel();
         top.Children.Add(UI.Text(app.L("Explorer shows a folder's own icon from a hidden desktop.ini file. Swivel adds two hidden system files to each folder (desktop.ini and an icon) and sets the folder's Read-only attribute if it is not set yet, which is how Explorer recognises the icon. Read-only on a folder does not stop changes to the files inside it."), 12));
         top.Children.Add(UI.Text(app.L("If Explorer's Customize tab or a sync service later rewrites desktop.ini, it is no longer recognised as Swivel's and Restore Default leaves it alone; remove the style in Explorer's folder Properties instead."), 12));
         top.Children.Add(UI.Text(app.L("Restore Default removes exactly these two files and clears Read-only only if Swivel set it. Folders that already have their own desktop.ini are left unchanged. Explorer may need a moment, or a refresh, to show the change; sync services such as OneDrive also sync the two files."), 12));
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        top.Children.Add(UI.Text(app.L("Swivel notifies Explorer after applying or restoring. Explorer's icon cache may still show the old icon until it refreshes."), 12));
+        var row = new WrapPanel();
         row.Children.Add(preview);
-        var choices = new StackPanel();
+        var choices = new StackPanel { MaxWidth = 380 };
         choices.Children.Add(UI.Text(app.L("Colour"), 14));
         var swatches = new WrapPanel { MaxWidth = 380 };
         var toggles = new List<ToggleButton>();
@@ -127,14 +156,50 @@ internal sealed class FolderStyleDialog : Window
             toggles.Add(toggle); swatches.Children.Add(toggle);
         }
         choices.Children.Add(swatches);
+        choices.Children.Add(UI.Text(app.L("Folder surface"), 14));
+        var surfaces = new ComboBox { Width = 240, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 8) };
+        string[] surfaceNames = { "Plain", "Linen", "Paper grain", "Wood stripes", "Dots", "Grid", "Gradient", "Brushed metal", "Stars" };
+        surfaces.ItemsSource = surfaceNames.Select(app.L).ToArray();
+        surfaces.SelectedIndex = 0;
+        AutomationProperties.SetName(surfaces, app.L("Folder surface"));
+        surfaces.SelectionChanged += (_, _) => { surface = (FolderSurface)surfaces.SelectedIndex; Update(); };
+        choices.Children.Add(surfaces);
+        var mode = new ComboBox { Width = 240, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 8),
+            ItemsSource = new[] { app.L("Text mark"), app.L("Emoji badge") }, SelectedIndex = 0 };
+        AutomationProperties.SetName(mode, app.L("Badge type"));
+        choices.Children.Add(mode);
         choices.Children.Add(UI.Text(app.L("Badge (optional, up to two characters)"), 14));
         AutomationProperties.SetName(badge, app.L("Badge (optional, up to two characters)"));
         badge.TextChanged += (_, _) => Update();
         choices.Children.Add(badge);
+        var emojiControls = new StackPanel { Visibility = Visibility.Collapsed };
+        emojiControls.Children.Add(UI.Text(app.L("Enter one emoji or choose below"), 14));
+        AutomationProperties.SetName(emoji, app.L("Emoji badge"));
+        emoji.TextChanged += (_, _) => Update();
+        emojiControls.Children.Add(emoji);
+        var emojiChoices = new WrapPanel { MaxWidth = 300 };
+        foreach (string value in new[] { "😀", "❤️", "⭐", "🌿", "📷", "🎵", "👩‍💻", "👍🏽" })
+        {
+            string choice = value;
+            var button = UI.Button(choice, () => emoji.Text = choice);
+            button.FontFamily = new FontFamily("Segoe UI Emoji");
+            AutomationProperties.SetName(button, app.L("Emoji badge") + ": " + choice);
+            emojiChoices.Children.Add(button);
+        }
+        emojiControls.Children.Add(emojiChoices);
+        emojiControls.Children.Add(UI.Text(app.L("Emoji availability and colour depend on the installed Segoe UI Emoji font."), 12));
+        choices.Children.Add(emojiControls);
+        mode.SelectionChanged += (_, _) =>
+        {
+            emojiMode = mode.SelectedIndex == 1;
+            badge.IsEnabled = !emojiMode;
+            emojiControls.Visibility = emojiMode ? Visibility.Visible : Visibility.Collapsed;
+            Update();
+        };
         choices.Children.Add(problem);
         row.Children.Add(choices);
         top.Children.Add(row);
-        DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
+        body.Children.Add(top);
 
         var list = new ListBox { Margin = new Thickness(0, 8, 0, 12) };
         ScrollViewer.SetHorizontalScrollBarVisibility(list, ScrollBarVisibility.Auto);
@@ -145,15 +210,22 @@ internal sealed class FolderStyleDialog : Window
             FolderStyleState.Other => "Has its own desktop.ini (left unchanged)",
             _ => "Explorer default",
         }))).ToArray();
-        root.Children.Add(list);
+        list.Height = 150;
+        body.Children.Add(list);
         Content = root;
         Update();
         Loaded += (_, _) => cancel.Focus();
 
         void Update()
         {
-            try { FolderStyles.ValidateBadge(badge.Text); problem.Text = ""; preview.Source = FolderStyleIcons.Bitmap(Chosen, 96); }
-            catch (UserError error) { problem.Text = app.L(error.Message); preview.Source = FolderStyleIcons.Bitmap(new FolderStyle(color), 96); }
+            try
+            {
+                if (emojiMode) FolderStyles.ValidateEmoji(emoji.Text);
+                Chosen.Validate();
+                preview.Source = FolderStyleIcons.Bitmap(Chosen, 96); problem.Text = "";
+                apply.IsEnabled = folders.Any(f => f.State is FolderStyleState.None or FolderStyleState.Swivel);
+            }
+            catch (UserError error) { apply.IsEnabled = false; problem.Text = app.L(error.Message); preview.Source = FolderStyleIcons.Bitmap(new FolderStyle(color, Surface: surface), 96); }
         }
     }
 }
