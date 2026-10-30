@@ -32,7 +32,8 @@ internal static class StorePackagesNativeChecks
             family.IsChecked=true;check(detail.Text.Contains("private-family_xyz")&&dialog.CurrentReport.Contains("private-family_xyz"),"Checkbox explicitly includes family names");
             family.IsChecked=false;check(!detail.Text.Contains("private-family_xyz"),"Unchecking hides family names again");
             var footer=((DockPanel)dialog.Content).Children.OfType<WrapPanel>().Single();
-            check(footer.Children.OfType<Button>().Select(x=>x.Content as string).SequenceEqual(new[]{app.L("Copy Report"),app.L("Copy Selected Details"),app.L("Close")}),"Package footer offers only explicit copies and close: no remove, Store or settings action");
+            check(footer.Children.OfType<Button>().Where(x=>x.Visibility==Visibility.Visible).Select(x=>x.Content as string).SequenceEqual(new[]{app.L("Uninstall…"),app.L("Copy Report"),app.L("Copy Selected Details"),app.L("Close")}),"Package footer offers Uninstall…, explicit copies and close: no Store or settings action; data and cancel buttons hidden until used");
+            check(!footer.Children.OfType<Button>().Single(x=>(x.Content as string)==app.L("Uninstall…")).IsEnabled&&dialog.SelectedBlock==RemovalBlock.Identity,"A package without a readable full name is never offered for Uninstall…");
         }
         finally{dialog.Close();}
         var empty=new StorePackagesDialog(app,new(DateTimeOffset.UtcNow,Array.Empty<StorePackageRecord>(),PackageListIssue.Unavailable));

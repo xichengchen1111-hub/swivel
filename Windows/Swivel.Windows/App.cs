@@ -567,7 +567,7 @@ public sealed partial class App : Application
                 token.ThrowIfCancellationRequested();
                 // The list read first stays the comparison: after a failed or empty search, or Back
                 // from the review, the same records window opens again.
-                int moved = 0; bool searched = false;
+                int moved = 0, storeUninstalled = 0, storeData = 0; bool searched = false;
                 while (true)
                 {
                     var records = new InstalledAppsDialog(this, installed);
@@ -580,7 +580,10 @@ public sealed partial class App : Application
                         catch (Exception error) when (!token.IsCancellationRequested && StorePackagesReader.Unavailable(error))
                         { report(L("The package list could not be read. The installation records read earlier are kept.")); if (!exiting) ShowError(new UserError("The package list could not be read. The installation records read earlier are kept.")); continue; }
                         token.ThrowIfCancellationRequested();
-                        ShowOperationDialog(new StorePackagesDialog(this, packages), owner, token);
+                        var storeDialog = new StorePackagesDialog(this, packages, StorePackageRemover.OwnFamily());
+                        ShowOperationDialog(storeDialog, owner, token);
+                        storeUninstalled += storeDialog.Uninstalled; storeData += storeDialog.DataMoved;
+                        if (storeDialog.Uninstalled > 0 || storeDialog.DataMoved > 0) report(string.Format(L("Store packages uninstalled: {0} · app data folders moved to the Recycle Bin or removed: {1}"), storeUninstalled, storeData));
                         if (token.IsCancellationRequested) break;
                         continue;
                     }
@@ -596,8 +599,11 @@ public sealed partial class App : Application
                     report(moved > 0 ? string.Format(L("Leftover review finished. Folders moved to the Recycle Bin or removed: {0}"), moved) : L("Leftover review closed. No folder from this window is in the Recycle Bin now."));
                     if (!back) break;
                 }
-                report(token.IsCancellationRequested ? L("Cancelled.") : moved > 0 ? string.Format(L("Leftover review finished. Folders moved to the Recycle Bin or removed: {0}"), moved)
-                    : searched ? L("Leftover review closed. No folder from this window is in the Recycle Bin now.") : L("Read-only installation-record inspection finished. No apps or files were changed.")); return;
+                string final = token.IsCancellationRequested ? L("Cancelled.") : moved > 0 ? string.Format(L("Leftover review finished. Folders moved to the Recycle Bin or removed: {0}"), moved)
+                    : searched ? L("Leftover review closed. No folder from this window is in the Recycle Bin now.") : storeUninstalled + storeData == 0 ? L("Read-only installation-record inspection finished. No apps or files were changed.") : "";
+                // Store results never replace the other outcomes of the same session.
+                if (storeUninstalled > 0 || storeData > 0) final = string.Format(L("Store packages uninstalled: {0} · app data folders moved to the Recycle Bin or removed: {1}"), storeUninstalled, storeData) + (final.Length > 0 ? " · " + final : "");
+                report(final); return;
             }
             if (action.Id == "doctor.appmemory")
             {
