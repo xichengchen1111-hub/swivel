@@ -33,6 +33,8 @@ internal static class PngMetadataNativeChecks
             check(dialog.Content is DockPanel&&children.OfType<ListView>().Single().Items.Count==document.Plan.Chunks.Count&&children.OfType<Button>().Single(b=>Equals(b.Content,app.L("Save PNG Copy"))).IsEnabled,"Native Fluent chunk summary is complete and Save explicitly available");
             check(children.OfType<TextBox>().All(t=>t.IsReadOnly)&&children.OfType<TextBlock>().All(t=>!t.Text.Contains("PRIVATE_AUTHOR")),"Preview does not display raw private payloads and source path is readonly JSON");dialog.Close();
             check(!document.Plan.Orientation.CanKeep&&!dialog.KeepOrientation&&!children.OfType<CheckBox>().Single().IsEnabled,"Without a keepable source orientation the Keep orientation option is off and disabled");
+            check(!document.CanRemoveLocation&&!string.IsNullOrEmpty(document.LocationUnavailableReason)&&!children.OfType<RadioButton>().Single(b=>Equals(b.Content,app.L("Remove location only"))).IsEnabled,"Malformed source EXIF disables location mode with a reason");
+            reject(()=>document.Save(false,true,default),"Unavailable native location save is refused");
             first=document.Save(default);string second=document.Save(default);
             check(first!=second&&File.ReadAllBytes(first).SequenceEqual(expected)&&File.ReadAllBytes(second).SequenceEqual(expected)&&File.ReadAllBytes(path).SequenceEqual(decorated),"Exclusive PNG copies preserve every retained byte and never replace source/previous copy");
             var clean=ImageTools.DecodeSnapshot(File.ReadAllBytes(first),first,default);var actual=new byte[pixels.Length];clean.CopyPixels(actual,28,0);
@@ -52,6 +54,18 @@ internal static class PngMetadataNativeChecks
             check(File.ReadAllBytes(kept).SequenceEqual(want)&&File.ReadAllBytes(rotated).SequenceEqual(source),"Kept copy is the source with only a minimal orientation EXIF in place of the original; source unchanged");
             check(PngMetadata.Read(new MemoryStream(File.ReadAllBytes(dropped)),default).Orientation==ExifOrientationInfo.None&&PngMetadata.Read(new MemoryStream(File.ReadAllBytes(kept)),default).Orientation.Value==6,"Unchecked copy has no orientation, kept copy re-reads as 6");
             var decoded=ImageTools.DecodeSnapshot(File.ReadAllBytes(kept),kept,default);check(document.CanKeepOrientation&&((decoded.PixelWidth==3&&decoded.PixelHeight==7)||(decoded.PixelWidth==7&&decoded.PixelHeight==3)),"Orientation 6 PNG kept copy passes validation; WIC may or may not apply eXIf orientation");
+            var modes=new PngMetadataDialog(app,document);var options=Children(modes).OfType<RadioButton>().ToArray();
+            check(options.Single(b=>Equals(b.Content,app.L("Remove all metadata"))).IsChecked==true&&!modes.LocationOnly,"Full removal remains the default mode");
+            check(document.CanRemoveLocation,"Strict source EXIF location variant passes native validation");
+            options.Single(b=>Equals(b.Content,app.L("Remove location only"))).IsChecked=true;
+            check(modes.LocationOnly&&!Children(modes).OfType<CheckBox>().Single().IsEnabled,"Explicit location choice disables the separate orientation-only option");
+            options.Single(b=>Equals(b.Content,app.L("Remove all metadata"))).IsChecked=true;
+            check(!modes.LocationOnly&&Children(modes).OfType<CheckBox>().Single().IsEnabled,"Switching back restores the existing orientation option");modes.Close();
+            using var locationExpected=new MemoryStream();document.Plan.WriteLocationOnly(locationExpected,default);
+            string location1=document.Save(false,true,default),location2=document.Save(true,true,default);
+            check(location1!=location2&&File.ReadAllBytes(location1).SequenceEqual(locationExpected.ToArray())&&File.ReadAllBytes(location2).SequenceEqual(locationExpected.ToArray())&&File.ReadAllBytes(rotated).SequenceEqual(source),"Native location saves are exclusive, independent of orientation checkbox, and preserve source");
+            int beforeLocationCancel=Directory.GetFiles(folder).Length;reject(()=>document.Save(false,true,new CancellationToken(true)),"Canceled native location save refused");
+            check(Directory.GetFiles(folder).Length==beforeLocationCancel,"Canceled location save publishes nothing");
         }
         using(var noMatch=PngMetadataDocument.Open(first,default))
         {

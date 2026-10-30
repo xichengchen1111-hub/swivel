@@ -10,6 +10,10 @@ internal sealed class JpegMetadataDocument : IDisposable
     private readonly NativeFiles.Input input;
     private readonly byte[] cleaned;
     private readonly byte[]? kept;
+    private byte[]? location;
+    internal bool CanRemoveLocation => location is not null;
+    internal int LocationBytes => location?.Length??0;
+    internal string? LocationUnavailableReason { get; private set; }
     private bool disposed;
     internal JpegMetadata.Plan Plan { get; }
     internal string Path => input.Path;
@@ -49,16 +53,34 @@ internal sealed class JpegMetadataDocument : IDisposable
                 catch(Exception error) when (error is UserError or System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException){kept=null;}
             }
             if(bitmap.PixelWidth!=plan.Width||bitmap.PixelHeight!=plan.Height)throw new UserError(JpegMetadata.Invalid);
-            token.ThrowIfCancellationRequested();return new(input,plan,cleaned,kept);
+            var document=new JpegMetadataDocument(input,plan,cleaned,kept);
+            document.LocationUnavailableReason=plan.LocationUnavailableReason;
+            if(plan.CanRemoveLocation)
+            {
+                using var locating=new MemoryStream();plan.WriteLocationOnly(locating,token);var candidate=locating.ToArray();
+                try
+                {
+                    var check=ImageTools.DecodeSnapshot(candidate,path,token);
+                    bool stored=check.PixelWidth==plan.Width&&check.PixelHeight==plan.Height;
+                    bool rotated=plan.Orientation.Value>=5&&check.PixelWidth==plan.Height&&check.PixelHeight==plan.Width;
+                    if(stored||rotated)document.location=candidate;
+                    else document.LocationUnavailableReason=ExifLocation.Validation;
+                }
+                catch(Exception error) when (error is UserError or System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException or IOException or OverflowException){document.LocationUnavailableReason=ExifLocation.Validation;}
+            }
+            token.ThrowIfCancellationRequested();return document;
         }
         catch{input.Dispose();throw;}
     }
     internal string Save(CancellationToken token)=>Save(false,token);
     internal string Save(bool keepOrientation,CancellationToken token)
+        =>Save(keepOrientation,false,token);
+    internal string Save(bool keepOrientation,bool locationOnly,CancellationToken token)
     {
         ObjectDisposedException.ThrowIf(disposed,this);token.ThrowIfCancellationRequested();
-        if(keepOrientation&&kept is null)throw new InvalidOperationException("No source orientation to keep.");
-        var cleaned=keepOrientation?kept!:this.cleaned;
+        if(locationOnly&&location is null)throw new UserError(LocationUnavailableReason??ExifLocation.Invalid);
+        if(!locationOnly&&keepOrientation&&kept is null)throw new InvalidOperationException("No source orientation to keep.");
+        var cleaned=locationOnly?location!:keepOrientation?kept!:this.cleaned;
         if(Plan.RemovedCount==0)throw new UserError("No JPEG APP1, APP13 or comment segments were found. No copy was saved.");
         return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+" exif-comments removed","jpg",output=>{
             for(int at=0;at<cleaned.Length;)

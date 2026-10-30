@@ -45,6 +45,37 @@ public static class PngMetadata
             RemovedCount=chunks.Count(c=>c.Removed);
             Chunks=Array.AsReadOnly(chunks.GroupBy(c=>c.Type).Select(g=>new PngMetadataChunk(g.Key,g.Count(),g.Sum(c=>(long)c.Length),g.First().Removed)).ToArray());
         }
+        private byte[]? locationExif;
+        public bool CanRemoveLocation => locationExif is not null;
+        public string? LocationUnavailableReason { get; private set; }
+        internal Plan PrepareLocation(CancellationToken token)
+        {
+            var exifs=chunks.Where(c=>c.Type=="eXIf").ToArray();
+            if(exifs.Length!=1){LocationUnavailableReason=ExifLocation.Missing;return this;}
+            var item=exifs[0];
+            locationExif=ExifLocation.Rebuild(source.AsSpan(item.Offset+8,item.Length-12),token,out var reason);
+            LocationUnavailableReason=reason;
+            if(locationExif is not null&&source.Length-item.Length+12L+locationExif.Length>MaxBytes){locationExif=null;LocationUnavailableReason=ExifLocation.Invalid;}
+
+            return this;
+        }
+        public void WriteLocationOnly(Stream output,CancellationToken token)
+        {
+            ArgumentNullException.ThrowIfNull(output);token.ThrowIfCancellationRequested();
+            if(!output.CanWrite)throw new ArgumentException("A writable output stream is required.",nameof(output));
+            if(!CanRemoveLocation)throw new UserError(LocationUnavailableReason??ExifLocation.Invalid);
+            output.Write(Signature);bool inserted=false;
+            foreach(var chunk in chunks)
+            {
+                token.ThrowIfCancellationRequested();
+                if(!inserted&&(chunk.Type=="eXIf"||chunk.Type=="IDAT"))
+                {var replacement=ExifChunk(locationExif!,token);for(int at=0;at<replacement.Length;){token.ThrowIfCancellationRequested();int n=Math.Min(65536,replacement.Length-at);output.Write(replacement.AsSpan(at,n));at+=n;}inserted=true;}
+                if(chunk.Type=="eXIf"||IsXmp(chunk))continue;
+                for(int at=0;at<chunk.Length;){token.ThrowIfCancellationRequested();int n=Math.Min(65536,chunk.Length-at);output.Write(source.AsSpan(chunk.Offset+at,n));at+=n;}
+            }
+            token.ThrowIfCancellationRequested();
+        }
+        private bool IsXmp(Chunk c)=>c.Type=="iTXt"&&source.AsSpan(c.Offset+8,c.Length-12).StartsWith("XML:com.adobe.xmp\0"u8);
         public void Write(Stream output,CancellationToken token)=>Write(output,false,token);
         // keepOrientation writes one new eXIf chunk (only IFD0 Orientation) where the source
         // eXIf stood, or just before the first IDAT if the source placed it later.
@@ -141,7 +172,7 @@ public static class PngMetadata
         if(exifChunks>1)orientation=ExifOrientationInfo.Ambiguous;
         // The PNG specification requires eXIf before the first IDAT.
         int slot=exifIndex<0?-1:Math.Min(exifIndex,firstData);
-        token.ThrowIfCancellationRequested();return Plan.Create(bytes,chunks.ToArray(),width,height,orientation,slot);
+        token.ThrowIfCancellationRequested();return Plan.Create(bytes,chunks.ToArray(),width,height,orientation,slot).PrepareLocation(token);
     }
     public const int OrientationChunkLength=12+ExifOrientation.TiffLength;
     public static byte[] OrientationChunk(int orientation)
@@ -150,6 +181,13 @@ public static class PngMetadata
         "eXIf"u8.CopyTo(bytes.AsSpan(4));ExifOrientation.Tiff(orientation).CopyTo(bytes,8);
         uint crc=0xffffffff;foreach(byte b in bytes.AsSpan(4,4+ExifOrientation.TiffLength))crc=CrcTable[(crc^b)&255]^(crc>>8);
         BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(OrientationChunkLength-4),crc^0xffffffff);return bytes;
+    }
+    private static byte[] ExifChunk(byte[] tiff,CancellationToken token)
+    {
+        var bytes=new byte[tiff.Length+12];BinaryPrimitives.WriteUInt32BigEndian(bytes,(uint)tiff.Length);
+        "eXIf"u8.CopyTo(bytes.AsSpan(4));tiff.CopyTo(bytes,8);uint crc=0xffffffff;
+        for(int i=4;i<8+tiff.Length;i++){if((i&65535)==0)token.ThrowIfCancellationRequested();crc=CrcTable[(crc^bytes[i])&255]^(crc>>8);}
+        BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(bytes.Length-4),crc^0xffffffff);return bytes;
     }
     // Some system decoders accept damaged image data. Retained IDAT bytes are copied
     // unchanged, so they must at least inflate to exactly the

@@ -22,13 +22,17 @@ internal sealed class JpegMetadataDialog : Window
     private sealed record Row(string Type,int Count,string Bytes,string Result);
     internal bool KeepOrientation=>keep.IsChecked==true;
     private readonly CheckBox keep;
+    private readonly RadioButton locationMode;
+    internal bool LocationOnly=>locationMode.IsChecked==true;
     internal JpegMetadataDialog(App app,JpegMetadataDocument document)
     {
         var plan=document.Plan;Title=app.L("Remove JPEG EXIF & Comments…");Width=850;Height=780;MinWidth=460;MinHeight=320;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var root=new DockPanel{Margin=new Thickness(20)};var footer=new StackPanel();DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
         keep=new CheckBox{Content=app.L("Keep orientation"),IsChecked=document.CanKeepOrientation,IsEnabled=document.CanKeepOrientation,Margin=new Thickness(0,4,0,8)};
+        var allMode=new RadioButton{Content=app.L("Remove all metadata"),IsChecked=true,GroupName="MetadataMode",Margin=new Thickness(0,4,0,4)};
+        locationMode=new RadioButton{Content=app.L("Remove location only"),IsEnabled=document.CanRemoveLocation,GroupName="MetadataMode",Margin=new Thickness(0,4,0,4)};
         var summary=UI.Text("");footer.Children.Add(summary);
-        void Summarize()=>summary.Text=plan.RemovedCount==0?app.L("No JPEG APP1, APP13 or comment segments were found. No copy was saved."):keep.IsChecked==true?string.Format(app.L("Remove {0:N0} segment(s), {1:N0} bytes; add a {2:N0}-byte orientation-only EXIF segment; new JPEG: {3:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,JpegMetadata.OrientationSegmentLength,plan.OutputBytesKeeping(true)):string.Format(app.L("Remove {0:N0} segment(s), {1:N0} bytes; new JPEG: {2:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,plan.OutputBytes);
+        void Summarize()=>summary.Text=LocationOnly?string.Format(app.L("New location-only copy: {0:N0} bytes. Image data is unchanged."),document.LocationBytes):plan.RemovedCount==0?app.L("No JPEG APP1, APP13 or comment segments were found. No copy was saved."):keep.IsChecked==true?string.Format(app.L("Remove {0:N0} segment(s), {1:N0} bytes; add a {2:N0}-byte orientation-only EXIF segment; new JPEG: {3:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,JpegMetadata.OrientationSegmentLength,plan.OutputBytesKeeping(true)):string.Format(app.L("Remove {0:N0} segment(s), {1:N0} bytes; new JPEG: {2:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,plan.OutputBytes);
         Summarize();keep.Checked+=(_,_)=>Summarize();keep.Unchecked+=(_,_)=>Summarize();
         var buttons=new WrapPanel();footer.Children.Add(buttons);var save=UI.Button(app.L("Save JPEG Copy"),()=>DialogResult=true);save.IsEnabled=plan.RemovedCount>0;buttons.Children.Add(save);var cancel=UI.Button(app.L("Cancel"),()=>DialogResult=false);cancel.IsCancel=true;buttons.Children.Add(cancel);
         var body=new StackPanel();root.Children.Add(UI.Scroll(body));Content=root;
@@ -36,12 +40,19 @@ internal sealed class JpegMetadataDialog : Window
         body.Children.Add(UI.Text(string.Format(app.L("{0} × {1} pixels · source: {2:N0} bytes"),plan.Width,plan.Height,plan.SourceBytes)));
         body.Children.Add(UI.Text(app.L(plan.Progressive?"Progressive JPEG":"Baseline JPEG")));
         body.Children.Add(UI.Text(string.Format(app.L("{0:N0} scan(s) · {1:N0} marker(s), including {2:N0} restarts"),plan.ScanCount,plan.MarkerCount,plan.RestartCount)));
-        body.Children.Add(UI.Text(OrientationNotices.Status(app,plan.Orientation,document.CanKeepOrientation)));body.Children.Add(keep);body.Children.Add(UI.Text(app.L(OrientationNotices.Keep),12));
-        foreach(string note in new[]{JpegMetadataNotices.Scope,JpegMetadataNotices.Limits,JpegMetadataNotices.Retained,JpegMetadataNotices.Restart,JpegMetadataNotices.Export})body.Children.Add(UI.Text(app.L(note),12));
-        body.Children.Add(UI.Text(app.L("JPEG Segment Summary"),18));var list=new ListView{Height=240,ItemsSource=plan.Segments.Select(c=>new Row(app.L(JpegMetadata.MarkerName(c.Marker)),c.Count,c.Bytes.ToString("N0"),app.L(c.Removed?"Remove":"Keep"))).ToArray()};
+        body.Children.Add(allMode);body.Children.Add(locationMode);
+        if(!document.CanRemoveLocation)body.Children.Add(UI.Text(app.L(document.LocationUnavailableReason??ExifLocation.Invalid),12));
+        var locationNotice=new StackPanel();body.Children.Add(locationNotice);
+        foreach(string note in new[]{ExifLocation.Notice,ExifLocation.JpegScope,ExifLocation.Export})locationNotice.Children.Add(UI.Text(app.L(note),12));
+        var fullDetails=new StackPanel();body.Children.Add(fullDetails);
+        fullDetails.Children.Add(UI.Text(OrientationNotices.Status(app,plan.Orientation,document.CanKeepOrientation)));fullDetails.Children.Add(keep);fullDetails.Children.Add(UI.Text(app.L(OrientationNotices.Keep),12));
+        foreach(string note in new[]{JpegMetadataNotices.Scope,JpegMetadataNotices.Limits,JpegMetadataNotices.Retained,JpegMetadataNotices.Restart,JpegMetadataNotices.Export})fullDetails.Children.Add(UI.Text(app.L(note),12));
+        fullDetails.Children.Add(UI.Text(app.L("JPEG Segment Summary"),18));var list=new ListView{Height=240,ItemsSource=plan.Segments.Select(c=>new Row(app.L(JpegMetadata.MarkerName(c.Marker)),c.Count,c.Bytes.ToString("N0"),app.L(c.Removed?"Remove":"Keep"))).ToArray()};
         VirtualizingPanel.SetIsVirtualizing(list,true);VirtualizingPanel.SetVirtualizationMode(list,VirtualizationMode.Recycling);ScrollViewer.SetCanContentScroll(list,true);AutomationProperties.SetName(list,app.L("JPEG Segment Summary"));
-        var grid=new GridView();foreach(var col in new[]{("Segment Type","Type",110d),("Count","Count",85d),("Bytes (including framing)","Bytes",200d),("Result","Result",110d)})grid.Columns.Add(new GridViewColumn{Header=app.L(col.Item1),DisplayMemberBinding=new Binding(col.Item2),Width=col.Item3});list.View=grid;body.Children.Add(list);
-        body.Children.Add(UI.Text(app.L(JpegMetadataNotices.Downgrade),12));
+        var grid=new GridView();foreach(var col in new[]{("Segment Type","Type",110d),("Count","Count",85d),("Bytes (including framing)","Bytes",200d),("Result","Result",110d)})grid.Columns.Add(new GridViewColumn{Header=app.L(col.Item1),DisplayMemberBinding=new Binding(col.Item2),Width=col.Item3});list.View=grid;fullDetails.Children.Add(list);
+        fullDetails.Children.Add(UI.Text(app.L(JpegMetadataNotices.Downgrade),12));
+        void ModeChanged(){fullDetails.Visibility=LocationOnly?Visibility.Collapsed:Visibility.Visible;locationNotice.Visibility=LocationOnly?Visibility.Visible:Visibility.Collapsed;keep.IsEnabled=!LocationOnly&&document.CanKeepOrientation;Summarize();}
+        allMode.Checked+=(_,_)=>ModeChanged();locationMode.Checked+=(_,_)=>ModeChanged();ModeChanged();
         SourceInitialized+=(_,_)=>WebRouteLayout.Fit(this,Owner??this);DpiChanged+=(_,_)=>WebRouteLayout.Fit(this,this);
     }
 }
