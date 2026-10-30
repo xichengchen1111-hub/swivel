@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.134 — merged A05 screenshot cards, B05/B06 exFAT/FAT32, C06 location-only removal (Codex) (2026-10-30)
+
+- Each branch passed its own Windows CI and independent review before merging: A05 41001362242 (core 4,554,376, native 6,259; no P1, P2s fixed and rechecked), B05/B06 41002205973 (core 4,554,414, native 6,340; FAT cases on real exFAT and FAT32 virtual disks created by diskpart on the runner), C06 41000250807 (core 4,554,485, native 6,244; written by Codex, three privacy P2s fixed).
+- After merging all three: core 4,554,637 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- Not tested: real Win+PrintScreen and Snipping Tool saves on a PC, real USB sticks and SD cards (removal while in use, other FAT drivers), photos from real cameras and phones in location-only mode.
+
 ## Windows0.133 — merged A05 top-edge rope, F09 connection test, F05 project kinds (Codex) (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: A05 40987721945 (core 4,553,662, native 6,200; one P2 and three P3s fixed), F09 40988223533 (core 4,553,790, native 6,195; no P1, four P2s fixed and rechecked), F05 40985925418 (core 4,553,899, native 6,171; written by Codex, three P2s fixed by dropping non-regenerable folders).

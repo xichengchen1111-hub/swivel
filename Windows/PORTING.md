@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.134 合并第九轮：A05 截图卡片、B05/B06 exFAT/FAT32、C06 只去位置（C06 由 Codex 编写）
+
+分支 `claude/win-a05-screenshots-b519a1`（195c56f、ad93ff0、1523e6b、50ba46a）、`claude/win-b05-exfat-026bb6`（5100bfa、385197b、950b3eb、3e73876，另有已删除的临时 FAT 身份探测提交）、`codex/win-c06-location`（5f35f52 由 Codex 编写，Claude 按审查修正）。Strings.json 三方 JSON 合并无同键冲突。CI 工作流新增一步：在 Windows 运行器上用 diskpart 创建小型 exFAT/FAT32 虚拟盘供原生检查使用（仅 CI，应用本身不需要提权）。
+
+- A05：默认关闭的设置，对 `FOLDERID_Screenshots`（不创建）运行既有到达会话，不初扫、不改系统设置。卡片不激活，位于指针所在显示器右下角，2.5 s 无人操作离开（悬停/按下/拖动暂停，离开后再 1 s），单击或上拖按引用挂上（顶边绳开启时放下绳子），其他拖动以复制/链接交出。审查（无 P1，P2 已修并复查）：常驻文件夹租约共享删除，使 Screenshots/Pictures 仍可改名移动；达到预算的会话最多每分钟续一次；忙时保留卡片并提示；正被按住的卡片不替换；替换时保留悬停；先定位后显示；全屏应用时不放绳；DPI 重新定位；OneDrive 专门提示；每 5 s 复核文件夹被改名/移动/重定位或稍后创建；永不匹配时停止而不是循环。
+- B05/B06：批量改名、移动文件、移动文件夹在同一 exFAT/FAT32 卷内可用；FAT 没有可靠的文件 ID，撤销依赖会话内持有的句柄（释放后撤销被拒），持有文件夹通过相对打开重新打开（ReOpenFile 拒绝目录）；必须用精确存储名（大小写、非 8.3 短名）选择。复制到 FAT：带 Zone.Identifier 的文件须在确认中明确接受丢失标记；额外数据流、非法名称、仅大小写不同、FAT32 ≥4 GB 预先拒绝；不提供撤销。NTFS 行为不变。审查修正：标记竞争、流回退、移动路径、持有竞争，以及诚实列出大小写冲突的跳过项。
+- C06：新 `ExifLocation` 严格解析单个源 EXIF（两种字节序，IFD0/Exif/Interop/GPS/IFD1，条目/偏移/重叠/循环有界）并按原字节序重写。审查（无 P1，3 个 P2）修正：EXIF 内的 XMP(700)/IPTC(33723)/Photoshop(34377) 也删除；内嵌缩略图总是去掉（可能自带 GPS 或显示已裁掉的内容）；PNG 中关键字为 XML:com.adobe.xmp 或以 “Raw profile type” 开头的 tEXt/zTXt/iTXt 删除；输出命名为 “location removed”。TIFF 与 Agent 未改。未处理的 P3：其他非标准 APP1 原样保留（已说明）、严格解析可能使部分真实相机文件不可用此模式、每次打开都会多做一次验证解码。
+
 ## 0.133 合并第八轮：A05 顶边绳子、F09 网络测试、F05 项目构建（F05 由 Codex 编写）
 
 分支 `claude/win-a05-rope-65af46`（daf9bd1、26480a0、427b24d）、`claude/win-f09-nettest-3f7e97`（90c9045、5f92e12、fcb62fc、11cb8ab）、`codex/win-f05-projects`（a378323 由 Codex 编写；Claude 去掉 Unreal Saved，随后按审查去掉更多不可重建项）。Strings.json 三方 JSON 合并无同键冲突。
