@@ -14,20 +14,24 @@ public sealed record ProjectFolderResult(IReadOnlyList<ProjectFolder> Folders, I
 // project file is parsed, executed or opened, and a match never authorizes cleanup.
 public static class ProjectFolders
 {
-    private enum Marker { Node, Cargo, Swift, Gradle, CMake, CMakeCache, Python, PythonConfig, DotNet, Next, Godot, Dart, Maven, Nuxt, Svelte, Elixir, Haskell, Zig, Terraform, UnityVersion, UnityProject, Unreal, Pods }
-    private enum Candidate { Node, Cargo, Swift, Build, Gradle, Python, DotNet, Next, Godot, Dart, Nuxt, Svelte, Elixir, Haskell, Zig, Terraform, Unity, Unreal, Pods }
+    private enum Marker { Node, Cargo, Swift, Gradle, CMake, CMakeCache, Python, PythonConfig, DotNet, Next, Godot, Dart, Maven, Nuxt, Svelte, Elixir, Haskell, Zig, UnityVersion, UnityProject, Unreal, Pods }
+    private enum Candidate { Node, Cargo, Swift, Build, Gradle, Python, DotNet, Next, Godot, Dart, Nuxt, Svelte, Elixir, Haskell, Zig, Unity, Unreal, Pods }
+    // Not offered because they can hold what a rebuild cannot bring back: Unity Temp (crash scene
+    // backups), Unreal Saved/Binaries (autosaves; precompiled modules without Source), Elixir deps
+    // (edited or vendored dependencies), Nuxt .output (the deployed server bundle) and Terraform
+    // .terraform (selected workspace and backend settings).
     private static readonly Dictionary<string, Candidate> Candidates = new(StringComparer.OrdinalIgnoreCase)
     {
         ["node_modules"] = Candidate.Node, ["target"] = Candidate.Cargo, [".build"] = Candidate.Swift,
         ["build"] = Candidate.Build, [".gradle"] = Candidate.Gradle, [".venv"] = Candidate.Python,
         ["venv"] = Candidate.Python, ["bin"] = Candidate.DotNet, ["obj"] = Candidate.DotNet,
         [".next"] = Candidate.Next, [".godot"] = Candidate.Godot, [".dart_tool"] = Candidate.Dart,
-        [".nuxt"] = Candidate.Nuxt, [".output"] = Candidate.Nuxt, [".svelte-kit"] = Candidate.Svelte,
-        ["_build"] = Candidate.Elixir, ["deps"] = Candidate.Elixir, [".stack-work"] = Candidate.Haskell,
+        [".nuxt"] = Candidate.Nuxt, [".svelte-kit"] = Candidate.Svelte,
+        ["_build"] = Candidate.Elixir, [".stack-work"] = Candidate.Haskell,
         [".zig-cache"] = Candidate.Zig, ["zig-cache"] = Candidate.Zig, ["zig-out"] = Candidate.Zig,
-        [".terraform"] = Candidate.Terraform, ["Library"] = Candidate.Unity, ["Temp"] = Candidate.Unity,
+        ["Library"] = Candidate.Unity,
         ["Intermediate"] = Candidate.Unreal,
-        ["DerivedDataCache"] = Candidate.Unreal, ["Binaries"] = Candidate.Unreal, ["Pods"] = Candidate.Pods
+        ["DerivedDataCache"] = Candidate.Unreal, ["Pods"] = Candidate.Pods
     };
     private static readonly Dictionary<string, Marker> MarkerNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -170,10 +174,9 @@ public static class ProjectFolders
                         case Candidate.Dart: Match("Dart tool cache", Marker.Dart); break;
                         case Candidate.Nuxt: Match("Nuxt build output", Marker.Nuxt); break;
                         case Candidate.Svelte: Match("SvelteKit build output", Marker.Svelte); break;
-                        case Candidate.Elixir: Match("Elixir build and dependencies", Marker.Elixir); break;
+                        case Candidate.Elixir: Match("Elixir build output", Marker.Elixir); break;
                         case Candidate.Haskell: Match("Haskell Stack build output", Marker.Haskell); break;
                         case Candidate.Zig: Match("Zig build output", Marker.Zig); break;
-                        case Candidate.Terraform: Match("Terraform working folder", Marker.Terraform); break;
                         case Candidate.Unity: Match("Unity project output", Marker.UnityProject); break;
                         case Candidate.Unreal: Match("Unreal Engine project output", Marker.Unreal); break;
                         case Candidate.Pods: Match("CocoaPods dependencies", Marker.Pods); break;
@@ -210,7 +213,6 @@ public static class ProjectFolders
         foreach (var (prefix, kind) in new[] { ("nuxt.config.", Marker.Nuxt), ("svelte.config.", Marker.Svelte) })
             if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
                 ScriptExtensions.Contains(name[prefix.Length..], StringComparer.OrdinalIgnoreCase)) return kind;
-        if (name.Length > 3 && name.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)) return Marker.Terraform;
         if (name.Length > 9 && name.EndsWith(".uproject", StringComparison.OrdinalIgnoreCase)) return Marker.Unreal;
         foreach (string extension in DotNetExtensions)
             if (name.Length > extension.Length && name.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) return Marker.DotNet;

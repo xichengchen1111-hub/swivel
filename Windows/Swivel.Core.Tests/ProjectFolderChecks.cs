@@ -37,22 +37,21 @@ internal static class ProjectFolderChecks
         {
             ("target", "pom.xml", null, "Maven build output"),
             ("Pods", "Podfile", null, "CocoaPods dependencies"),
-            ("_build", "mix.exs", null, "Elixir build and dependencies"),
-            ("deps", "mix.exs", null, "Elixir build and dependencies"),
+            ("_build", "mix.exs", null, "Elixir build output"),
             (".stack-work", "stack.yaml", null, "Haskell Stack build output"),
             (".zig-cache", "build.zig", null, "Zig build output"),
             ("zig-cache", "build.zig", null, "Zig build output"),
             ("zig-out", "build.zig", null, "Zig build output"),
-            (".terraform", "main.tf", null, "Terraform working folder"),
             ("Intermediate", "Game.uproject", null, "Unreal Engine project output"),
-            ("DerivedDataCache", "Game.uproject", null, "Unreal Engine project output"),
-            ("Binaries", "Game.uproject", null, "Unreal Engine project output")
+            ("DerivedDataCache", "Game.uproject", null, "Unreal Engine project output")
         }).Concat(from extension in new[] { "js", "mjs", "cjs", "ts", "mts", "cts" }
-                  from folder in new[] { ".nuxt", ".output", ".svelte-kit" }
+                  from folder in new[] { ".nuxt", ".svelte-kit" }
                   select (folder, (folder == ".svelte-kit" ? "svelte" : "nuxt") + ".config." + extension,
                       (string?)null, folder == ".svelte-kit" ? "SvelteKit build output" : "Nuxt build output")).ToArray();
-        // Unreal's Saved folder holds autosaves, config and screenshots, so it is never offered.
-        check(Find(D("root", F("Game.uproject", 1), D("Saved", F("Autosave.umap", 9)))).Folders.Count == 0, "Unreal Saved folder is never offered");
+        // Folders that can hold what a rebuild cannot bring back are never offered.
+        foreach (var (folder, marker) in new[] { ("Saved", "Game.uproject"), ("Binaries", "Game.uproject"), ("deps", "mix.exs"), (".output", "nuxt.config.ts"), (".terraform", "main.tf") })
+            check(Find(D("root", F(marker, 1), D(folder, F("data", 9)))).Folders.Count == 0, "Not offered (may not be regenerable): " + folder);
+        check(Find(D("root", D("Assets"), D("ProjectSettings", F("ProjectVersion.txt", 1)), D("Temp", D("__Backupscenes", F("0.backup", 9))))).Folders.Count == 0, "Unity Temp (crash scene backups) is never offered");
         foreach (var rule in rules)
         {
             var content = new List<Fixture> { F("output", 77) }; if (rule.Inside is not null) content.Add(F(rule.Inside, 5));
@@ -93,7 +92,7 @@ internal static class ProjectFolderChecks
                 check(result.Folders.Count == 0, "Internal identifying marker must itself be a regular file");
             }
         }
-        foreach (string folder in new[] { "Library", "Temp", "obj" })
+        foreach (string folder in new[] { "Library", "obj" })
         {
             Fixture Unity(bool version = true, bool assets = true) => D("root",
                 D("ProjectSettings", version ? F("ProjectVersion.txt", 1) : F("other")),
@@ -123,7 +122,7 @@ internal static class ProjectFolderChecks
             var result = Find(D("root", extra.Concat(new[] { F(first), F(second), D(folder) }).ToArray()));
             check(result.Folders.Count == 0 && result.Issues.Single().Reason == "Ambiguous project markers", "Complete overlapping rules are ambiguous: " + folder);
         }
-        foreach (var (folder, marker) in new[] { (".terraform", ".tf"), ("Binaries", ".uproject"), (".nuxt", "nuxt.config.js.bak"), (".svelte-kit", "svelte.config."), ("dist", "vite.config.ts") })
+        foreach (var (folder, marker) in new[] { ("Binaries", ".uproject"), (".nuxt", "nuxt.config.js.bak"), (".svelte-kit", "svelte.config."), ("dist", "vite.config.ts") })
             check(Find(D("root", F(marker), D(folder))).Folders.Count == 0, "Empty wildcard stems, backup configs and generic Vite dist are not project evidence");
         foreach (var rule in rules.Where(x => !oldRules.Contains(x)))
         {
@@ -138,8 +137,8 @@ internal static class ProjectFolderChecks
         var unityMany = Find(D("root", D("Assets"), D("ProjectSettings", unityVersions), D("projectsettings", unityVersions), D("Library"))).Folders.Single();
         var versionPaths = unityVersions.SelectMany(x => new[] { "ProjectSettings\\" + x.Name, "projectsettings\\" + x.Name }).OrderBy(x => x, StringComparer.Ordinal).Take(8);
         check(unityMany.EvidenceCount == 32 && unityMany.Evidence.SequenceEqual(versionPaths), "Unity merges case-variant settings directories with exact counts and eight sorted file paths");
-        var terraformMany = Find(D("root", Enumerable.Range(0, 30).Reverse().Select(i => F($"p{i:D2}.tf")).Append(D(".terraform")).ToArray())).Folders.Single();
-        check(terraformMany.EvidenceCount == 30 && terraformMany.Evidence.SequenceEqual(Enumerable.Range(0, 8).Select(i => $"p{i:D2}.tf")), "New wildcard evidence preserves count and deterministic eight-path cap");
+        var unrealMany = Find(D("root", Enumerable.Range(0, 30).Reverse().Select(i => F($"p{i:D2}.uproject")).Append(D("Intermediate")).ToArray())).Folders.Single();
+        check(unrealMany.EvidenceCount == 30 && unrealMany.Evidence.SequenceEqual(Enumerable.Range(0, 8).Select(i => $"p{i:D2}.uproject")), "New wildcard evidence preserves count and deterministic eight-path cap");
         foreach (string marker in new[] { ".csproj", ".fsproj", ".vbproj", "app.csproj.bak", "app.csprojx", "csproj" })
         {
             var result = Find(D("root", F(marker), D("bin", F("payload"))));

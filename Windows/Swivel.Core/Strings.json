@@ -16134,11 +16134,6 @@
     "SvelteKit 建置輸出",
     "SvelteKit ビルド出力"
   ],
-  "Elixir build and dependencies": [
-    "Elixir 构建与依赖",
-    "Elixir 建置與相依套件",
-    "Elixir ビルドと依存関係"
-  ],
   "Haskell Stack build output": [
     "Haskell Stack 构建输出",
     "Haskell Stack 建置輸出",
@@ -16148,11 +16143,6 @@
     "Zig 构建输出",
     "Zig 建置輸出",
     "Zig ビルド出力"
-  ],
-  "Terraform working folder": [
-    "Terraform 工作文件夹",
-    "Terraform 工作資料夾",
-    "Terraform 作業フォルダー"
   ],
   "Unity project output": [
     "Unity 项目输出",
@@ -16168,5 +16158,10 @@
     "CocoaPods 依赖",
     "CocoaPods 相依套件",
     "CocoaPods 依存関係"
+  ],
+  "Elixir build output": [
+    "Elixir 构建输出",
+    "Elixir 建置輸出",
+    "Elixir ビルド出力"
   ]
 }
