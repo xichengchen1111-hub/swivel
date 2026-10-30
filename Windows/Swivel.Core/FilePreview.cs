@@ -11,7 +11,7 @@ public enum FilePreviewKind { Unsupported, Image, Document, Subtitle, Data, Loca
 // Routing is extension-only; each existing reader still validates the complete input.
 public static class FilePreview
 {
-    public static readonly string[] ImageExtensions = { "png", "jpg", "jpeg", "bmp", "tif", "tiff", "gif", "tga", "psd", "webp" };
+    public static readonly string[] ImageExtensions = { "png", "jpg", "jpeg", "bmp", "tif", "tiff", "gif", "tga", "psd", "webp", "heic", "heif", "avif" };
     public static readonly string[] LocalAudioExtensions = { "wav", "aif", "aiff", "aifc" };
     public static readonly string[] DecodedAudioExtensions = { "mp3", "aac", "flac", "m4a" };
     public static readonly string[] Extensions = ImageExtensions.Concat(DocumentText.Extensions)

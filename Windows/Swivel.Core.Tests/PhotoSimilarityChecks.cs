@@ -62,7 +62,7 @@ internal static class PhotoSimilarityChecks
         check(scan.Attempted==2&&scan.FileLimit&&scan.Pairs.Count==1&&source.Opened==2,"Attempt bound caps source opens including decoder failures");
         foreach(int budget in new[]{15,16})
         {scan=Run(new(){["a.png"]=Hash(1),["b.png"]=Hash(1)},new(MaxReadBytes:budget));check(scan.Pairs.Count==(budget==16?1:0)&&scan.ByteLimit==(budget==15)&&scan.BytesRead==(budget==16?16:8),"Whole source budget precheck exact/+1: "+budget);}
-        scan=Run(new(){["huge.png"]=new byte[16*1024*1024+1],["empty.bmp"]=Array.Empty<byte>(),["unsupported.heic"]=Hash(1)});
+        scan=Run(new(){["huge.png"]=new byte[16*1024*1024+1],["empty.bmp"]=Array.Empty<byte>(),["unsupported.jxl"]=Hash(1)});
         check(source.Opened==0&&scan.Issues.Count==3,"Oversize/empty/unsupported formats never read data");
         scan=Run(new(){["a.png"]=new byte[16*1024*1024]},new(MaxReadBytes:16*1024*1024),(_,_,_,_)=>1);
         check(scan.Loaded==1&&scan.BytesRead==16*1024*1024&&!scan.ByteLimit,"Exactly16MiB source remains eligible under exact read budget");
