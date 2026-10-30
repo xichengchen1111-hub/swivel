@@ -172,7 +172,10 @@ internal static class HeifDecoder
     /// one. When saving, colour contexts that can't be read are an error, not a silent skip.
     private static IWICColorTransform? Profile(IWICImagingFactory factory, IWICBitmapFrameDecode frame, IWICFormatConverter bgra, bool readOnly, List<object?> owned)
     {
-        frame.GetColorContexts(0, null, out uint count);
+        // "Unsupported operation" or "not implemented" from the count query means no colour contexts.
+        uint count;
+        try { frame.GetColorContexts(0, null, out count); }
+        catch (COMException error) when (error.HResult is unchecked((int)0x88982F81) or unchecked((int)0x80004001)) { return null; }
         if (count == 0) return null;
         if (count > 16) { if (readOnly) return null; throw new UserError(ProfileFailed); }
         var contexts = new IWICColorContext[count];
