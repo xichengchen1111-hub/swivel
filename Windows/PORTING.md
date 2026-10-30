@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.133 合并第八轮：A05 顶边绳子、F09 网络测试、F05 项目构建（F05 由 Codex 编写）
+
+分支 `claude/win-a05-rope-65af46`（daf9bd1、26480a0、427b24d）、`claude/win-f09-nettest-3f7e97`（90c9045、5f92e12、fcb62fc、11cb8ab）、`codex/win-f05-projects`（a378323 由 Codex 编写；Claude 去掉 Unreal Saved，随后按审查去掉更多不可重建项）。Strings.json 三方 JSON 合并无同键冲突。
+
+- A05：默认关闭的设置；50 ms 光标轮询（无钩子、无权限），在指针所在显示器顶边短暂停留后放下无边框、不激活、置顶的绳子窗口，跳过全屏应用，指针离开约 1 秒收起。挂图复用原窗口的按钮与拼接逻辑（提取为 ClotheslinePrints）。RopeMotion 为解析阻尼弹簧，检查阻尼 ≥0.6、可见摆动 ≤2、1.5 s 内静止；减少动画时直接到位。审查修正（1 个 P2、3 个 P3）：最大化或带标题栏的窗口不当作全屏、最大化无边框窗口仍算全屏、拖出结束在所有宿主清除悬停、WM_DPICHANGED 建议矩形换成绳子自己的。截图接管未做。
+- F09：`doctor.nettest` 窗口在按下带说明的按钮前不联网；网关 ping 4×1 s（含 PPP 适配器网关）、系统 DNS、msftconnecttest.com 精确正文且不跟随重定向（只报告重定向主机）、HTTPS 到 www.microsoft.com、可选 25 MB/15 s 下载测速（固定的 .NET 运行时包，丢弃）。使用系统代理并报告；无凭据/Cookie/持久化/修复。审查（无 P1，4 个 P2 已修）：HTTP 被拦而 HTTPS 成功为单独结论、任何 HTTPS 状态都证明 TLS 可用、代理隧道拒绝与 407 归为代理问题、内部超时表现为 I/O 错误时计为超时、无代理时的中性 DNS 说明、WPAD/PAC 说明、取消源释放、极快的完整样本也报告速度。
+- F05：新项目类型只用既有元数据快照，要求同一父文件夹中的项目文件（Unity 另需 Assets 目录与 ProjectSettings/ProjectVersion.txt）；Maven/Rust `target`、Unity/.NET `obj` 同时满足时为歧义。审查（无 P1，3 个 P2）后去掉 Unity Temp（崩溃场景备份）、Unreal Binaries（无 Source 时不可重建）、Terraform .terraform（工作区与后端设置），并按 P3 去掉 Elixir deps 与 Nuxt .output；检查确保它们永不出现。未处理的 P3：名为 Library/Pods 等的普通文件夹会在问题列表多出“缺少项目标记”。
+
 ## 0.132 合并第七轮：D04 变速声音、F08 Store 卸载、A04 预览（A04 由 Codex 编写）
 
 分支 `claude/win-d04-speedsound-1f2400`（c1208b3、fee7e4e、bdf6fe0、3e85790，另有两个已删除的临时 CI 探测提交）、`claude/win-f08-storeuninstall-e58da2`（802d041、345417d）、`codex/win-a04-preview`（0f68883 由 Codex 编写，Claude 加预览专用解码说明；审查修正提交）。Strings.json 三方 JSON 合并无同键冲突。

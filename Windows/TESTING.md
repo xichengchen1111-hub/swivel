@@ -1327,6 +1327,12 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.133 — merged A05 top-edge rope, F09 connection test, F05 project kinds (Codex) (2026-10-30)
+
+- Each branch passed its own Windows CI and independent review before merging: A05 40987721945 (core 4,553,662, native 6,200; one P2 and three P3s fixed), F09 40988223533 (core 4,553,790, native 6,195; no P1, four P2s fixed and rechecked), F05 40985925418 (core 4,553,899, native 6,171; written by Codex, three P2s fixed by dropping non-regenerable folders).
+- After merging all three: core 4,554,319 on Mac, native compiled 0 warnings/errors there. Windows CI on the merged branch: see below.
+- Not tested: how the rope feels on real hardware and multi-monitor setups, the connection test on a home network with a captive portal or proxy, project folders from real Unity/Unreal/Maven projects.
+
 ## Windows0.132 — merged D04 speed-change sound, F08 Store uninstall, A04 Preview File (Codex) (2026-10-30)
 
 - Each branch passed its own Windows CI and independent review before merging: D04 40980786519 (core 4,553,063, native 6,088; review fixes and an exact sound length), F08 40979198060 (core 4,553,170, native 6,097, including a real test-package install/uninstall round trip; no P1/P2 left), A04 40977928721 (core 4,553,221, native 6,112; written by Codex, review no P1/P2, four P3s fixed).

@@ -10,6 +10,14 @@ Windows 独立原生实现，使用 C# / .NET 10 / WPF / Win32。**这是多批�
 
 B06 仍为部分实现：跨卷移动、文件夹树复制／移动及会话撤销副本仍待做。固定52项仍22／24／4／2，普通剩余28。原生复制测试只交叉编译，真实 Windows 未执行。新动作存入 My Wheel 后旧版可能拒绝整份设置，降级前保留升级前备份。
 
+## 0.133 新增：顶边唤出晾衣绳、网络连接测试、更多项目构建文件夹
+
+本版合并第八轮三个并行分支（各自通过 Windows CI 与独立审查）；项目构建一项由 Codex 编写，经 Claude 审查修正后提交。
+
+- **从屏幕顶边放下晾衣绳**：晾衣绳下新增默认关闭的设置。开启后，指针在屏幕顶边稍停，就在该显示器顶部放下一条不抢焦点、置顶的绳子，挂着的图片可照常点击复制、双击打开、长按预览、拖出和拼接；指针离开约 1 秒后收起，全屏应用时不出现。绳子和图片用温和的弹簧摆动（阻尼 ≥ 0.6、最多 2 次可见摆动、1.5 秒内静止），系统关闭动画时直接到位。截图接管仍未做；实际手感未在真机验证。
+- **Doctor 网络连接测试**：新的 **Test Internet Connection…** 窗口，只有点了写明会联网的按钮才联网：网关 ping、系统 DNS 查询 www.msftconnecttest.com、Windows 自己的 HTTP 连通性检查（精确比对内容，不跟随重定向，可识别登录页拦截）、到 www.microsoft.com 的 HTTPS 请求；另有可选的下载速度采样（最多 25 MB/15 秒，下载后丢弃）。使用并报告系统代理；不保存、不修复。
+- **项目构建文件夹多认 10 类**：Maven `target`、Nuxt `.nuxt`、SvelteKit `.svelte-kit`、Elixir `_build`、Haskell `.stack-work`、Zig 缓存与输出、Unity `Library`/`obj`、Unreal `Intermediate`/`DerivedDataCache`、CocoaPods `Pods`，都要求旁边有项目文件。可能装着重建不回来内容的文件夹（Unity `Temp`、Unreal `Saved`/`Binaries`、Elixir `deps`、Nuxt `.output`、Terraform `.terraform`）不会列出。
+
 ## 0.132 新增：变速保留声音、卸载 Store 应用、预览更多格式
 
 本版合并第七轮三个并行分支（各自通过 Windows CI 与独立审查）；其中预览一项由 Codex 编写，经 Claude 审查修正后提交。
