@@ -118,7 +118,14 @@ internal sealed class ScreenshotCardController
         try
         {
             if (session is null && waitingForFolder && folderReady?.Invoke() == true) { waitingForFolder = false; _ = Update(); }
-            else if (session is { } active && active.Snapshot.Status == ArrivalStatus.Running && stillValid is not null && !stillValid(active)) { renew = true; _ = Update(); }
+            else if (session is { } active && active.Snapshot.Status == ArrivalStatus.Running && stillValid is not null && !stillValid(active))
+            {
+                // A folder that never matches its reported path (a substituted drive, say) must not restart every few seconds.
+                var now = DateTime.UtcNow;
+                if (lastRenewal is { } previous && now - previous < TimeSpan.FromMinutes(1))
+                { halted = true; check?.Stop(); renew = true; _ = Update(); report("Screenshot cards are not running. Turn the setting off and on to try again."); return; }
+                lastRenewal = now; renew = true; _ = Update();
+            }
         }
         catch { } // A failed check tries again next time.
     }
@@ -134,7 +141,7 @@ internal sealed class ScreenshotCardController
             {
                 dirty = false;
                 bool want = desired();
-                if (want && renew && session is { } moved) { renew = false; await StopAsync(moved,ArrivalStopReason.Cancelled); dirty = true; }
+                if (renew && session is { } moved) { renew = false; await StopAsync(moved,ArrivalStopReason.Cancelled); dirty = true; }
                 else if (want && session is null && !halted && !waitingForFolder) await StartAsync();
                 else if (!want && session is { } active) await StopAsync(active,ArrivalStopReason.FeatureDisabled);
             }
