@@ -29,6 +29,7 @@ public static class FilePreview
         return DocumentText.Extensions.Contains(ext) ? FilePreviewKind.Document : FilePreviewKind.Unsupported;
     }
 
+    public const string FloatClipping = "The float WAV contains samples outside [-1,1], so it cannot be previewed without clipping. Use Convert Float WAV to PCM… to make a PCM copy first.";
     public const string TextNotice = "Read-only subtitle or data source text, validated by the existing format reader. Only strict UTF-8 or BOM-marked UTF-16 is accepted. Subtitles are limited to 8 MiB and the existing cue/text limits; data files to 32 MiB and the existing structure limits. Binary plist is displayed as generated YAML. Nothing is executed, fetched or exported. The source stays held until this window closes.";
     // The native caller bounds allocation before reading, and holds the source lease.
     public static string ReadText(byte[] bytes, string path, CancellationToken token)
