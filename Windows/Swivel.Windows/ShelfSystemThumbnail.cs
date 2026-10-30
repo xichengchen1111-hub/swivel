@@ -17,7 +17,19 @@ internal static class ShelfSystemThumbnail
     // Never extract a thumbnail or fall back to an icon, even for local items.
     internal const uint Flags = 0x08 | 0x10; // THUMBNAILONLY | INCACHEONLY
     internal static BitmapSource? Load(string path, CancellationToken token)
-        => Load(path, token, NativeFiles.InspectShelfReference, CachedImage);
+        => Load(path, token, CachedImage);
+    internal static BitmapSource? Load(string path, CancellationToken token,
+        Func<string, uint, int, CancellationToken, BitmapSource?> cachedImage)
+    {
+        BitmapSource? bitmap = null;
+        try
+        {
+            NativeFiles.InspectShelfReference(path, token, reference =>
+                bitmap = Load(path, token, (_, _) => reference, cachedImage));
+            return bitmap;
+        }
+        catch when (token.IsCancellationRequested) { throw new OperationCanceledException(token); }
+    }
     internal static BitmapSource? Load(string path, CancellationToken token,
         Func<string, CancellationToken, ShelfReference> inspect, Func<string, uint, int, CancellationToken, BitmapSource?> cachedImage)
     {

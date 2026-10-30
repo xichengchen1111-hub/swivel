@@ -106,14 +106,15 @@ public static class Explorer
 {
     public static void Reveal(string path)
     {
-        var reference = NativeFiles.InspectShelfReference(path, System.Threading.CancellationToken.None);
-        // Explorer can have a content preview pane; do not ask it to select
-        // an online-only item. Copy/drag remains a pure reference handoff.
-        if (reference.IsOnlineOnly) throw new UserError(ShelfReferences.OnlineOnlyRefusal);
-        int result = SHParseDisplayName(path, IntPtr.Zero, out var pidl, 0, out _);
-        Marshal.ThrowExceptionForHR(result);
-        try { Marshal.ThrowExceptionForHR(SHOpenFolderAndSelectItems(pidl, 0, IntPtr.Zero, 0)); }
-        finally { Marshal.FreeCoTaskMem(pidl); }
+        NativeFiles.InspectShelfReference(path, System.Threading.CancellationToken.None, reference => {
+            // Explorer can have a content preview pane; do not ask it to select
+            // an online-only item. Copy/drag remains a pure reference handoff.
+            if (reference.IsOnlineOnly) throw new UserError(ShelfReferences.OnlineOnlyRefusal);
+            int result = SHParseDisplayName(path, IntPtr.Zero, out var pidl, 0, out _);
+            Marshal.ThrowExceptionForHR(result);
+            try { Marshal.ThrowExceptionForHR(SHOpenFolderAndSelectItems(pidl, 0, IntPtr.Zero, 0)); }
+            finally { Marshal.FreeCoTaskMem(pidl); }
+        });
     }
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern int SHParseDisplayName(string name, IntPtr context, out IntPtr pidl, uint input, out uint output);
     [DllImport("shell32.dll")] private static extern int SHOpenFolderAndSelectItems(IntPtr pidl, uint count, IntPtr children, uint flags);

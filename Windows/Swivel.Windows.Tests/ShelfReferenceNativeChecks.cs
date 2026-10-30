@@ -82,6 +82,28 @@ internal static class ShelfReferenceNativeChecks
         check(cacheCalls == 1, "Unsafe metadata failure cannot request a thumbnail");
         using var late = new CancellationTokenSource();
         var bitmap = BitmapSource.Create(1, 1, 96, 96, PixelFormats.Bgra32, null, new byte[4], 4); bitmap.Freeze();
+        BitmapSource? PinnedCache(string path, uint flags, int edge, CancellationToken token)
+        {
+            reject(() => File.Move(child, child + ".swapped"), "Shell lookup pins the checked leaf against path replacement");
+            reject(() => Directory.Move(folder, folder + ".swapped"), "Shell lookup pins checked ancestors against path replacement");
+            return bitmap;
+        }
+        check(ReferenceEquals(ShelfSystemThumbnail.Load(child, default, PinnedCache), bitmap), "Pinned Shell lookup returns its result");
+        void CanRenameAfterShell(string message)
+        {
+            File.Move(child, child + ".after"); File.Move(child + ".after", child);
+            Directory.Move(folder, folder + ".after"); Directory.Move(folder + ".after", folder);
+            check(true, message);
+        }
+        CanRenameAfterShell("Successful Shell lookup releases leaf and ancestor handles");
+        using var pinnedCancel = new CancellationTokenSource();
+        Cancelled(() => ShelfSystemThumbnail.Load(child, pinnedCancel.Token, (p, f, e, t) => { PinnedCache(p, f, e, t); pinnedCancel.Cancel(); return bitmap; }), "Cancelled pinned lookup discards its result");
+        CanRenameAfterShell("Cancelled Shell lookup releases leaf and ancestor handles");
+        bool injectedFailure = false;
+        try { ShelfSystemThumbnail.Load(child, default, (p, f, e, t) => { PinnedCache(p, f, e, t); throw new IOException("Injected pinned Shell failure"); }); }
+        catch (IOException) { injectedFailure = true; }
+        check(injectedFailure, "Pinned Shell failure reaches the caller");
+        CanRenameAfterShell("Failed Shell lookup releases leaf and ancestor handles");
         Cancelled(() => ShelfSystemThumbnail.Load(child, late.Token, Inspect, (_, _, _, _) => { late.Cancel(); return bitmap; }), "Late cancellation discards a completed bitmap");
         using var failed = new CancellationTokenSource();
         Cancelled(() => ShelfSystemThumbnail.Load(child, failed.Token, Inspect, (_, _, _, _) => { failed.Cancel(); throw new IOException("Injected Shell failure"); }), "Cancelled failed Shell call cannot publish a late result");

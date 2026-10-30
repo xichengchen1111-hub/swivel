@@ -12,20 +12,30 @@ public static partial class NativeFiles
     // References never request FILE_READ_DATA/LIST_DIRECTORY. Do not follow a
     // reparse point or ask a provider to recall data, including in ancestors.
     internal static ShelfReference InspectShelfReference(string path, CancellationToken token)
+        => InspectShelfReference(path, token, null);
+    // Shell parses paths again. Hold execute/traverse (never data/list) access
+    // without write/delete sharing until that use finishes, so names stay pinned.
+    internal static ShelfReference InspectShelfReference(string path, CancellationToken token, Action<ShelfReference>? use)
     {
         token.ThrowIfCancellationRequested(); ShelfReferences.ValidatePath(path);
         string root = path[..3];
         if (GetDriveType(root) is not 2 and not 3 and not 6) throw new UserError(LocalOnly);
         var handles = new List<SafeFileHandle>();
+        uint access = ReadAttributes | (use is null ? 0 : Traverse), share = use is null ? 3u : 1u;
         try
         {
             string current = root; bool onlineOnly = false;
+            ShelfReference Finish(ShelfReference reference)
+            {
+                token.ThrowIfCancellationRequested(); use?.Invoke(reference);
+                token.ThrowIfCancellationRequested(); return reference;
+            }
             ShelfReference Read(string candidate)
             {
                 token.ThrowIfCancellationRequested();
                 var handle = handles.Count == 0
-                    ? Open(candidate, ReadAttributes, 3, 3, OpenReparse | BackupSemantics | 0x00100000) // OPEN_NO_RECALL
-                    : OpenShelfChild(handles[^1], System.IO.Path.GetFileName(candidate));
+                    ? Open(candidate, access, share, 3, OpenReparse | BackupSemantics | 0x00100000) // OPEN_NO_RECALL
+                    : OpenShelfChild(handles[^1], System.IO.Path.GetFileName(candidate), access, share);
                 handles.Add(handle);
                 if (GetFileType(handle) != 1) throw new UserError(LocalOnly);
                 if (!GetShelfTag(handle, 9, out var info, 8)) ThrowLast(); // FileAttributeTagInfo
@@ -35,13 +45,13 @@ public static partial class NativeFiles
             }
             var rootReference = Read(current);
             if (!rootReference.IsFolder) throw new UserError(LocalOnly);
-            if (path.Length == 3) return rootReference;
+            if (path.Length == 3) return Finish(rootReference);
             string[] parts = path[3..].Split('\\');
             for (int i = 0; i < parts.Length; i++)
             {
                 current = System.IO.Path.Combine(current, parts[i]);
                 var reference = Read(current);
-                if (i == parts.Length - 1) { token.ThrowIfCancellationRequested(); return reference; }
+                if (i == parts.Length - 1) return Finish(reference);
                 if (!reference.IsFolder) throw new UserError(LocalOnly);
             }
             throw new UserError(LocalOnly);
@@ -50,7 +60,7 @@ public static partial class NativeFiles
     }
     // Attribute-only handles do not prevent ancestor renames. Open one leaf
     // relative to the checked parent so a path swap cannot redirect the probe.
-    private static SafeFileHandle OpenShelfChild(SafeFileHandle parent, string leaf)
+    private static SafeFileHandle OpenShelfChild(SafeFileHandle parent, string leaf, uint access, uint share)
     {
         WindowsPathPolicy.ValidateName(leaf);
         bool retained = false;
@@ -62,7 +72,7 @@ public static partial class NativeFiles
             Marshal.StructureToPtr(name, namePointer, false);
             var attributes = new ObjectAttributes { Length = Marshal.SizeOf<ObjectAttributes>(), RootDirectory = parent.DangerousGetHandle(), ObjectName = namePointer, Attributes = 0x40 };
             // Backup intent, open reparse point, no recall; no data/list access.
-            int status = NtOpenFile(out var handle, ReadAttributes, ref attributes, out _, 3, 0x4000 | 0x200000 | 0x400000);
+            int status = NtOpenFile(out var handle, access, ref attributes, out _, share, 0x4000 | 0x200000 | 0x400000);
             if (status >= 0) return handle;
             handle.Dispose(); throw new System.ComponentModel.Win32Exception((int)RtlNtStatusToDosError(status));
         }
