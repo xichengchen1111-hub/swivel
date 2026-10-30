@@ -66,12 +66,21 @@ internal sealed class RopeWindow : Window
         Closed += (_,_) => { app.Prints.CollectionChanged -= Changed; StopFrames(); prints.Dispose(); };
     }
 
-    private static nint Hook(nint window,int message,nint wParam,nint lParam,ref bool handled)
+    private nint Hook(nint window,int message,nint wParam,nint lParam,ref bool handled)
     {
         // A click on a print must not take focus from the app the person is working in.
         if (message == MouseActivate) { handled = true; return NoActivate; }
+        // Moving to a monitor with another DPI: replace the system's suggested rectangle with the
+        // rope's own before WPF applies it, so it never shows scaled or spills onto a neighbour.
+        if (message == DpiChangedMessage && lParam != 0 && work.Width > 0)
+        {
+            uint dpi = (uint)((ulong)wParam >> 16 & 0xFFFF);
+            Marshal.StructureToPtr(Target(dpi == 0 ? 96 : dpi),lParam,false);
+        }
         return 0;
     }
+    private const int DpiChangedMessage = 0x02E0;
+    private NativeRect Target(uint dpi) => new() { Left = work.Left,Top = work.Top,Right = work.Right,Bottom = work.Top + (int)Math.Ceiling(RopeLayout.Height * dpi / 96.0) };
 
     internal bool Engaged => IsVisible && prints.Engaged;
     internal bool Lowered => IsVisible && motion.Lowered;
@@ -117,9 +126,9 @@ internal sealed class RopeWindow : Window
         var handle = new WindowInteropHelper(this).Handle;
         if (handle == 0 || work.Width <= 0) return;
         uint dpi = GetDpiForMonitor(monitor,0,out uint x,out _) == 0 && x > 0 ? x : 96;
-        int height = (int)Math.Ceiling(RopeLayout.Height * dpi / 96.0);
-        if (GetWindowRect(handle,out var now) && now.Left == work.Left && now.Top == work.Top && now.Right == work.Right && now.Bottom == work.Top + height) return;
-        SetWindowPos(handle,-1,work.Left,work.Top,work.Width,height,0x10 | 0x200); // NOACTIVATE | NOOWNERZORDER
+        var target = Target(dpi);
+        if (GetWindowRect(handle,out var now) && now.Equals(target)) return;
+        SetWindowPos(handle,-1,target.Left,target.Top,target.Right - target.Left,target.Bottom - target.Top,0x10 | 0x200); // NOACTIVATE | NOOWNERZORDER
     }
 
     private void Changed(object? sender,NotifyCollectionChangedEventArgs e)
@@ -285,8 +294,11 @@ internal sealed class RopeEdgeWatcher : IDisposable
         var name = new StringBuilder(64);
         bool desktopOrOwn = process == (uint)Environment.ProcessId || window == GetShellWindow() || (GetClassNameW(window,name,name.Capacity) > 0 && IsDesktopClass(name.ToString()));
         ScreenRect? bounds = RopeWindow.GetWindowRect(window,out var r) ? Rect(r) : null;
-        return RopeEdgeTrigger.IsFullScreen(bounds,rect,MonitorFromWindow(window,2) == monitor,desktopOrOwn);
+        return RopeEdgeTrigger.IsFullScreen(bounds,rect,MonitorFromWindow(window,2) == monitor,desktopOrOwn,IsFramed(IsZoomed(window),GetWindowLongPtrW(window,-16)));
     }
+
+    /// A maximized window, or one with a full caption (WS_CAPTION = border + title bar), is an ordinary frame, not full screen.
+    internal static bool IsFramed(bool zoomed,long style) => zoomed || (style & 0x00C00000) == 0x00C00000;
 
     private static ScreenRect Rect(RopeWindow.NativeRect r) => new(r.Left,r.Top,r.Right,r.Bottom);
 
@@ -304,6 +316,10 @@ internal sealed class RopeEdgeWatcher : IDisposable
     private static extern nint GetForegroundWindow();
     [DllImport("user32.dll",ExactSpelling = true)][DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern nint GetShellWindow();
+    [DllImport("user32.dll",ExactSpelling = true)][DefaultDllImportSearchPaths(DllImportSearchPath.System32)][return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsZoomed(nint window);
+    [DllImport("user32.dll",ExactSpelling = true)][DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern nint GetWindowLongPtrW(nint window,int index);
     [DllImport("user32.dll",ExactSpelling = true)][DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     private static extern uint GetWindowThreadProcessId(nint window,out uint process);
     [DllImport("user32.dll",ExactSpelling = true,CharSet = CharSet.Unicode,SetLastError = true)][DefaultDllImportSearchPaths(DllImportSearchPath.System32)]

@@ -177,9 +177,11 @@ public sealed class RopeEdgeTrigger
     public static bool AtEdge(int x,int y,ScreenRect monitor) => monitor.Contains(x,y) && y < monitor.Top + EdgeRows;
 
     /// A window in front counts as full screen when it covers the whole monitor and is
-    /// not the desktop or one of Swivel's own windows.
-    public static bool IsFullScreen(ScreenRect? foreground,ScreenRect monitor,bool sameMonitor,bool desktopOrOwn) =>
-        foreground is { } window && sameMonitor && !desktopOrOwn && monitor.Width > 0 && monitor.Height > 0 && window.Covers(monitor);
+    /// not the desktop, one of Swivel's own windows, or a maximized or captioned frame
+    /// (a maximized window's rectangle includes invisible borders and can cover a
+    /// monitor without a visible taskbar).
+    public static bool IsFullScreen(ScreenRect? foreground,ScreenRect monitor,bool sameMonitor,bool desktopOrOwn,bool framed) =>
+        foreground is { } window && sameMonitor && !desktopOrOwn && !framed && monitor.Width > 0 && monitor.Height > 0 && window.Covers(monitor);
 
     /// `monitor` is the monitor under the pointer; `rope` the rope window's rectangle while showing;
     /// `engaged` is true while a print is pressed, dragged, open in a menu or running an action.

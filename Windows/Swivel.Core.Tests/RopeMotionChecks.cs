@@ -193,10 +193,11 @@ internal static class RopeMotionChecks
         reset.Reset(); check(!reset.Showing && reset.Monitor is null,"Reset hides without an action");
         reset.Update(T(300),900,0,left,false,null,false); check(reset.Update(T(500),900,0,left,false,null,false) == RopeEdgeAction.Show,"After a reset the edge works again");
 
-        check(RopeEdgeTrigger.IsFullScreen(left,left,true,false) && RopeEdgeTrigger.IsFullScreen(new ScreenRect(-8,-8,1928,1088),left,true,false),"A window covering the monitor is full screen");
-        check(!RopeEdgeTrigger.IsFullScreen(new ScreenRect(0,0,1920,1040),left,true,false),"A maximized window above the taskbar is not full screen");
-        check(!RopeEdgeTrigger.IsFullScreen(left,left,true,true),"The desktop and Swivel's own windows are never full screen");
-        check(!RopeEdgeTrigger.IsFullScreen(left,left,false,false) && !RopeEdgeTrigger.IsFullScreen(null,left,true,false),"A window on another monitor or no window is not full screen");
-        check(!RopeEdgeTrigger.IsFullScreen(left,new ScreenRect(0,0,0,0),true,false),"An empty monitor rectangle is never full screen");
+        check(RopeEdgeTrigger.IsFullScreen(left,left,true,false,false) && RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1,-1,1921,1081),left,true,false,false),"A frameless window covering the monitor is full screen");
+        check(!RopeEdgeTrigger.IsFullScreen(new ScreenRect(-8,-8,1928,1088),left,true,false,true),"A maximized window whose invisible borders cover a taskbar-less monitor is not full screen");
+        check(!RopeEdgeTrigger.IsFullScreen(new ScreenRect(0,0,1920,1040),left,true,false,false),"A window stopping above the taskbar is not full screen");
+        check(!RopeEdgeTrigger.IsFullScreen(left,left,true,true,false),"The desktop and Swivel's own windows are never full screen");
+        check(!RopeEdgeTrigger.IsFullScreen(left,left,false,false,false) && !RopeEdgeTrigger.IsFullScreen(null,left,true,false,false),"A window on another monitor or no window is not full screen");
+        check(!RopeEdgeTrigger.IsFullScreen(left,new ScreenRect(0,0,0,0),true,false,false),"An empty monitor rectangle is never full screen");
     }
 }

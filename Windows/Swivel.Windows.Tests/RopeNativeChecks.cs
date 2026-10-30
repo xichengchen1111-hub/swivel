@@ -66,8 +66,11 @@ internal static class RopeNativeChecks
         // Full-screen skip: desktop and shell windows never count; a covering window does.
         foreach (var name in new[] { "Progman","WorkerW","Shell_TrayWnd","Shell_SecondaryTrayWnd" }) check(RopeEdgeWatcher.IsDesktopClass(name),"Desktop class is never full screen: " + name);
         check(!RopeEdgeWatcher.IsDesktopClass("Chrome_WidgetWin_1") && !RopeEdgeWatcher.IsDesktopClass("progman"),"Ordinary window classes are not desktop");
-        check(RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1280,-300,0,724),second,true,false) && !RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1280,-300,0,684),second,true,false),
+        check(RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1280,-300,0,724),second,true,false,false) && !RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1280,-300,0,684),second,true,false,false),
             "Covering a secondary monitor is full screen; stopping at its taskbar is not");
+        check(!RopeEdgeTrigger.IsFullScreen(new ScreenRect(-1288,-308,8,732),second,true,false,true),"A maximized captioned window on a taskbar-less monitor is not full screen");
+        check(RopeEdgeWatcher.IsFramed(true,0) && RopeEdgeWatcher.IsFramed(false,0x00C00000) && !RopeEdgeWatcher.IsFramed(false,unchecked((long)0x80000000)) && !RopeEdgeWatcher.IsFramed(false,0x00800000),
+            "Maximized or full-caption windows are frames; a popup without a caption is not");
         // The real sampler runs without throwing (a locked or headless session may give no cursor).
         var real = RopeEdgeWatcher.Native(false);
         check(real is null || (real.Value.Monitor.Width > 0 && real.Value.Work.Width > 0 && real.Value.Monitor.Covers(real.Value.Work)),"Native cursor sample reports a monitor containing its work area");

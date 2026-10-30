@@ -21,6 +21,8 @@ internal sealed class ClotheslinePrints : IDisposable
     // One drag at a time across every host, so a print dragged from the rope can stitch in the window and back.
     private static string? dragSource;
     private static (string Top,string Bottom)? pendingStitch;
+    // Every live host, so the end of a drag clears the hover wherever it was shown.
+    private static readonly HashSet<ClotheslinePrints> live = new();
     private readonly App app;
     private readonly Window host;
     private readonly Func<bool> available;
@@ -39,6 +41,7 @@ internal sealed class ClotheslinePrints : IDisposable
     internal ClotheslinePrints(App app,Window host,Func<bool> available,Action<string> report)
     {
         this.app = app; this.host = host; this.available = available; this.report = report;
+        live.Add(this);
         hoverTimer.Tick += (_,_) => { if (hover.Target is null || shown is null) hoverTimer.Stop(); else if (hover.IsReady(clock.Elapsed) && shown is { } s) Show(s.Button, s.Target, StitchHoverState.Ready); };
     }
 
@@ -60,9 +63,9 @@ internal sealed class ClotheslinePrints : IDisposable
                     pendingStitch = null; dragSource = print.Path;
                     try { DragDrop.DoDragDrop(source,data,DragDropEffects.Copy); } finally { dragSource = null; }
                 });
-                // Released while still holding (too early): say why nothing happened.
-                bool early = shown is { State: StitchHoverState.Holding };
-                ClearHover();
+                // Released while still holding (too early), over this host or another: say why nothing happened.
+                bool early = false;
+                foreach (var other in live.ToArray()) { early |= other.shown is { State: StitchHoverState.Holding }; other.ClearHover(); }
                 if (early) report(app.L("Not stitched: hold over the lower half of a print for half a second before releasing."));
                 // Run after the drag has ended, never inside the drag loop.
                 if (pendingStitch is { } stitch) { pendingStitch = null; Stitch(stitch.Top,stitch.Bottom); }
@@ -174,5 +177,5 @@ internal sealed class ClotheslinePrints : IDisposable
     internal void CancelGestures() { foreach (var button in buttons) button.CancelPending(); }
     /// Disposes the current buttons before a rebuild.
     internal void Clear() { ClearHover(); foreach (var button in buttons) button.Dispose(); buttons.Clear(); }
-    public void Dispose() { Clear(); hoverTimer.Stop(); }
+    public void Dispose() { Clear(); hoverTimer.Stop(); live.Remove(this); }
 }
