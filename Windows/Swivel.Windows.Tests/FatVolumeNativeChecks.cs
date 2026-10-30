@@ -8,7 +8,7 @@ using Swivel.Core;
 using Swivel.Windows;
 
 // Batch Rename, Move Files, Move Folder and Copy to Folder on real exFAT and FAT32 volumes. CI
-// creates small virtual disks before the suite (.github/ci/fat-volumes.ps1) and names them in
+// creates small virtual disks before the suite (Windows/Swivel.Windows.Tests/fat-volumes.ps1) and names them in
 // SWIVEL_TEST_EXFAT / SWIVEL_TEST_FAT32; without them these cases are skipped and say so.
 internal static class FatVolumeNativeChecks
 {
@@ -57,6 +57,17 @@ internal static class FatVolumeNativeChecks
         check(done.Error is null && done.Remaining.Count == 2 && File.ReadAllText(plan[0].Destination) == "original A" && File.ReadAllText(plan[1].Destination) == "original B", fs + ": batch rename to long names keeps contents");
         check(NativeFiles.FatHoldCount >= 2, fs + ": a reference is kept per renamed file");
         File.ReadAllText(plan[0].Destination); // other apps can still read while the reference is kept
+        // Does a kept reference stop the folder holding it from being moved? Reported, not required.
+        string aside = Path.Combine(work, "aside"); Directory.CreateDirectory(aside);
+        try
+        {
+            FolderMoveReceipt parentMove;
+            using (var session = FolderMoveSession.Open(dir, aside, CancellationToken.None, true)) parentMove = session.Execute(CancellationToken.None);
+            using (var back = FolderMoveSession.ForUndo(parentMove, CancellationToken.None, true)) back.Execute(CancellationToken.None);
+            Console.WriteLine("INFO: " + fs + ": the parent folder could be moved (and moved back) while references were kept.");
+        }
+        catch (Exception error) when (error is UserError or System.ComponentModel.Win32Exception) { Console.WriteLine("INFO: " + fs + ": moving the parent folder was refused while references were kept: " + error.Message); }
+        check(Directory.Exists(dir) && File.Exists(plan[0].Destination), fs + ": the rename folder is back in place after the parent-move probe");
         var restored = Undo(done);
         check(restored.Error is null && File.ReadAllText(a) == "original A" && File.ReadAllText(b) == "original B" && !File.Exists(plan[0].Destination), fs + ": undo puts both names back through the kept references");
 
@@ -169,7 +180,7 @@ internal static class FatVolumeNativeChecks
             outcome = session.Execute(CancellationToken.None);
         }
         check(outcome.Error is null && outcome.Copied.Count == 1 && File.ReadAllText(outcome.Copied[0].Destination) == "plain" && outcome.Copied[0].Verified && outcome.Copied[0].Stamp is null, fs + ": a plain file copies, is verified and is not offered for undo");
-        check(File.GetLastWriteTimeUtc(outcome.Copied[0].Destination) - File.GetLastWriteTimeUtc(plain) < TimeSpan.FromSeconds(2.1), fs + ": the copy keeps the modified time (FAT's 2-second steps)");
+        check((File.GetLastWriteTimeUtc(outcome.Copied[0].Destination) - File.GetLastWriteTimeUtc(plain)).Duration() < TimeSpan.FromSeconds(2.1), fs + ": the copy keeps the modified time (FAT's 2-second steps)");
 
         using (var session = CopySession.Open(new[] { zoned }, into, CancellationToken.None))
         {
@@ -222,13 +233,19 @@ internal static class FatVolumeNativeChecks
         }
         check(copied.Error is null && copied.FilesCopied == 2 && !copied.Recorded && copied.RootIdentity is null && File.ReadAllText(Path.Combine(copied.Folder!, "sub", "a.txt")) == "a", fs + ": Copy Folder with consent copies the tree; undo is not offered");
         string sensitive = Path.Combine(ntfs, "fat-case-" + fs); Directory.CreateDirectory(sensitive);
-        if (Fsutil("file setCaseSensitiveInfo \"" + sensitive + "\" enable"))
+        bool caseSensitive = Fsutil("file setCaseSensitiveInfo \"" + sensitive + "\" enable");
+        if (caseSensitive)
         {
             File.WriteAllText(Path.Combine(sensitive, "read.txt"), "1"); File.WriteAllText(Path.Combine(sensitive, "READ.txt"), "2");
+            caseSensitive = Directory.GetFiles(sensitive).Length == 2;
+            if (!caseSensitive) Console.WriteLine("SKIP: fsutil reported success but the folder is not case-sensitive here; the case-clash rule is covered by core checks.");
+        }
+        if (caseSensitive)
+        {
             Refused(() => FolderCopyWork.Open(sensitive, into, CancellationToken.None).Dispose(), FatRules.CaseClash, fs + ": names differing only in case are refused before copying", check);
             Fsutil("file setCaseSensitiveInfo \"" + sensitive + "\" disable");
         }
-        else Console.WriteLine("SKIP: case-sensitive NTFS folders are not available here; the case-clash rule is covered by core checks.");
+        else if (!Directory.Exists(sensitive) || Directory.GetFiles(sensitive).Length == 0) Console.WriteLine("SKIP: case-sensitive NTFS folders are not available here; the case-clash rule is covered by core checks.");
     }
 
     private static void Refused(Action action, string template, string name, Action<bool, string> check)

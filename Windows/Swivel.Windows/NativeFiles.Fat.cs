@@ -72,10 +72,13 @@ public static partial class NativeFiles
     /// `path` (exactly, as the file system reports it).
     internal static SafeFileHandle ReopenFat(ulong token, string path, uint access, uint share, bool directory)
     {
-        SafeFileHandle? held;
-        lock (fatHolds) fatHolds.TryGetValue(token, out held);
-        if (held is null) throw new UserError(FatRules.Released);
-        var handle = Reopen(held, access, share, directory, out int error);
+        SafeFileHandle? held; bool retained = false;
+        // Kept alive while in use, even if the history is forgotten meanwhile.
+        lock (fatHolds) { if (fatHolds.TryGetValue(token, out held)) held.DangerousAddRef(ref retained); }
+        if (held is null || !retained) throw new UserError(FatRules.Released);
+        SafeFileHandle handle; int error;
+        try { handle = Reopen(held, access, share, directory, out error); }
+        finally { held.DangerousRelease(); }
         if (handle.IsInvalid)
         {
             handle.Dispose();

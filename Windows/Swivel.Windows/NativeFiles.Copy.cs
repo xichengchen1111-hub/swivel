@@ -139,6 +139,7 @@ public static partial class NativeFiles
         string leaf = System.IO.Path.GetFileName(source.Path);
         // A source on exFAT/FAT32 has only its main stream.
         var expected = StreamsOf(source.Stream.SafeFileHandle);
+        var before = expected;
         if (fat is { } format)
         {
             // Checked again here: a stream may have been added since the preview.
@@ -184,7 +185,10 @@ public static partial class NativeFiles
                 int result = CopyFile2(source.Path, destination, ref parameters);
                 GC.KeepAlive(progress);
                 if (redirected) throw new UserError(FolderCopy.Interfered);
-                if (result == 0) { var (unverified, stamp) = Verify(destination, expected, created, fat is not null); return (destination, stamp, unverified); }
+                // On FAT a stream another app added to the source during the copy would vanish
+                // silently (on NTFS the copy's stream list shows it): the source must be unchanged.
+                bool sourceUnchanged = fat is null || CopyRules.SameStreams(before, StreamsOf(source.Stream.SafeFileHandle));
+                if (result == 0) { var (unverified, stamp) = Verify(destination, expected, created, fat is not null, sourceUnchanged); return (destination, stamp, unverified); }
                 if (callbackFailed && !token.IsCancellationRequested) throw new UserError("The copy could not be verified.");
                 if (unchecked((uint)result & 0xFFFF0000) != 0x80070000) throw Marshal.GetExceptionForHR(result)!;
                 int error = result & 0xFFFF;
@@ -201,7 +205,7 @@ public static partial class NativeFiles
     // match the source; a mismatch removes it through this handle (read-only included). A kept
     // copy's stamp is read through the same handle, so undoing the copy recognises that object.
     // exFAT/FAT32 (`fat`): no stream list there, and no stamp, so a copy is never offered for undo.
-    private static (UserError? Unverified, DuplicateStamp? Stamp) Verify(string destination, IReadOnlyList<(string, long)> expected, string? created, bool fat = false)
+    private static (UserError? Unverified, DuplicateStamp? Stamp) Verify(string destination, IReadOnlyList<(string, long)> expected, string? created, bool fat = false, bool sourceUnchanged = true)
     {
         const string unverified = "A copy was made but could not be verified. Check it in the destination folder before relying on it.";
         if (created is null) return (new UserError(unverified), null);
@@ -217,7 +221,7 @@ public static partial class NativeFiles
             if (current != created)
                 throw new UserError("A copy was moved or replaced by another app before it could be verified. Swivel left it alone; check the destination folder.");
             bool keep;
-            try { Check(handle, false); keep = CopyRules.SameStreams(expected, fat ? StreamsOf(handle) : Streams(handle)); }
+            try { Check(handle, false); keep = sourceUnchanged && CopyRules.SameStreams(expected, fat ? StreamsOf(handle) : Streams(handle)); }
             catch (UserError) { keep = false; }
             catch (Win32Exception) { return (new UserError(unverified), null); }
             if (keep && fat) return (null, null);
@@ -254,7 +258,8 @@ public static partial class NativeFiles
     internal static IReadOnlyList<(string Name, long Size)> StreamsOf(SafeFileHandle handle)
     {
         try { return Streams(handle); }
-        catch (Win32Exception error) when (error.NativeErrorCode is 1 or 50 or 87)
+        // Only on a drive that has no streams: elsewhere a failed listing must never hide a download warning.
+        catch (Win32Exception error) when (error.NativeErrorCode is 1 or 50 or 87 && FatRules.IsFat(Format(handle)))
         {
             if (!GetFileInformationByHandle(handle, out var info)) ThrowLast();
             return new[] { (FatRules.MainStream, (long)(((ulong)info.SizeHigh << 32) | info.SizeLow)) };

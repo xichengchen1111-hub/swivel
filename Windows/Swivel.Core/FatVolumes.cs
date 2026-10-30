@@ -18,7 +18,7 @@ public static class FatRules
     public const ulong Fat32MaxFile = uint.MaxValue; // 4 GiB − 1 byte
     public const string MainStream = "::$DATA", ZoneStream = ":Zone.Identifier:$DATA";
 
-    public const string UndoNote = "On exFAT and FAT32 drives (USB sticks, memory cards) Swivel cannot recognise a file again later, so Undo works only while Swivel keeps a reference to each moved or renamed item until you undo or forget the history. Windows may say the drive is in use while it does: forget the history before ejecting it.";
+    public const string UndoNote = "On exFAT and FAT32 drives (USB sticks, memory cards) Swivel cannot recognise a file again later, so Undo works only while Swivel keeps a reference to each moved or renamed item until you undo or forget the history. Meanwhile Windows may say the drive is in use, the folders holding those items may not be renamed or moved, and a deleted item's name stays taken: forget the history first, for example before ejecting the drive.";
     public const string ExactName = "On exFAT and FAT32 drives, choose each item by its exact stored name (same letter case, not a short 8.3 name).";
     public const string NameNotTaken = "The drive did not store the new name exactly as asked. Nothing was overwritten; check the current names.";
     public const string Released = "Undo is no longer available for this item: on exFAT and FAT32 drives it needs the reference Swivel kept, which was released. Nothing was changed.";

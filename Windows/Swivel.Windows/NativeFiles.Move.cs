@@ -160,7 +160,8 @@ public static partial class NativeFiles
             if (!RenameMove(handle, directory, MoveRules.FileName(path), out int error)) throw new Win32Exception(error);
             CurrentPath = path; CurrentDirectory = directory.Snapshot; VerifiedStamp = null;
             // FAT: the name actually stored decides where the file is.
-            if (fatToken is not null && !string.Equals(FatCurrentPath(handle), path, StringComparison.Ordinal)) throw new UserError(FatRules.NameNotTaken);
+            if (fatToken is not null && FatCurrentPath(handle) is var actual && !string.Equals(actual, path, StringComparison.Ordinal))
+            { CurrentPath = actual; throw new UserError(FatRules.NameNotTaken); }
             VerifiedStamp = ReadMoveStamp(handle, fatToken);
             if (!restoring && (before is not { } previous || !MoveRules.SameRenameMetadata(previous, VerifiedStamp.Value)))
                 throw new UserError("The recorded file identity or metadata changed. The move was refused; create a new preview.");

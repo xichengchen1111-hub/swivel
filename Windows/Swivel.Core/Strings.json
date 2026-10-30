@@ -16584,11 +16584,6 @@
     "Nuxt 建置輸出",
     "Nuxt ビルド出力"
   ],
-  "On exFAT and FAT32 drives (USB sticks, memory cards) Swivel cannot recognise a file again later, so Undo works only while Swivel keeps a reference to each moved or renamed item until you undo or forget the history. Windows may say the drive is in use while it does: forget the history before ejecting it.": [
-    "在 exFAT 和 FAT32 驱动器（U 盘、存储卡）上，Swivel 之后无法再次识别同一个文件，因此只有在 Swivel 为每个移动或重命名的项目保留引用期间才能撤销，直到你撤销或清除历史记录为止。在此期间 Windows 可能提示驱动器正在使用：弹出前请先清除历史记录。",
-    "在 exFAT 和 FAT32 磁碟機（USB 隨身碟、記憶卡）上，Swivel 之後無法再次辨識同一個檔案，因此只有在 Swivel 為每個移動或重新命名的項目保留參照期間才能復原，直到你復原或清除歷程記錄為止。在此期間 Windows 可能提示磁碟機正在使用中：退出前請先清除歷程記錄。",
-    "exFAT や FAT32 のドライブ（USB メモリー、メモリーカード）では、Swivel は後から同じファイルを識別できません。そのため取り消しは、移動または名前変更した各項目への参照を Swivel が保持している間だけ使えます（取り消すか履歴を消去するまで）。その間、Windows がドライブを使用中と表示することがあります。取り出す前に履歴を消去してください。"
-  ],
   "On exFAT and FAT32 drives, choose each item by its exact stored name (same letter case, not a short 8.3 name).": [
     "在 exFAT 和 FAT32 驱动器上，请按项目实际存储的名称选择（大小写一致，不要使用 8.3 短名称）。",
     "在 exFAT 和 FAT32 磁碟機上，請依項目實際儲存的名稱選擇（大小寫一致，不要使用 8.3 短名稱）。",
@@ -16703,5 +16698,10 @@
     "完整路径预览后，明确在同一 NTFS 卷内移动普通文件。不覆盖，原文件对象保留附带数据及原权限。失败时尝试回滚，记录准确恢复路径，并提供最多 20 批会话撤销，核对已记录的身份及元数据；不能检测所有内容变化。复制到文件夹可把 1–100 个文件复制到本地 NTFS 文件夹，保留所有数据流、下载警告、属性和修改时间，绝不覆盖，并核对每个副本的数据流名称和大小。在 exFAT 和 FAT32 驱动器上也可在驱动器内移动文件，复制到文件夹时会保留内容、属性和修改时间（仅在明确同意放弃时才会丢失下载警告；额外数据流和 FAT32 上 4 GB 及以上的文件会被拒绝）；在这些驱动器上撤销移动需要 Swivel 保留的引用。只读文件移动后仍为只读，移动硬链接只移动所选名称。暂不支持跨卷移动，以及移动文件夹或云链接；真实 Windows 验收仍待执行。",
     "完整路徑預覽後，明確在同一 NTFS 磁碟區內移動一般檔案。不覆寫，原檔案物件保留附帶資料及原權限。失敗時嘗試復原，記錄準確恢復路徑，並提供最多 20 批工作階段復原，核對已記錄的身分及中繼資料；不能偵測所有內容變更。複製到資料夾可把 1–100 個檔案複製到本機 NTFS 資料夾，保留所有資料流、下載警告、屬性和修改時間，絕不覆寫，並核對每個副本的資料流名稱和大小。在 exFAT 和 FAT32 磁碟機上也可在磁碟機內移動檔案，複製到資料夾時會保留內容、屬性和修改時間（僅在明確同意放棄時才會遺失下載警告；額外資料流和 FAT32 上 4 GB 及以上的檔案會被拒絕）；在這些磁碟機上復原移動需要 Swivel 保留的參照。唯讀檔案移動後仍為唯讀，移動硬連結只移動所選名稱。暫不支援跨磁碟區移動，以及移動資料夾或雲端連結；真實 Windows 驗收仍待執行。",
     "完全なパスを確認後、同じ NTFS ボリューム内で通常ファイルを明示的に移動します。上書きせず、同じファイルが付随データと元の権限を保持します。失敗時は復元を試み、正確な復旧パスと最大 20 回分のセッション取り消し履歴を記録します。識別情報と記録済みメタデータを照合しますが、すべての内容変更を検出できません。フォルダーへのコピーでは 1～100 個のファイルをローカル NTFS フォルダーにコピーし、すべてのデータストリーム、ダウンロードの警告、属性、更新日時を残し、上書きせず、各コピーのストリーム名とサイズを照合します。exFAT と FAT32 のドライブでもドライブ内でファイルを移動でき、フォルダーへのコピーでは内容、属性、更新日時を残します（ダウンロードの警告は失うことに明示的に同意した場合のみ失われ、追加のストリームと FAT32 上の 4 GB 以上のファイルは拒否されます）。これらのドライブで移動を取り消すには Swivel が保持する参照が必要です。読み取り専用ファイルは移動後も読み取り専用のままで、ハードリンクは選んだ名前だけが移動します。ボリューム間の移動や、フォルダー・クラウドリンクの移動は未対応です。Windows 実機検証は未実施です。"
+  ],
+  "On exFAT and FAT32 drives (USB sticks, memory cards) Swivel cannot recognise a file again later, so Undo works only while Swivel keeps a reference to each moved or renamed item until you undo or forget the history. Meanwhile Windows may say the drive is in use, the folders holding those items may not be renamed or moved, and a deleted item's name stays taken: forget the history first, for example before ejecting the drive.": [
+    "在 exFAT 和 FAT32 驱动器（U 盘、存储卡）上，Swivel 之后无法再次识别同一个文件，因此只有在 Swivel 为每个移动或重命名的项目保留引用期间才能撤销，直到你撤销或清除历史记录为止。在此期间，Windows 可能提示驱动器正在使用，存放这些项目的文件夹可能无法重命名或移动，已删除项目的名称也会一直被占用：请先清除历史记录，例如在弹出驱动器之前。",
+    "在 exFAT 和 FAT32 磁碟機（USB 隨身碟、記憶卡）上，Swivel 之後無法再次辨識同一個檔案，因此只有在 Swivel 為每個移動或重新命名的項目保留參照期間才能復原，直到你復原或清除歷程記錄為止。在此期間，Windows 可能提示磁碟機正在使用中，存放這些項目的資料夾可能無法重新命名或移動，已刪除項目的名稱也會一直被佔用：請先清除歷程記錄，例如在退出磁碟機之前。",
+    "exFAT や FAT32 のドライブ（USB メモリー、メモリーカード）では、Swivel は後から同じファイルを識別できません。そのため取り消しは、移動または名前変更した各項目への参照を Swivel が保持している間だけ使えます（取り消すか履歴を消去するまで）。その間、Windows がドライブを使用中と表示したり、それらの項目を含むフォルダーの名前変更や移動ができなかったり、削除した項目の名前が使えないままになったりすることがあります。ドライブを取り出す前などには、先に履歴を消去してください。"
   ]
 }
