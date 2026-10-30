@@ -17024,11 +17024,6 @@
     "{0} 小時",
     "{0} 時間"
   ],
-  "Upscale Video 2× takes videos from 16 × 16 up to 1920 × 1080 pixels (landscape or portrait), so the result stays within 3840 × 2160.": [
-    "视频放大 2× 支持 16 × 16 到 1920 × 1080 像素的视频（横向或纵向），结果不超过 3840 × 2160。",
-    "影片放大 2× 支援 16 × 16 到 1920 × 1080 像素的影片（橫向或直向），結果不超過 3840 × 2160。",
-    "動画の 2× アップスケールは 16 × 16 から 1920 × 1080 ピクセル（横長・縦長）の動画に対応し、結果は 3840 × 2160 以内になります。"
-  ],
   "Upscale Video 2× takes videos up to 10 minutes and 300,000 model blocks (frames × blocks per frame). Trim the video first or use a smaller one.": [
     "视频放大 2× 支持最长 10 分钟、最多 300,000 个模型块（帧数 × 每帧块数）的视频。请先剪短视频或使用更小的视频。",
     "影片放大 2× 支援最長 10 分鐘、最多 300,000 個模型區塊（影格數 × 每格區塊數）的影片。請先剪短影片或使用較小的影片。",
@@ -17079,11 +17074,6 @@
     "儲存為 H.264 MP4，每格保持原來的時間；聲音重新編碼為 AAC。8 位元 SDR；不保留中繼資料、章節、字幕和其他軌道。",
     "各フレームを元の時刻のまま H.264 MP4 として保存し、音声は AAC で再エンコードします。8 ビット SDR で、メタデータ、チャプター、字幕、その他のトラックは保持しません。"
   ],
-  "Takes videos up to 1920 × 1080 (landscape or portrait), 10 minutes and 300,000 model blocks. Videos stored with a rotation flag are not supported.": [
-    "支持最大 1920 × 1080（横向或纵向）、最长 10 分钟、最多 300,000 个模型块的视频。不支持带旋转标记存储的视频。",
-    "支援最大 1920 × 1080（橫向或直向）、最長 10 分鐘、最多 300,000 個模型區塊的影片。不支援帶旋轉標記儲存的影片。",
-    "最大 1920 × 1080（横長・縦長）、10 分、モデルのブロック数 300,000 までの動画に対応します。回転フラグ付きで保存された動画には対応していません。"
-  ],
   "The result is saved beside the original as “name 2x.mp4” without replacing anything. Cancel stops within one block and saves nothing.": [
     "结果以“名称 2x.mp4”保存在原文件旁边，不会替换任何文件。取消会在一个块内停止，且不保存任何文件。",
     "結果以「名稱 2x.mp4」儲存在原檔案旁邊，不會取代任何檔案。取消會在一個區塊內停止，且不儲存任何檔案。",
@@ -17113,5 +17103,25 @@
     "正在编码声音…",
     "正在編碼聲音…",
     "音声をエンコードしています…"
+  ],
+  "Upscale Video 2× takes videos from 32 × 32 up to 1920 pixels wide and 1080 pixels tall, so the result stays within 3840 × 2160 (the most Windows' H.264 encoder takes).": [
+    "视频放大 2× 支持 32 × 32 到宽 1920、高 1080 像素的视频，结果不超过 3840 × 2160（Windows H.264 编码器的上限）。",
+    "影片放大 2× 支援 32 × 32 到寬 1920、高 1080 像素的影片，結果不超過 3840 × 2160（Windows H.264 編碼器的上限）。",
+    "動画の 2× アップスケールは 32 × 32 から幅 1920・高さ 1080 ピクセルまでの動画に対応し、結果は 3840 × 2160 以内（Windows の H.264 エンコーダーの上限）になります。"
+  ],
+  "This video has too many frames per second for Windows' H.264 encoder at twice its size. Use a video with a lower frame rate (4K output takes up to 64 frames per second).": [
+    "对 Windows 的 H.264 编码器来说，此视频放大一倍后每秒帧数过多。请使用帧率更低的视频（4K 输出最多每秒 64 帧）。",
+    "對 Windows 的 H.264 編碼器而言，此影片放大一倍後每秒影格數過多。請使用影格率較低的影片（4K 輸出最多每秒 64 格）。",
+    "この動画は 2 倍のサイズでは Windows の H.264 エンコーダーにとって 1 秒あたりのフレーム数が多すぎます。フレームレートの低い動画を使ってください（4K 出力は毎秒 64 フレームまで）。"
+  ],
+  "This video has non-square pixels (anamorphic video). Upscale Video 2× writes square pixels, so the result would look squashed; such videos aren't supported.": [
+    "此视频使用非正方形像素（变形宽银幕视频）。视频放大 2× 输出正方形像素，结果会被压扁，因此不支持这类视频。",
+    "此影片使用非正方形像素（變形寬銀幕影片）。影片放大 2× 輸出正方形像素，結果會被壓扁，因此不支援這類影片。",
+    "この動画は正方形でないピクセル（アナモルフィック動画）です。動画の 2× アップスケールは正方形ピクセルで書き出すため結果がつぶれて見えるので、このような動画には対応していません。"
+  ],
+  "Takes videos up to 1920 pixels wide and 1080 tall, 10 minutes and 300,000 model blocks (4K output up to 64 frames per second). Videos stored with a rotation flag or with non-square pixels are not supported.": [
+    "支持宽不超过 1920、高不超过 1080 像素、最长 10 分钟、最多 300,000 个模型块的视频（4K 输出最多每秒 64 帧）。不支持带旋转标记存储或非正方形像素的视频。",
+    "支援寬不超過 1920、高不超過 1080 像素、最長 10 分鐘、最多 300,000 個模型區塊的影片（4K 輸出最多每秒 64 格）。不支援帶旋轉標記儲存或非正方形像素的影片。",
+    "幅 1920・高さ 1080 ピクセル以内、10 分以内、モデルのブロック数 300,000 以内の動画に対応します（4K 出力は毎秒 64 フレームまで）。回転フラグ付きで保存された動画や正方形でないピクセルの動画には対応していません。"
   ]
 }

@@ -196,27 +196,39 @@ internal sealed class VideoFrameReader : IDisposable
         Width = width; Height = height;
         started = MediaFoundation.Start();
         MediaFoundation.IMFAttributes? attributes = null; MediaFoundation.IMFMediaType? type = null;
+        // Locals are released before a failure shuts Media Foundation down again.
         try
         {
-            Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateAttributes(out attributes, 1));
-            attributes.SetUINT32(MediaFoundation.EnableVideoProcessing, 1);
-            Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateSourceReaderFromURL(path, attributes, out var opened));
-            reader = opened;
-            reader.SetStreamSelection(MediaFoundation.AllStreams, false);
-            reader.SetStreamSelection(MediaFoundation.FirstVideoStream, true);
-            reader.GetNativeMediaType(MediaFoundation.FirstVideoStream, 0, out var native);
             try
             {
-                native.GetUINT64(MediaFoundation.FrameRate, out ulong rate);
-                (RateNumerator, RateDenominator) = MediaFoundation.Unpack(rate);
+                Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateAttributes(out attributes, 1));
+                attributes.SetUINT32(MediaFoundation.EnableVideoProcessing, 1);
+                Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateSourceReaderFromURL(path, attributes, out var opened));
+                reader = opened;
+                reader.SetStreamSelection(MediaFoundation.AllStreams, false);
+                reader.SetStreamSelection(MediaFoundation.FirstVideoStream, true);
+                reader.GetNativeMediaType(MediaFoundation.FirstVideoStream, 0, out var native);
+                try
+                {
+                    native.GetUINT64(MediaFoundation.FrameRate, out ulong rate);
+                    (RateNumerator, RateDenominator) = MediaFoundation.Unpack(rate);
+                }
+                catch (COMException) { RateNumerator = 0; RateDenominator = 0; }
+                try
+                {
+                    native.GetUINT64(MediaFoundation.PixelAspect, out ulong aspect);
+                    var (across, down) = MediaFoundation.Unpack(aspect);
+                    SquarePixels = across == down || across == 0 || down == 0;
+                }
+                catch (COMException) { }
+                finally { MediaFoundation.Release(native); }
+                Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateMediaType(out type));
+                type.SetGUID(MediaFoundation.MajorType, MediaFoundation.Video);
+                type.SetGUID(MediaFoundation.Subtype, MediaFoundation.Rgb32);
+                reader.SetCurrentMediaType(MediaFoundation.FirstVideoStream, IntPtr.Zero, type);
+                ReadType();
             }
-            catch (COMException) { RateNumerator = 0; RateDenominator = 0; }
-            finally { MediaFoundation.Release(native); }
-            Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateMediaType(out type));
-            type.SetGUID(MediaFoundation.MajorType, MediaFoundation.Video);
-            type.SetGUID(MediaFoundation.Subtype, MediaFoundation.Rgb32);
-            reader.SetCurrentMediaType(MediaFoundation.FirstVideoStream, IntPtr.Zero, type);
-            ReadType();
+            finally { MediaFoundation.Release(type); MediaFoundation.Release(attributes); }
         }
         catch (Exception error) when (error is COMException or InvalidCastException or ArgumentException or UserError)
         {
@@ -224,8 +236,10 @@ internal sealed class VideoFrameReader : IDisposable
             throw new UserError(VideoUpscale.Unreadable);
         }
         catch { Dispose(); throw; }
-        finally { MediaFoundation.Release(type); MediaFoundation.Release(attributes); }
     }
+
+    /// False when the stream states non-square pixels (anamorphic video), which the 1:1 output would squash.
+    public bool SquarePixels { get; private set; } = true;
 
     // The decoded frame size and row stride; refuses frames smaller than the picture.
     private void ReadType()
@@ -328,18 +342,22 @@ internal sealed class VideoFrameWriter : IDisposable
         MediaFoundation.IMFAttributes? attributes = null; MediaFoundation.IMFMediaType? output = null, input = null;
         try
         {
-            Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateAttributes(out attributes, 1));
-            attributes.SetGUID(MediaFoundation.ContainerType, MediaFoundation.ContainerMpeg4);
-            Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateSinkWriterFromURL(path, IntPtr.Zero, attributes, out var opened));
-            writer = opened;
-            output = MediaFoundation.VideoType(MediaFoundation.H264, width, height, rateNumerator, rateDenominator);
-            output.SetUINT32(MediaFoundation.AverageBitrate, bitrate);
-            writer.AddStream(output, out stream);
-            input = MediaFoundation.VideoType(MediaFoundation.Rgb32, width, height, rateNumerator, rateDenominator);
-            input.SetUINT32(MediaFoundation.DefaultStride, (uint)(width * 4)); // positive: top row first
-            input.SetUINT32(MediaFoundation.AllSamplesIndependent, 1);
-            writer.SetInputMediaType(stream, input, null);
-            writer.BeginWriting();
+            try
+            {
+                Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateAttributes(out attributes, 1));
+                attributes.SetGUID(MediaFoundation.ContainerType, MediaFoundation.ContainerMpeg4);
+                Marshal.ThrowExceptionForHR(MediaFoundation.MFCreateSinkWriterFromURL(path, IntPtr.Zero, attributes, out var opened));
+                writer = opened;
+                output = MediaFoundation.VideoType(MediaFoundation.H264, width, height, rateNumerator, rateDenominator);
+                output.SetUINT32(MediaFoundation.AverageBitrate, bitrate);
+                writer.AddStream(output, out stream);
+                input = MediaFoundation.VideoType(MediaFoundation.Rgb32, width, height, rateNumerator, rateDenominator);
+                input.SetUINT32(MediaFoundation.DefaultStride, (uint)(width * 4)); // positive: top row first
+                input.SetUINT32(MediaFoundation.AllSamplesIndependent, 1);
+                writer.SetInputMediaType(stream, input, null);
+                writer.BeginWriting();
+            }
+            finally { MediaFoundation.Release(input); MediaFoundation.Release(output); MediaFoundation.Release(attributes); }
         }
         catch (Exception error) when (error is COMException or InvalidCastException or ArgumentException)
         {
@@ -347,7 +365,6 @@ internal sealed class VideoFrameWriter : IDisposable
             throw new UserError(VideoUpscaler.Failed);
         }
         catch { Dispose(); throw; }
-        finally { MediaFoundation.Release(input); MediaFoundation.Release(output); MediaFoundation.Release(attributes); }
     }
 
     public void Write(byte[] bgra, long time, long duration)

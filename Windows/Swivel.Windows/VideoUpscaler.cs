@@ -15,12 +15,15 @@ namespace Swivel.Windows;
 /// Real-ESRGAN model enlarges it 2× through the same tiles as a still (Upscale), and Media
 /// Foundation encodes the frames as H.264 at their original times in a private temporary folder.
 /// The sound is decoded by Windows' media editing API, encoded as AAC and added as a second track
-/// (Mp4AudioMux) like Trim Video's speed changes. The result is published beside the original as
-/// `name 2x.mp4`; a cancel or failure publishes nothing and the temporary files are removed.
+/// (Mp4AudioMux) like Trim Video's speed changes. The sound is prepared first (with the time
+/// measurement), so a sound Windows can't handle is refused before any frame is upscaled. The
+/// result is published beside the original as `name 2x.mp4`; a cancel or failure publishes nothing
+/// and the temporary files are removed.
 public sealed class VideoUpscaler : IDisposable
 {
     public const string Failed = "Windows could not encode the upscaled video. No file was saved.";
     public const string SoundFailed = "Windows could not prepare the video's sound, so no file was saved.";
+    public const string NotSquare = "This video has non-square pixels (anamorphic video). Upscale Video 2× writes square pixels, so the result would look squashed; such videos aren't supported.";
     public const string Rotated = "This video is stored with a rotation flag (as phones often do). Upscale Video 2× reads the frames as stored, so the result would be turned; such videos aren't supported.";
     private static readonly Guid RotationKey = new("C380465D-2271-428C-9B83-ECEA3B4A85C1"); // MF_MT_VIDEO_ROTATION
     private readonly NativeFiles.Input input;
@@ -36,6 +39,10 @@ public sealed class VideoUpscaler : IDisposable
     public bool HasSound { get; }
     private readonly uint rateNumerator, rateDenominator, bitrate;
     private readonly (int Rate, int Channels) soundFormat;
+    private const string Prefix = "Swivel-upscale-";
+    /// The decoded sound's sample frames once its AAC file is ready in the workspace's sound folder.
+    private long? soundFrames;
+    private string SoundFolder => System.IO.Path.Combine(Workspace, "sound");
 
     private VideoUpscaler(NativeFiles.Input input, StorageFile file, string workspace, VideoEncodingProperties video, double seconds, long frames, MediaClip clip)
     {
@@ -57,6 +64,7 @@ public sealed class VideoUpscaler : IDisposable
         token.ThrowIfCancellationRequested();
         // The held read handle denies writers and deleters, so the file Windows opens by path
         // below is the one checked here, until the work ends.
+        SweepStale();
         var input = NativeFiles.OpenRead(path);
         string? workspace = null;
         try
@@ -85,7 +93,7 @@ public sealed class VideoUpscaler : IDisposable
             double seconds = clip.OriginalDuration.TotalSeconds;
             double fps = video.FrameRate.Numerator > 0 && video.FrameRate.Denominator > 0 ? (double)video.FrameRate.Numerator / video.FrameRate.Denominator : 30;
             long frames = VideoUpscale.Check((int)video.Width, (int)video.Height, seconds, fps);
-            workspace = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Swivel-upscale-" + Guid.NewGuid().ToString("N"));
+            workspace = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Prefix + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(workspace);
             return new VideoUpscaler(input, file, workspace, video, seconds, frames, clip);
         }
@@ -97,16 +105,31 @@ public sealed class VideoUpscaler : IDisposable
         }
     }
 
+    /// Workspaces a killed app left behind: removed once they are a day old. Directory.Delete
+    /// removes links inside without following them.
+    private static void SweepStale()
+    {
+        try
+        {
+            foreach (var stale in new DirectoryInfo(System.IO.Path.GetTempPath()).EnumerateDirectories(Prefix + "*"))
+                if ((stale.Attributes & System.IO.FileAttributes.ReparsePoint) == 0 && stale.LastWriteTimeUtc < DateTime.UtcNow.AddDays(-1))
+                    try { stale.Delete(true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+        catch (IOException) { } catch (UnauthorizedAccessException) { }
+    }
+
     public (int Width, int Height) Output => VideoUpscale.Dimensions(Width, Height);
     public long Blocks => VideoUpscale.Blocks(Width, Height, Frames);
 
-    /// Loads the model, decodes the first frame and times one model block on it (its top-left
-    /// corner), so the estimate reflects this PC. Returns whether Windows ML uses a graphics card.
+    /// Prepares the sound, loads the model, decodes the first frame and times one model block on
+    /// it (its top-left corner), so the estimate reflects this PC and a sound or frame Windows
+    /// can't handle is refused before the dialog. Returns whether Windows ML uses a graphics card.
     public (bool Graphics, TimeSpan PerBlock) Measure(CancellationToken token)
     {
+        PrepareSound(token);
         bool graphics = UpscaleModel.UsesGraphics(token);
         var frame = new byte[Width * Height * 4];
-        using (var reader = new VideoFrameReader(input.Path, Width, Height))
+        using (var reader = Reader())
             if (!reader.Read(frame, out _, out _, token)) throw new UserError(VideoUpscale.Unreadable);
         int w = Math.Min(Width, Upscale.Tile - 2 * Upscale.Halo), h = Math.Min(Height, Upscale.Tile - 2 * Upscale.Halo);
         var corner = new byte[w * h * 4];
@@ -116,20 +139,49 @@ public sealed class VideoUpscaler : IDisposable
         return (graphics, clock.Elapsed);
     }
 
+    // The frame reader, refusing anamorphic video and frame rates past the encoder's level.
+    private VideoFrameReader Reader()
+    {
+        var reader = new VideoFrameReader(input.Path, Width, Height);
+        try
+        {
+            if (!reader.SquarePixels) throw new UserError(NotSquare);
+            if (reader.RateNumerator > 0 && reader.RateDenominator > 0) VideoUpscale.CheckRate(Width, Height, (double)reader.RateNumerator / reader.RateDenominator);
+            return reader;
+        }
+        catch { reader.Dispose(); throw; }
+    }
+
+    private void PrepareSound(CancellationToken token)
+    {
+        if (!HasSound || soundFrames is not null) return;
+        try { Directory.CreateDirectory(SoundFolder); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new UserError(SoundFailed); }
+        try { soundFrames = SoundAsync(token).GetAwaiter().GetResult(); }
+        catch
+        {
+            foreach (var temporary in new[] { Decoded, Encoded }) try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            throw;
+        }
+    }
+    private string Decoded => System.IO.Path.Combine(SoundFolder, "sound.wav");
+    private string Encoded => System.IO.Path.Combine(SoundFolder, "sound.m4a");
+
     /// Upscales every frame and publishes `name 2x.mp4`. `progress` gets frames done, the
     /// estimated total and the time left; `sound` is called when the sound is being prepared.
     public string Run(Action<long, long, TimeSpan?>? progress, Action? sound, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         var (ow, oh) = Output;
-        string rendered = System.IO.Path.Combine(Workspace, "upscaled.mp4"), decoded = System.IO.Path.Combine(Workspace, "sound.wav"), encoded = System.IO.Path.Combine(Workspace, "sound.m4a");
+        if (HasSound) { sound?.Invoke(); PrepareSound(token); }
+        string rendered = System.IO.Path.Combine(Workspace, "upscaled.mp4");
         try
         {
-            using (var reader = new VideoFrameReader(input.Path, Width, Height))
+            using (var reader = Reader())
             {
                 uint numerator = reader.RateNumerator, denominator = reader.RateDenominator;
                 if (numerator == 0 || denominator == 0) (numerator, denominator) = rateNumerator > 0 && rateDenominator > 0 ? (rateNumerator, rateDenominator) : (30u, 1u);
-                if ((double)numerator / denominator > VideoUpscale.MaxFps) throw new UserError(VideoUpscale.Unreadable);
+                VideoUpscale.CheckRate(Width, Height, (double)numerator / denominator);
                 long step = (long)Math.Round(10_000_000.0 * denominator / numerator);
                 using var writer = new VideoFrameWriter(rendered, ow, oh, numerator, denominator, VideoUpscale.Bitrate(ow, oh, (double)numerator / denominator, bitrate));
                 var frame = new byte[Width * Height * 4];
@@ -146,16 +198,21 @@ public sealed class VideoUpscaler : IDisposable
                     progress?.Invoke(count, total, VideoUpscale.Left(clock.Elapsed, count, total));
                 }
                 if (count == 0) throw new UserError(VideoUpscale.Unreadable);
+                progress?.Invoke(count, count, TimeSpan.Zero);
                 token.ThrowIfCancellationRequested();
                 writer.Finish();
             }
             token.ThrowIfCancellationRequested();
-            long soundFrames = 0;
+            // The prepared sound, cut to the upscaled video's length.
+            long play = 0;
             if (HasSound)
-            {
-                sound?.Invoke();
-                soundFrames = SoundAsync(rendered, decoded, encoded, token).GetAwaiter().GetResult();
-            }
+                try
+                {
+                    using var video = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    var (duration, timescale) = Mp4AudioMux.Length(video);
+                    play = Math.Min(soundFrames!.Value, VideoEdit.SoundFrames(duration, timescale, soundFormat.Rate));
+                }
+                catch (UserError) { throw new UserError(SoundFailed); }
             token.ThrowIfCancellationRequested();
             return NativeFiles.WriteBeside(input, System.IO.Path.GetFileNameWithoutExtension(input.Path) + " 2x", "mp4", stream =>
             {
@@ -163,8 +220,8 @@ public sealed class VideoUpscaler : IDisposable
                 if (source.Length == 0) throw new UserError(Failed);
                 if (HasSound)
                 {
-                    using var audio = new FileStream(encoded, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
-                    try { Mp4AudioMux.Write(source, audio, stream, token, (soundFrames, soundFormat.Rate)); }
+                    using var audio = new FileStream(Encoded, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
+                    try { Mp4AudioMux.Write(source, audio, stream, token, (play, soundFormat.Rate)); }
                     catch (UserError error) when (error.Message == Mp4AudioMux.Failed) { throw new UserError(SoundFailed); }
                     return;
                 }
@@ -172,22 +229,19 @@ public sealed class VideoUpscaler : IDisposable
                 while ((read = source.Read(buffer)) > 0) { token.ThrowIfCancellationRequested(); stream.Write(buffer, 0, read); }
             }, token);
         }
-        catch (IOException) { throw new UserError(Failed); }
-        finally
-        {
-            foreach (var temporary in new[] { rendered, decoded, encoded })
-                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new UserError(Failed); }
+        finally { try { File.Delete(rendered); } catch (IOException) { } catch (UnauthorizedAccessException) { } }
     }
 
-    /// The whole sound decoded to PCM16 (Windows' media editing API, precise), encoded as AAC; the
-    /// sample frames to play are those of the decoded sound, cut to the upscaled video's length.
-    private async Task<long> SoundAsync(string rendered, string decoded, string encoded, CancellationToken token)
+    /// The whole sound decoded to PCM16 (Windows' media editing API, precise) and encoded as AAC;
+    /// returns the decoded sample frames.
+    private async Task<long> SoundAsync(CancellationToken token)
     {
+        string decoded = Decoded, encoded = Encoded;
         var (rate, channels) = soundFormat;
         long milliseconds = (long)Math.Round(Seconds * 1000);
         try { VideoEdit.CheckSound(milliseconds, 100, rate, channels); } catch (UserError) { throw new UserError(SoundFailed); }
-        var folder = await NativeAsync.Join(StorageFolder.GetFolderFromPathAsync(Workspace), token).ConfigureAwait(false);
+        var folder = await NativeAsync.Join(StorageFolder.GetFolderFromPathAsync(SoundFolder), token).ConfigureAwait(false);
         try
         {
             var clip = await NativeAsync.Join(MediaClip.CreateFromFileAsync(file), token).ConfigureAwait(false);
@@ -204,15 +258,13 @@ public sealed class VideoUpscaler : IDisposable
         long frames;
         try
         {
-            ulong duration; uint timescale;
-            using (var video = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read)) (duration, timescale) = Mp4AudioMux.Length(video);
             using var pcm = new FileStream(decoded, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
             var info = PcmWave.Read(pcm, token);
             if (info.Rate != rate || info.Channels != channels || info.Bits != 16 || !VideoEdit.SoundMatches(info.Frames, rate, milliseconds)) throw new UserError(SoundFailed);
-            frames = Math.Min(info.Frames, VideoEdit.SoundFrames(duration, timescale, rate));
+            frames = info.Frames;
         }
         catch (UserError) { throw new UserError(SoundFailed); }
-        catch (IOException) { throw new UserError(SoundFailed); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new UserError(SoundFailed); }
         token.ThrowIfCancellationRequested();
 
         try

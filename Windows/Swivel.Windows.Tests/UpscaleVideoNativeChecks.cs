@@ -54,14 +54,15 @@ internal static class UpscaleVideoNativeChecks
             string output = Task.Run(() => video.Run((done, all, left) => { frames = done; total = all; lastLeft = left; }, null, default)).GetAwaiter().GetResult();
             Console.WriteLine($"Upscale Video 2× of {frames} frames of 64×48: {clock.Elapsed.TotalSeconds:0.0} s, {clock.Elapsed.TotalSeconds / Math.Max(1, frames):0.00} s per frame");
             check(output == Path.Combine(root, "quarters 2x.mp4"), "The upscaled video is saved beside the original as “name 2x.mp4”: " + Path.GetFileName(output));
-            check(frames == sourceFrames.Count && total >= frames && lastLeft == TimeSpan.Zero, $"Progress counts every frame: {frames} of {total}, last time left {lastLeft}");
-            check(Directory.GetFiles(video.Workspace).Length == 0, "No temporary files remain after saving");
+            check(frames == sourceFrames.Count && total == frames && lastLeft == TimeSpan.Zero, $"Progress counts every frame: {frames} of {total}, last time left {lastLeft}");
+            check(Directory.GetFiles(video.Workspace).Length == 0, "No temporary video remains after saving (only the prepared sound, removed on close)");
 
             var outputFrames = Frames(output, 2 * W, 2 * H, out var outputTimes);
             var (ow, oh, seconds, sound) = Probe(output);
             var (_, _, sourceSeconds, _) = Probe(source);
             check(ow == 2 * W && oh == 2 * H, $"The upscaled video is 128 × 96: {ow}×{oh}");
-            check(outputFrames.Count == sourceFrames.Count && outputTimes.Zip(sourceTimes).All(p => Math.Abs(p.First - p.Second) <= 10_000),
+            // Windows' writer starts the video at 0 (the reader gave this source's first frame at 0.1 s), so times are compared from the first frame.
+            check(outputFrames.Count == sourceFrames.Count && outputTimes.Zip(sourceTimes).All(p => Math.Abs(p.First - outputTimes[0] - (p.Second - sourceTimes[0])) <= 10_000),
                 $"Every frame is kept at its time: {outputFrames.Count} frames (source {sourceFrames.Count}), first times {string.Join(",", outputTimes.Take(3))} vs {string.Join(",", sourceTimes.Take(3))}");
             check(VideoUpscale.WithinFrame(seconds, sourceSeconds, Fps) && sound, $"The upscaled video lasts as long as the original within a frame and has sound: {seconds:0.000} s vs {sourceSeconds:0.000} s, sound {sound}");
 
@@ -70,7 +71,21 @@ internal static class UpscaleVideoNativeChecks
             double rmse = Math.Sqrt(Enumerable.Range(0, W * H * 4).Where(i => i % 4 != 3).Average(i => Math.Pow(reduced[i] - sourceFrames[middle][i], 2)));
             check(rmse < 20 && Quarters(outputFrames[middle], 2 * W, 2 * H) == "RGBW", $"A sampled upscaled frame, halved, matches the source frame: RMSE {rmse:0.0}, quarters {Quarters(outputFrames[middle], 2 * W, 2 * H)}");
         }
+        check(!Directory.GetDirectories(Path.GetTempPath(), "Swivel-upscale-*").Any(d => Directory.EnumerateFileSystemEntries(d, "*", SearchOption.AllDirectories).Any()), "Closing removes the upscaling workspace and its prepared sound");
         check(SHA256.HashData(File.ReadAllBytes(source)).SequenceEqual(original), "Upscaling leaves the original byte for byte the same");
+
+        // Windows' H.264 encoder takes the extremes the limits allow: 64 × 64 and 3840 × 2160 at 64 fps (level 5.2).
+        foreach (var (w, h, rate) in new[] { (64, 64, 120u), (3840, 2160, 64u), (2160, 2160, 30u) })
+        {
+            string probe = Path.Combine(root, $"writer {w}x{h}.mp4");
+            var frame = new byte[w * h * 4];
+            using (var writer = new VideoFrameWriter(probe, w, h, rate, 1, VideoUpscale.Bitrate(w, h, rate, 0)))
+            {
+                writer.Write(frame, 0, 10_000_000 / rate); writer.Write(frame, 10_000_000 / rate, 10_000_000 / rate); writer.Finish();
+            }
+            check(Probe(probe) is var (pw, ph, _, _) && pw == w && ph == h, $"Windows' H.264 writer takes {w} × {h} at {rate} fps");
+            File.Delete(probe);
+        }
 
         // A phone video stored sideways is refused (its stored frames would come out turned).
         string turned = Path.Combine(root, "turned.mp4");

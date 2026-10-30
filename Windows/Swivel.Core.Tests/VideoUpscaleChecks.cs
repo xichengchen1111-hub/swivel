@@ -6,20 +6,27 @@ internal static class VideoUpscaleChecks
 {
     internal static void Run(Action<bool, string> check, Action<Action, string> reject)
     {
-        // Sizes: 2× of anything from 16 × 16 up to 1920 × 1080 either way up, never past 3840 × 2160.
+        // Sizes: 2× of 32 × 32 up to 1920 wide and 1080 tall, never past 3840 × 2160 (Windows' H.264 encoder stops at 2304 lines).
         check(VideoUpscale.Dimensions(64, 48) == (128, 96), "Upscale Video doubles 64 × 48");
-        check(VideoUpscale.Dimensions(1920, 1080) == (3840, 2160) && VideoUpscale.Dimensions(1080, 1920) == (2160, 3840), "Upscale Video takes 1920 × 1080 landscape and portrait");
-        check(VideoUpscale.Dimensions(16, 16) == (32, 32) && VideoUpscale.Dimensions(17, 33) == (34, 66), "Odd and minimum sizes still give even outputs");
-        foreach (var (w, h) in new[] { (15, 100), (100, 15), (1921, 1080), (1920, 1081), (1080, 1921), (1200, 1200), (0, 0), (-2, 64), (3840, 2160) })
+        check(VideoUpscale.Dimensions(1920, 1080) == (3840, 2160) && VideoUpscale.Dimensions(608, 1080) == (1216, 2160), "Upscale Video takes 1920 × 1080 and portrait videos up to 1080 tall");
+        check(VideoUpscale.Dimensions(32, 32) == (64, 64) && VideoUpscale.Dimensions(33, 35) == (66, 70), "Odd and minimum sizes still give even outputs of at least 64 × 64");
+        foreach (var (w, h) in new[] { (31, 100), (100, 31), (16, 16), (1921, 1080), (1920, 1081), (1080, 1920), (1200, 1200), (0, 0), (-2, 64), (3840, 2160) })
             reject(() => VideoUpscale.Dimensions(w, h), $"Upscale Video refuses {w} × {h}");
-        for (int w = 16; w <= 1920; w += 37)
-            for (int h = 16; h <= 1920; h += 41)
+        for (int w = 16; w <= 1960; w += 37)
+            for (int h = 16; h <= 1960; h += 41)
             {
-                bool fits = Math.Min(w, h) <= 1080;
-                bool ok = true; try { var (ow, oh) = VideoUpscale.Dimensions(w, h); ok = ow == 2 * w && oh == 2 * h && Math.Max(ow, oh) <= 3840 && Math.Min(ow, oh) <= 2160; } catch (UserError) { ok = !fits; }
+                bool fits = w is >= 32 and <= 1920 && h is >= 32 and <= 1080;
+                bool ok = true; try { var (ow, oh) = VideoUpscale.Dimensions(w, h); ok = fits && ow == 2 * w && oh == 2 * h && ow <= 3840 && oh <= 2160 && ow >= 64 && oh >= 64; } catch (UserError) { ok = !fits; }
                 if (!ok) { check(false, $"Upscale Video size rule at {w} × {h}"); return; }
             }
         check(true, "Upscale Video size rule over a grid of sizes");
+
+        // Frame rate: H.264 level 5.2 at the doubled size (4K: 32,400 macroblocks, up to 64 fps).
+        VideoUpscale.CheckRate(1920, 1080, 64); VideoUpscale.CheckRate(1280, 720, 120); VideoUpscale.CheckRate(64, 48, 120);
+        check(true, "4K output up to 64 fps and 1440p up to 120 fps pass");
+        reject(() => VideoUpscale.CheckRate(1920, 1080, 64.01), "4K output over 64 fps is refused");
+        reject(() => VideoUpscale.Check(1920, 1080, 1, 120), "Check refuses 1080p at 120 fps");
+        reject(() => VideoUpscale.CheckRate(64, 48, 0), "A zero frame rate is refused");
 
         // Frame counts from length and average rate.
         check(VideoUpscale.Frames(1.0, 10) == 10 && VideoUpscale.Frames(1.0, 30) == 30 && VideoUpscale.Frames(1.0001, 10) == 11 && VideoUpscale.Frames(0.01, 30) == 1, "Frames counts whole and partial frames");
@@ -42,7 +49,7 @@ internal static class VideoUpscaleChecks
         check(VideoUpscale.Estimate(TimeSpan.FromSeconds(0.2), 1920, 1080, 1800) == TimeSpan.FromSeconds(0.2 * 243_000), "A 1080p minute at 0.2 s a block");
         check(VideoUpscale.Estimate(TimeSpan.Zero, 64, 48, 10) == TimeSpan.Zero && VideoUpscale.Estimate(TimeSpan.MaxValue, 1920, 1080, 1800) == TimeSpan.MaxValue, "Estimate saturates instead of overflowing");
         reject(() => VideoUpscale.Estimate(TimeSpan.FromSeconds(-1), 64, 48, 1), "A negative block time is refused");
-        check(VideoUpscale.Left(TimeSpan.FromSeconds(30), 0, 10) is null && VideoUpscale.Left(TimeSpan.FromSeconds(30), 2, 10) == TimeSpan.FromSeconds(120) && VideoUpscale.Left(TimeSpan.FromSeconds(30), 12, 10) == TimeSpan.Zero, "Time left from the frames done so far");
+        check(VideoUpscale.Left(TimeSpan.FromSeconds(30), 0, 10) is null && VideoUpscale.Left(TimeSpan.FromSeconds(30), 2, 10) == TimeSpan.FromSeconds(120) && VideoUpscale.Left(TimeSpan.FromSeconds(30), 12, 10) == TimeSpan.Zero && VideoUpscale.Left(TimeSpan.MaxValue, 1, long.MaxValue) == TimeSpan.MaxValue, "Time left from the frames done so far");
         check(VideoUpscale.Duration(TimeSpan.FromSeconds(0.2)) == ("{0} s", 1) && VideoUpscale.Duration(TimeSpan.FromSeconds(59)) == ("{0} s", 59) && VideoUpscale.Duration(TimeSpan.FromSeconds(60)) == ("{0} min", 1)
             && VideoUpscale.Duration(TimeSpan.FromSeconds(61)) == ("{0} min", 2) && VideoUpscale.Duration(TimeSpan.FromHours(2)) == ("{0} h", 2) && VideoUpscale.Duration(TimeSpan.MaxValue).Value > 0, "Durations read as seconds, minutes or hours");
 
