@@ -108,6 +108,9 @@ internal static class FolderStyleNativeChecks
             foreach (string mark in new[] { "", "A", "工作", "👩‍💻" })
             {
                 var legacy = new FolderStyle(color, mark);
+                // Warm WPF glyph/text caches for each mark before the byte-exact comparison.
+                _ = FolderStyleIcons.Icon(legacy);
+                _ = LegacyFolderStyleIcons.Icon(legacy);
                 byte[] actual=FolderStyleIcons.Icon(legacy),expected=LegacyFolderStyleIcons.Icon(legacy);
                 bool identical=actual.SequenceEqual(expected);string detail="";
                 if(!identical)
