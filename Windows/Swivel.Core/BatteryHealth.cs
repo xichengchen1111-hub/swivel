@@ -57,7 +57,8 @@ public static class BatteryHealth
         if ((info.Capabilities & CapacityRelative) != 0) return new(BatteryHealthClass.Unknown, null, BatteryUnknownReason.RelativeCapacity);
         if (!Known(info.DesignedCapacity)) return new(BatteryHealthClass.Unknown, null, BatteryUnknownReason.DesignUnknown);
         if (!Known(info.FullChargedCapacity)) return new(BatteryHealthClass.Unknown, null, BatteryUnknownReason.FullUnknown);
-        double percent = info.FullChargedCapacity * 100.0 / info.DesignedCapacity;
+        // Classify on the one-decimal value that is shown, so 79.96% (shown 80.0%) is Good.
+        double percent = Math.Round(info.FullChargedCapacity * 100.0 / info.DesignedCapacity, 1, MidpointRounding.AwayFromZero);
         return new(percent >= GoodAtLeast ? BatteryHealthClass.Good : percent >= ReducedAtLeast ? BatteryHealthClass.Reduced : BatteryHealthClass.Worn, percent, BatteryUnknownReason.None);
     }
 
@@ -85,11 +86,13 @@ public static class BatteryHealth
     // "mWh" only for absolute-capacity batteries; relative units are named as such.
     public static string Capacity(uint value, uint capabilities) => !Known(value) ? "Unknown (" + value.ToString(CultureInfo.InvariantCulture) + ")"
         : value.ToString("N0", CultureInfo.InvariantCulture) + ((capabilities & CapacityRelative) != 0 ? " (relative units)" : " mWh");
-    public static string RemainingCapacity(uint value, uint capabilities) => value == UnknownCapacity ? "Unknown"
-        : value.ToString("N0", CultureInfo.InvariantCulture) + ((capabilities & CapacityRelative) != 0 ? " (relative units)" : " mWh");
+    // Null capabilities: BATTERY_INFORMATION failed, so mWh versus relative units is unknown.
+    public static string RemainingCapacity(uint value, uint? capabilities) => value == UnknownCapacity ? "Unknown"
+        : value.ToString("N0", CultureInfo.InvariantCulture) + Unit(capabilities, " mWh");
     public static string Voltage(uint value) => value == UnknownVoltage ? "Unknown" : (value / 1000.0).ToString("0.000", CultureInfo.InvariantCulture) + " V";
-    public static string Rate(int value, uint capabilities) => value == UnknownRate ? "Unknown"
-        : value.ToString("N0", CultureInfo.InvariantCulture) + ((capabilities & CapacityRelative) != 0 ? " (relative units)" : " mW");
+    public static string Rate(int value, uint? capabilities) => value == UnknownRate ? "Unknown"
+        : value.ToString("N0", CultureInfo.InvariantCulture) + Unit(capabilities, " mW");
+    private static string Unit(uint? capabilities, string absolute) => capabilities is not uint c ? " (units unknown)" : (c & CapacityRelative) != 0 ? " (relative units)" : absolute;
     public static string Cycles(uint value) => value == 0 ? "Not reported (0)" : value.ToString(CultureInfo.InvariantCulture);
     public static double? ChargePercent(BatteryInformation? info, BatteryStatus? status)
     {

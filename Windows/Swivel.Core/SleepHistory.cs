@@ -15,7 +15,7 @@ public sealed class SleepHistorySnapshot
     public IReadOnlyList<SleepEvent> Events { get; }
     public SleepLogStatus Status { get; }
     public int? ErrorCode { get; }
-    // More matching events existed than the bound, or the time limit stopped reading.
+    // More matching events existed than the 200-event bound; TimedOut marks the time limit.
     public bool Truncated { get; }
     public bool TimedOut { get; }
     public DateTimeOffset WindowStart { get; }

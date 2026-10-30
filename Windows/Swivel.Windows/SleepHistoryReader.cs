@@ -14,7 +14,7 @@ namespace Swivel.Windows;
 // powercfg is never started: its commands are shown as text only.
 internal static class SleepHistoryReader
 {
-    private const int SystemExecutionState = 16;
+    private const int SystemExecutionState = 16, ErrorTimeout = unchecked((int)0x800705B4);
     private static readonly string[] Paths =
     {
         "Event/EventData/Data[@Name='TargetState']", "Event/EventData/Data[@Name='Reason']",
@@ -30,25 +30,34 @@ internal static class SleepHistoryReader
         var start = DateTimeOffset.Now.AddDays(-SleepHistory.Days);
         var events = new List<SleepEvent>(); bool truncated = false, timedOut = false;
         var clock = Stopwatch.StartNew();
+        // The time limit cancels the native read itself (EvtCancel) as well as the loop, so a
+        // slow batch over a large, sparse log is bounded too; events already read are kept.
+        using var limit = new CancellationTokenSource(timeLimit);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, limit.Token);
         try
         {
             var logQuery = new EventLogQuery("System", PathType.LogName, query) { ReverseDirection = true };
             using var reader = new EventLogReader(logQuery);
             using var selector = new EventLogPropertySelector(Paths);
-            using var cancel = token.Register(() => { try { reader.CancelReading(); } catch (Exception) { } });
+            using var cancel = linked.Token.Register(() => { try { reader.CancelReading(); } catch (Exception) { } });
             while (true)
             {
                 token.ThrowIfCancellationRequested();
                 var remaining = timeLimit - clock.Elapsed;
-                if (remaining <= TimeSpan.Zero) { timedOut = true; break; }
-                using EventRecord? record = reader.ReadEvent(remaining);
+                if (remaining <= TimeSpan.Zero || limit.IsCancellationRequested) { timedOut = true; break; }
+                EventRecord? next;
+                try { next = reader.ReadEvent(remaining); }
+                catch (Exception e) when (!token.IsCancellationRequested && (limit.IsCancellationRequested || (e is EventLogException && e.HResult == ErrorTimeout)))
+                { timedOut = true; break; }
+                using EventRecord? record = next;
                 token.ThrowIfCancellationRequested();
                 if (record is null) { if (clock.Elapsed >= timeLimit) timedOut = true; break; }
                 if (events.Count >= maxEvents) { truncated = true; break; }
                 var kind = SleepHistory.Kind(record.ProviderName, record.Id);
                 if (kind is null || record.TimeCreated is not DateTime created) continue;
                 IList<object?> values;
-                try { values = record is EventLogRecord logRecord ? logRecord.GetPropertyValues(selector) : new object?[Paths.Length]; } catch (EventLogException) { values = new object?[Paths.Length]; }
+                try { values = record is EventLogRecord logRecord ? logRecord.GetPropertyValues(selector) : new object?[Paths.Length]; }
+                catch (Exception e) when (e is not OperationCanceledException) { values = new object?[Paths.Length]; }
                 events.Add(new(Time(created), kind.Value, Number(values, 0), Number(values, 1), values.Count > 2 ? values[2] as string : null, OptionalTime(values, 3), OptionalTime(values, 4)));
             }
         }

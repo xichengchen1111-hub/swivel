@@ -59,7 +59,11 @@ internal static class BatteryReader
         token.ThrowIfCancellationRequested();
         var tagOut = new byte[4];
         if (!Ioctl(handle, QueryTag, BitConverter.GetBytes(0u), tagOut, out _, out uint tagError))
+        {
+            // With a zero wait, an empty bay or detached battery answers "not found" rather than tag 0.
+            if (tagError is 2 /* ERROR_FILE_NOT_FOUND */ or 433 /* ERROR_NO_SUCH_DEVICE */) { emptySlot = true; return new(index, null, null, null, null, null, null, null, null, null); }
             return new(index, null, tagError, null, null, null, null, null, null, null);
+        }
         uint tag = BitConverter.ToUInt32(tagOut);
         if (tag == 0) { emptySlot = true; return new(index, null, null, null, null, null, null, null, null, null); }
 

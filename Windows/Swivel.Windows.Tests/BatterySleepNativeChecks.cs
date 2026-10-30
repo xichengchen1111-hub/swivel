@@ -60,7 +60,9 @@ internal static class BatterySleepNativeChecks
         // A broad query over every System event exercises the time limit and cancellation paths.
         const string all = "*[System[TimeCreated[timediff(@SystemTime) <= 604800000]]]";
         var limited = SleepHistoryReader.ReadHistory(all, SleepHistory.MaxEvents, TimeSpan.FromTicks(1), default);
-        check(limited.TimedOut || limited.Status != SleepLogStatus.Read, "Time limit stops reading and is reported");
+        check(limited.TimedOut && limited.Status == SleepLogStatus.Read, "Time limit stops reading and is reported as partial, not as a failure");
+        var shortLimit = SleepHistoryReader.ReadHistory(all, SleepHistory.MaxEvents, TimeSpan.FromMilliseconds(50), default);
+        check(shortLimit.Status == SleepLogStatus.Read, "A time limit inside a native read keeps the Read status: " + shortLimit.Status + " " + shortLimit.ErrorCode);
         using (var stop = new CancellationTokenSource())
         {
             stop.CancelAfter(TimeSpan.FromMilliseconds(30)); clock.Restart(); bool cancelled = false;

@@ -57,7 +57,7 @@ internal sealed class BatteryHealthDialog : Window
     {
         bool reveal = Reveal.IsChecked == true; var rows = new List<Row>();
         // Formatted values carry only digits and units; their English words are translated here.
-        string Tr(string text) => text.Replace("Not reported", app.L("Not reported")).Replace("(relative units)", app.L("(relative units)")).Replace("Unknown", app.L("Unknown"));
+        string Tr(string text) => text.Replace("Not reported", app.L("Not reported")).Replace("(relative units)", app.L("(relative units)")).Replace("(units unknown)", app.L("(units unknown)")).Replace("Unknown", app.L("Unknown"));
         string Code(uint code) => app.L("Windows Error Code") + " " + code.ToString(CultureInfo.InvariantCulture);
         if (snapshot.EnumerationError is uint enumError) rows.Add(new(app.L("Battery Device List"), app.L("Incomplete") + " · " + Code(enumError)));
         if (snapshot.NoBattery) rows.Add(new(app.L("Batteries"), app.L("None reported")));
@@ -88,9 +88,9 @@ internal sealed class BatteryHealthDialog : Window
             {
                 var states = BatteryHealth.PowerStates(status.PowerState);
                 Add("Power State", (states.Count == 0 ? app.L("Not reported") : string.Join(", ", states.Select(app.L))) + " (" + status.PowerState.ToString(CultureInfo.InvariantCulture) + ")");
-                Add("Remaining Capacity", Tr(BatteryHealth.RemainingCapacity(status.Capacity, info?.Capabilities ?? 0)) + (BatteryHealth.ChargePercent(info, status) is double c ? " · " + BatteryHealth.Percent(c) : ""));
+                Add("Remaining Capacity", Tr(BatteryHealth.RemainingCapacity(status.Capacity, info?.Capabilities)) + (BatteryHealth.ChargePercent(info, status) is double c ? " · " + BatteryHealth.Percent(c) : ""));
                 Add("Voltage", Tr(BatteryHealth.Voltage(status.Voltage)));
-                Add("Charge or Discharge Rate", Tr(BatteryHealth.Rate(status.Rate, info?.Capabilities ?? 0)));
+                Add("Charge or Discharge Rate", Tr(BatteryHealth.Rate(status.Rate, info?.Capabilities)));
             }
             foreach (var (name, text) in new[] { ("Device Name", battery.DeviceName), ("Manufacturer", battery.Manufacturer), ("Serial Number", battery.SerialNumber) })
                 Add(name, !reveal ? app.L("Hidden") : text is null ? app.L("Unavailable") : text.Value is string v ? (v.Length == 0 ? app.L("Not reported") : v) : app.L("Not reported") + " · " + Code(text.Error ?? 0));

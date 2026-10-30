@@ -13,9 +13,9 @@ internal static class BatterySleepChecks
         var good = BatteryHealth.Classify(Info(50_000, 45_000));
         check(good.Class == BatteryHealthClass.Good && Math.Abs(good.Percent!.Value - 90) < 1e-9, "90% of design is Good");
         check(BatteryHealth.Classify(Info(50_000, 40_000)).Class == BatteryHealthClass.Good, "Exactly 80% is Good");
-        check(BatteryHealth.Classify(Info(50_000, 39_999)).Class == BatteryHealthClass.Reduced, "Just under 80% is Reduced");
+        check(BatteryHealth.Classify(Info(50_000, 39_950)).Class == BatteryHealthClass.Reduced, "79.9% is Reduced");
         check(BatteryHealth.Classify(Info(50_000, 30_000)).Class == BatteryHealthClass.Reduced, "Exactly 60% is Reduced");
-        check(BatteryHealth.Classify(Info(50_000, 29_999)).Class == BatteryHealthClass.Worn, "Under 60% is Worn");
+        check(BatteryHealth.Classify(Info(50_000, 29_950)).Class == BatteryHealthClass.Worn, "59.9% is Worn");
         var above = BatteryHealth.Classify(Info(50_000, 52_000));
         check(above.Class == BatteryHealthClass.Good && above.Percent > 100 && BatteryHealth.Percent(above.Percent) == "104.0%", "Full charge above design is reported as is, not capped");
         check(BatteryHealth.Classify(Info(uint.MaxValue, uint.MaxValue)).Class == BatteryHealthClass.Unknown, "All-ones values are unknown sentinels, not 100%");
@@ -39,6 +39,8 @@ internal static class BatterySleepChecks
         check(BatteryHealth.RemainingCapacity(0, 0) == "0 mWh" && BatteryHealth.RemainingCapacity(BatteryHealth.UnknownCapacity, 0) == "Unknown", "Remaining charge zero is a real value; sentinel is unknown");
         check(BatteryHealth.Voltage(12_345) == "12.345 V" && BatteryHealth.Voltage(BatteryHealth.UnknownVoltage) == "Unknown", "Voltage mV to V; unknown sentinel");
         check(BatteryHealth.Rate(-12_000, 0) == "-12,000 mW" && BatteryHealth.Rate(BatteryHealth.UnknownRate, 0) == "Unknown", "Discharge rate sign kept; unknown sentinel");
+        check(BatteryHealth.Classify(Info(100_000, 79_960)).Class == BatteryHealthClass.Good && BatteryHealth.Classify(Info(100_000, 59_970)).Class == BatteryHealthClass.Reduced && BatteryHealth.Classify(Info(100_000, 79_940)).Class == BatteryHealthClass.Reduced, "Class follows the displayed one-decimal percentage");
+        check(BatteryHealth.RemainingCapacity(5, null) == "5 (units unknown)" && BatteryHealth.Rate(-5, null) == "-5 (units unknown)", "Units unknown when battery information failed");
         check(BatteryHealth.Cycles(0) == "Not reported (0)" && BatteryHealth.Cycles(312) == "312", "Cycle count zero is not reported");
         check(BatteryHealth.ChargePercent(Info(50_000, 40_000), new(BatteryHealth.Discharging, 20_000, 12_000, -5_000)) == 50 && BatteryHealth.ChargePercent(Info(50_000, 0), new(0, 20_000, 0, 0)) is null && BatteryHealth.ChargePercent(Info(50_000, 40_000), new(0, BatteryHealth.UnknownCapacity, 0, 0)) is null, "Charge percent only from known values");
         check(BatteryHealth.ChargePercent(Info(50_000, 40_000), new(0, 41_000, 0, 0)) == 100, "Charge percent capped at 100");
@@ -109,7 +111,7 @@ internal static class BatterySleepChecks
         prefs.Set(Feature.Doctor, true);
         check(new[] { "doctor.battery", "doctor.sleephistory" }.All(id => Catalog.Available(prefs, Array.Empty<string>()).Any(x => x.Id == id)), "Available once Doctor is on");
 
-        foreach (string text in new[] { BatteryHealth.Scope, BatteryHealth.Limits, SleepHistory.Scope, SleepHistory.Limits, SleepHistory.AdminNote, SleepHistory.ExecutionStateNote, "Unknown", "Not recorded", "Plugged in", "Discharging", "Charging", "Critical", "System required", "Display required", "User present", "Away mode required", "Continuous", "Other bits", "Read",
+        foreach (string text in new[] { BatteryHealth.Scope, BatteryHealth.Limits, SleepHistory.Scope, SleepHistory.Limits, SleepHistory.AdminNote, SleepHistory.ExecutionStateNote, "Unknown", "Not recorded", "Plugged in", "Discharging", "Charging", "Critical", "System required", "Display required", "User present", "Away mode required", "Continuous", "Other bits", "Read", "(units unknown)",
             BatteryHealth.Kind(0), BatteryHealth.Kind(BatteryHealth.SystemBattery), BatteryHealth.Kind(BatteryHealth.SystemBattery | BatteryHealth.ShortTerm), BatteryHealth.Technology(0), BatteryHealth.Technology(1) })
             check(Strings.Table.ContainsKey(text), "Battery/sleep text translated: " + text[..Math.Min(40, text.Length)]);
         foreach (var c in Enum.GetValues<BatteryHealthClass>()) check(Strings.Table.ContainsKey(BatteryHealth.Name(c)), "Health class translated: " + c);
