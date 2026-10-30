@@ -15,7 +15,9 @@ public sealed class ZipOutcome
 {
     public string? Folder { get; internal set; }
     public int FilesWritten { get; internal set; }
-    public int FileCount { get; init; }
+    public int FileCount { get; internal set; }
+    /// Encrypted ZIP members left out because the password did not match them.
+    public IReadOnlyList<string> Refused { get; internal set; } = Array.Empty<string>();
     public Exception? Error { get; internal set; }
     public bool Cancelled { get; internal set; }
 }

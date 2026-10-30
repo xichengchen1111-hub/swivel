@@ -13,7 +13,17 @@ namespace Swivel.Core;
 /// One validated ZIP member. Path uses '\' and contains only names that passed
 /// WindowsPathPolicy.ValidateName; it is always relative to the new extraction folder.
 public sealed record ZipMember(string Path, bool IsDirectory, uint Crc, long CompressedSize, long Size, ushort Method,
-    ushort Flags, long LocalOffset, byte[] RawName, DateTime? Modified);
+    ushort Flags, long LocalOffset, byte[] RawName, DateTime? Modified)
+{
+    /// Set only by the ZIP reader; None for TAR, 7z and plain ZIP entries.
+    public ZipEncryption Encryption { get; init; }
+    /// WinZip AES (method 99): the compression method underneath (0 or 8) and AE-1 or AE-2.
+    public ushort AesMethod { get; init; }
+    public ushort AesVersion { get; init; }
+    /// The raw DOS time from the directory (ZipCrypto checks its high byte with a data descriptor).
+    public ushort DosTime { get; init; }
+    public ushort DataMethod => Method == 99 ? AesMethod : Method;
+}
 
 public sealed class ZipPlan
 {
@@ -28,8 +38,10 @@ public sealed class ZipPlan
 
 /// Original ZIP reader for extraction: Store and Deflate only, central directory first,
 /// every member validated before anything is written. ZIP64 records are read within the same
-/// 2 GB / 10,000-entry limits. No encryption, multi-disk, links, devices or ambiguous names.
-/// Data integrity is the exact size plus CRC-32.
+/// 2 GB / 10,000-entry limits. No multi-disk, links, devices or ambiguous names. Encrypted
+/// entries (WinZip AES, or traditional ZipCrypto read only) need a ZipPassword; PKWARE strong
+/// encryption is refused. Data integrity is the exact size plus CRC-32 (and the AES
+/// authentication code; AE-2 entries carry no CRC).
 public static class ZipExtract
 {
     public const int MaxEntries = 10000, MaxDepth = 32;
@@ -110,16 +122,20 @@ public static class ZipExtract
             var extra = directory.AsSpan(position + CentralRecord + nameLength, extraLength);
             position = next;
 
-            if ((flags & 0x0041) != 0 || (flags & 0x2000) != 0) throw new UserError("Encrypted ZIP archives are not supported.");
-            if (method is not 0 and not 8) throw new UserError("This ZIP archive uses a compression method other than Store or Deflate.");
-            // 4.5 is ZIP64. The features between 2.0 and 4.5 are other methods (refused above) and
-            // patch data (flag bit 5, refused here).
-            if ((needed & 0xFF) > 45 || (flags & 0x0020) != 0) throw new UserError("This ZIP archive needs features beyond ZIP64 and was not extracted.");
+            if ((flags & 0x0040) != 0 || (flags & 0x2000) != 0) throw new UserError(StrongEncryption);
+            if (method is not 0 and not 8 and not 99) throw new UserError("This ZIP archive uses a compression method other than Store or Deflate.");
+            // 4.5 is ZIP64, 5.1 is WinZip AES. The features in between are other methods (refused
+            // above) and patch data (flag bit 5, refused here).
+            if ((needed & 0xFF) > (method == 99 ? 51 : 45) || (flags & 0x0020) != 0) throw new UserError("This ZIP archive needs features beyond ZIP64 and was not extracted.");
             if (startDisk is not 0 and not 0xFFFF) throw new UserError("Split or multi-disk ZIP archives are not supported.");
             var values = CheckExtra(extra, (flags & 0x0800) != 0, size32 == uint.MaxValue, compressed32 == uint.MaxValue, offset32 == uint.MaxValue, startDisk == 0xFFFF);
+            var encryption = Encryption(flags, method, values.Aes);
+            ushort dataMethod = values.Aes?.Method ?? method;
+            if (dataMethod is not 0 and not 8) throw new UserError("This ZIP archive uses a compression method other than Store or Deflate.");
             ulong size = values.Size ?? size32, compressed = values.Compressed ?? compressed32, offset = values.Offset ?? offset32;
-            if (compressed > (ulong)length || offset > (ulong)length) throw new UserError("This ZIP archive's directory is damaged.");
-            if (method == 0 && compressed != size) throw new UserError("This ZIP archive's directory is damaged.");
+            ulong overhead = (ulong)ZipDecrypt.Overhead(encryption);
+            if (compressed > (ulong)length || offset > (ulong)length || compressed < overhead) throw new UserError("This ZIP archive's directory is damaged.");
+            if (dataMethod == 0 && compressed != size + overhead) throw new UserError("This ZIP archive's directory is damaged.");
 
             string name = DecodeName(raw, (flags & 0x0800) != 0);
             int host = madeBy >> 8;
@@ -141,7 +157,7 @@ public static class ZipExtract
             for (int depth = 1; depth < parts.Length; depth++) AddDirectory(string.Join('\\', parts.Take(depth)));
             if (isDirectory)
             {
-                if (size != 0 || compressed > 2) throw new UserError("This ZIP archive's directory is damaged.");
+                if (size != 0 || compressed > overhead + 2) throw new UserError("This ZIP archive's directory is damaged.");
                 AddDirectory(path); continue;
             }
             CheckSpelling(path);
@@ -149,8 +165,11 @@ public static class ZipExtract
             kinds[path] = false;
             if (size > (ulong)(MaxTotalBytes - total)) throw new UserError("ZIP extraction is limited to 2 GB of extracted data.");
             total += (long)size; longest = Math.Max(longest, path.Length);
-            members.Add(new(path, false, crc, (long)compressed, (long)size, method, flags, (long)offset, raw, DosTime(date, time)));
+            members.Add(new(path, false, crc, (long)compressed, (long)size, method, flags, (long)offset, raw, DosTime(date, time))
+                { Encryption = encryption, AesMethod = values.Aes?.Method ?? 0, AesVersion = values.Aes?.Version ?? 0, DosTime = time });
         }
+        // 5.1 in the ZIP64 end record is accepted only for an archive with WinZip AES entries.
+        if (wide is { Needed: > 45 } && !members.Any(member => member.Method == 99)) throw new UserError("This ZIP archive needs features beyond ZIP64 and was not extracted.");
         if (position != directory.Length) throw new UserError("This ZIP archive has unexpected data around its directory and was not extracted.");
         CheckLayout(archive, members, cdOffset, token);
         directories.Sort((a, b) => a.Count(c => c == '\\').CompareTo(b.Count(c => c == '\\')) is int order and not 0 ? order : string.CompareOrdinal(a, b));
@@ -177,6 +196,18 @@ public static class ZipExtract
         }
     }
 
+    public const string StrongEncryption = "This ZIP archive uses PKWARE strong encryption, which is not supported.";
+
+    // Bit 0 marks encryption: WinZip AES when the method is 99 with its 0x9901 field, otherwise
+    // traditional ZipCrypto. AES fields without both are damage.
+    private static ZipEncryption Encryption(ushort flags, ushort method, AesField? aes)
+    {
+        bool encrypted = (flags & 1) != 0;
+        if ((method == 99) != aes.HasValue || method == 99 && !encrypted) throw new UserError("This ZIP archive's directory is damaged.");
+        if (!encrypted) return ZipEncryption.None;
+        return aes?.Strength switch { null => ZipEncryption.ZipCrypto, 1 => ZipEncryption.Aes128, 2 => ZipEncryption.Aes192, _ => ZipEncryption.Aes256 };
+    }
+
     // Local headers are read now, so a plan never claims a member whose data cannot be located.
     // Member ranges may not overlap one another or the directory (no shared-data expansion).
     private static void CheckLayout(Stream archive, List<ZipMember> members, long cdOffset, CancellationToken token)
@@ -185,7 +216,7 @@ public static class ZipExtract
         foreach (var member in members)
         {
             token.ThrowIfCancellationRequested();
-            var (dataStart, wide) = LocalData(archive, member, token);
+            var (dataStart, wide, _) = LocalData(archive, member, token);
             // A data descriptor follows the data: at least CRC and two sizes, 8 bytes each with ZIP64.
             long end = dataStart + member.CompressedSize + ((member.Flags & 8) == 0 ? 0 : wide ? 20 : 12);
             if (end > cdOffset) throw new UserError("This ZIP archive's directory is damaged.");
@@ -198,8 +229,15 @@ public static class ZipExtract
 
     private static long LocalDataStart(Stream archive, ZipMember member, CancellationToken token) => LocalData(archive, member, token).Start;
 
+    // Info-ZIP takes the ZipCrypto check time from the local header.
+    private static (long Start, ZipMember Member) LocalCrypto(Stream archive, ZipMember member, CancellationToken token)
+    {
+        var (start, _, time) = LocalData(archive, member, token);
+        return (start, member.Encryption == ZipEncryption.ZipCrypto && time != member.DosTime ? member with { DosTime = time } : member);
+    }
+
     // The local header must agree with the directory; ZIP64 sizes come from its own 0x0001 field.
-    private static (long Start, bool Wide) LocalData(Stream archive, ZipMember member, CancellationToken token)
+    private static (long Start, bool Wide, ushort Time) LocalData(Stream archive, ZipMember member, CancellationToken token)
     {
         if (member.LocalOffset + LocalRecord > archive.Length) throw new UserError("This ZIP archive's directory is damaged.");
         byte[] local = ReadAt(archive, member.LocalOffset, LocalRecord, token);
@@ -213,12 +251,14 @@ public static class ZipExtract
         bool wideSize = size32 == uint.MaxValue, wideCompressed = compressed32 == uint.MaxValue;
         var values = CheckExtra(ReadAt(archive, member.LocalOffset + LocalRecord + nameLength, extraLength, token), (flags & 0x0800) != 0,
             wideSize, wideCompressed, plainLocal: wideSize || wideCompressed ? null : (size32, compressed32));
+        if (values.Aes is { } aes ? aes.Method != member.AesMethod || aes.Version != member.AesVersion || Encryption(flags, method, aes) != member.Encryption
+            : member.Method == 99) throw new UserError("This ZIP archive's directory is damaged.");
         if ((flags & 8) == 0 && (U32(local, 14) != member.Crc || (values.Compressed ?? compressed32) != (ulong)member.CompressedSize || (values.Size ?? size32) != (ulong)member.Size))
             throw new UserError("This ZIP archive's directory is damaged.");
-        return (member.LocalOffset + LocalRecord + nameLength + extraLength, values.WideSizes);
+        return (member.LocalOffset + LocalRecord + nameLength + extraLength, values.WideSizes, U16(local, 10));
     }
 
-    private readonly record struct Zip64Record(long RecordOffset, uint Disk, uint CdDisk, ulong DiskEntries, ulong Entries, ulong CdSize, ulong CdOffset);
+    private readonly record struct Zip64Record(long RecordOffset, uint Disk, uint CdDisk, ulong DiskEntries, ulong Entries, ulong CdSize, ulong CdOffset, int Needed);
 
     // A ZIP64 end record and its locator sit directly before the end record, in that order.
     // Null when there is no locator there (an ordinary ZIP).
@@ -233,32 +273,66 @@ public static class ZipExtract
         byte[] record = ReadAt(archive, recordOffset, Zip64EndRecord, token);
         if (U32(record, 0) != 0x06064b50) throw new UserError("This ZIP archive's directory is damaged.");
         // Version 2 records (central directory encryption) carry extra data; only the plain record is read.
-        if (U64(record, 4) != Zip64EndRecord - 12 || (U16(record, 14) & 0xFF) > 45) throw new UserError("This ZIP archive needs features beyond ZIP64 and was not extracted.");
-        return new(recordOffset, U32(record, 16), U32(record, 20), U64(record, 24), U64(record, 32), U64(record, 40), U64(record, 48));
+        if (U64(record, 4) != Zip64EndRecord - 12 || (U16(record, 14) & 0xFF) > 51) throw new UserError("This ZIP archive needs features beyond ZIP64 and was not extracted.");
+        return new(recordOffset, U32(record, 16), U32(record, 20), U64(record, 24), U64(record, 32), U64(record, 40), U64(record, 48), U16(record, 14) & 0xFF);
     }
 
     /// Writes exactly one member's contents. Output that is too long, too short or fails
-    /// CRC-32 throws; the caller discards its private staging file.
-    public static void Extract(Stream archive, ZipMember member, Stream output, CancellationToken token)
+    /// CRC-32 throws; the caller discards its private staging file. Encrypted members need the
+    /// password; AES members are authenticated before anything is decrypted.
+    public static void Extract(Stream archive, ZipMember member, Stream output, CancellationToken token, ZipPassword? password = null)
     {
         token.ThrowIfCancellationRequested();
-        long start = LocalDataStart(archive, member, token);
+        bool encrypted = member.Encryption != ZipEncryption.None;
+        if (encrypted && password is null) throw new UserError("This ZIP entry is encrypted and needs a password.");
+        long start;
+        (start, member) = encrypted ? LocalCrypto(archive, member, token) : (LocalDataStart(archive, member, token), member);
         archive.Position = start;
         using var slice = new Slice(archive, member.CompressedSize, token);
-        using Stream source = member.Method == 8 ? new DeflateStream(slice, CompressionMode.Decompress, true) : slice;
+        using Stream? decrypted = encrypted ? ZipDecrypt.Open(slice, member, password!, offset =>
+        {
+            archive.Position = start + offset; return new Slice(archive, member.CompressedSize - offset, token);
+        }, token) : null;
+        Stream data = decrypted ?? slice;
+        using Stream source = member.DataMethod == 8 ? new DeflateStream(data, CompressionMode.Decompress, true) : data;
         byte[] buffer = new byte[65536]; long written = 0; uint crc = 0xFFFFFFFF;
         for (;;)
         {
             token.ThrowIfCancellationRequested();
             int count;
             try { count = source.Read(buffer, 0, (int)Math.Min(buffer.Length, member.Size - written + 1)); }
-            catch (InvalidDataException) { throw new UserError("A ZIP entry's compressed data is damaged and was not extracted."); }
+            catch (InvalidDataException) { throw new UserError(encrypted ? ZipDecrypt.Damaged : "A ZIP entry's compressed data is damaged and was not extracted."); }
             if (count == 0) break;
-            if (count > member.Size - written) throw new UserError("A ZIP entry is larger than its directory says and was not extracted.");
+            if (count > member.Size - written) throw new UserError(encrypted ? ZipDecrypt.Damaged : "A ZIP entry is larger than its directory says and was not extracted.");
             crc = Crc32(crc, buffer.AsSpan(0, count)); output.Write(buffer, 0, count); written += count;
         }
-        if (written != member.Size) throw new UserError("A ZIP entry is shorter than its directory says and was not extracted.");
-        if ((crc ^ 0xFFFFFFFF) != member.Crc) throw new UserError("A ZIP entry failed its CRC check and was not extracted.");
+        if (written != member.Size) throw new UserError(encrypted ? ZipDecrypt.Damaged : "A ZIP entry is shorter than its directory says and was not extracted.");
+        // AE-2 stores no CRC; its authentication code was checked above.
+        bool checkCrc = member.Method != 99 || member.AesVersion == 1;
+        if (checkCrc && (crc ^ 0xFFFFFFFF) != member.Crc) throw new UserError(encrypted ? ZipDecrypt.Damaged : "A ZIP entry failed its CRC check and was not extracted.");
+    }
+
+    /// The quick password check for one encrypted member (AES verifier or ZipCrypto header
+    /// byte) without decrypting its data. Plain members always match.
+    public static bool PasswordMatches(Stream archive, ZipMember member, ZipPassword password, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        if (member.Encryption == ZipEncryption.None) return true;
+        (archive.Position, member) = LocalCrypto(archive, member, token);
+        using var slice = new Slice(archive, member.CompressedSize, token);
+        return ZipDecrypt.PasswordMatches(slice, member, password);
+    }
+
+    /// The full check for one ZipCrypto member, whose one-byte header check lets a wrong
+    /// password through 1 time in 256: decrypts, inflates and compares the CRC-32 without
+    /// keeping any output. AES members (2-byte verifier, then authentication) and plain
+    /// members only get the quick check.
+    public static bool PasswordVerified(Stream archive, ZipMember member, ZipPassword password, CancellationToken token)
+    {
+        if (!PasswordMatches(archive, member, password, token)) return false;
+        if (member.Encryption != ZipEncryption.ZipCrypto) return true;
+        try { Extract(archive, member, Stream.Null, token, password); return true; }
+        catch (UserError error) when (error.Message == ZipDecrypt.Damaged) { return false; }
     }
 
     /// Mark of the Web never weakens: at least Internet (3), and a Restricted (4) source stays 4.
@@ -330,7 +404,8 @@ public static class ZipExtract
     internal static readonly System.Text.RegularExpressions.Regex ShortName = new(@"^[^.~]{0,7}~[0-9]+(\.[^.]{0,3})?$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     /// WideSizes: the field carries 8-byte sizes, so a data descriptor has 8-byte sizes too.
-    private readonly record struct Zip64Values(ulong? Size, ulong? Compressed, ulong? Offset, bool Present, bool WideSizes);
+    private readonly record struct Zip64Values(ulong? Size, ulong? Compressed, ulong? Offset, bool Present, bool WideSizes, AesField? Aes = null);
+    private readonly record struct AesField(ushort Version, byte Strength, ushort Method);
 
     // The ZIP64 field (0x0001) holds exactly the values whose 32-bit fields carry the marker, in
     // the fixed order size, compressed size, local header offset (8 bytes each), disk (4 bytes).
@@ -340,7 +415,7 @@ public static class ZipExtract
     private static Zip64Values CheckExtra(ReadOnlySpan<byte> extra, bool utf8, bool wideSize = false, bool wideCompressed = false, bool wideOffset = false, bool wideDisk = false,
         (uint Size, uint Compressed)? plainLocal = null)
     {
-        int at = 0; var values = new Zip64Values(null, null, null, false, false);
+        int at = 0; var values = new Zip64Values(null, null, null, false, false); AesField? aes = null;
         while (at < extra.Length)
         {
             if (at + 4 > extra.Length) throw new UserError("This ZIP archive's directory is damaged.");
@@ -361,13 +436,22 @@ public static class ZipExtract
                 if (wideDisk && BinaryPrimitives.ReadUInt32LittleEndian(field[read..]) != 0) throw new UserError("Split or multi-disk ZIP archives are not supported.");
                 values = new(wide, compressed, offset, true, wideSize || wideCompressed);
             }
-            if (id is 0x0017 or 0x9901) throw new UserError("Encrypted ZIP archives are not supported.");
+            if (id == 0x0017) throw new UserError(StrongEncryption);
+            // WinZip AES: version (AE-1 or AE-2), vendor "AE", strength 1–3, the actual method.
+            if (id == 0x9901)
+            {
+                var field = extra.Slice(at + 4, size);
+                if (aes is not null || size != 7 || field[2] != (byte)'A' || field[3] != (byte)'E') throw new UserError("This ZIP archive's directory is damaged.");
+                ushort version = BinaryPrimitives.ReadUInt16LittleEndian(field);
+                if (version is not 1 and not 2 || field[4] is < 1 or > 3) throw new UserError("This ZIP archive uses an encryption variant that is not supported.");
+                aes = new(version, field[4], BinaryPrimitives.ReadUInt16LittleEndian(field[5..]));
+            }
             // A second, possibly different Unicode name is ambiguous unless the header itself is UTF-8.
             if (id == 0x7075 && !utf8) throw new UserError("This ZIP archive uses legacy non-Unicode names. Re-create it with Unicode (UTF-8) names.");
             at += 4 + size;
         }
         if ((wideSize || wideCompressed || wideOffset || wideDisk) && !values.Present) throw new UserError("This ZIP archive's directory is damaged.");
-        return values;
+        return values with { Aes = aes };
     }
 
     private static DateTime? DosTime(ushort date, ushort time)
@@ -383,6 +467,7 @@ public static class ZipExtract
         for (int k = 0; k < 8; k++) c = (c & 1) != 0 ? 0xEDB88320 ^ (c >> 1) : c >> 1;
         return c;
     }).ToArray();
+    internal static uint Crc32Byte(uint state, byte b) => CrcTable[(state ^ b) & 0xFF] ^ (state >> 8);
     public static uint Crc32(uint state, ReadOnlySpan<byte> data)
     {
         foreach (byte b in data) state = CrcTable[(state ^ b) & 0xFF] ^ (state >> 8);

@@ -16813,5 +16813,100 @@
     "仅移除位置需要恰好一个源 EXIF 块。",
     "僅移除位置需要恰好一個來源 EXIF 區塊。",
     "位置情報のみの削除には、元の EXIF ブロックがちょうど1個必要です。"
+  ],
+  "Type the archive's password.": [
+    "请输入压缩包的密码。",
+    "請輸入壓縮檔的密碼。",
+    "アーカイブのパスワードを入力してください。"
+  ],
+  "The password contains characters that cannot be used.": [
+    "密码中含有无法使用的字符。",
+    "密碼中含有無法使用的字元。",
+    "パスワードに使用できない文字が含まれています。"
+  ],
+  "The password is too long.": [
+    "密码太长。",
+    "密碼太長。",
+    "パスワードが長すぎます。"
+  ],
+  "The password does not match this encrypted ZIP entry, so it was not extracted.": [
+    "密码与这个加密的 ZIP 条目不符，因此未解压它。",
+    "密碼與這個加密的 ZIP 項目不符，因此未解壓縮它。",
+    "パスワードがこの暗号化された ZIP 項目と一致しないため、展開しませんでした。"
+  ],
+  "An encrypted ZIP entry failed its authentication check: the archive is damaged or was altered. It was not extracted.": [
+    "一个加密的 ZIP 条目未通过认证检查：压缩包已损坏或被改动。未解压该条目。",
+    "一個加密的 ZIP 項目未通過驗證檢查：壓縮檔已損毀或遭變更。未解壓縮該項目。",
+    "暗号化された ZIP 項目が認証チェックに失敗しました。アーカイブが破損しているか改ざんされています。この項目は展開していません。"
+  ],
+  "An encrypted ZIP entry failed its integrity check (the password may be wrong, or the archive is damaged) and was not extracted.": [
+    "一个加密的 ZIP 条目未通过完整性检查（可能密码错误，或压缩包已损坏），未解压该条目。",
+    "一個加密的 ZIP 項目未通過完整性檢查（可能密碼錯誤，或壓縮檔已損毀），未解壓縮該項目。",
+    "暗号化された ZIP 項目が整合性チェックに失敗したため（パスワードが違うか、アーカイブが破損している可能性があります）、展開しませんでした。"
+  ],
+  "This ZIP archive uses PKWARE strong encryption, which is not supported.": [
+    "这个 ZIP 压缩包使用 PKWARE 强加密，暂不支持。",
+    "這個 ZIP 壓縮檔使用 PKWARE 強加密，目前不支援。",
+    "この ZIP アーカイブは PKWARE 強力暗号化を使用しており、サポートされていません。"
+  ],
+  "This ZIP archive uses an encryption variant that is not supported.": [
+    "这个 ZIP 压缩包使用了不支持的加密变体。",
+    "這個 ZIP 壓縮檔使用了不支援的加密變體。",
+    "この ZIP アーカイブはサポートされていない暗号化方式を使用しています。"
+  ],
+  "This ZIP entry is encrypted and needs a password.": [
+    "这个 ZIP 条目已加密，需要密码。",
+    "這個 ZIP 項目已加密，需要密碼。",
+    "この ZIP 項目は暗号化されており、パスワードが必要です。"
+  ],
+  "The password is not correct. Nothing was extracted.": [
+    "密码不正确。未解压任何内容。",
+    "密碼不正確。未解壓縮任何內容。",
+    "パスワードが正しくありません。何も展開していません。"
+  ],
+  "{0} of {1} file(s) are encrypted ({2}). Type the archive's password to extract them.": [
+    "{1} 个文件中有 {0} 个已加密（{2}）。请输入压缩包的密码以解压它们。",
+    "{1} 個檔案中有 {0} 個已加密（{2}）。請輸入壓縮檔的密碼以解壓縮它們。",
+    "{1} 個のファイルのうち {0} 個が暗号化されています（{2}）。展開するにはアーカイブのパスワードを入力してください。"
+  ],
+  "Some files use ZipCrypto, the old PKWARE encryption. It is weak and can be broken, so do not rely on it to protect anything. Swivel only opens it and never creates it.": [
+    "部分文件使用 ZipCrypto，即旧的 PKWARE 加密。这种加密很弱、可被破解，不要依赖它保护任何内容。Swivel 只打开它，从不创建它。",
+    "部分檔案使用 ZipCrypto，即舊的 PKWARE 加密。這種加密很弱、可被破解，請勿依賴它保護任何內容。Swivel 只開啟它，從不建立它。",
+    "一部のファイルは古い PKWARE 暗号化である ZipCrypto を使用しています。この方式は弱く解読される可能性があるため、何かを保護する手段として頼らないでください。Swivel はこれを開くだけで、作成することはありません。"
+  ],
+  "Each AES-encrypted file is checked against its authentication code before it is decrypted, and appears only if that check passes.": [
+    "每个 AES 加密的文件在解密前都会核对其认证码，只有核对通过才会出现。",
+    "每個 AES 加密的檔案在解密前都會核對其驗證碼，只有核對通過才會出現。",
+    "AES で暗号化された各ファイルは、復号の前に認証コードが照合され、照合に成功した場合にのみ表示されます。"
+  ],
+  "If some files use a different password, they are left out and listed after extraction. Strong PKWARE encryption is not supported.": [
+    "如果部分文件使用了不同的密码，它们会被略过，并在解压后列出。不支持 PKWARE 强加密。",
+    "如果部分檔案使用了不同的密碼，它們會被略過，並在解壓縮後列出。不支援 PKWARE 強加密。",
+    "一部のファイルが別のパスワードを使用している場合、それらは除外され、展開後に一覧表示されます。PKWARE 強力暗号化はサポートされていません。"
+  ],
+  "The password stays in memory for this extraction only. It is never saved, logged or sent anywhere. Windows cannot guarantee that every copy in memory is erased afterwards.": [
+    "密码只在本次解压期间保留在内存中，绝不会被保存、记录或发送到任何地方。Windows 无法保证之后内存中的每一份副本都会被清除。",
+    "密碼只在本次解壓縮期間保留在記憶體中，絕不會被儲存、記錄或傳送到任何地方。Windows 無法保證之後記憶體中的每一份副本都會被清除。",
+    "パスワードはこの展開の間だけメモリに保持され、保存・記録・送信されることはありません。ただし、Windows では後でメモリ内のすべてのコピーが消去されることを保証できません。"
+  ],
+  "Archive password": [
+    "压缩包密码",
+    "壓縮檔密碼",
+    "アーカイブのパスワード"
+  ],
+  "{0} (encrypted, {1})": [
+    "{0}（已加密，{1}）",
+    "{0}（已加密，{1}）",
+    "{0}（暗号化、{1}）"
+  ],
+  "{0} encrypted file(s) were left out because the password did not match them: {1}": [
+    "{0} 个加密文件因密码不符而被略过：{1}",
+    "{0} 個加密檔案因密碼不符而被略過：{1}",
+    "パスワードが一致しなかったため、暗号化された {0} 個のファイルを除外しました：{1}"
+  ],
+  "The archive could not be read. Nothing was extracted.": [
+    "无法读取压缩包。未解压任何内容。",
+    "無法讀取壓縮檔。未解壓縮任何內容。",
+    "アーカイブを読み取れませんでした。何も展開していません。"
   ]
 }
