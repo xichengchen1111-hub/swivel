@@ -14,7 +14,8 @@ internal static class VideoEditChecks
         Retime(check, reject);
         foreach (var text in new[] { VideoEdit.TooSmall, VideoEdit.CannotRetime, VideoEdit.TooFast, "No turn", "90° clockwise", "180°", "90° counterclockwise", "Flip left to right", "Flip upside down", "Whole picture", "Turn",
             "Crop to shape", "Crop position", "Picture", "Speed", "Crop position (left to right, or top to bottom)", "The new video is {0} × {1} pixels and {2} long.",
-            "At any speed but 1× the sound is removed: Windows' editing API used here can't change its speed.", "When the picture or speed changes, it is saved as “name edited.mp4” instead." })
+            VideoEdit.SoundTooLong, VideoEdit.SoundFailed,
+            "At this speed the sound is time-stretched to the new length with its pitch kept (Swivel's own method, not the Mac's): slowed sound can echo a little and sped-up sound can soften sharp sounds such as claps. Windows then encodes it as AAC beside the unchanged picture.", "When the picture or speed changes, it is saved as “name edited.mp4” instead." })
             check(Strings.Table.TryGetValue(text, out var row) && row.Length == 3 && row.All(x => x.Length > 0 && (!text.Contains("{2}") || x.Contains("{0}") && x.Contains("{1}") && x.Contains("{2}"))), "Video edit message translated: " + text);
     }
 
