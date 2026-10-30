@@ -14,6 +14,30 @@ internal static class DocumentTextNativeChecks
 {
     public static void Run(string directory,Action<bool,string> check,Action<Action,string> reject)
     {
+        string dataPath=Path.Combine(directory,"preview data.json");
+        string dataText="{\"text\":\""+new string('a',65526)+"😀"+new string('b',30)+"\"}";
+        File.WriteAllText(dataPath,dataText,new UTF8Encoding(false));
+        byte[] dataOriginal=File.ReadAllBytes(dataPath);int beforePreview=Directory.GetFiles(directory).Length;
+        using(var preview=FileTextPreview.Open(dataPath,default))
+        {
+            check(preview.Text==dataText,"Strict data preview preserves validated source");
+            reject(()=>File.WriteAllText(dataPath,"{}"),"Data preview source remains pinned");
+            reject(()=>Directory.Move(directory,directory+" moved"),"Data preview ancestors remain pinned");
+            var previewApp=Application.Current as App??new App();previewApp.ShutdownMode=ShutdownMode.OnExplicitShutdown;
+            var window=new FileTextPreviewDialog(previewApp,preview);
+            try
+            {
+                var root=(DockPanel)window.Content;
+                check(root.Children.OfType<Button>().Count()==1&&root.Children.OfType<Button>().Single().IsCancel,"Data preview has only Close and no export/play action");
+                var body=(StackPanel)root.Children.OfType<ScrollViewer>().Single().Content;
+                var text=body.Children.OfType<TextBox>().Last();
+                check(body.Children.OfType<TextBox>().All(x=>x.IsReadOnly)&&text.Text==DocumentTextDialog.Preview(dataText)&&text.Text.Length<=65536&&!char.IsHighSurrogate(text.Text[^1]),"Data display uses existing surrogate-safe 65536 bound");
+            }
+            finally{window.Close();}
+        }
+        check(File.ReadAllBytes(dataPath).SequenceEqual(dataOriginal)&&Directory.GetFiles(directory).Length==beforePreview,"Data preview creates no files and leaves original bytes unchanged");
+        File.Move(dataPath,dataPath+" released");
+        reject(()=>FileTextPreview.Open(dataPath,new CancellationToken(true)),"Data preview pre-cancel precedes file access");
         string path=Path.Combine(directory,"document source.txt");byte[] source=new UTF8Encoding(true).GetPreamble().Concat(Encoding.UTF8.GetBytes("中文 👩‍👩‍👧‍👦 {\\object}\r\nlast")).ToArray();File.WriteAllBytes(path,source);
         using(var file=DocumentTextFile.Open(path,default))
         {

@@ -15858,5 +15858,35 @@
     "一次最多选择 32 个应用退出。",
     "一次最多選擇 32 個 App 結束。",
     "一度に終了できるアプリは最大 32 個です。"
+  ],
+  "Preview Audio": [
+    "预览音频",
+    "預覽音訊",
+    "音声をプレビュー"
+  ],
+  "Preview is limited to the first 65,536 UTF-16 units. No file is saved from this preview.": [
+    "预览仅显示前 65,536 个 UTF-16 单元。此预览不保存文件。",
+    "預覽僅顯示前 65,536 個 UTF-16 單元。此預覽不儲存檔案。",
+    "プレビューは先頭の65,536 UTF-16単位まで表示します。このプレビューからファイルは保存されません。"
+  ],
+  "Read-only subtitle or data source text, validated by the existing format reader. Only strict UTF-8 or BOM-marked UTF-16 is accepted. Subtitles are limited to 8 MiB and the existing cue/text limits; data files to 32 MiB and the existing structure limits. Binary plist is displayed as generated YAML. Nothing is executed, fetched or exported. The source stays held until this window closes.": [
+    "只读显示字幕或数据源文本，由现有格式读取器验证。仅接受严格 UTF-8 或带 BOM 的 UTF-16。字幕上限为 8 MiB，并沿用条目及文本限制；数据文件上限为 32 MiB，并沿用结构限制。二进制 plist 显示为生成的 YAML。不执行、不获取外部内容、不导出。源文件将保持占用直至窗口关闭。",
+    "唯讀顯示字幕或資料來源文字，由現有格式讀取器驗證。僅接受嚴格 UTF-8 或含 BOM 的 UTF-16。字幕上限為 8 MiB，並沿用項目及文字限制；資料檔案上限為 32 MiB，並沿用結構限制。二進位 plist 顯示為產生的 YAML。不執行、不擷取外部內容、不匯出。來源檔案將保持持有直到視窗關閉。",
+    "既存の形式リーダーで検証した字幕またはデータのソーステキストを読み取り専用で表示します。厳密なUTF-8またはBOM付きUTF-16のみ受け付けます。字幕は8 MiBと既存の字幕数・テキスト制限、データは32 MiBと既存の構造制限に従います。バイナリplistは生成したYAMLで表示します。実行、外部取得、書き出しは行いません。ウィンドウを閉じるまで元ファイルを保持します。"
+  ],
+  "Read-only audio preview. Integer PCM WAV is read directly; supported float WAV, integer AIFF/AIFC and G.711 WAV are converted to PCM in memory without clipping. Play Original explicitly plays up to the first 10 seconds as 16-bit PCM. The waveform represents the complete source. No editing, file export or automatic playback is provided here. The source stays held until this window and audio preparation finish.": [
+    "只读音频预览。整数 PCM WAV 直接读取；支持的浮点 WAV、整数 AIFF/AIFC 和 G.711 WAV 在内存中转为 PCM，不削波。点击“播放原音”才会以 16 位 PCM 播放最初至多 10 秒。波形代表完整来源。此处不提供编辑、文件导出或自动播放。源文件将保持占用，直至窗口关闭且音频准备完成。",
+    "唯讀音訊預覽。整數 PCM WAV 直接讀取；支援的浮點 WAV、整數 AIFF/AIFC 和 G.711 WAV 在記憶體中轉為 PCM，不削波。按下「播放原音」才會以 16 位元 PCM 播放最初最多 10 秒。波形代表完整來源。此處不提供編輯、檔案匯出或自動播放。來源檔案將保持持有，直到視窗關閉且音訊準備完成。",
+    "読み取り専用の音声プレビューです。整数PCM WAVは直接読み取り、対応する浮動小数点WAV、整数AIFF/AIFC、G.711 WAVはクリッピングせずメモリ内でPCMに変換します。「元の音声を再生」を押すと先頭の最大10秒を16ビットPCMで再生します。波形はソース全体を表します。編集、ファイル書き出し、自動再生はありません。ウィンドウが閉じ、音声の準備が完了するまで元ファイルを保持します。"
+  ],
+  "A floating shelf and main-window shelf share session references and copy drag. Explicit single-file preview supports existing SDR PNG/JPEG/BMP/TIFF/GIF/TGA/PSD/WebP images; extracted TXT/TEXT/MD/MARKDOWN/LOG/DOC/DOCX/ODT/RTF/HTML/HTM/EPUB text; strict SRT/VTT/ASS/SSA/LRC/SBV and JSON/JSONL/NDJSON/PLIST/CSV/TSV source text (binary plist as YAML); integer/float/G.711 WAV and integer AIFF/AIFC via in-memory PCM preparation; and MP3/AAC/FLAC/M4A via Windows decoding. Audio playback is manual and limited to the first 10 seconds. Shelf refresh never reads previews. Folders, virtual/cloud items, other formats (including ICO), system preview handlers and non-activating focus remain planned; real Windows acceptance is pending.": [
+    "浮动文件架与主窗口文件架共享会话引用并支持复制拖出。显式单文件预览支持现有 SDR PNG/JPEG/BMP/TIFF/GIF/TGA/PSD/WebP 图片；提取 TXT/TEXT/MD/MARKDOWN/LOG/DOC/DOCX/ODT/RTF/HTML/HTM/EPUB 文字；严格读取 SRT/VTT/ASS/SSA/LRC/SBV 和 JSON/JSONL/NDJSON/PLIST/CSV/TSV 源文本（二进制 plist 显示为 YAML）；整数/浮点/G.711 WAV 和整数 AIFF/AIFC 在内存中准备为 PCM；MP3/AAC/FLAC/M4A 通过 Windows 解码。音频仅手动播放最初至多 10 秒。刷新文件架从不读取预览。文件夹、虚拟/云项目、其他格式（包括 ICO）、系统预览处理程序及不激活焦点仍在计划中；真实 Windows 验收尚待完成。",
+    "浮動檔案架與主視窗檔案架共用工作階段參照並支援複製拖出。明確的單檔預覽支援現有 SDR PNG/JPEG/BMP/TIFF/GIF/TGA/PSD/WebP 圖片；擷取 TXT/TEXT/MD/MARKDOWN/LOG/DOC/DOCX/ODT/RTF/HTML/HTM/EPUB 文字；嚴格讀取 SRT/VTT/ASS/SSA/LRC/SBV 和 JSON/JSONL/NDJSON/PLIST/CSV/TSV 來源文字（二進位 plist 顯示為 YAML）；整數/浮點/G.711 WAV 和整數 AIFF/AIFC 在記憶體中準備為 PCM；MP3/AAC/FLAC/M4A 透過 Windows 解碼。音訊僅手動播放最初最多 10 秒。重新整理檔案架從不讀取預覽。資料夾、虛擬/雲端項目、其他格式（包括 ICO）、系統預覽處理程式及不啟用焦點仍在計畫中；真實 Windows 驗收尚待完成。",
+    "フローティングシェルフとメイン画面のシェルフはセッション参照とコピー用ドラッグを共有します。明示的な単一ファイルプレビューは既存のSDR PNG/JPEG/BMP/TIFF/GIF/TGA/PSD/WebP画像、TXT/TEXT/MD/MARKDOWN/LOG/DOC/DOCX/ODT/RTF/HTML/HTM/EPUBの抽出テキスト、厳密なSRT/VTT/ASS/SSA/LRC/SBVとJSON/JSONL/NDJSON/PLIST/CSV/TSVのソーステキスト（バイナリplistはYAML）、メモリ内でPCMに準備する整数・浮動小数点・G.711 WAVと整数AIFF/AIFC、WindowsでデコードするMP3/AAC/FLAC/M4Aに対応します。音声は手動で先頭の最大10秒のみ再生します。シェルフの更新でプレビューを読み取ることはありません。フォルダー、仮想・クラウド項目、その他の形式（ICOを含む）、システムのプレビューハンドラー、非アクティブのフォーカスは今後の予定です。実際のWindowsでの受け入れ確認は未実施です。"
+  ],
+  "Windows decoded this file to 16-bit PCM first (its codec can change precision, priming or padding; up to 128 MiB and two hours). Nothing is saved from this preview.": [
+    "Windows 先将此文件解码为 16 位 PCM（其编解码器可能改变精度、前置静音或填充；上限 128 MiB、两小时）。此预览不会保存任何文件。",
+    "Windows 先將此檔案解碼為 16 位元 PCM（其編解碼器可能改變精度、前置靜音或填補；上限 128 MiB、兩小時）。此預覽不會儲存任何檔案。",
+    "Windows がこのファイルを先に 16 ビット PCM にデコードしました（コーデックにより精度、先頭の無音、パディングが変わることがあります。上限 128 MiB、2 時間）。このプレビューからは何も保存されません。"
   ]
 }

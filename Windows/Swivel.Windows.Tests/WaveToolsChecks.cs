@@ -19,6 +19,17 @@ internal static class WaveToolsChecks
         {
             check(document.Info.Bits==bits && !document.Decoded && document.Peaks.Length==600,"Local noise conversion exposes integer PCM without Windows-decoder notice");
             var app=System.Windows.Application.Current as App??new App();
+            int previewFiles=Directory.GetFiles(Path.GetDirectoryName(path)!).Length;
+            var readOnly=new WavePreviewDialog(app,document);
+            try
+            {
+                var previewRoot=(System.Windows.Controls.DockPanel)readOnly.Content;
+                var footer=previewRoot.Children.OfType<System.Windows.Controls.StackPanel>().Single();
+                var buttons=footer.Children.OfType<System.Windows.Controls.WrapPanel>().Single().Children.OfType<System.Windows.Controls.Button>().ToArray();
+                check(buttons.Length==3&&buttons.Select(x=>x.Content?.ToString()).SequenceEqual(new[]{app.L("Play Original"),app.L("Stop"),app.L("Close")}),"Converted audio preview offers manual Play/Stop/Close only, never Save");
+            }
+            finally{readOnly.Close();readOnly.FinishPreviewAsync().GetAwaiter().GetResult();}
+            check(Directory.GetFiles(Path.GetDirectoryName(path)!).Length==previewFiles&&File.ReadAllBytes(path).SequenceEqual(original),"Converted audio read-only preview creates no files and preserves source bytes");
             var dialog=new WaveNoiseDialog(app,document);
             var body=(System.Windows.Controls.StackPanel)((System.Windows.Controls.DockPanel)dialog.Content).Children.OfType<System.Windows.Controls.ScrollViewer>().Single().Content;
             check(body.Children.OfType<System.Windows.Controls.TextBlock>().Any(x=>x.Text==app.L(WaveNoiseInput.Hint)),"Noise dialog shows supported local inputs and conversion limits");
