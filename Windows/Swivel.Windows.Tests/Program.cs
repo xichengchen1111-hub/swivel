@@ -29,6 +29,13 @@ internal static class Program
         string directory = Path.Combine(Path.GetTempPath(), "swivel-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var validationApp=new App(validationHost:true);
+        if (args.Length > 0 && args[0] == "--diag-appcheck")
+        {
+            Group("AppCheckNativeChecks", () => AppCheckNativeChecks.Run(directory,Check,Reject));
+            Directory.Delete(directory, true); validationApp.Shutdown();
+            Console.WriteLine("DIAG group failures " + failures.Count);
+            return failures.Count;
+        }
         try
         {
             string source = Path.Combine(directory, "图像 🦜.png");

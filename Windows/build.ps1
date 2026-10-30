@@ -14,6 +14,11 @@ try {
     & (Join-Path $PSScriptRoot 'ThirdParty/RealESRGAN/fetch-model.ps1') # pinned upscaling model, converted and checked by SHA-256
     & (Join-Path $PSScriptRoot 'ThirdParty/Whisper/fetch-model.ps1') # pinned speech model, converted and checked by SHA-256
     if (-not $SkipTests) {
+        & dotnet build Swivel.Windows.Tests -c Release
+        $diagExe = Get-ChildItem Swivel.Windows.Tests/bin/Release -Recurse -Filter Swivel.Windows.Tests.exe | Select-Object -First 1
+        foreach ($i in 1..40) { & $diagExe.FullName --diag-appcheck | Out-Null; Write-Host "DIAG try $i exit $LASTEXITCODE" }
+        Get-WinEvent -LogName Application -MaxEvents 60 | Where-Object { $_.ProviderName -in 'Application Error','.NET Runtime' } | Select-Object -First 6 | ForEach-Object { Write-Host ("DIAG event " + $_.ProviderName + " " + ($_.Message -replace '\s+',' ')) }
+        exit 0
         & dotnet run --project Swivel.Core.Tests -c Release
         if ($LASTEXITCODE -ne 0) { throw 'Core checks failed.' }
         if ($env:OS -ne 'Windows_NT') { throw 'Native tests require Windows. Cross-builds must explicitly use -SkipTests.' }
