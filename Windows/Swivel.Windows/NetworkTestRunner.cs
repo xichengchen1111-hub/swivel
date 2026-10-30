@@ -49,7 +49,7 @@ internal sealed class NetworkTestRunner : IDisposable
         try
         {
             gateways = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(x => x.OperationalStatus == OperationalStatus.Up && x.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel or NetworkInterfaceType.Ppp))
+                .Where(x => x.OperationalStatus == OperationalStatus.Up && x.NetworkInterfaceType is not (NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel))
                 .SelectMany(x => { try { return x.GetIPProperties().GatewayAddresses.Select(g => g.Address).ToArray(); } catch (NetworkInformationException) { return Array.Empty<IPAddress>(); } })
                 .Where(x => !x.Equals(IPAddress.Any) && !x.Equals(IPAddress.IPv6Any)).Distinct().ToArray();
         }
