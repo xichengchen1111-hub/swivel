@@ -14,14 +14,20 @@ public sealed record ProjectFolderResult(IReadOnlyList<ProjectFolder> Folders, I
 // project file is parsed, executed or opened, and a match never authorizes cleanup.
 public static class ProjectFolders
 {
-    private enum Marker { Node, Cargo, Swift, Gradle, CMake, CMakeCache, Python, PythonConfig, DotNet, Next, Godot, Dart }
-    private enum Candidate { Node, Cargo, Swift, Build, Gradle, Python, DotNet, Next, Godot, Dart }
+    private enum Marker { Node, Cargo, Swift, Gradle, CMake, CMakeCache, Python, PythonConfig, DotNet, Next, Godot, Dart, Maven, Nuxt, Svelte, Elixir, Haskell, Zig, Terraform, UnityVersion, UnityProject, Unreal, Pods }
+    private enum Candidate { Node, Cargo, Swift, Build, Gradle, Python, DotNet, Next, Godot, Dart, Nuxt, Svelte, Elixir, Haskell, Zig, Terraform, Unity, Unreal, Pods }
     private static readonly Dictionary<string, Candidate> Candidates = new(StringComparer.OrdinalIgnoreCase)
     {
         ["node_modules"] = Candidate.Node, ["target"] = Candidate.Cargo, [".build"] = Candidate.Swift,
         ["build"] = Candidate.Build, [".gradle"] = Candidate.Gradle, [".venv"] = Candidate.Python,
         ["venv"] = Candidate.Python, ["bin"] = Candidate.DotNet, ["obj"] = Candidate.DotNet,
-        [".next"] = Candidate.Next, [".godot"] = Candidate.Godot, [".dart_tool"] = Candidate.Dart
+        [".next"] = Candidate.Next, [".godot"] = Candidate.Godot, [".dart_tool"] = Candidate.Dart,
+        [".nuxt"] = Candidate.Nuxt, [".output"] = Candidate.Nuxt, [".svelte-kit"] = Candidate.Svelte,
+        ["_build"] = Candidate.Elixir, ["deps"] = Candidate.Elixir, [".stack-work"] = Candidate.Haskell,
+        [".zig-cache"] = Candidate.Zig, ["zig-cache"] = Candidate.Zig, ["zig-out"] = Candidate.Zig,
+        [".terraform"] = Candidate.Terraform, ["Library"] = Candidate.Unity, ["Temp"] = Candidate.Unity,
+        ["Intermediate"] = Candidate.Unreal,
+        ["DerivedDataCache"] = Candidate.Unreal, ["Binaries"] = Candidate.Unreal, ["Pods"] = Candidate.Pods
     };
     private static readonly Dictionary<string, Marker> MarkerNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -32,13 +38,21 @@ public static class ProjectFolders
         ["pyproject.toml"] = Marker.Python, ["requirements.txt"] = Marker.Python, ["setup.py"] = Marker.Python,
         ["pyvenv.cfg"] = Marker.PythonConfig, ["next.config.js"] = Marker.Next,
         ["next.config.mjs"] = Marker.Next, ["next.config.ts"] = Marker.Next,
-        ["project.godot"] = Marker.Godot, ["pubspec.yaml"] = Marker.Dart
+        ["project.godot"] = Marker.Godot, ["pubspec.yaml"] = Marker.Dart,
+        ["pom.xml"] = Marker.Maven, ["mix.exs"] = Marker.Elixir, ["stack.yaml"] = Marker.Haskell,
+        ["build.zig"] = Marker.Zig, ["ProjectVersion.txt"] = Marker.UnityVersion, ["Podfile"] = Marker.Pods
     };
+    private static readonly string[] ScriptExtensions = { "js", "mjs", "cjs", "ts", "mts", "cts" };
     private static readonly string[] DotNetExtensions = { ".csproj", ".fsproj", ".vbproj" };
     private sealed class EvidenceSet
     {
         public int Count { get; private set; }
         public List<string> Paths { get; } = new();
+        public void Merge(EvidenceSet other)
+        {
+            foreach (string path in other.Paths) Add(path);
+            Count += other.Count - other.Paths.Count;
+        }
         public void Add(string path)
         {
             Count++;
@@ -84,6 +98,23 @@ public static class ProjectFolders
                 }
                 Index(child, childPath);
             }
+            // Unity needs two ordinary sibling directories and a regular file
+            // under ProjectSettings. Index once, without any additional I/O.
+            // Retain file evidence for the existing native move recheck contract;
+            // Assets is a metadata-only directory condition, never a file path.
+            bool assets = false;
+            var versions = new EvidenceSet();
+            foreach (var child in node.Children)
+            {
+                token.ThrowIfCancellationRequested();
+                if (!child.Directory || child.Aggregate || child.Issue is not null ||
+                    (child.Children.Count == 0 && child.Skipped > 0)) continue;
+                if (child.Name.Equals("Assets", StringComparison.OrdinalIgnoreCase)) assets = true;
+                if (child.Name.Equals("ProjectSettings", StringComparison.OrdinalIgnoreCase) &&
+                    indices.TryGetValue(child, out var settings) &&
+                    settings.TryGetValue(Marker.UnityVersion, out var version)) versions.Merge(version);
+            }
+            if (assets && versions.Count > 0) markers.Add(Marker.UnityProject, versions);
             // The scanner increments Skipped locally on enumeration failure,
             // while descendant skips are already reported at their own paths.
             if (node.Issue is null && node.Skipped > childSkipped) Issue(path, "Folder enumeration incomplete");
@@ -119,7 +150,10 @@ public static class ProjectFolders
                     switch (candidate)
                     {
                         case Candidate.Node: Match("Node.js dependencies", Marker.Node); break;
-                        case Candidate.Cargo: Match("Rust build output", Marker.Cargo); break;
+                        case Candidate.Cargo:
+                            Match("Rust build output", Marker.Cargo);
+                            Match("Maven build output", Marker.Maven);
+                            break;
                         case Candidate.Swift: Match("Swift build output", Marker.Swift); break;
                         case Candidate.Build:
                             Match("Gradle build output", Marker.Gradle);
@@ -127,10 +161,22 @@ public static class ProjectFolders
                             break;
                         case Candidate.Gradle: Match("Gradle project cache", Marker.Gradle); break;
                         case Candidate.Python: MatchInside("Python virtual environment", Marker.Python, Marker.PythonConfig); break;
-                        case Candidate.DotNet: Match(".NET build output", Marker.DotNet); break;
+                        case Candidate.DotNet:
+                            Match(".NET build output", Marker.DotNet);
+                            if (node.Name.Equals("obj", StringComparison.OrdinalIgnoreCase)) Match("Unity project output", Marker.UnityProject);
+                            break;
                         case Candidate.Next: Match("Next.js build output", Marker.Next); break;
                         case Candidate.Godot: Match("Godot project cache", Marker.Godot); break;
                         case Candidate.Dart: Match("Dart tool cache", Marker.Dart); break;
+                        case Candidate.Nuxt: Match("Nuxt build output", Marker.Nuxt); break;
+                        case Candidate.Svelte: Match("SvelteKit build output", Marker.Svelte); break;
+                        case Candidate.Elixir: Match("Elixir build and dependencies", Marker.Elixir); break;
+                        case Candidate.Haskell: Match("Haskell Stack build output", Marker.Haskell); break;
+                        case Candidate.Zig: Match("Zig build output", Marker.Zig); break;
+                        case Candidate.Terraform: Match("Terraform working folder", Marker.Terraform); break;
+                        case Candidate.Unity: Match("Unity project output", Marker.UnityProject); break;
+                        case Candidate.Unreal: Match("Unreal Engine project output", Marker.Unreal); break;
+                        case Candidate.Pods: Match("CocoaPods dependencies", Marker.Pods); break;
                     }
                     if (matches.Count == 1)
                     {
@@ -161,6 +207,11 @@ public static class ProjectFolders
     private static Marker? MarkerFor(string name)
     {
         if (MarkerNames.TryGetValue(name, out var marker)) return marker;
+        foreach (var (prefix, kind) in new[] { ("nuxt.config.", Marker.Nuxt), ("svelte.config.", Marker.Svelte) })
+            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+                ScriptExtensions.Contains(name[prefix.Length..], StringComparer.OrdinalIgnoreCase)) return kind;
+        if (name.Length > 3 && name.EndsWith(".tf", StringComparison.OrdinalIgnoreCase)) return Marker.Terraform;
+        if (name.Length > 9 && name.EndsWith(".uproject", StringComparison.OrdinalIgnoreCase)) return Marker.Unreal;
         foreach (string extension in DotNetExtensions)
             if (name.Length > extension.Length && name.EndsWith(extension, StringComparison.OrdinalIgnoreCase)) return Marker.DotNet;
         return null;

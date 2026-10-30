@@ -16118,5 +16118,55 @@
     "只读显示字幕或数据源文本，由现有格式读取器验证。仅接受严格 UTF-8 或带 BOM 的 UTF-16。字幕上限为 8 MiB，并沿用条目及文本限制；数据文件上限为 32 MiB，并沿用结构限制。二进制 plist 显示为生成的 YAML。不执行、不获取外部内容、不导出。源文件将保持占用直至窗口关闭。",
     "唯讀顯示字幕或資料來源文字，由現有格式讀取器驗證。僅接受嚴格 UTF-8 或含 BOM 的 UTF-16。字幕上限為 8 MiB，並沿用項目及文字限制；資料檔案上限為 32 MiB，並沿用結構限制。二進位 plist 顯示為產生的 YAML。不執行、不擷取外部內容、不匯出。來源檔案將保持持有直到視窗關閉。",
     "既存の形式リーダーで検証した字幕またはデータのソーステキストを読み取り専用で表示します。厳密なUTF-8またはBOM付きUTF-16のみ受け付けます。字幕は8 MiBと既存の字幕数・テキスト制限、データは32 MiBと既存の構造制限に従います。バイナリplistは生成したYAMLで表示します。実行、外部取得、書き出しは行いません。ウィンドウを閉じるまで元ファイルを保持します。"
+  ],
+  "Maven build output": [
+    "Maven 构建输出",
+    "Maven 建置輸出",
+    "Maven ビルド出力"
+  ],
+  "Nuxt build output": [
+    "Nuxt 构建输出",
+    "Nuxt 建置輸出",
+    "Nuxt ビルド出力"
+  ],
+  "SvelteKit build output": [
+    "SvelteKit 构建输出",
+    "SvelteKit 建置輸出",
+    "SvelteKit ビルド出力"
+  ],
+  "Elixir build and dependencies": [
+    "Elixir 构建与依赖",
+    "Elixir 建置與相依套件",
+    "Elixir ビルドと依存関係"
+  ],
+  "Haskell Stack build output": [
+    "Haskell Stack 构建输出",
+    "Haskell Stack 建置輸出",
+    "Haskell Stack ビルド出力"
+  ],
+  "Zig build output": [
+    "Zig 构建输出",
+    "Zig 建置輸出",
+    "Zig ビルド出力"
+  ],
+  "Terraform working folder": [
+    "Terraform 工作文件夹",
+    "Terraform 工作資料夾",
+    "Terraform 作業フォルダー"
+  ],
+  "Unity project output": [
+    "Unity 项目输出",
+    "Unity 專案輸出",
+    "Unity プロジェクト出力"
+  ],
+  "Unreal Engine project output": [
+    "Unreal Engine 项目输出",
+    "Unreal Engine 專案輸出",
+    "Unreal Engine プロジェクト出力"
+  ],
+  "CocoaPods dependencies": [
+    "CocoaPods 依赖",
+    "CocoaPods 相依套件",
+    "CocoaPods 依存関係"
   ]
 }
