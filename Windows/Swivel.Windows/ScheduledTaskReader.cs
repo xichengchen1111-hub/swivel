@@ -1,5 +1,7 @@
 using System;
 using System.Reflection;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,14 +13,14 @@ internal static class ScheduledTaskReader
 {
     internal static Task<ScheduledTaskSnapshot> ReadAsync(CancellationToken token)
         => ReadAsync(token, new ScheduledTaskAutomation());
-    internal static Task<ScheduledTaskSnapshot> ReadAsync(CancellationToken token, IScheduledTaskAutomation automation)
+    internal static Task<ScheduledTaskSnapshot> ReadAsync(CancellationToken token, IScheduledTaskAutomation automation, bool includeActions = false, Func<TimeSpan>? elapsed = null)
     {
         if (token.IsCancellationRequested) return Task.FromCanceled<ScheduledTaskSnapshot>(token);
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         ScheduledTaskSnapshot? result = null; Exception? failure = null;
         var worker = new Thread(() =>
         {
-            try { result = ScheduledTasks.Scan(access => new Source(automation, access), token); }
+            try { var watch = Stopwatch.StartNew(); result = ScheduledTasks.ScanWithClock(access => new Source(automation, access), elapsed ?? (() => watch.Elapsed), token, includeActions); }
             catch (Exception error) { failure = error; }
             finally { ended.TrySetResult(); }
         }) { IsBackground = true, Name = "Swivel scheduled-task metadata" };
@@ -144,6 +146,24 @@ internal static class ScheduledTaskReader
             public int State() => source.Scalar<int>(owned, "State", path);
             public bool Enabled() => source.Scalar<bool>(owned, "Enabled", path);
             public uint LastResult() => unchecked((uint)source.Scalar<int>(owned, "LastTaskResult", path));
+            public IReadOnlyList<string?> ExecutablePaths()
+            {
+                using var definition = source.Call(owned, "Definition", true, Array.Empty<object?>(), path);
+                using var actions = source.Call(definition, "Actions", true, Array.Empty<object?>(), path);
+                int count = source.Scalar<int>(actions, "Count", path);
+                if (count is < 0 or > 32) throw new ScheduledTaskValueException();
+                var paths = new List<string?>();
+                for (int i = 1; i <= count; i++)
+                {
+                    using var action = source.Call(actions, "Item", true, new object?[] { i }, path);
+                    int type = source.Scalar<int>(action, "Type", path);
+                    // Non-executable actions have no executable path; never inspect script/COM payloads.
+                    string? target = type == 0 ? source.Scalar<string>(action, "Path", path) : null;
+                    if (target?.Length > ScheduledTasks.MaxValueUnits) throw new ScheduledTaskValueException();
+                    paths.Add(target);
+                }
+                return paths.AsReadOnly();
+            }
             public void Dispose() => owned.Dispose();
         }
     }

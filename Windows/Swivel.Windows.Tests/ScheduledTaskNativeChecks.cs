@@ -22,6 +22,27 @@ internal static class ScheduledTaskNativeChecks
         check(ScheduledTaskAutomation.ClassId == new Guid("0F87369F-A4E5-4CFC-BD3E-73E6154572DD"), "Task Scheduler 2.0 system class ID is explicit");
         foreach (var method in typeof(ScheduledTaskAutomation).GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Where(x => x.GetCustomAttribute<DllImportAttribute>() != null))
             check(method.GetCustomAttribute<DllImportAttribute>()!.Value == "ole32.dll" && method.GetCustomAttribute<DefaultDllImportSearchPathsAttribute>()?.Paths == DllImportSearchPath.System32, "COM apartment imports are System32 restricted");
+        var actionNative = new Fake(); var actionReport = await ScheduledTaskReader.ReadAsync(default, actionNative, true);
+        check(!actionReport.Partial && actionReport.Tasks.Single().Executables!.Single() == @"C:\Apps\Foo\foo.exe" && actionNative.Balanced && actionNative.Thread is { IsAlive: false }, "F08 explicitly reads executable action paths on the same owning worker, releasing definitions/actions/items before join");
+        check(!actionNative.Calls.Any(x => new[] { "Arguments", "WorkingDirectory", "Xml", "Run", "Stop", "Delete" }.Contains(x.Split(':')[0])), "Task registration evidence never asks for arguments/scripts or mutation methods");
+        for (int point = 1; point <= actionNative.Returns; point++)
+        {
+            using var cancelled = new CancellationTokenSource(); int at = point;
+            var cut = new Fake { AfterReturn = (n, _) => { if (n == at) cancelled.Cancel(); } };
+            reject(() => ScheduledTaskReader.ReadAsync(cancelled.Token, cut, true).GetAwaiter().GetResult(), "Action scan post-call cancellation is observed");
+            check(cut.Balanced && cut.Thread is { IsAlive: false }, "Cancelled action scan releases every nested COM acquisition and joins");
+        }
+        foreach (string member in new[] { "Definition", "Actions", "Type", "Path" })
+        {
+            var denied = new Fake { FailMember = member }; var partial = await ScheduledTaskReader.ReadAsync(default, denied, true);
+            check(partial.Partial && partial.Tasks.Single().Executables is null && denied.Balanced, "Action access denied remains unreadable with balanced cleanup: " + member);
+        }
+        var unsupported = await ScheduledTaskReader.ReadAsync(default, new Fake { ReplaceMember = "Type", Replacement = 5 }, true);
+        check(unsupported.Tasks.Single().Executables!.Single() is null, "Unsupported task actions remain unresolved rather than absent");
+        var tooMany = new Fake { ActionCount = 33 }; var tooManyResult = await ScheduledTaskReader.ReadAsync(default, tooMany, true);
+        check(tooManyResult.Partial && tooManyResult.Tasks.Single().Executables is null && tooMany.Balanced, "Task action cap is visible and releases collection without reading items");
+        var timed = new Fake(); var timedResult = await ScheduledTaskReader.ReadAsync(default, timed, true, () => TimeSpan.FromSeconds(15));
+        check(timedResult.Partial && timedResult.Tasks.Count == 0 && timed.Balanced && timed.Thread is { IsAlive: false }, "Shared soft deadline skips native task inventory and still joins worker");
         int baselineCalls = native.Returns;
         for (int cancelAt = 1; cancelAt <= baselineCalls; cancelAt++)
         {
@@ -84,12 +105,12 @@ internal static class ScheduledTaskNativeChecks
     private sealed class Fake : IScheduledTaskAutomation
     {
         internal Thread? Thread; internal readonly HashSet<int> ThreadIds = new(); internal readonly List<string> Calls = new();
-        private readonly Com service = new("service"), folder = new("folder"), tasks = new("tasks"), folders = new("folders"), task = new("task");
-        internal int Initializes, Uninitializes, Acquisitions, ReleaseCalls, Returns, PeakAliasCount, ItemAcquisitions, InitResult, RepeatedTasks = 1;
+        private readonly Com service = new("service"), folder = new("folder"), tasks = new("tasks"), folders = new("folders"), task = new("task"), definition = new("definition"), actions = new("actions"), action = new("action");
+        internal int Initializes, Uninitializes, Acquisitions, ReleaseCalls, Returns, PeakAliasCount, ItemAcquisitions, InitResult, RepeatedTasks = 1, ActionCount = 1;
         internal bool ConnectWasEmpty, FlagsWereZero = true, ItemWasOneBased = true, ReleaseFails, UninitializeFails;
         internal string? FailMember, ReturnComFor, ReplaceMember; internal object? Replacement;
         internal Action<int, object?>? AfterReturn; internal Action<string>? BeforeInvoke; internal Action? DuringUninitialize;
-        internal bool Balanced => new[] { service, folder, tasks, folders, task }.All(x => x.Refs == 0) && Acquisitions == ReleaseCalls;
+        internal bool Balanced => new[] { service, folder, tasks, folders, task, definition, actions, action }.All(x => x.Refs == 0) && Acquisitions == ReleaseCalls;
         private void Here() => ThreadIds.Add(Environment.CurrentManagedThreadId);
         public void ConfigureThread(Thread thread) => Thread = thread;
         public int InitializeMta() { Here(); Initializes++; return InitResult; }
@@ -108,8 +129,9 @@ internal static class ScheduledTaskNativeChecks
             object? result = member switch
             {
                 "Connect" => null, "GetFolder" => folder, "GetTasks" => tasks, "GetFolders" => folders,
-                "Count" => com.Kind == "tasks" ? RepeatedTasks : 0, "Item" => task,
-                "Name" => "Task", "Path" => @"\Task", "State" => -7, "Enabled" => false, "LastTaskResult" => -1,
+                "Definition" => definition, "Actions" => actions, "Type" => 0,
+                "Count" => com.Kind == "tasks" ? RepeatedTasks : com.Kind == "actions" ? ActionCount : 0, "Item" => com.Kind == "actions" ? action : task,
+                "Name" => "Task", "Path" => com.Kind == "action" ? @"C:\Apps\Foo\foo.exe" : @"\Task", "State" => -7, "Enabled" => false, "LastTaskResult" => -1,
                 _ => throw new InvalidOperationException("Unexpected member")
             };
             return Returned(result);

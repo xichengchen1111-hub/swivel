@@ -11,6 +11,16 @@ internal static class ScheduledTasksChecks
     {
         var sample = new Tree(); sample.Root.Tasks.Add(new TaskData { Name = "Private task", Path = @"\Private task", State = -9, Enabled = false, Result = uint.MaxValue });
         var report = sample.Scan();
+        var actions = new Tree(); actions.Root.Tasks.Add(new TaskData { Paths = new string?[] { @"C:\Apps\Foo\a.exe", null } });
+        var withActions = ScheduledTasks.ScanWithClock(_ => actions.Open(), () => TimeSpan.Zero, default, true);
+        check(withActions.Tasks.Single().Executables!.SequenceEqual(new string?[] { @"C:\Apps\Foo\a.exe", null }) && actions.Balanced, "Explicit task action paths retained with unsupported actions unresolved and leases released");
+        foreach (var paths in new[] { new string?[33], new string?[] { new string('x', 1025) }, new string?[] { "a\0b" } })
+        {
+            var badActions = new Tree(); badActions.Root.Tasks.Add(new TaskData { Paths = paths });
+            var refused = ScheduledTasks.ScanWithClock(_ => badActions.Open(), () => TimeSpan.Zero, default, true);
+            check(refused.Partial && refused.Tasks.Single().Executables is null && refused.Issues.Any(x => x.Phase == ScheduledTaskPhase.Actions) && badActions.Balanced, "Invalid/oversized task action paths are unresolved whole, not truncated");
+        }
+
         check(!report.Partial && report.Folders.Single().Complete && report.Tasks.Single() == new ScheduledTaskRow(1, "Private task", @"\Private task", -9, false, uint.MaxValue), "Five raw fields survive without inventing task health or ownership");
         check(report.TaskAttempts == 1 && report.FolderAttempts == 1 && report.RetainedTextUnits == 26 && sample.Balanced, "One root and one task are charged and all handles disposed");
         check(ScheduledTasks.State(-9) == "Unknown task state value" && ScheduledTasks.State(0) == "Unknown (reported)", "Unknown raw states have explicit labels");
@@ -89,6 +99,7 @@ internal static class ScheduledTasksChecks
     private static Exception Error() => new COMException("SECRET namespace path should never appear in the reason", unchecked((int)0x80070005));
     private sealed class TaskData
     {
+        internal IReadOnlyList<string?> Paths = Array.Empty<string?>();
         internal string Name = "Task", Path = @"\Task"; internal int State = 3; internal bool Enabled = true; internal uint Result = 0;
         internal string? Failure; internal Action<string>? AfterRead;
         internal T Read<T>(string phase, T value) { if (Failure == phase) throw Error(); AfterRead?.Invoke(phase); return value; }
@@ -136,6 +147,7 @@ internal static class ScheduledTasksChecks
         private sealed class Item(Tree tree, TaskData data) : Lease(tree, "Task"), IScheduledTaskItem
         {
             public string Name() => data.Read("Name", data.Name); public string Path() => data.Read("Path", data.Path);
+            public IReadOnlyList<string?> ExecutablePaths() => data.Paths;
             public int State() => data.Read("State", data.State); public bool Enabled() => data.Read("Enabled", data.Enabled); public uint LastResult() => data.Read("LastResult", data.Result);
         }
     }

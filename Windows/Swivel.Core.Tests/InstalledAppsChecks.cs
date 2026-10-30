@@ -66,6 +66,26 @@ internal static class InstalledAppsChecks
         check(Encoding.UTF8.GetByteCount(InstalledApps.Report(empty,false,L,default))==InstalledApps.MaxReportBytes,"Report UTF8 exact4MiB including all header/newlines/views accepted");
         reject(()=>InstalledApps.Report(empty,false,key=>key==InstalledApps.Scope?L(key)+"x":key,default),"Report onebyte over4MiB refused whole");
         reject(()=>InstalledApps.Report(snap,false,x=>x,new CancellationToken(true)),"Precancel report makes no copy payload");
+        int locationReads = 0;
+        Root LocationRoot() => new(i => i == 0 ? new(RegistrationKeyKind.Item, "app") : new(RegistrationKeyKind.End), _ => new Entry(field =>
+        {
+            if (field == RegistrationField.InstallLocation) { locationReads++; return Text(@"C:\Apps\Foo"); }
+            return Text(field == RegistrationField.Name ? "Foo" : "Publisher");
+        }));
+        var withoutLocations = InstalledApps.Scan(Single(LocationRoot()), default);
+        check(locationReads == 0 && withoutLocations.Records.Single().InstallLocation is null, "Default metadata reader still does not request InstallLocation");
+        var withLocations = InstalledApps.Scan(Single(LocationRoot()), default, true);
+        check(locationReads == 1 && withLocations.Records.Single().InstallLocation?.Value == @"C:\Apps\Foo", "F08 opt-in retains bounded install location before uninstall");
+        check(!InstalledApps.Report(withLocations, true, x => x, default).Contains(@"C:\Apps\Foo"), "Install location is excluded from existing installation-record exports");
+        var goneLocation = AppLeftovers.Removed(withLocations, empty, (_, _) => RecordKeyState.Gone);
+        check(goneLocation.Apps.Single().InstallFolders.Single() == @"C:\Apps\Foo", "Removed app retains its earlier install folder after registry key disappears");
+        using (var cancellation = new CancellationTokenSource())
+        {
+            var locationEntry = new Entry(field => { if (field == RegistrationField.InstallLocation) cancellation.Cancel(); return Text("Foo"); });
+            var locationRoot = new Root(i => i == 0 ? new(RegistrationKeyKind.Item, "app") : new(RegistrationKeyKind.End), _ => locationEntry);
+            reject(() => InstalledApps.Scan(Single(locationRoot), cancellation.Token, true), "Cancellation during InstallLocation read prevents late F08 snapshot");
+            check(locationEntry.Disposed && locationRoot.Disposed, "InstallLocation cancellation releases both registry leases");
+        }
         var prefs=new Prefs();check(!Catalog.Available(prefs,Array.Empty<string>()).Any(x=>x.Id=="doctor.installedapps"),"Installed records absent while Doctor defaultoff");prefs.Set(Feature.Doctor,true);check(Catalog.Available(prefs,Array.Empty<string>()).Any(x=>x.Id=="doctor.installedapps"),"Installed records available by explicit action without files");
     }
     private static Source Single(Root root)=>new(s=>s==RegistrationSource.Machine64?new(root,RegistrationOpenState.Open):new(null,RegistrationOpenState.Missing));
