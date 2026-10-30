@@ -18,7 +18,9 @@ internal static class Program
     // A failed check is reported and the run continues, so one Windows run lists every failure.
     private static void Check(bool condition, string name) { if (!condition) { failures.Add(name); Console.Error.WriteLine("FAIL: " + name); return; } checks++; }
     // An unexpected exception fails its group only; later groups still run and report.
-    private static void Group(string name, Action run) { Console.WriteLine("RUN: " + name); try { run(); } catch (Exception error) { failures.Add(name + " threw " + error.GetType().Name + ": " + error.Message); Console.Error.WriteLine(name + " threw: " + error); } }
+    private static int groupIndex;
+    private static readonly int groupLo = int.Parse(Environment.GetEnvironmentVariable("SWIVEL_GROUP_LO") ?? "0"), groupHi = int.Parse(Environment.GetEnvironmentVariable("SWIVEL_GROUP_HI") ?? "100000");
+    private static void Group(string name, Action run) { int index = groupIndex++; if (index < groupLo || index >= groupHi) return; Console.WriteLine("RUN: " + name); try { run(); } catch (Exception error) { failures.Add(name + " threw " + error.GetType().Name + ": " + error.Message); Console.Error.WriteLine(name + " threw: " + error); } }
     private static void Reject(Action action, string name) { bool failed = false; try { action(); } catch { failed = true; } Check(failed, name); }
     [STAThread]
     public static int Main(string[] args)
