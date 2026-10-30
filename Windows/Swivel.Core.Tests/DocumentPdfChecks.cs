@@ -261,6 +261,8 @@ internal static class DocumentPdfChecks
         check(Extract(Validate(Render(shared),check,"Shared-glyph PDF"))=="A\u00A0B A\f","PDF characters sharing one glyph keep their own ToUnicode entry");
         var blank=DocumentPdf.Prepare("AQ",new[]{Candidate(TinyFont(extra:new Dictionary<int,int>{['Q']=6})),Candidate(TinyFont(0,"Outlined",new Dictionary<int,int>{['Q']=1}))},default);
         check(blank.FontNames.SequenceEqual(new[]{"SwivelTiny","Outlined"}),"PDF skips a font whose glyph for a visible character has no outline");
+        var onlyBlank=DocumentPdf.Prepare("A\u2800",new[]{Candidate(TinyFont(extra:new Dictionary<int,int>{[0x2800]=6}))},default);
+        check(Extract(Validate(Render(onlyBlank),check,"Blank-glyph PDF"))=="A\u2800\f","PDF keeps a genuinely blank glyph when no font has an outline for it");
         string temp=Path.Combine(Path.GetTempPath(),"swivel-pdf-"+Guid.NewGuid().ToString("N")+".pdf");
         try{using var target=new FileStream(temp,FileMode.CreateNew,FileAccess.Write);plan.Write(target,default);check(target.CanWrite,"PDF writing leaves the destination stream open");target.Flush(true);check(target.Length>0&&File.Exists(temp),"PDF output can be flushed by its owner afterwards");}
         finally{File.Delete(temp);}

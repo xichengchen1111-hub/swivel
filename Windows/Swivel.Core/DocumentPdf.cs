@@ -147,8 +147,13 @@ public sealed class DocumentPdf
         (int Font, double Advance)? Measure(int scalar)
         {
             if (cache.TryGetValue(scalar, out var known)) return known;
-            (int, double)? result = null;
-            bool blank = scalar == ' ' || CharUnicodeInfo.GetUnicodeCategory(scalar) == UnicodeCategory.SpaceSeparator;
+            (int, double)? result = null; int blankFont = -1, blankGlyph = 0;
+            bool space = scalar == ' ' || CharUnicodeInfo.GetUnicodeCategory(scalar) == UnicodeCategory.SpaceSeparator;
+            (int, double) Use(int i, TrueTypeFace f, int glyph)
+            {
+                if (!usedIndex.TryGetValue(i, out int index)) { index = used.Count; used.Add(f); usedIndex[i] = index; }
+                return (index, Units(f, glyph) * settings.FontSize / 1000);
+            }
             for (int i = 0; i < candidates.Count && result is null; i++)
             {
                 if (!tried[i])
@@ -157,11 +162,17 @@ public sealed class DocumentPdf
                     try { var face = candidates[i].Load(token); loaded[i] = face is { MayEmbedSubset: true } ? face : null; }
                     catch (UserError) { loaded[i] = null; }
                 }
-                // A visible character whose glyph has no outline (a color-only emoji, say) would print blank.
-                if (loaded[i] is not { } f || f.Glyph(scalar) is not (> 0 and var glyph) || !blank && !f.HasOutline(glyph)) continue;
-                if (!usedIndex.TryGetValue(i, out int index)) { index = used.Count; used.Add(f); usedIndex[i] = index; }
-                result = (index, Units(f, glyph) * settings.FontSize / 1000);
+                if (loaded[i] is not { } f) continue;
+                int glyph; bool outline;
+                try { glyph = f.Glyph(scalar); outline = glyph > 0 && (space || f.HasOutline(glyph)); }
+                catch (UserError) { continue; } // a damaged entry in a later font: treat as not covered
+                if (glyph <= 0) continue;
+                // A visible character whose glyph has no outline (a color-only emoji, say) would print
+                // blank: prefer a later font that draws it, else keep the blank glyph (U+2800 is blank).
+                if (!outline) { if (blankFont < 0) { blankFont = i; blankGlyph = glyph; } continue; }
+                result = Use(i, f, glyph);
             }
+            if (result is null && blankFont >= 0) result = Use(blankFont, loaded[blankFont]!, blankGlyph);
             cache[scalar] = result; return result;
         }
         var layout = PdfTextLayout.Layout(text, Measure, settings, s => new UserError(Missing, "U+" + s.ToString("X4", CultureInfo.InvariantCulture)), token);
