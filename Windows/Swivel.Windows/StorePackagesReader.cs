@@ -9,8 +9,8 @@ using Windows.Management.Deployment;
 
 namespace Swivel.Windows;
 
-// Read-only package properties for the current user only (empty SID). No package
-// removal, registration, provisioning, Store queries, file access or network.
+// Read-only package properties for the current user only (empty SID). No registration,
+// provisioning, Store queries, file access or network; removal is StorePackageRemover.
 internal static class StorePackagesReader
 {
     internal static StorePackagesSnapshot Read(CancellationToken token)=>StorePackages.Scan(new Source(),token);
@@ -41,12 +41,24 @@ internal static class StorePackagesReader
         private static T? Try<T>(Func<T> read)where T:struct{try{return read();}catch(Exception error)when(Unavailable(error)){return null;}}
         public string? Text(PackageTextField field)
         {
-            try{return field switch{PackageTextField.DisplayName=>package.DisplayName,PackageTextField.PublisherDisplayName=>package.PublisherDisplayName,PackageTextField.FamilyName=>package.Id.FamilyName,_=>null};}
+            try{return field switch{PackageTextField.DisplayName=>package.DisplayName,PackageTextField.PublisherDisplayName=>package.PublisherDisplayName,PackageTextField.FamilyName=>package.Id.FamilyName,PackageTextField.FullName=>package.Id.FullName,_=>null};}
             catch(Exception error)when(Unavailable(error)){return null;}
         }
         public PackageVersion? Version()=>Try(()=>{var v=package.Id.Version;return new PackageVersion(v.Major,v.Minor,v.Build,v.Revision);});
         public uint? Architecture()=>Try(()=>(uint)package.Id.Architecture);
         public bool? Flag(PackageFlag flag)=>Try(()=>flag switch{PackageFlag.Framework=>package.IsFramework,PackageFlag.Resource=>package.IsResourcePackage,PackageFlag.Bundle=>package.IsBundle,PackageFlag.Development=>package.IsDevelopmentMode,_=>throw new IndexOutOfRangeException(nameof(flag))});
         public DateTimeOffset? Installed()=>Try(()=>package.InstalledDate);
+        public uint? Signature()=>Try(()=>(uint)package.SignatureKind);
+        public bool? StatusOk()=>Try(()=>package.Status.VerifyIsOK());
+        public IReadOnlyList<string>? Dependencies()
+        {
+            try
+            {
+                var list=new List<string>();
+                foreach(var dependency in package.Dependencies){if(list.Count==StorePackageRemoval.MaxDependencies)return null;list.Add(dependency.Id.FullName);}
+                return list;
+            }
+            catch(Exception error)when(Unavailable(error)){return null;}
+        }
     }
 }

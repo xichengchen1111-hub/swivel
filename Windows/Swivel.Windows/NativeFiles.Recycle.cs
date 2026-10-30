@@ -193,6 +193,12 @@ public static partial class NativeFiles
     internal static string RecycleLeftover(string folder, Action check, IntPtr owner = default)
         => Recycle(folder, true, _ => check(), owner, () => throw new UserError(AppLeftovers.NotRecycled));
 
+    /// Rechecks the folder Windows kept for an uninstalled package family (a plain local folder at
+    /// the same place, then `check`, which throws a UserError when the family is installed again),
+    /// then moves it to the Recycle Bin.
+    internal static string RecyclePackageData(string folder, Action check, IntPtr owner = default)
+        => Recycle(folder, true, _ => check(), owner, () => throw new UserError(StorePackageRemoval.DataNotRecycled));
+
     private static bool StillCompared(SafeFileHandle handle, DuplicateStamp compared)
     {
         try { return ReadDuplicateStamp(handle, ReadIdentity(handle).Volume) == compared; }

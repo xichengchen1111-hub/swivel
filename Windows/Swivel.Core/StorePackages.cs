@@ -16,7 +16,7 @@ public sealed record PackageText(string? Value,PackageValueState State)
 {
     public static PackageText Unknown(PackageValueState state)=>new(null,state);
 }
-public enum PackageTextField { DisplayName,PublisherDisplayName,FamilyName }
+public enum PackageTextField { DisplayName,PublisherDisplayName,FamilyName,FullName }
 public enum PackageFlag { Framework,Resource,Bundle,Development }
 public readonly record struct PackageVersion(ushort Major,ushort Minor,ushort Build,ushort Revision)
 {
@@ -37,10 +37,18 @@ public interface IStorePackageEntry
     uint? Architecture();
     bool? Flag(PackageFlag flag);
     DateTimeOffset? Installed();
+    // Read for Uninstall… only (never shown in the list or reports); null means not available.
+    // PackageSignatureKind raw value: None 0, Developer 1, Enterprise 2, Store 3, System 4.
+    uint? Signature()=>null;
+    /// Package.Status.VerifyIsOK().
+    bool? StatusOk()=>null;
+    /// Full names of the packages this one depends on, or null when they cannot all be read.
+    IReadOnlyList<string>? Dependencies()=>null;
 }
 [Flags] public enum PackageListIssue { None=0,Unavailable=1,EnumerationFailed=2,Limit=4,TimeLimit=8 }
 public sealed record StorePackageRecord(int Ordinal,PackageText Name,PackageText Publisher,PackageVersion? Version,uint? Architecture,
-    bool? Framework,bool? Resource,bool? Bundle,bool? Development,DateTimeOffset? Installed,PackageText Family,bool TimeLimited);
+    bool? Framework,bool? Resource,bool? Bundle,bool? Development,DateTimeOffset? Installed,PackageText Family,bool TimeLimited,
+    PackageText? FullName=null,uint? Signature=null,bool? StatusOk=null,IReadOnlyList<string>? DependsOn=null);
 public sealed record StorePackagesSnapshot(DateTimeOffset RecordedUtc,IReadOnlyList<StorePackageRecord> Records,PackageListIssue Issues)
 {
     public bool Partial=>Issues!=PackageListIssue.None||Records.Any(x=>x.TimeLimited||x.Version is null||x.Installed is null||x.Architecture is null||x.Framework is null||x.Resource is null||x.Bundle is null||x.Development is null||
@@ -89,7 +97,11 @@ public static class StorePackages
         var version=Get(entry.Version);var architecture=Get(entry.Architecture);
         bool? framework=Get(()=>entry.Flag(PackageFlag.Framework)),resource=Get(()=>entry.Flag(PackageFlag.Resource)),bundle=Get(()=>entry.Flag(PackageFlag.Bundle)),development=Get(()=>entry.Flag(PackageFlag.Development));
         var installed=Get(entry.Installed);var family=Text(PackageTextField.FamilyName);
-        return new(index,name,publisher,version,architecture,framework,resource,bundle,development,installed,family,timed);
+        // Removal-only fields, after the listed ones so a time limit never hides a listed field earlier.
+        var fullName=Text(PackageTextField.FullName);var signature=Get(entry.Signature);var statusOk=Get(entry.StatusOk);
+        IReadOnlyList<string>? depends=null;
+        if(!Stop()){var raw=entry.Dependencies();token.ThrowIfCancellationRequested();depends=StorePackageRemoval.Dependencies(raw);}
+        return new(index,name,publisher,version,architecture,framework,resource,bundle,development,installed,family,timed,fullName,signature,statusOk,depends);
     }
     public static PackageText Validate(string? value)
     {

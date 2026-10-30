@@ -15858,5 +15858,220 @@
     "一次最多选择 32 个应用退出。",
     "一次最多選擇 32 個 App 結束。",
     "一度に終了できるアプリは最大 32 個です。"
+  ],
+  "A data folder Windows kept for this app is still there; it is listed below.": [
+    "Windows 为此应用保留的数据文件夹仍在，列在下方。",
+    "Windows 為此應用程式保留的資料夾仍在，列在下方。",
+    "Windows がこのアプリ用に保持していたデータ フォルダーがまだ残っています。下に表示します。"
+  ],
+  "A package of this family is installed for your account again, or Swivel could not check, so the folder was left alone.": [
+    "你的账户又安装了该系列的包，或 Swivel 无法检查，因此未动该文件夹。",
+    "你的帳戶又安裝了該系列的套件，或 Swivel 無法檢查，因此未動該資料夾。",
+    "このファミリーのパッケージがあなたのアカウントに再びインストールされているか、Swivel が確認できなかったため、フォルダーはそのままにしました。"
+  ],
+  "A package of this family is installed for your account again, or Swivel could not check, so the folder was not put back.": [
+    "你的账户又安装了该系列的包，或 Swivel 无法检查，因此未放回该文件夹。",
+    "你的帳戶又安裝了該系列的套件，或 Swivel 無法檢查，因此未放回該資料夾。",
+    "このファミリーのパッケージがあなたのアカウントに再びインストールされているか、Swivel が確認できなかったため、フォルダーは元に戻していません。"
+  ],
+  "After an uninstall, the folder Windows keeps for that package family under Local app data (Packages) is offered only when no package of that family is installed for your account any more and the folder is still there; Windows usually removes it itself. It can be moved to the Recycle Bin after a confirmation, only while the family is still not installed, and Undo Move puts it back while this window is open unless the app was installed again.": [
+    "卸载后，只有当你的账户不再安装该包系列的任何包且文件夹仍在时，才会提供 Windows 在本地应用数据（Packages）下为该包系列保留的文件夹；Windows 通常会自行删除它。确认后可将其移到回收站，前提是该系列仍未安装；本窗口打开期间，“撤销移动”可将其放回，除非应用已重新安装。",
+    "解除安裝後，只有當你的帳戶不再安裝該套件系列的任何套件且資料夾仍在時，才會提供 Windows 在本機應用程式資料（Packages）下為該套件系列保留的資料夾；Windows 通常會自行刪除它。確認後可將其移到資源回收筒，前提是該系列仍未安裝；本視窗開啟期間，「復原移動」可將其放回，除非應用程式已重新安裝。",
+    "アンインストール後、そのパッケージ ファミリーのパッケージがあなたのアカウントにもうインストールされておらず、フォルダーが残っている場合にのみ、Windows がローカル アプリ データ (Packages) に保持するそのファミリーのフォルダーを表示します。通常は Windows 自身が削除します。確認後、ファミリーが未インストールのままの間だけごみ箱に移動でき、このウィンドウを開いている間は「移動を取り消す」で元に戻せます (アプリを再インストールした場合を除く)。"
+  ],
+  "Can be uninstalled for your account after a confirmation.": [
+    "确认后可为你的账户卸载。",
+    "確認後可為你的帳戶解除安裝。",
+    "確認後、あなたのアカウントからアンインストールできます。"
+  ],
+  "Cancel Uninstall": [
+    "取消卸载",
+    "取消解除安裝",
+    "アンインストールをキャンセル"
+  ],
+  "Cancellation was requested; Windows may have finished the removal anyway. The list above was read afterwards.": [
+    "已请求取消；Windows 仍可能已完成删除。上方列表是之后读取的。",
+    "已要求取消；Windows 仍可能已完成移除。上方清單是之後讀取的。",
+    "キャンセルを要求しましたが、Windows が削除を完了している可能性があります。上の一覧はその後に読み取ったものです。"
+  ],
+  "Cancelled before removal started. Nothing was removed.": [
+    "在删除开始前已取消。未删除任何内容。",
+    "在移除開始前已取消。未移除任何內容。",
+    "削除の開始前にキャンセルしました。何も削除していません。"
+  ],
+  "Checking the package list again…": [
+    "正在重新检查包列表…",
+    "正在重新檢查套件清單…",
+    "パッケージ一覧を再確認しています…"
+  ],
+  "Move the data folder of the uninstalled app to the Recycle Bin?": [
+    "将已卸载应用的数据文件夹移到回收站？",
+    "將已解除安裝應用程式的資料夾移到資源回收筒？",
+    "アンインストールしたアプリのデータ フォルダーをごみ箱に移動しますか?"
+  ],
+  "Move {0} data folders of uninstalled apps to the Recycle Bin?": [
+    "将 {0} 个已卸载应用的数据文件夹移到回收站？",
+    "將 {0} 個已解除安裝應用程式的資料夾移到資源回收筒？",
+    "アンインストールしたアプリのデータ フォルダー {0} 個をごみ箱に移動しますか?"
+  ],
+  "Not offered: Windows does not report its status as OK (it may be updating, damaged or not available).": [
+    "不提供：Windows 未报告其状态正常（可能正在更新、已损坏或不可用）。",
+    "不提供：Windows 未回報其狀態正常（可能正在更新、已損壞或無法使用）。",
+    "対象外: Windows がその状態を正常と報告していません (更新中、破損、または利用不可の可能性)。"
+  ],
+  "Not offered: Windows' own packages, the Store, App Installer, Edge and Windows Security stay installed.": [
+    "不提供：Windows 自身的包、Microsoft Store、应用安装程序、Edge 和 Windows 安全中心保持安装。",
+    "不提供：Windows 本身的套件、Microsoft Store、應用程式安裝程式、Edge 和 Windows 安全性保持安裝。",
+    "対象外: Windows 自身のパッケージ、Store、アプリ インストーラー、Edge、Windows セキュリティはインストールしたままにします。"
+  ],
+  "Not offered: a bundle (or its kind is unknown). Uninstall the app package listed for it instead.": [
+    "不提供：这是捆绑包（或类型未知）。请改为卸载为其列出的应用包。",
+    "不提供：這是套件組合（或類型未知）。請改為解除安裝為其列出的應用程式套件。",
+    "対象外: バンドルです (または種類が不明)。代わりに、それに対して表示されるアプリ パッケージをアンインストールしてください。"
+  ],
+  "Not offered: a framework package (or its kind is unknown). Apps use it; Windows removes it when no app needs it.": [
+    "不提供：这是框架包（或类型未知）。应用会用到它；没有应用需要时 Windows 会删除它。",
+    "不提供：這是架構套件（或類型未知）。應用程式會用到它；沒有應用程式需要時 Windows 會移除它。",
+    "対象外: フレームワーク パッケージです (または種類が不明)。アプリが使用し、必要なアプリがなくなると Windows が削除します。"
+  ],
+  "Not offered: a resource package (or its kind is unknown). It belongs to its app.": [
+    "不提供：这是资源包（或类型未知），属于其应用。",
+    "不提供：這是資源套件（或類型未知），屬於其應用程式。",
+    "対象外: リソース パッケージです (または種類が不明)。そのアプリに属しています。"
+  ],
+  "Not offered: a system-signed package, or its signature kind is unknown.": [
+    "不提供：这是系统签名的包，或签名类型未知。",
+    "不提供：這是系統簽署的套件，或簽章類型未知。",
+    "対象外: システム署名のパッケージ、または署名の種類が不明です。"
+  ],
+  "Not offered: another listed package depends on it.": [
+    "不提供：列表中的其他包依赖它。",
+    "不提供：清單中的其他套件相依於它。",
+    "対象外: 一覧の別のパッケージが依存しています。"
+  ],
+  "Not offered: its full name, family name or version could not be read consistently.": [
+    "不提供：无法一致地读取其完整名称、系列名称或版本。",
+    "不提供：無法一致地讀取其完整名稱、系列名稱或版本。",
+    "対象外: 完全名、ファミリー名、バージョンを一貫して読み取れませんでした。"
+  ],
+  "Not offered: the package list is incomplete, so packages that depend on it cannot be ruled out.": [
+    "不提供：包列表不完整，无法排除依赖它的包。",
+    "不提供：套件清單不完整，無法排除相依於它的套件。",
+    "対象外: パッケージ一覧が不完全なため、依存するパッケージがないとは言えません。"
+  ],
+  "Not offered: this is Swivel itself.": [
+    "不提供：这是 Swivel 本身。",
+    "不提供：這是 Swivel 本身。",
+    "対象外: Swivel 自身です。"
+  ],
+  "Nothing was removed.": [
+    "未删除任何内容。",
+    "未移除任何內容。",
+    "何も削除していません。"
+  ],
+  "Package Full Name": [
+    "包完整名称",
+    "套件完整名稱",
+    "パッケージ完全名"
+  ],
+  "Store packages uninstalled: {0} · app data folders moved to the Recycle Bin or removed: {1}": [
+    "已卸载的应用商店包：{0} · 已移到回收站或被删除的应用数据文件夹：{1}",
+    "已解除安裝的市集套件：{0} · 已移到資源回收筒或被移除的應用程式資料夾：{1}",
+    "アンインストールした Store パッケージ: {0} · ごみ箱に移動または削除されたアプリ データ フォルダー: {1}"
+  ],
+  "The app is running, or Swivel could not list the running programs, so nothing was removed. Close the app, including any copy in the background, and try again.": [
+    "应用正在运行，或 Swivel 无法列出正在运行的程序，因此未删除任何内容。请关闭该应用（包括后台运行的副本）后重试。",
+    "應用程式正在執行，或 Swivel 無法列出正在執行的程式，因此未移除任何內容。請關閉該應用程式（包括背景執行的副本）後重試。",
+    "アプリが実行中か、Swivel が実行中のプログラムを一覧できなかったため、何も削除していません。バックグラウンドのものも含めてアプリを閉じてから、もう一度お試しください。"
+  ],
+  "The folder can hold the app's settings, saved files or games. Check the path first. If it is too large for the Recycle Bin, Windows asks before deleting it permanently.": [
+    "该文件夹可能包含应用的设置、保存的文件或游戏存档。请先检查路径。如果它太大无法放入回收站，Windows 会在永久删除前询问。",
+    "該資料夾可能包含應用程式的設定、儲存的檔案或遊戲存檔。請先檢查路徑。如果它太大無法放入資源回收筒，Windows 會在永久刪除前詢問。",
+    "このフォルダーにはアプリの設定、保存したファイル、ゲームのセーブ データが含まれている場合があります。先にパスを確認してください。ごみ箱に入らないほど大きい場合は、完全に削除する前に Windows が確認します。"
+  ],
+  "The package changed since the list was read (for example it was updated). Nothing was removed. Read the package list again.": [
+    "读取列表后该包已更改（例如已更新）。未删除任何内容。请重新读取包列表。",
+    "讀取清單後該套件已變更（例如已更新）。未移除任何內容。請重新讀取套件清單。",
+    "一覧を読み取った後にパッケージが変わりました (更新された場合など)。何も削除していません。パッケージ一覧をもう一度読み取ってください。"
+  ],
+  "The package is no longer in your account's package list.": [
+    "该包已不在你账户的包列表中。",
+    "該套件已不在你帳戶的套件清單中。",
+    "パッケージはあなたのアカウントのパッケージ一覧にもうありません。"
+  ],
+  "The package is no longer installed for your account. Nothing was removed.": [
+    "你的账户已不再安装该包。未删除任何内容。",
+    "你的帳戶已不再安裝該套件。未移除任何內容。",
+    "パッケージはあなたのアカウントにもうインストールされていません。何も削除していません。"
+  ],
+  "The package is still in your account's package list.": [
+    "该包仍在你账户的包列表中。",
+    "該套件仍在你帳戶的套件清單中。",
+    "パッケージはまだあなたのアカウントのパッケージ一覧にあります。"
+  ],
+  "The package is unchanged.": [
+    "该包未更改。",
+    "該套件未變更。",
+    "パッケージは変わっていません。"
+  ],
+  "The package list could not be read again. Nothing was removed.": [
+    "无法再次读取包列表。未删除任何内容。",
+    "無法再次讀取套件清單。未移除任何內容。",
+    "パッケージ一覧をもう一度読み取れませんでした。何も削除していません。"
+  ],
+  "The package list read afterwards is incomplete, so whether the package was removed is not known.": [
+    "之后读取的包列表不完整，因此不知道该包是否已删除。",
+    "之後讀取的套件清單不完整，因此不知道該套件是否已移除。",
+    "その後に読み取ったパッケージ一覧が不完全なため、パッケージが削除されたかどうかは不明です。"
+  ],
+  "Uninstall Status": [
+    "卸载状态",
+    "解除安裝狀態",
+    "アンインストールの状態"
+  ],
+  "Uninstall this package for your Windows account?": [
+    "为你的 Windows 账户卸载此包？",
+    "為你的 Windows 帳戶解除安裝此套件？",
+    "あなたの Windows アカウントからこのパッケージをアンインストールしますか?"
+  ],
+  "Uninstalled in this window: {0}": [
+    "已在此窗口卸载：{0}",
+    "已在此視窗解除安裝：{0}",
+    "このウィンドウでアンインストール済み: {0}"
+  ],
+  "Uninstalling… {0}%": [
+    "正在卸载… {0}%",
+    "正在解除安裝… {0}%",
+    "アンインストールしています… {0}%"
+  ],
+  "Uninstall…": [
+    "卸载…",
+    "解除安裝…",
+    "アンインストール…"
+  ],
+  "Uninstall… removes one selected app package for your Windows account with the system package manager, after a confirmation. Frameworks, resource packages, bundles, system-signed packages, packages whose status is not OK, packages other listed packages depend on, Store and App Installer, Edge, Windows Security, Windows' own packages and Swivel itself are never offered, and nothing is offered while the list is incomplete. Just before removal the package list is read again: if the package's full name, version or kind changed, or the app is running, nothing is removed. Removal cannot be undone from Swivel.": [
+    "“卸载…”在确认后用系统包管理器为你的 Windows 账户删除一个所选应用包。框架包、资源包、捆绑包、系统签名的包、状态不正常的包、列表中其他包依赖的包、Microsoft Store 和应用安装程序、Edge、Windows 安全中心、Windows 自身的包以及 Swivel 本身都不会提供；列表不完整时不提供任何包。删除前会再次读取包列表：如果包的完整名称、版本或类型已更改，或应用正在运行，则不删除任何内容。删除无法在 Swivel 中撤销。",
+    "「解除安裝…」在確認後用系統套件管理員為你的 Windows 帳戶移除一個所選應用程式套件。架構套件、資源套件、套件組合、系統簽署的套件、狀態不正常的套件、清單中其他套件相依的套件、Microsoft Store 和應用程式安裝程式、Edge、Windows 安全性、Windows 本身的套件以及 Swivel 本身都不會提供；清單不完整時不提供任何套件。移除前會再次讀取套件清單：如果套件的完整名稱、版本或類型已變更，或應用程式正在執行，則不移除任何內容。移除無法在 Swivel 中復原。",
+    "「アンインストール…」は、確認後にシステムのパッケージ マネージャーで、選択したアプリ パッケージ 1 つをあなたの Windows アカウントから削除します。フレームワーク、リソース パッケージ、バンドル、システム署名のパッケージ、状態が正常でないパッケージ、一覧の他のパッケージが依存するパッケージ、Store とアプリ インストーラー、Edge、Windows セキュリティ、Windows 自身のパッケージ、Swivel 自身は対象外で、一覧が不完全な間は何も対象になりません。削除の直前にパッケージ一覧をもう一度読み取り、完全名、バージョン、種類が変わっていたりアプリが実行中だったりした場合は何も削除しません。削除は Swivel では元に戻せません。"
+  ],
+  "Windows removes the app and the data it keeps for this app for your account. This cannot be undone from Swivel: to get the app back, install it again from the Microsoft Store or from where it came from. Only your account is changed: other Windows users and copies provisioned for new users are not. Swivel does not ask for administrator rights and does not close the app: if it starts again before the removal finishes, Windows may close it.": [
+    "Windows 会为你的账户删除该应用及其保留的数据。此操作无法在 Swivel 中撤销：如需找回应用，请从 Microsoft Store 或原来的来源重新安装。只会更改你的账户：其他 Windows 用户和为新用户预配的副本不受影响。Swivel 不会请求管理员权限，也不会关闭该应用：如果它在删除完成前再次启动，Windows 可能会将其关闭。",
+    "Windows 會為你的帳戶移除該應用程式及其保留的資料。此操作無法在 Swivel 中復原：如需取回應用程式，請從 Microsoft Store 或原來的來源重新安裝。只會變更你的帳戶：其他 Windows 使用者和為新使用者佈建的副本不受影響。Swivel 不會要求系統管理員權限，也不會關閉該應用程式：如果它在移除完成前再次啟動，Windows 可能會將其關閉。",
+    "Windows はあなたのアカウントからアプリと、そのアプリ用に保持しているデータを削除します。これは Swivel では元に戻せません。アプリを戻すには、Microsoft Store または入手元から再インストールしてください。変更されるのはあなたのアカウントだけで、他の Windows ユーザーや新規ユーザー用にプロビジョニングされたコピーは変わりません。Swivel は管理者権限を求めず、アプリを閉じることもしません。削除の完了前にアプリが再び起動すると、Windows がそれを閉じる場合があります。"
+  ],
+  "Windows reported an error: {0}": [
+    "Windows 报告了错误：{0}",
+    "Windows 回報了錯誤：{0}",
+    "Windows がエラーを報告しました: {0}"
+  ],
+  "Leftover data was not looked for: another package of this family may still be installed, or the list or the Local app data path could not be read.": [
+    "未查找残留数据：该系列的其他包可能仍已安装，或无法读取列表或本地应用数据路径。",
+    "未尋找殘留資料：該系列的其他套件可能仍已安裝，或無法讀取清單或本機應用程式資料路徑。",
+    "残ったデータは探していません: このファミリーの別のパッケージがまだインストールされているか、一覧またはローカル アプリ データのパスを読み取れませんでした。"
+  ],
+  "No data folder for this app remains under Local app data (Packages).": [
+    "本地应用数据（Packages）下没有此应用残留的数据文件夹。",
+    "本機應用程式資料（Packages）下沒有此應用程式殘留的資料夾。",
+    "ローカル アプリ データ (Packages) にこのアプリのデータ フォルダーは残っていません。"
   ]
 }
