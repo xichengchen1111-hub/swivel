@@ -11,7 +11,8 @@ namespace Swivel.Core;
 /// What the box gate learned about a still HEIF (HEIC) or AVIF picture before any codec runs.
 /// Width and Height are the coded size of the primary image (ispe, before rotation);
 /// Orientation is the EXIF-style value (1–8) equivalent to its irot/imir properties.
-public sealed record HeifInfo(HeifCodec Codec, int Width, int Height, int Orientation, int BitDepth, bool HighDynamicRange, bool HasAlpha, bool IsGrid);
+/// WideGamut: nclx colour primaries other than BT.709/sRGB with no embedded ICC profile.
+public sealed record HeifInfo(HeifCodec Codec, int Width, int Height, int Orientation, int BitDepth, bool HighDynamicRange, bool HasAlpha, bool IsGrid, bool WideGamut = false);
 
 public enum HeifCodec { Hevc, Av1 }
 
@@ -25,13 +26,15 @@ public static class HeifImage
     public const string Invalid = "The HEIF or AVIF data is invalid or incomplete.";
     public const string Sequence = "HEIF and AVIF image sequences and animations are not supported. Save one frame as PNG, or use a still image.";
     public const string Unsupported = "This HEIF or AVIF file uses a feature Swivel doesn't check yet (external data, derived or cropped images, or an unknown required property). Save it again as JPEG or PNG.";
-    public const string Ambiguous = "This HEIF or AVIF photo is flipped or turned upside down. Swivel can't yet confirm how Windows' decoder applies that, so it is refused rather than risk a wrong picture. Rotate it in another app and save it as JPEG or PNG.";
+    public const string Ambiguous = "This HEIF or AVIF photo is mirrored or turned upside down. Swivel can't yet confirm how Windows' decoder applies that, so it is refused rather than risk a wrong picture. Rotate it in another app and save it as JPEG or PNG.";
+    public const string AmbiguousSquare = "This square HEIF or AVIF photo is turned a quarter turn. Swivel can't yet tell whether Windows' decoder has already turned it, so it is refused rather than risk a wrong picture. Rotate it in another app and save it as JPEG or PNG.";
+    public const string WideGamut = "This HEIF or AVIF picture uses a wide colour space (such as Display P3 or BT.2020) without an embedded colour profile, which Swivel can't convert to sRGB yet. Save it again as JPEG or PNG.";
     public const string HighDepth = "HDR and high-bit-depth HEIF or AVIF images are not supported for saving yet. Swivel works with 8-bit SDR pictures.";
     public const string AlphaUnsupported = "This HEIF or AVIF image has a transparency layer that Windows' decoder doesn't return. Save it again as PNG.";
     public const string HeicMissing = "Windows can't decode HEIC pictures yet. Install Microsoft's HEIF Image Extensions (free) and HEVC Video Extensions from the Microsoft Store, then try again. Swivel never installs anything itself.";
     public const string AvifMissing = "Windows can't decode AVIF pictures yet. Install Microsoft's free HEIF Image Extensions and AV1 Video Extension from the Microsoft Store, then try again. Swivel never installs anything itself.";
     public const string DecodeFailed = "Windows' HEIF decoder couldn't read this picture. The file may be damaged, or a codec extension may be missing or out of date.";
-    public const string ReadNotice = "HEIC, HEIF and AVIF are read only through Microsoft's own HEIF decoder in Windows (free HEIF Image Extensions with HEVC Video Extensions or AV1 Video Extension from the Microsoft Store); other installed codecs are not used. Still pictures only; rotation and the colour profile are applied, depth maps, gain maps and other metadata are not. Flipped or upside-down photos are refused for now.";
+    public const string ReadNotice = "HEIC, HEIF and AVIF are opened only by Microsoft's own HEIF decoder in Windows; other installed HEIF codecs are not used. Windows chooses the HEVC or AV1 video decoder that decoder needs (Microsoft's Store extensions or the graphics hardware): HEIF Image Extensions with HEVC Video Extensions or AV1 Video Extension. Still pictures only; rotation and an embedded colour profile are applied, depth maps, gain maps and other metadata are not. Mirrored or upside-down photos, and wide-gamut pictures without a profile, are refused for now.";
 
     public const int MaxMetaBytes = 4 * 1024 * 1024, MaxBoxes = 8192, MaxDepth = 8, MaxItems = 4096, MaxProperties = 4096, MaxTopLevel = 1024;
 
@@ -272,7 +275,7 @@ public static class HeifImage
         // The primary image: coded HEVC or AV1, or a grid of such tiles.
         var primaryProperties = PropertiesOf(primary, true);
         var coded = new List<uint>();
-        bool grid = false;
+        bool grid = false; (int Rows, int Columns, uint Width, uint Height) layout = default;
         switch (primaryItem.Type)
         {
             case "hvc1": case "av01": coded.Add(primary); break;
@@ -280,7 +283,7 @@ public static class HeifImage
                 grid = true;
                 var dimg = references.Where(x => x.Type == "dimg" && x.From == primary).ToList();
                 if (dimg.Count != 1 || dimg[0].To.Count == 0) throw new UserError(Invalid);
-                Grid(meta, primaryLocation, idat, dimg[0].To.Count, fileLength);
+                layout = Grid(meta, primaryLocation, idat, dimg[0].To.Count);
                 foreach (uint tile in dimg[0].To)
                 {
                     if (!items.TryGetValue(tile, out var tileItem) || tileItem.Type is not ("hvc1" or "av01") || !locations.ContainsKey(tile)) throw new UserError(Invalid);
@@ -298,6 +301,22 @@ public static class HeifImage
         uint width = size.U32(), height = size.U32();
         if (width > int.MaxValue || height > int.MaxValue) throw new UserError("Images are limited to 16 megapixels and 16384 pixels per side.");
         ImageRules.Validate((int)width, (int)height);
+        if (grid)
+        {
+            if (layout.Width != width || layout.Height != height) throw new UserError(Invalid);
+            // Every tile is bounded too, so the decoder's work stays near the picture's own size.
+            long tilePixels = 0;
+            foreach (uint tile in coded)
+            {
+                var tileSize = PropertiesOf(tile, true).Where(b => b.Type == "ispe").ToList();
+                if (tileSize.Count != 1) throw new UserError(Invalid);
+                var t = new Reader(meta, tileSize[0]); t.Full();
+                uint tileWidth = t.U32(), tileHeight = t.U32();
+                if (tileWidth is 0 or > 16384 || tileHeight is 0 or > 16384) throw new UserError(Unsupported);
+                tilePixels += (long)tileWidth * tileHeight;
+                if (tilePixels > 4 * ImageRules.MaxPixels) throw new UserError(Unsupported);
+            }
+        }
         // Bit depth from the codec configuration of every coded item, and pixi when present.
         int depth = 8;
         foreach (uint id in coded)
@@ -310,12 +329,22 @@ public static class HeifImage
             foreach (var pixi in codedProperties.Where(b => b.Type == "pixi")) depth = Math.Max(depth, PixiDepth(meta, pixi));
         }
         foreach (var pixi in primaryProperties.Where(b => b.Type == "pixi")) depth = Math.Max(depth, PixiDepth(meta, pixi));
-        // HDR: a PQ or HLG transfer, or HDR luminance properties.
-        bool hdr = primaryProperties.Any(b => b.Type is "clli" or "mdcv" or "cclv" or "amve");
-        foreach (var colr in primaryProperties.Where(b => b.Type == "colr"))
+        // Colour, on the primary image and every coded item: a PQ or HLG transfer or HDR luminance
+        // properties mark HDR; nclx primaries other than BT.709 (1) or unspecified (2) without an
+        // ICC profile are a wide gamut Swivel can't convert. Non-square pixels are refused.
+        bool hdr = false, wide = false, icc = false;
+        foreach (var box in coded.Where(id => id != primary).SelectMany(id => PropertiesOf(id, true)).Concat(primaryProperties))
         {
-            var r = new Reader(meta, colr);
-            if (r.Tag4() == "nclx") { r.U16(); ushort transfer = r.U16(); hdr |= transfer is 16 or 18; }
+            hdr |= box.Type is "clli" or "mdcv" or "cclv" or "amve";
+            if (box.Type == "pasp")
+            {
+                var r = new Reader(meta, box); uint h = r.U32(), v = r.U32();
+                if (h != v) throw new UserError(Unsupported);
+            }
+            if (box.Type != "colr") continue;
+            var c = new Reader(meta, box); string kind = c.Tag4();
+            if (kind == "nclx") { ushort primaries = c.U16(), transfer = c.U16(); hdr |= transfer is 16 or 18; wide |= primaries is not (1 or 2); }
+            else if (kind is "prof" or "rICC") icc = true;
         }
         // Rotation and mirroring, applied in association order, as an EXIF orientation.
         var transforms = new List<(string Type, int Value)>();
@@ -336,7 +365,7 @@ public static class HeifImage
                 alpha |= urn is "urn:mpeg:hevc:2015:auxid:1" or "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha";
             }
         }
-        return new HeifInfo(codec, (int)width, (int)height, Orientation(transforms), depth, hdr, alpha, grid);
+        return new HeifInfo(codec, (int)width, (int)height, Orientation(transforms), depth, hdr, alpha, grid, wide && !icc);
     }
 
     /// The EXIF orientation equivalent to HEIF transforms applied in order: irot turns the image
@@ -421,17 +450,21 @@ public static class HeifImage
         return locations;
     }
 
-    /// A grid description (ImageGrid) stored in idat: version 0, rows × columns equal to the tile count.
-    private static void Grid(byte[] meta, Location location, Box? idat, int tiles, long fileLength)
+    /// A grid description (ImageGrid) in idat: version 0, rows × columns equal to the tile count,
+    /// output size in 16- or 32-bit fields. A grid description elsewhere is not read.
+    private static (int, int, uint, uint) Grid(byte[] meta, Location location, Box? idat, int tiles)
     {
-        if (location.Method != 1 || idat is not { } data || location.Extents.Count != 1) return; // grid data in the file body: WIC reads it; tile count was checked.
+        if (location.Method != 1 || idat is not { } data || location.Extents.Count != 1) throw new UserError(Unsupported);
         var (offset, length) = location.Extents[0];
         long start = data.Start + (long)(location.BaseOffset + offset);
         long count = length == 0 ? data.End - start : (long)length;
-        if (count < 8) throw new UserError(Invalid);
-        if (meta[start] != 0) throw new UserError(Invalid);
+        bool wide = count >= 2 && (meta[start + 1] & 1) != 0;
+        if (count != (wide ? 12 : 8) || meta[start] != 0) throw new UserError(Invalid);
         int rows = meta[start + 2] + 1, columns = meta[start + 3] + 1;
         if (rows * columns != tiles) throw new UserError(Invalid);
+        var field = meta.AsSpan((int)start + 4);
+        return wide ? (rows, columns, BinaryPrimitives.ReadUInt32BigEndian(field), BinaryPrimitives.ReadUInt32BigEndian(field[4..]))
+            : (rows, columns, BinaryPrimitives.ReadUInt16BigEndian(field), BinaryPrimitives.ReadUInt16BigEndian(field[2..]));
     }
 
     private static int HevcDepth(byte[] meta, Box box)

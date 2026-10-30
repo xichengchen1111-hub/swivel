@@ -8,9 +8,11 @@ using Swivel.Core;
 
 namespace Swivel.Windows;
 
-/// HEIC/HEIF/AVIF pixels come only from Microsoft's HEIF decoder in WIC (CLSID_WICHeifDecoder),
+/// HEIC/HEIF/AVIF files are opened only by Microsoft's HEIF decoder in WIC (CLSID_WICHeifDecoder),
 /// created by its CLSID after its component info names Microsoft as vendor and author; WIC is
-/// never asked to pick a codec by content, so a third-party HEIF codec is never run. The file has
+/// never asked to pick a codec by content, so a third-party HEIF codec is never run. That decoder
+/// hands the HEVC/AV1 bitstream to the video decoder Media Foundation chooses (Microsoft's Store
+/// extension or a graphics driver's hardware decoder); Swivel doesn't choose it. The file has
 /// already passed Swivel's own box gate (HeifImage.Inspect). The decoder needs Microsoft's HEIF
 /// Image Extensions plus an HEVC (HEIC) or AV1 (AVIF) video decoder from the Microsoft Store;
 /// their absence is reported, never installed.
@@ -47,8 +49,10 @@ internal static class HeifDecoder
             factory = Factory();
             try { factory.CreateComponentInfo(HeifDecoderClsid, out info); }
             catch (COMException) { return new(false, Guid.Empty, Guid.Empty, "", "", "", "", Guid.Empty, "not registered"); }
-            var decoder = (IWICBitmapDecoderInfo)info;
-            decoder.GetCLSID(out Guid clsid); decoder.GetVendorGUID(out Guid vendor); decoder.GetContainerFormat(out Guid container);
+            if (info is not IWICBitmapDecoderInfo decoder) return new(true, Guid.Empty, Guid.Empty, "", "", "", "", Guid.Empty, "not a decoder");
+            Guid clsid, vendor, container;
+            try { decoder.GetCLSID(out clsid); decoder.GetVendorGUID(out vendor); decoder.GetContainerFormat(out container); }
+            catch (COMException) { return new(true, Guid.Empty, Guid.Empty, "", "", "", "", Guid.Empty, "component info unreadable"); }
             string author = Text(decoder.GetAuthor), name = Text(decoder.GetFriendlyName), version = Text(decoder.GetVersion), extensions = Text(decoder.GetFileExtensions);
             string? problem = clsid != HeifDecoderClsid ? "unexpected CLSID" : vendor != VendorMicrosoft ? "vendor is not Microsoft"
                 : !author.StartsWith("Microsoft", StringComparison.Ordinal) ? "author is not Microsoft" : container != ContainerHeif ? "container is not HEIF" : null;
@@ -98,21 +102,21 @@ internal static class HeifDecoder
         try
         {
             var factory = Own(Factory());
-            factory.CreateComponentInfo(HeifDecoderClsid, out object infoObject); Own(infoObject);
-            var decoderInfo = (IWICBitmapDecoderInfo)infoObject;
-            decoderInfo.CreateInstance(out IWICBitmapDecoder decoder); Own(decoder);
-            factory.CreateStream(out IWICStream wicStream); Own(wicStream);
-            wicStream.InitializeFromMemory(handle.AddrOfPinnedObject(), (uint)file.Length);
             token.ThrowIfCancellationRequested();
             IWICBitmapFrameDecode frame;
             try
             {
+                factory.CreateComponentInfo(HeifDecoderClsid, out object infoObject); Own(infoObject);
+                var decoderInfo = (IWICBitmapDecoderInfo)infoObject;
+                decoderInfo.CreateInstance(out IWICBitmapDecoder decoder); Own(decoder);
+                factory.CreateStream(out IWICStream wicStream); Own(wicStream);
+                wicStream.InitializeFromMemory(handle.AddrOfPinnedObject(), (uint)file.Length);
                 decoder.Initialize(wicStream, 0 /* WICDecodeMetadataCacheOnDemand */);
                 decoder.GetFrameCount(out uint frames);
                 if (frames != 1) throw new UserError("Multi-frame images are not supported yet.");
                 decoder.GetFrame(0, out frame); Own(frame);
             }
-            catch (COMException) { throw new UserError(HeifImage.DecodeFailed); }
+            catch (Exception error) when (error is COMException or InvalidCastException) { throw new UserError(HeifImage.DecodeFailed); }
             frame.GetSize(out uint width, out uint height);
             // The decoder either returns the coded size, or applies a quarter-turn itself.
             if (width == info.Width && height == info.Height) oriented = info.Orientation == 1;
@@ -123,13 +127,16 @@ internal static class HeifDecoder
             if (!readOnly && !sdr) throw new UserError(HeifImage.HighDepth);
             if (!readOnly && info.HasAlpha && !alpha) throw new UserError(HeifImage.AlphaUnsupported);
             token.ThrowIfCancellationRequested();
-            IWICBitmapSource source = frame;
-            try { if (Profile(factory, frame, owned) is { } transform) source = transform; }
-            catch (COMException) when (readOnly) { }
-            catch (COMException) { throw new UserError(ProfileFailed); }
+            // To 32bpp BGRA first, then the embedded ICC profile to sRGB on BGRA (a pair the colour
+            // transform supports), whatever the decoder's own format.
             factory.CreateFormatConverter(out IWICFormatConverter converter); Own(converter);
             Guid target = Bgra32;
-            converter.Initialize(source, ref target, 0, IntPtr.Zero, 0, 0);
+            try { converter.Initialize(frame, ref target, 0, IntPtr.Zero, 0, 0); }
+            catch (COMException) { throw new UserError(HeifImage.DecodeFailed); }
+            IWICBitmapSource source = converter;
+            try { if (Profile(factory, frame, converter, readOnly, owned) is { } transform) source = transform; }
+            catch (COMException) when (readOnly) { }
+            catch (COMException) { throw new UserError(ProfileFailed); }
             int stride = checked((int)width * 4);
             var bgra = new byte[checked(stride * (int)height)];
             var pinned = GCHandle.Alloc(bgra, GCHandleType.Pinned);
@@ -140,7 +147,7 @@ internal static class HeifDecoder
                     token.ThrowIfCancellationRequested();
                     int rows = (int)Math.Min(256, height - y);
                     var rect = new WicRect { X = 0, Y = y, Width = (int)width, Height = rows };
-                    try { converter.CopyPixels(ref rect, (uint)stride, (uint)(rows * stride), pinned.AddrOfPinnedObject() + y * stride); }
+                    try { CopyPixels(source, ref rect, (uint)stride, (uint)(rows * stride), pinned.AddrOfPinnedObject() + y * stride); }
                     catch (COMException) { throw new UserError(HeifImage.DecodeFailed); }
                 }
             }
@@ -155,11 +162,19 @@ internal static class HeifDecoder
     }
 
     /// A transform from the frame's embedded ICC profile to sRGB, or null without one.
-    private static IWICColorTransform? Profile(IWICImagingFactory factory, IWICBitmapFrameDecode frame, List<object?> owned)
+    private static void CopyPixels(IWICBitmapSource source, ref WicRect rect, uint stride, uint size, IntPtr buffer)
     {
-        uint count;
-        try { frame.GetColorContexts(0, null, out count); } catch (COMException) { return null; }
-        if (count == 0 || count > 16) return null;
+        if (source is IWICColorTransform transform) transform.CopyPixels(ref rect, stride, size, buffer);
+        else ((IWICFormatConverter)source).CopyPixels(ref rect, stride, size, buffer);
+    }
+
+    /// A transform of the BGRA pixels from the frame's embedded ICC profile to sRGB, or null without
+    /// one. When saving, colour contexts that can't be read are an error, not a silent skip.
+    private static IWICColorTransform? Profile(IWICImagingFactory factory, IWICBitmapFrameDecode frame, IWICFormatConverter bgra, bool readOnly, List<object?> owned)
+    {
+        frame.GetColorContexts(0, null, out uint count);
+        if (count == 0) return null;
+        if (count > 16) { if (readOnly) return null; throw new UserError(ProfileFailed); }
         var contexts = new IWICColorContext[count];
         for (int i = 0; i < count; i++) { factory.CreateColorContext(out contexts[i]); owned.Add(contexts[i]); }
         frame.GetColorContexts(count, contexts, out uint actual);
@@ -170,7 +185,7 @@ internal static class HeifDecoder
         srgb.InitializeFromExifColorSpace(1);
         factory.CreateColorTransformer(out IWICColorTransform transform); owned.Add(transform);
         Guid target = Bgra32;
-        transform.Initialize(frame, profile, srgb, ref target);
+        transform.Initialize(bgra, profile, srgb, ref target);
         return transform;
     }
 
@@ -192,12 +207,20 @@ internal static class HeifDecoder
             frame.Initialize(IntPtr.Zero);
             frame.SetSize((uint)image.Width, (uint)image.Height);
             Guid format = Bgra32; frame.SetPixelFormat(ref format);
+            if (format != Bgra32) return null;
             var pixels = GCHandle.Alloc(image.Bgra, GCHandleType.Pinned);
             try { frame.WritePixels((uint)image.Height, (uint)image.Width * 4, (uint)image.Bgra.Length, pixels.AddrOfPinnedObject()); }
             finally { pixels.Free(); }
             frame.Commit(); encoder.Commit();
-            stream.Seek(0, 1 /* STREAM_SEEK_CUR */, out ulong length);
-            return buffer.AsSpan(0, (int)length).ToArray();
+            // The written length: the top-level boxes from the start, up to the first empty header.
+            long length = 0;
+            while (length + 8 <= buffer.Length)
+            {
+                long size = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(buffer.AsSpan((int)length));
+                if (size < 8 || buffer[(int)length + 4] == 0 || length + size > buffer.Length) break;
+                length += size;
+            }
+            return length == 0 ? null : buffer.AsSpan(0, (int)length).ToArray();
         }
         catch (COMException) { return null; }
         finally { Release(frame); Release(encoder); Release(stream); Release(factory); handle.Free(); }
@@ -255,14 +278,14 @@ internal static class HeifDecoder
         void GetComponentType(out int type);
         void GetCLSID(out Guid clsid);
         void GetSigningStatus(out uint status);
-        void GetAuthor(uint length, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] char[]? buffer, out uint actual);
+        void GetAuthor(uint length, [Out, MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U2, SizeParamIndex = 0)] char[]? buffer, out uint actual);
         void GetVendorGUID(out Guid vendor);
-        void GetVersion(uint length, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] char[]? buffer, out uint actual);
-        void GetSpecVersion(uint length, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] char[]? buffer, out uint actual);
-        void GetFriendlyName(uint length, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] char[]? buffer, out uint actual);
+        void GetVersion(uint length, [Out, MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U2, SizeParamIndex = 0)] char[]? buffer, out uint actual);
+        void GetSpecVersion(uint length, [Out, MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U2, SizeParamIndex = 0)] char[]? buffer, out uint actual);
+        void GetFriendlyName(uint length, [Out, MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U2, SizeParamIndex = 0)] char[]? buffer, out uint actual);
         void GetContainerFormat(out Guid container);
         void GetPixelFormats(); void GetColorManagementVersion(); void GetDeviceManufacturer(); void GetDeviceModels(); void GetMimeTypes();
-        void GetFileExtensions(uint length, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0)] char[]? buffer, out uint actual);
+        void GetFileExtensions(uint length, [Out, MarshalAs(UnmanagedType.LPArray, ArraySubType = UnmanagedType.U2, SizeParamIndex = 0)] char[]? buffer, out uint actual);
         void DoesSupportAnimation(); void DoesSupportChromakey(); void DoesSupportLossless(); void DoesSupportMultiframe(); void MatchesMimeType();
         void GetPatterns(); void MatchesPattern();
         void CreateInstance(out IWICBitmapDecoder decoder);
@@ -309,7 +332,8 @@ internal static class HeifDecoder
     {
         new void GetSize(out uint width, out uint height);
         new void GetPixelFormat(out Guid format);
-        void GetResolution(); void CopyPalette(); void CopyPixels();
+        void GetResolution(); void CopyPalette();
+        void CopyPixels(ref WicRect rect, uint stride, uint size, IntPtr buffer);
         void Initialize(IWICBitmapSource source, IWICColorContext from, IWICColorContext to, ref Guid format);
     }
 

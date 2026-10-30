@@ -15084,10 +15084,10 @@
     "僅解碼單幀 SDR PNG、JPEG、BMP、TIFF、TGA、PSD、靜態 WebP、8 位元靜態 HEIC/HEIF/AVIF（需 Microsoft 編解碼器擴充功能）和支援的靜態 GIF。透明度先合成到白底，再計算 9×8 網格的整數亮度平均值。64 次橫向比較構成簽章，最多相差 6 位即相符（一致率至少 90.625%）。可跨圖片格式比較。顯示百分比截斷至小數點後兩位。這不是物件、人臉或語意辨識分數。",
     "単一フレームのSDR PNG、JPEG、BMP、TIFF、TGA、PSD、静止WebP、8ビットの静止HEIC/HEIF/AVIF（Microsoftのコーデック拡張機能が必要）と対応する静止GIFのみデコードします。透明度を白背景に合成し、9×8グリッドの整数輝度平均を計算します。64回の横方向比較でシグネチャを作り、異なるビットが6個以下なら対象です（一致率90.625%以上）。画像形式をまたいで比較できます。表示の割合は小数点以下2桁で切り捨てます。物体、顔、意味を認識するスコアではありません。"
   ],
-  "Images smaller than 9-by-8 pixels, grid brightness ranges below 16, or signatures with fewer than 4 or more than 60 set bits are skipped. These heuristics can miss valid images, including flat pictures and directional gradients. Animation, HDR, high bit depth, CMYK and unsupported formats are refused. HEIC and AVIF remain pending.": [
-    "小于 9×8 像素、网格亮度范围不足 16、或签名中置位比特不足 4 或超过 60 的图片会跳过。这些启发式条件会漏掉有效图片，包括平坦图和单向渐变。动画、HDR、高位深、CMYK 和不支持的格式会拒绝。HEIC 和 AVIF 仍待实现。",
-    "小於 9×8 像素、網格亮度範圍不足 16、或簽章中設為 1 的位元不足 4 或超過 60 的圖片會略過。這些啟發式條件會漏掉有效圖片，包括平坦圖及單向漸層。動畫、HDR、高位元深度、CMYK 和不支援的格式會拒絕。HEIC 和 AVIF 仍待實作。",
-    "9×8画素未満、グリッド輝度範囲が16未満、またはシグネチャの1のビットが4未満か60超の画像はスキップします。この経験則は平坦な画像や一方向のグラデーションなど有効な画像も見逃します。アニメーション、HDR、高ビット深度、CMYK、未対応形式は拒否します。HEIC、AVIFは未実装です。"
+  "Images smaller than 9-by-8 pixels, grid brightness ranges below 16, or signatures with fewer than 4 or more than 60 set bits are skipped. These heuristics can miss valid images, including flat pictures and directional gradients. Animation, HDR, high bit depth, CMYK and unsupported formats are refused. HEIC, HEIF and AVIF need Microsoft's codec extensions; mirrored or upside-down ones are skipped.": [
+    "小于 9×8 像素、网格亮度范围不足 16、或签名中置位比特不足 4 或超过 60 的图片会跳过。这些启发式条件会漏掉有效图片，包括平坦图和单向渐变。动画、HDR、高位深、CMYK 和不支持的格式会拒绝。HEIC、HEIF 和 AVIF 需要 Microsoft 编解码器扩展；镜像或上下颠倒的会跳过。",
+    "小於 9×8 像素、網格亮度範圍不足 16、或簽章中設為 1 的位元不足 4 或超過 60 的圖片會略過。這些啟發式條件會漏掉有效圖片，包括平坦圖及單向漸層。動畫、HDR、高位元深度、CMYK 和不支援的格式會拒絕。HEIC、HEIF 和 AVIF 需要 Microsoft 編解碼器擴充功能；鏡像或上下顛倒的會略過。",
+    "9×8画素未満、グリッド輝度範囲が16未満、またはシグネチャの1のビットが4未満か60超の画像はスキップします。この経験則は平坦な画像や一方向のグラデーションなど有効な画像も見逃します。アニメーション、HDR、高ビット深度、CMYK、未対応形式は拒否します。HEIC・HEIF・AVIFにはMicrosoftのコーデック拡張機能が必要で、反転・上下逆のものはスキップします。"
   ],
   "Word 97-2003 DOC reads the main document text from the piece table, not Word's rendered view. Headers, footers, footnotes, comments, text boxes, field codes, Insert-Symbol characters, pictures, OLE objects and macros are omitted; field results are kept. Paragraph marks become line breaks, table cells tabs and table rows line breaks. Directly formatted hidden text and tracked deletions are skipped; hidden text from styles and piece-level property changes are not evaluated. Encrypted or obfuscated files and Word 6/95 or older are refused; a .doc that is really RTF or DOCX is read as that format. Limits: 16,384 compound-file directory entries and 128 nested fields. Nothing is extracted to disk or executed.": [
     "Word 97-2003 DOC 从片段表读取主文档文字，不是 Word 的排版视图。页眉、页脚、脚注、批注、文本框、域代码、插入的符号、图片、OLE 对象和宏都会省略；保留域结果。段落标记变为换行，表格单元格变为制表符，表格行变为换行。直接设置格式的隐藏文字和修订中的删除内容会跳过；来自样式的隐藏文字和片段级属性更改不会计算。已加密或混淆的文件以及 Word 6/95 或更早版本会被拒绝；实为 RTF 或 DOCX 的 .doc 按对应格式读取。限制：复合文件目录 16,384 项、嵌套域 128 层。不会解压到磁盘，也不会执行任何内容。",
@@ -16829,7 +16829,7 @@
     "此 HEIF 或 AVIF 檔案使用了 Swivel 尚不檢查的功能（外部資料、衍生或裁切影像，或未知的必要屬性）。請重新存為 JPEG 或 PNG。",
     "この HEIF または AVIF ファイルは、Swivel がまだ確認しない機能（外部データ、派生・切り抜き画像、または不明な必須プロパティ）を使っています。JPEG または PNG として保存し直してください。"
   ],
-  "This HEIF or AVIF photo is flipped or turned upside down. Swivel can't yet confirm how Windows' decoder applies that, so it is refused rather than risk a wrong picture. Rotate it in another app and save it as JPEG or PNG.": [
+  "This HEIF or AVIF photo is mirrored or turned upside down. Swivel can't yet confirm how Windows' decoder applies that, so it is refused rather than risk a wrong picture. Rotate it in another app and save it as JPEG or PNG.": [
     "此 HEIF 或 AVIF 照片被镜像或上下颠倒。Swivel 尚无法确认 Windows 解码器如何处理这一点，为避免画面错误而拒绝处理。请在其他应用中旋转并存为 JPEG 或 PNG。",
     "此 HEIF 或 AVIF 相片被鏡像或上下顛倒。Swivel 尚無法確認 Windows 解碼器如何處理這一點，為避免畫面錯誤而拒絕處理。請在其他應用程式中旋轉並存為 JPEG 或 PNG。",
     "この HEIF または AVIF 写真は反転または上下逆になっています。Windows のデコーダーがこれをどう適用するか Swivel ではまだ確認できないため、誤った画像になるのを避けて処理しません。別のアプリで回転し、JPEG または PNG として保存してください。"
@@ -16859,10 +16859,10 @@
     "Windows 的 HEIF 解碼器無法讀取此圖片。檔案可能已損毀，或編解碼器延伸模組遺失或已過時。",
     "Windows の HEIF デコーダーでこの画像を読み込めませんでした。ファイルが破損しているか、コーデック拡張機能がないか古い可能性があります。"
   ],
-  "HEIC, HEIF and AVIF are read only through Microsoft's own HEIF decoder in Windows (free HEIF Image Extensions with HEVC Video Extensions or AV1 Video Extension from the Microsoft Store); other installed codecs are not used. Still pictures only; rotation and the colour profile are applied, depth maps, gain maps and other metadata are not. Flipped or upside-down photos are refused for now.": [
-    "HEIC、HEIF 和 AVIF 只通过 Windows 中 Microsoft 自己的 HEIF 解码器读取（需从 Microsoft Store 安装免费的“HEIF 图像扩展”，以及“HEVC 视频扩展”或“AV1 视频扩展”）；不使用其他已安装的编解码器。仅限静态图片；会应用旋转和颜色描述文件，不应用深度图、增益图和其他元数据。镜像或上下颠倒的照片暂时会被拒绝。",
-    "HEIC、HEIF 和 AVIF 只透過 Windows 中 Microsoft 自己的 HEIF 解碼器讀取（需從 Microsoft Store 安裝免費的「HEIF 影像延伸模組」，以及「HEVC 視訊延伸模組」或「AV1 視訊延伸模組」）；不使用其他已安裝的編解碼器。僅限靜態圖片；會套用旋轉和色彩描述檔，不套用深度圖、增益圖和其他中繼資料。鏡像或上下顛倒的相片暫時會被拒絕。",
-    "HEIC・HEIF・AVIF は Windows に含まれる Microsoft 独自の HEIF デコーダーだけで読み込みます（Microsoft Store の無料の「HEIF 画像拡張機能」と、「HEVC ビデオ拡張機能」または「AV1 ビデオ拡張機能」が必要）。ほかにインストールされたコーデックは使いません。静止画のみで、回転とカラープロファイルは適用し、深度マップ・ゲインマップ・その他のメタデータは適用しません。反転または上下逆の写真は当面処理しません。"
+  "HEIC, HEIF and AVIF are opened only by Microsoft's own HEIF decoder in Windows; other installed HEIF codecs are not used. Windows chooses the HEVC or AV1 video decoder that decoder needs (Microsoft's Store extensions or the graphics hardware): HEIF Image Extensions with HEVC Video Extensions or AV1 Video Extension. Still pictures only; rotation and an embedded colour profile are applied, depth maps, gain maps and other metadata are not. Mirrored or upside-down photos, and wide-gamut pictures without a profile, are refused for now.": [
+    "HEIC、HEIF 和 AVIF 只由 Windows 中 Microsoft 自己的 HEIF 解码器打开，不使用其他已安装的 HEIF 编解码器。该解码器所需的 HEVC 或 AV1 视频解码器由 Windows 选择（Microsoft Store 扩展或显卡硬件）：“HEIF 图像扩展”加“HEVC 视频扩展”或“AV1 视频扩展”。仅限静态图片；会应用旋转和嵌入的颜色描述文件，不应用深度图、增益图和其他元数据。镜像或上下颠倒的照片，以及没有描述文件的广色域图片，暂时会被拒绝。",
+    "HEIC、HEIF 和 AVIF 只由 Windows 中 Microsoft 自己的 HEIF 解碼器開啟，不使用其他已安裝的 HEIF 編解碼器。該解碼器所需的 HEVC 或 AV1 視訊解碼器由 Windows 選擇（Microsoft Store 延伸模組或顯示卡硬體）：「HEIF 影像延伸模組」加「HEVC 視訊延伸模組」或「AV1 視訊延伸模組」。僅限靜態圖片；會套用旋轉和內嵌的色彩描述檔，不套用深度圖、增益圖和其他中繼資料。鏡像或上下顛倒的相片，以及沒有描述檔的廣色域圖片，暫時會被拒絕。",
+    "HEIC・HEIF・AVIF は Windows に含まれる Microsoft 独自の HEIF デコーダーだけで開き、ほかにインストールされた HEIF コーデックは使いません。そのデコーダーが必要とする HEVC または AV1 のビデオデコーダーは Windows が選びます（Microsoft Store の拡張機能またはグラフィックスハードウェア）。必要なのは「HEIF 画像拡張機能」と「HEVC ビデオ拡張機能」または「AV1 ビデオ拡張機能」です。静止画のみで、回転と埋め込みカラープロファイルは適用し、深度マップ・ゲインマップ・その他のメタデータは適用しません。反転または上下逆の写真と、プロファイルのない広色域の画像は当面処理しません。"
   ],
   "The HEIF decoder registered in Windows is not Microsoft's, so Swivel doesn't use it.": [
     "Windows 中注册的 HEIF 解码器不是 Microsoft 的，因此 Swivel 不使用它。",
@@ -16873,5 +16873,15 @@
     "Windows 无法应用此图片的颜色描述文件。",
     "Windows 無法套用此圖片的色彩描述檔。",
     "Windows でこの画像のカラープロファイルを適用できませんでした。"
+  ],
+  "This square HEIF or AVIF photo is turned a quarter turn. Swivel can't yet tell whether Windows' decoder has already turned it, so it is refused rather than risk a wrong picture. Rotate it in another app and save it as JPEG or PNG.": [
+    "此正方形 HEIF 或 AVIF 照片需旋转 90 度。Swivel 尚无法判断 Windows 解码器是否已旋转它，为避免画面错误而拒绝处理。请在其他应用中旋转并存为 JPEG 或 PNG。",
+    "此正方形 HEIF 或 AVIF 相片需旋轉 90 度。Swivel 尚無法判斷 Windows 解碼器是否已旋轉它，為避免畫面錯誤而拒絕處理。請在其他應用程式中旋轉並存為 JPEG 或 PNG。",
+    "この正方形の HEIF または AVIF 写真は 90 度回転が必要です。Windows のデコーダーがすでに回転したかどうか Swivel ではまだ判断できないため、誤った画像になるのを避けて処理しません。別のアプリで回転し、JPEG または PNG として保存してください。"
+  ],
+  "This HEIF or AVIF picture uses a wide colour space (such as Display P3 or BT.2020) without an embedded colour profile, which Swivel can't convert to sRGB yet. Save it again as JPEG or PNG.": [
+    "此 HEIF 或 AVIF 图片使用广色域（如 Display P3 或 BT.2020）但没有嵌入颜色描述文件，Swivel 暂时无法转换为 sRGB。请重新存为 JPEG 或 PNG。",
+    "此 HEIF 或 AVIF 圖片使用廣色域（如 Display P3 或 BT.2020）但沒有內嵌色彩描述檔，Swivel 暫時無法轉換為 sRGB。請重新存為 JPEG 或 PNG。",
+    "この HEIF または AVIF 画像は埋め込みカラープロファイルのない広色域（Display P3 や BT.2020 など）を使っており、Swivel はまだ sRGB に変換できません。JPEG または PNG として保存し直してください。"
   ]
 }

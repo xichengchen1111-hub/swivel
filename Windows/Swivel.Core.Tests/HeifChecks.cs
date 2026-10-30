@@ -33,7 +33,9 @@ internal static class HeifChecks
         public bool ExtraEssential;
         public bool Alpha, Grid, Moov, Clap;
         public int DataReference; public int Method;
-        public int Transfer = 13;
+        public int Transfer = 13, Primaries = 1;
+        public bool GridInFile; public int GridWidth = -1, TileWidth = -1;
+        public List<byte[]> TileExtra = new();
         public byte[]? Dinf;
         public string Handler = "pict";
         public uint? Primary;
@@ -57,19 +59,22 @@ internal static class HeifChecks
         var properties = new List<byte[]> {
             Config(o.Codec, o.Depth),
             Full("ispe", 0, 0, U32((uint)o.Width), U32((uint)o.Height)),
-            Box("colr", A("nclx"), U16(1), U16(o.Transfer), U16(1), B(0x80)),
-            Full("ispe", 0, 0, U32((uint)Math.Max(1, o.Width / 2)), U32((uint)o.Height)),
+            Box("colr", A("nclx"), U16(o.Primaries), U16(o.Transfer), U16(1), B(0x80)),
+            Full("ispe", 0, 0, U32((uint)(o.TileWidth > 0 ? o.TileWidth : Math.Max(1, o.Width / 2))), U32((uint)o.Height)),
             Full("auxC", 0, 0, A("urn:mpeg:mpegB:cicp:systems:auxiliary:alpha"), B(0)),
         };
         if (o.Clap) properties.Add(Box("clap", new byte[32]));
         properties.AddRange(o.Extra);
+        int tileExtraStart = properties.Count + 1;
+        properties.AddRange(o.TileExtra);
         var ipco = Box("ipco", properties.ToArray());
         var associations = new List<(uint Id, int[] Indexes)>();
         var primaryIndexes = new List<int> { 2, 3 };
         if (!o.Grid) primaryIndexes.Insert(0, 0x81);
-        for (int i = 6; i <= properties.Count; i++) primaryIndexes.Add(o.ExtraEssential ? 0x80 | i : i);
+        for (int i = 6; i < tileExtraStart; i++) primaryIndexes.Add(o.ExtraEssential ? 0x80 | i : i);
         associations.Add((1, primaryIndexes.ToArray()));
-        if (o.Grid) { associations.Add((2, new[] { 0x81, 4 })); associations.Add((3, new[] { 0x81, 4 })); }
+        int[] tileIndexes = new[] { 0x81, 4 }.Concat(Enumerable.Range(tileExtraStart, o.TileExtra.Count)).ToArray();
+        if (o.Grid) { associations.Add((2, tileIndexes)); associations.Add((3, tileIndexes)); }
         if (o.Alpha) associations.Add((9, new[] { 0x81, 2, 5 }));
         var ipma = Full("ipma", 0, 0, new[] { U32((uint)associations.Count) }.Concat(associations.Select(a => U16((int)a.Id).Concat(B(a.Indexes.Length)).Concat(a.Indexes.Select(x => (byte)x)).ToArray())).ToArray());
         var iprp = Box("iprp", ipco, ipma);
@@ -78,12 +83,13 @@ internal static class HeifChecks
         if (o.Alpha) references.Add(Box("auxl", U16(9), U16(1), U16(1)));
         var hdlr = Full("hdlr", 0, 0, U32(0), A(o.Handler), new byte[12], B(0));
         var pitm = Full("pitm", 0, 0, U16((int)(o.Primary ?? 1)));
-        byte[] grid = B(0, 0, 0, 1, (o.Width >> 8) & 255, o.Width & 255, (o.Height >> 8) & 255, o.Height & 255);
+        int gridWidth = o.GridWidth < 0 ? o.Width : o.GridWidth;
+        byte[] grid = B(0, 0, 0, 1, (gridWidth >> 8) & 255, gridWidth & 255, (o.Height >> 8) & 255, o.Height & 255);
         byte[]? idat = o.Grid ? Box("idat", grid) : null;
         // iloc version 1: offset/length 4 bytes, base 0, index 0; offsets patched once sizes are known.
         byte[] Iloc(uint mdatData) => Full("iloc", 1, 0, U16(0x4400), U16(items.Count), items.SelectMany((item, n) =>
         {
-            bool inIdat = o.Grid && item.Id == 1;
+            bool inIdat = o.Grid && item.Id == 1 && !o.GridInFile;
             int method = inIdat ? 1 : o.Method;
             return U16((int)item.Id).Concat(U16(method)).Concat(U16(o.DataReference)).Concat(U16(1))
                 .Concat(U32(inIdat ? 0u : mdatData + (uint)n * 16)).Concat(U32(inIdat ? (uint)grid.Length : 16u));
@@ -127,6 +133,18 @@ internal static class HeifChecks
         check(HeifImage.Inspect(File(new Options { Extra = { Full("pixi", 0, 0, B(3, 10, 10, 10)) } }), default).BitDepth == 10, "pixi with 10 bits per channel is seen");
         check(HeifImage.Inspect(File(new Options { Transfer = 16 }), default).HighDynamicRange && HeifImage.Inspect(File(new Options { Transfer = 18 }), default).HighDynamicRange, "PQ and HLG transfers are HDR");
         check(HeifImage.Inspect(File(new Options { Extra = { Box("clli", new byte[4]) } }), default).HighDynamicRange, "A content light level property marks HDR");
+        // Review follow-ups: colour on tiles, wide gamut, pixel aspect, grid layout and tile sizes.
+        check(HeifImage.Inspect(File(new Options { Grid = true, TileExtra = { Box("colr", A("nclx"), U16(9), U16(16), U16(9), B(0)) } }), default).HighDynamicRange, "A PQ transfer on grid tiles marks HDR");
+        check(HeifImage.Inspect(File(new Options { Primaries = 12 }), default).WideGamut && HeifImage.Inspect(File(new Options { Primaries = 9 }), default).WideGamut, "P3 or BT.2020 nclx primaries without a profile are wide gamut");
+        check(!HeifImage.Inspect(File(new Options { Primaries = 12, Extra = { Box("colr", A("prof"), new byte[16]) } }), default).WideGamut && !HeifImage.Inspect(File(new Options { Primaries = 2 }), default).WideGamut, "An ICC profile, or unspecified primaries, is not a wide-gamut refusal");
+        Refused(File(new Options { Extra = { Box("pasp", U32(4), U32(3)) } }), HeifImage.Unsupported, "Non-square pixels are refused");
+        check(HeifImage.Inspect(File(new Options { Extra = { Box("pasp", U32(1), U32(1)) } }), default).Width == 4032, "Square pixels (pasp 1:1) are accepted");
+        Refused(File(new Options { Grid = true, GridWidth = 4000 }), HeifImage.Invalid, "A grid whose output size differs from its ispe is refused");
+        Refused(File(new Options { Grid = true, GridInFile = true }), HeifImage.Unsupported, "A grid description outside idat is refused");
+        Refused(File(new Options { Grid = true, TileExtra = { Full("ispe", 0, 0, U32(2016), U32(3024)) } }), HeifImage.Invalid, "A tile with two sizes is refused");
+        Refused(File(new Options { Grid = true, TileWidth = 16385 }), HeifImage.Unsupported, "A tile wider than 16384 is refused");
+        Refused(File(new Options { Grid = true, TileWidth = 16384 }), HeifImage.Unsupported, "Tiles adding up to more than 4 × 16 MP are refused");
+        check(HeifImage.Inspect(File(new Options { Grid = true, TileWidth = 2048 }), default).IsGrid, "Tiles slightly larger than the output (coding padding) are accepted");
 
         // Orientation: irot (anticlockwise quarter turns) and imir, in association order.
         int Orient(params byte[][] extra) { var o = new Options(); o.Extra.AddRange(extra); return HeifImage.Inspect(File(o), default).Orientation; }
@@ -206,7 +224,7 @@ internal static class HeifChecks
         check(Catalog.IsImage("x.heic") && Catalog.IsImage("x.avif") && Catalog.IsImage("x.heif"), "HEIC, HEIF and AVIF are image inputs");
         check(PhotoSimilarity.SupportedExtensions.Contains(".heic") && PhotoSimilarity.SupportedExtensions.Contains(".avif"), "Photo similarity takes HEIC and AVIF");
         check(FilePreview.ImageExtensions.Contains("heic") && FilePreview.ImageExtensions.Contains("avif"), "Preview File takes HEIC and AVIF");
-        foreach (string text in new[] { HeifImage.Invalid, HeifImage.Sequence, HeifImage.Unsupported, HeifImage.Ambiguous, HeifImage.HighDepth, HeifImage.AlphaUnsupported, HeifImage.HeicMissing, HeifImage.AvifMissing, HeifImage.ReadNotice, HeifImage.DecodeFailed })
+        foreach (string text in new[] { HeifImage.Invalid, HeifImage.Sequence, HeifImage.Unsupported, HeifImage.Ambiguous, HeifImage.HighDepth, HeifImage.AlphaUnsupported, HeifImage.AmbiguousSquare, HeifImage.WideGamut, HeifImage.HeicMissing, HeifImage.AvifMissing, HeifImage.ReadNotice, HeifImage.DecodeFailed })
             check(Strings.Table.TryGetValue(text, out var translations) && translations.Length == 3 && translations.All(t => !string.IsNullOrWhiteSpace(t)), "HEIF text translated: " + text);
     }
 

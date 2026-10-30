@@ -107,14 +107,17 @@ public static class ImageTools
         catch (Exception error) when (error is System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException) { return Convert(false); }
     }
     /// HEIC/HEIF/AVIF: Swivel's own box gate first (structure, sequences, size, orientation, bit
-    /// depth), then only Microsoft's HEIF decoder through WIC (HeifDecoder). Orientations the
-    /// decoder's output can't prove applied or not (mirrors and half turns, quarter turns of a
-    /// square picture) are refused rather than guessed.
+    /// depth), then only Microsoft's HEIF decoder through WIC (HeifDecoder). Only upright and
+    /// quarter-turned pictures are taken: whether the decoder already applied a quarter turn shows
+    /// in its output size; mirrors, half turns and quarter turns of a square picture can't be
+    /// told apart that way, so they are refused rather than guessed.
     private static BitmapSource DecodeHeif(Stream stream, CancellationToken cancellation, bool readOnly)
     {
         var info = HeifImage.Inspect(stream, cancellation);
-        if (info.Orientation is 2 or 3 or 4 || HeifImage.SwapsSides(info.Orientation) && info.Width == info.Height) throw new UserError(HeifImage.Ambiguous);
+        if (info.Orientation is not (1 or 6 or 8)) throw new UserError(HeifImage.Ambiguous);
+        if (info.Orientation != 1 && info.Width == info.Height) throw new UserError(HeifImage.AmbiguousSquare);
         if (!readOnly && (info.BitDepth > 8 || info.HighDynamicRange)) throw new UserError(HeifImage.HighDepth);
+        if (!readOnly && info.WideGamut) throw new UserError(HeifImage.WideGamut);
         var pixels = HeifDecoder.Read(stream, info, readOnly, cancellation, out bool oriented);
         BitmapSource source = BitmapSource.Create(pixels.Width, pixels.Height, 96, 96, PixelFormats.Bgra32, null, pixels.Bgra, pixels.Width * 4);
         if (!oriented) source = Orient(source, (ushort)info.Orientation);

@@ -56,6 +56,11 @@ internal static class HeifNativeChecks
         check(Message(Write("huge.heic", HeifChecks.File(new HeifChecks.Options { Width = 5000, Height = 4000 }))) == "Images are limited to 16 megapixels and 16384 pixels per side.", "An over-16 MP ispe is refused before decoding");
         var upsideDown = new HeifChecks.Options(); upsideDown.Extra.Add(HeifChecks.Box("irot", HeifChecks.B(2)));
         check(Message(Write("upside down.heic", HeifChecks.File(upsideDown))) == HeifImage.Ambiguous, "A half-turned photo is refused rather than guessed");
+        var mirrored = new HeifChecks.Options(); mirrored.Extra.Add(HeifChecks.Box("irot", HeifChecks.B(1))); mirrored.Extra.Add(HeifChecks.Box("imir", HeifChecks.B(0)));
+        check(Message(Write("mirrored.heic", HeifChecks.File(mirrored))) == HeifImage.Ambiguous, "A mirrored quarter-turned photo is refused rather than guessed");
+        var square = new HeifChecks.Options { Width = 512, Height = 512 }; square.Extra.Add(HeifChecks.Box("irot", HeifChecks.B(3)));
+        check(Message(Write("square.heic", HeifChecks.File(square))) == HeifImage.AmbiguousSquare, "A quarter-turned square photo is refused with its own message");
+        check(Message(Write("p3.avif", HeifChecks.File(new HeifChecks.Options { Major = "avif", Compatible = new[] { "avif" }, Codec = "av01", Primaries = 12 }))) == HeifImage.WideGamut, "A P3 AVIF without a profile is refused for saving");
         check(Message(Write("deep.heic", HeifChecks.File(new HeifChecks.Options { Depth = 10 }))) == HeifImage.HighDepth, "A 10-bit HEIC is refused for saving");
         check(Message(Write("pq.avif", HeifChecks.File(new HeifChecks.Options { Major = "avif", Compatible = new[] { "avif" }, Codec = "av01", Transfer = 16 }))) == HeifImage.HighDepth, "A PQ (HDR) AVIF is refused for saving");
         check(Message(Write("cut.heic", original[..200])) == HeifImage.Invalid, "A truncated HEIC is refused");
@@ -64,7 +69,7 @@ internal static class HeifNativeChecks
 
         // A real picture, only when Microsoft's HEIF encoder (and an HEVC encoder) exist on this machine.
         if (!facts.Trusted || hevc == 0) { Console.WriteLine("HEIF REPORT: real-picture decode not exercised (no trusted HEIF decoder or no HEVC decoder)."); return; }
-        var source = new PixelImage(40, 24, Enumerable.Range(0, 40 * 24).SelectMany(i => new byte[] { (byte)(i % 40 * 6), (byte)(i / 40 * 10), 128, 255 }).ToArray());
+        var source = new PixelImage(64, 48, Enumerable.Range(0, 64 * 48).SelectMany(i => new byte[] { (byte)(i % 64 * 4), (byte)(i / 64 * 5), 128, 255 }).ToArray());
         byte[]? encoded = hevcEncoders > 0 ? HeifDecoder.EncodeForTests(source) : null;
         if (encoded is null) { Console.WriteLine("HEIF REPORT: real-picture decode not exercised (Microsoft's HEIF encoder unavailable)."); return; }
         string real = Write("made here.heic", encoded);
@@ -76,6 +81,6 @@ internal static class HeifNativeChecks
         int worst = 0;
         for (int i = 0; i < source.Bgra.Length; i += 4) for (int c = 0; c < 3; c++) worst = Math.Max(worst, Math.Abs(pixels.Bgra[i + c] - source.Bgra[i + c]));
         Console.WriteLine($"HEIF REPORT: real HEIC decoded {pixels.Width}×{pixels.Height}, worst channel difference {worst}");
-        check(pixels.Width == 40 && pixels.Height == 24 && worst <= 48, "A HEIC made by Microsoft's encoder decodes through the image tools at its size with close colours");
+        check(pixels.Width == 64 && pixels.Height == 48 && worst <= 48, "A HEIC made by Microsoft's encoder decodes through the image tools at its size with close colours");
     }
 }
