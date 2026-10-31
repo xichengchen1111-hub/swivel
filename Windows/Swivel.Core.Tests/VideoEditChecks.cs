@@ -254,6 +254,21 @@ internal static class VideoEditChecks
             reject(() => Mp4Retime.Apply(stream, 200), name);
             check(stream.ToArray().SequenceEqual(copy), name + " (and leaves the file as it was)");
         }
+        foreach (bool wide in new[] { false, true })
+        {
+            var movie = Movie(1000, 30000, 300, 1000, wide: wide);
+            int matrix = Find(movie, "tkhd") + (wide ? 52 : 40);
+            U32(2400u << 16).CopyTo(movie, matrix + 36); U32(64u << 16).CopyTo(movie, matrix + 40);
+            using var storage = new MemoryStream(); storage.Write(File(Plain("ftyp", 24), movie, Plain("mdat", 100)));
+            var before = storage.ToArray(); Mp4Retime.DisplayClockwise(storage, 2400, 64); var after = storage.ToArray();
+            int at = 24 + matrix;
+            uint[] expected = { 0, 0x10000, 0, 0xffff0000, 0, 0, 64u << 16, 0, 0x40000000 };
+            check(expected.Select((value, i) => R32(after, at + 4 * i) == value).All(x => x) && before.Length == after.Length &&
+                before.AsSpan(0, at).SequenceEqual(after.AsSpan(0, at)) && before.AsSpan(at + 36).SequenceEqual(after.AsSpan(at + 36)),
+                "Portrait storage changes only the display matrix, preserving size, sample offsets and all media bytes");
+            var snapshot = storage.ToArray(); reject(() => Mp4Retime.DisplayClockwise(storage, 2400, 64), "Portrait storage refuses a second rotation");
+            check(storage.ToArray().SequenceEqual(snapshot), "Refused portrait patch leaves every byte untouched");
+        }
         Refuses("Retiming refuses a file without a movie box", Plain("ftyp", 24), Plain("mdat", 100));
         Refuses("Retiming refuses two movie boxes", Plain("ftyp", 24), Movie(1000, 30000, 300, 1000), Movie(1000, 30000, 300, 1000));
         Refuses("Retiming refuses fragments", Plain("ftyp", 24), Movie(1000, 30000, 300, 1000), Plain("moof", 40), Plain("mdat", 100));

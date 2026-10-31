@@ -225,6 +225,43 @@ public static class Mp4Retime
         stream.Position = moov; stream.Write(movie); stream.Flush();
     }
 
+    /// A privately encoded landscape video stored counterclockwise for the encoder's height
+    /// limit: display it clockwise again. Sample tables and coded dimensions stay untouched.
+    public static void DisplayClockwise(Stream stream, int width, int height)
+    {
+        if (width < 1 || height < 1 || width > 3840 || height > 3840) throw new ArgumentOutOfRangeException(nameof(width));
+        var (at, movie) = Movie(stream);
+        var (start, end) = Body(movie, 0, movie.Length, "moov");
+        int? header = null; int headerEnd = 0;
+        foreach (var (type, s, e) in Children(movie, start, end))
+        {
+            if (type == "mvex") Fail();
+            if (type != "trak") continue;
+            int? tkhd = null; int tkhdEnd = 0; bool video = false;
+            foreach (var (t, s2, e2) in Children(movie, s, e))
+            {
+                if (t == "tkhd") { One(ref tkhd, s2); tkhdEnd = e2; }
+                else if (t == "mdia") foreach (var (t3, s3, _) in Children(movie, s2, e2))
+                    if (t3 == "hdlr") { Need(movie, s3, 12); video |= Type(movie, s3 + 8) == "vide"; }
+            }
+            if (video)
+            {
+                if (tkhd is not { } th) { Fail(); return; }
+                One(ref header, th); headerEnd = tkhdEnd;
+            }
+        }
+        if (header is not { } h) { Fail(); return; }
+        Need(movie, h, 1); if (movie[h] > 1) Fail();
+        int matrix = h + (movie[h] == 1 ? 52 : 40);
+        Need(movie, matrix, 44); if (matrix + 44 > headerEnd) Fail();
+        if (Be32(movie, matrix + 36) != (uint)width << 16 || Be32(movie, matrix + 40) != (uint)height << 16) Fail();
+        uint[] identity = { 0x10000, 0, 0, 0, 0x10000, 0, 0, 0, 0x40000000 };
+        for (int i = 0; i < 9; i++) if (Be32(movie, matrix + i * 4) != identity[i]) Fail();
+        uint[] clockwise = { 0, 0x10000, 0, 0xffff0000, 0, 0, (uint)height << 16, 0, 0x40000000 };
+        for (int i = 0; i < 9; i++) Put32(movie, matrix + i * 4, clockwise[i]);
+        stream.Position = at; stream.Write(movie); stream.Flush();
+    }
+
     /// Whether every video track's header matrix is the identity (stored upright, unmirrored).
     /// null when the stream isn't a readable ISO media file with one movie box (e.g. WMV).
     public static bool? StraightVideo(Stream stream)

@@ -5,13 +5,13 @@ namespace Swivel.Core;
 
 /// The part of a video to keep, in milliseconds from its start, whether its sound is kept, and
 /// optional picture changes and speed (percent). No picture change is null.
-public sealed record VideoTrimPlan(long Start, long End, bool KeepSound, VideoPicture? Picture = null, int Speed = 100, WaveNoise? Noise = null)
+public sealed record VideoTrimPlan(long Start, long End, bool KeepSound, VideoPicture? Picture = null, int Speed = 100, WaveNoise? Noise = null, VideoColorSound? Effects = null)
 {
     public long Length => End - Start;
     /// Milliseconds of the new video.
     public long OutputLength => VideoEdit.OutputLength(Length, Speed);
     /// More than the cut and the sound changed: saved as “name edited.mp4”.
-    public bool Edited => Picture is not null || Speed != 100 || Noise is not null;
+    public bool Edited => Picture is not null || Speed != 100 || Noise is not null || Effects is not null;
 }
 
 /// Trim Video…: reading and writing the start and end times typed in the window, and checking a
@@ -76,9 +76,11 @@ public static class VideoTrim
 
     /// A video without sound has nothing to remove, so keeping all of it changes nothing. At
     /// another speed a kept sound is time-stretched to the new length with its pitch kept.
-    public static VideoTrimPlan Plan(long start, long end, long duration, bool keepSound, bool hasSound = true, VideoPicture? picture = null, int speed = 100, WaveNoise? noise = null, int soundRate = 48000)
+    public static VideoTrimPlan Plan(long start, long end, long duration, bool keepSound, bool hasSound = true, VideoPicture? picture = null, int speed = 100, WaveNoise? noise = null, int soundRate = 48000, VideoColorSound? effects = null)
     {
         VideoEdit.ValidateSpeed(speed);
+        effects?.Validate();
+        if (effects?.IsNeutral == true) effects = null;
         if (picture is not null) { VideoEdit.Validate(picture); if (picture.IsIdentity) picture = null; }
         if (start < 0 || end > duration || end - start < MinLength) throw new UserError(OutOfRange);
         if (!keepSound || !hasSound) noise = null;
@@ -86,8 +88,8 @@ public static class VideoTrim
         // up to 100 ms more or less than the cut (VideoEdit.SoundMatches), so only the shape is
         // checked here with that tolerance; the exact bound is applied to the decoded sound.
         noise?.Range(new WaveInfo(soundRate, 1, 16, 44, (long)Math.Round((end - start + 100) * soundRate / 1000.0, MidpointRounding.AwayFromZero) * 2));
-        bool edited = picture is not null || speed != 100 || noise is not null;
+        bool edited = picture is not null || speed != 100 || noise is not null || effects is not null;
         if (start == 0 && end == duration && !edited && (keepSound || !hasSound)) throw new UserError(hasSound ? Unchanged : UnchangedSilent);
-        return new VideoTrimPlan(start, end, keepSound && hasSound, picture, speed, noise);
+        return new VideoTrimPlan(start, end, keepSound && hasSound, picture, speed, noise, effects);
     }
 }
