@@ -114,6 +114,8 @@ CustomizationChecks.Run(Check, Reject);
 DoctorChecks.Run(Check);
 WindowsDoctorChecks.Run(Check,Reject);
 MountedDriveChecks.Run(Check,Reject);
+DoctorDiagnosisChecks.Run(Check);
+DriveEjectChecks.Run(Check);
 PowerPlanChecks.Run(Check,Reject);
 SleepCapabilityChecks.Run(Check,Reject);
 BatterySleepChecks.Run(Check,Reject);

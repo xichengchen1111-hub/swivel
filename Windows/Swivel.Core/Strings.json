@@ -18763,5 +18763,425 @@
     "降噪使用保留片段中的纯噪声样本，在变速前运行；移除声音会停用降噪。降噪本身不增加画面编码。",
     "降噪使用保留片段中的純噪聲樣本，在變速前執行；移除聲音會停用降噪。降噪本身不增加畫面編碼。",
     "ノイズ除去は残す範囲内のノイズのみのサンプルを使い、速度変更前に実行します。音声を削除すると無効になります。ノイズ除去自体は映像の再エンコードを追加しません。"
+  ],
+  "Check Slow or Hot…": [
+    "检查电脑变慢或发热…",
+    "檢查電腦變慢或發熱…",
+    "動作の遅さ・発熱を確認…"
+  ],
+  "Sampling processes and memory for about five seconds…": [
+    "正在采样进程和内存，约需五秒…",
+    "正在取樣處理程序和記憶體，約需五秒…",
+    "プロセスとメモリを約5秒間サンプリング中…"
+  ],
+  "Read-only slowdown check closed. Nothing was changed.": [
+    "只读性能检查已关闭，未作更改。",
+    "唯讀效能檢查已關閉，未作變更。",
+    "読み取り専用の動作確認を閉じました。変更はありません。"
+  ],
+  "Drive inspection closed. Any eject request already sent may still complete.": [
+    "磁盘检查已关闭。已发送的弹出请求仍可能完成。",
+    "磁碟檢查已關閉。已送出的退出要求仍可能完成。",
+    "ドライブの確認を閉じました。送信済みの取り出し要求は完了する場合があります。"
+  ],
+  "Device Write Protection": [
+    "设备写保护",
+    "裝置寫入保護",
+    "デバイスの書き込み保護"
+  ],
+  "Device reports writable (permissions untested).": [
+    "设备报告可写（未测试权限）。",
+    "裝置回報可寫入（未測試權限）。",
+    "デバイスは書き込み可能と報告しています（権限は未確認）。"
+  ],
+  "Device reports write protected.": [
+    "设备报告已写保护。",
+    "裝置回報已啟用寫入保護。",
+    "デバイスは書き込み保護されていると報告しています。"
+  ],
+  "Eject {0} ({1})…": [
+    "弹出 {0}（{1}）…",
+    "退出 {0}（{1}）…",
+    "{0}（{1}）を取り出す…"
+  ],
+  "Eject is disabled for system disks and when device identity or safe-removal eligibility cannot be verified.": [
+    "系统磁盘或无法确认设备身份、安全弹出资格的设备不能弹出。",
+    "系統磁碟或無法確認裝置身分、安全退出資格的裝置無法退出。",
+    "システムディスク、および識別情報や安全な取り出しの条件を確認できないデバイスは取り出せません。"
+  ],
+  "No eject request was sent.": [
+    "未发送弹出请求。",
+    "未送出退出要求。",
+    "取り出し要求は送信されませんでした。"
+  ],
+  "This drive is not eligible for eject.": [
+    "此磁盘不符合弹出条件。",
+    "此磁碟不符合退出條件。",
+    "このドライブは取り出しの条件を満たしていません。"
+  ],
+  "The drive identity changed. Close this window and read the drive list again.": [
+    "磁盘身份已变化。请关闭此窗口并重新读取磁盘列表。",
+    "磁碟身分已變更。請關閉此視窗並重新讀取磁碟清單。",
+    "ドライブの識別情報が変わりました。このウィンドウを閉じ、一覧を再取得してください。"
+  ],
+  "The volume is gone after the eject request.": [
+    "弹出请求后，此卷已不再挂载。",
+    "退出要求後，此磁碟區已不再掛載。",
+    "取り出し要求後、ボリュームのマウントが解除されたことを確認しました。"
+  ],
+  "Windows accepted the request, but removal could not be confirmed. Do not unplug the drive yet.": [
+    "Windows 已接受请求，但尚无法确认磁盘已移除。请先不要拔出。",
+    "Windows 已接受要求，但尚無法確認磁碟已移除。請先不要拔除。",
+    "Windows は要求を受け付けましたが、取り外しを確認できません。まだ抜かないでください。"
+  ],
+  "Vetoing Device": [
+    "阻止弹出的设备或程序",
+    "阻止退出的裝置或程式",
+    "取り出しを拒否したデバイスまたはプログラム"
+  ],
+  "Confirm Eject": [
+    "确认弹出",
+    "確認退出",
+    "取り出しの確認"
+  ],
+  "Eject {0} ({1})? Other volumes on this device may also disconnect. Windows can refuse if a program is using it.": [
+    "弹出 {0}（{1}）？此设备上的其他卷也可能断开。如有程序正在使用，Windows 可能拒绝请求。",
+    "退出 {0}（{1}）？此裝置上的其他磁碟區也可能中斷連線。如有程式正在使用，Windows 可能拒絕要求。",
+    "{0}（{1}）を取り出しますか？同じデバイス上のほかのボリュームも切断される場合があります。使用中のプログラムがあると Windows が拒否することがあります。"
+  ],
+  "This device does not support safe removal.": [
+    "此设备不支持安全弹出。",
+    "此裝置不支援安全退出。",
+    "このデバイスは安全な取り出しに対応していません。"
+  ],
+  "Windows is waiting for a file or device to close. Try again shortly.": [
+    "Windows 正等待文件或设备关闭。请稍后重试。",
+    "Windows 正在等候檔案或裝置關閉。請稍後再試。",
+    "Windows はファイルまたはデバイスが閉じられるのを待っています。少し待って再試行してください。"
+  ],
+  "A program is using it. Close its files and try again.": [
+    "有程序正在使用它。请关闭相关文件后重试。",
+    "有程式正在使用它。請關閉相關檔案後再試。",
+    "プログラムが使用中です。関連するファイルを閉じて再試行してください。"
+  ],
+  "A service is using it.": [
+    "有服务正在使用它。",
+    "有服務正在使用它。",
+    "サービスが使用中です。"
+  ],
+  "A device cannot safely be removed now.": [
+    "某个设备目前无法安全移除。",
+    "某個裝置目前無法安全移除。",
+    "現在、安全に取り外せないデバイスがあります。"
+  ],
+  "A driver is preventing removal.": [
+    "驱动程序阻止了移除。",
+    "驅動程式阻止了移除。",
+    "ドライバーが取り外しを拒否しています。"
+  ],
+  "This device does not support the removal request.": [
+    "此设备不支持此移除请求。",
+    "此裝置不支援此移除要求。",
+    "このデバイスはこの取り外し要求に対応していません。"
+  ],
+  "There is not enough power to remove the device safely.": [
+    "电力不足，无法安全移除设备。",
+    "電力不足，無法安全移除裝置。",
+    "電力が不足しているため、安全に取り外せません。"
+  ],
+  "This device cannot be disabled.": [
+    "此设备无法禁用。",
+    "此裝置無法停用。",
+    "このデバイスは無効にできません。"
+  ],
+  "Windows did not grant permission to eject it.": [
+    "Windows 未授予弹出权限。",
+    "Windows 未授予退出權限。",
+    "Windows は取り出しの権限を許可しませんでした。"
+  ],
+  "Windows reports that the device was already removed; refresh the drive list.": [
+    "Windows 报告此设备已被移除；请刷新磁盘列表。",
+    "Windows 回報此裝置已移除；請重新整理磁碟清單。",
+    "Windows はすでに取り外されたと報告しています。ドライブ一覧を更新してください。"
+  ],
+  "Windows could not safely remove the device. Try again later.": [
+    "Windows 无法安全移除此设备。请稍后重试。",
+    "Windows 無法安全移除此裝置。請稍後再試。",
+    "Windows は安全に取り外せませんでした。後で再試行してください。"
+  ],
+  "Memory or commit is nearly full; review the three largest working sets below.": [
+    "内存或提交量接近上限；请查看下方工作集最大的三个进程。",
+    "記憶體或認可量接近上限；請查看下方工作集最大的三個處理程序。",
+    "メモリまたはコミットが上限に近づいています。下のワーキングセットが大きい3つのプロセスを確認してください。"
+  ],
+  "A process used at least a quarter of this PC's CPU during the sample; review the busiest processes below.": [
+    "采样期间有进程使用了至少四分之一的总 CPU 算力；请查看下方最繁忙的进程。",
+    "取樣期間有處理程序使用了至少四分之一的總 CPU 算力；請查看下方最忙碌的處理程序。",
+    "サンプル中に PC 全体の CPU の4分の1以上を使用したプロセスがあります。下の一覧を確認してください。"
+  ],
+  "The system drive has less than 10% free space; review files you no longer need.": [
+    "系统盘剩余空间不足 10%；可检查不再需要的文件。",
+    "系統磁碟可用空間不足 10%；可檢查不再需要的檔案。",
+    "システムドライブの空き容量が10%未満です。不要になったファイルを確認してください。"
+  ],
+  "Windows reports a pending restart or has been running for at least 14 days; review Windows Update when convenient.": [
+    "Windows 报告有待完成的重启，或已运行至少 14 天；方便时请查看 Windows 更新。",
+    "Windows 回報有待完成的重新啟動，或已執行至少 14 天；方便時請查看 Windows 更新。",
+    "Windows が再起動待ちを報告しているか、14日以上稼働しています。都合のよいときに Windows Update を確認してください。"
+  ],
+  "No review threshold was reached in this moment-in-time sample; unavailable readings can hide a problem.": [
+    "本次瞬时采样未达到提示阈值；无法读取的项目仍可能隐藏问题。",
+    "本次瞬間取樣未達到提示門檻；無法讀取的項目仍可能隱藏問題。",
+    "今回の一時点のサンプルでは確認基準に達していませんが、取得できない値に問題が隠れている可能性があります。"
+  ],
+  "This sample is only a moment in time; it does not measure temperature or prove why the PC is slow.": [
+    "此采样只反映一个时间片段，不测量温度，也不证明电脑变慢的原因。",
+    "此取樣只反映一個時間片段，不測量溫度，也不證明電腦變慢的原因。",
+    "このサンプルは一時点の状態です。温度の測定や動作が遅い原因の特定は行いません。"
+  ],
+  "Device identity is unavailable; eject is disabled.": [
+    "无法读取设备身份，已禁用弹出。",
+    "無法讀取裝置身分，已停用退出。",
+    "デバイスの識別情報を取得できないため、取り出しは無効です。"
+  ],
+  "Device information is partial; unavailable facts are not proof of write access or safe removal.": [
+    "设备信息不完整；无法读取的事实不能证明写入权限或可安全弹出。",
+    "裝置資訊不完整；無法讀取的事實不能證明寫入權限或可安全退出。",
+    "デバイス情報は一部のみです。取得できない項目は、書き込み権限や安全な取り出しを保証しません。"
+  ],
+  "Open Windows Update": [
+    "打开 Windows 更新",
+    "開啟 Windows 更新",
+    "Windows Update を開く"
+  ],
+  "Physical memory load: {0}%; commit: {1} / {2} bytes; pagefile use: {3} / {4} bytes.": [
+    "物理内存使用率：{0}%；提交量：{1} / {2} 字节；分页文件使用量：{3} / {4} 字节。",
+    "實體記憶體使用率：{0}%；認可量：{1} / {2} 位元組；分頁檔使用量：{3} / {4} 位元組。",
+    "物理メモリ使用率：{0}%；コミット：{1} / {2} バイト；ページファイル使用量：{3} / {4} バイト。"
+  ],
+  "System-drive free space: {0} / {1} bytes; uptime: {2:F1} days; pending restart: {3}.": [
+    "系统盘可用空间：{0} / {1} 字节；运行时间：{2:F1} 天；待重启：{3}。",
+    "系統磁碟可用空間：{0} / {1} 位元組；執行時間：{2:F1} 天；待重新啟動：{3}。",
+    "システムドライブ空き容量：{0} / {1} バイト；稼働時間：{2:F1} 日；再起動待ち：{3}。"
+  ],
+  "Highest CPU shares (up to three processes)": [
+    "CPU 使用率最高（最多三个进程）",
+    "CPU 使用率最高（最多三個處理程序）",
+    "CPU 使用率の上位（最大3プロセス）"
+  ],
+  "{0} (PID {1}): {2:F1}% of total CPU": [
+    "{0}（PID {1}）：总 CPU 的 {2:F1}%",
+    "{0}（PID {1}）：總 CPU 的 {2:F1}%",
+    "{0}（PID {1}）：全 CPU の {2:F1}%"
+  ],
+  "Largest working sets (up to three processes)": [
+    "工作集最大（最多三个进程）",
+    "工作集最大（最多三個處理程序）",
+    "ワーキングセットの上位（最大3プロセス）"
+  ],
+  "{0} (PID {1}): {2} bytes working set": [
+    "{0}（PID {1}）：工作集 {2} 字节",
+    "{0}（PID {1}）：工作集 {2} 位元組",
+    "{0}（PID {1}）：ワーキングセット {2} バイト"
+  ],
+  "System memory load is unavailable.": [
+    "无法读取系统内存使用率。",
+    "無法讀取系統記憶體使用率。",
+    "システムメモリ使用率を取得できません。"
+  ],
+  "System commit readings are unavailable.": [
+    "无法读取系统提交量。",
+    "無法讀取系統認可量。",
+    "システムのコミット値を取得できません。"
+  ],
+  "Pagefile use is unavailable.": [
+    "无法读取分页文件使用量。",
+    "無法讀取分頁檔使用量。",
+    "ページファイル使用量を取得できません。"
+  ],
+  "System-drive free space is unavailable.": [
+    "无法读取系统盘可用空间。",
+    "無法讀取系統磁碟可用空間。",
+    "システムドライブの空き容量を取得できません。"
+  ],
+  "Pending-restart flags are unavailable or incomplete.": [
+    "待重启标记无法读取或不完整。",
+    "待重新啟動標記無法讀取或不完整。",
+    "再起動待ちフラグを取得できないか、一部のみです。"
+  ],
+  "The process list is partial or unavailable.": [
+    "进程列表不完整或无法读取。",
+    "處理程序清單不完整或無法讀取。",
+    "プロセス一覧を取得できないか、一部のみです。"
+  ],
+  "The process list reached its time limit (partial).": [
+    "进程列表读取达到时间上限（结果不完整）。",
+    "處理程序清單讀取達到時間上限（結果不完整）。",
+    "プロセス一覧の取得が時間制限に達しました（一部のみ）。"
+  ],
+  "Some processes exited or denied access; their readings are unavailable.": [
+    "部分进程已退出或拒绝访问，无法读取其数据。",
+    "部分處理程序已結束或拒絕存取，無法讀取其資料。",
+    "一部のプロセスは終了したかアクセスを拒否したため、値を取得できません。"
+  ],
+  "Explicit read-only drive-letter metadata, at most A–Z. Only letters reported as removable, fixed, CD/DVD or RAM have filesystem/capacity queried; letters reported as network, missing or unknown are listed without those queries. Device bus, removable flag, vendor, product, label, volume identity and write-protection status are requested without write access. No directory entries or file contents are read. Access can wake removable media, and a blocked system call may return after cancellation. Drive letters can change between calls, so this is not one authenticated or atomic device snapshot; a remapped letter or system provider can cause remote metadata access.": [
+    "明确读取 A–Z 已挂载盘符的只读元数据。仅对可移动、固定、光盘或内存盘查询文件系统和容量；网络、缺失或未知类型只列出。以零写入权限读取设备总线、可移动标记、厂商、产品、卷标、卷身份及写保护状态，不读取目录条目或文件内容。访问可能唤醒媒体，阻塞的系统调用可能在取消后才返回。盘符可能在调用间变化，此结果不是经身份认证或原子的设备快照；重映射盘符或系统提供程序可能导致远程元数据访问。",
+    "明確讀取 A–Z 已掛載盤符的唯讀中繼資料。僅對可移動、固定、光碟或記憶體磁碟查詢檔案系統和容量；網路、缺失或未知類型只列出。以零寫入權限讀取裝置匯流排、可移動標記、廠商、產品、標籤、磁碟區身分及寫入保護狀態，不讀取目錄項目或檔案內容。存取可能喚醒媒體，阻塞的系統呼叫可能在取消後才返回。盤符可能在呼叫間變更，此結果不是經身分認證或不可分割的裝置快照；重新對應盤符或系統提供者可能導致遠端中繼資料存取。",
+    "A～Z のマウント済みドライブのメタデータを明示的に読み取ります。リムーバブル・固定・光学・RAM ドライブのみでファイルシステムと容量を取得し、ネットワーク・不明・未接続は一覧に残します。書き込み権限なしでバス、取り外し可能フラグ、メーカー、製品、ラベル、ボリューム識別情報、書き込み保護を取得します。ディレクトリやファイル内容は読みません。アクセスでメディアが起動する場合があり、ブロックされたシステム呼び出しはキャンセル後に戻ることがあります。ドライブ文字は呼び出し間に変わり得るため、認証済みの一貫したスナップショットではありません。再割り当てやシステムのプロバイダーによってリモートのメタデータにアクセスする場合があります。"
+  ],
+  "Bus information is reported by the device and may be unavailable. Only mounted drive letters are covered, not folder mount points or unmounted devices. The read-only flag is a filesystem declaration, not a write-access test; its absence does not prove write permission. Available and total bytes for the caller can reflect quotas; total free bytes are a separate volume value. Eject requires a separate confirmation and identity recheck; Windows can veto it. Other volumes on the same device may also disappear. No forced dismount, repair, format, administrator action, network test or assistant upload is performed.": [
+    "总线信息由设备报告，可能无法读取。仅覆盖已挂载盘符，不含文件夹挂载点或未挂载设备。只读标记是文件系统声明，不是写入测试；未声明不代表有写权限。调用者可用及总容量可能受配额影响，卷总可用空间是另一项数据。弹出须单独确认并复核身份；Windows 可以拒绝。同一设备上的其他卷也可能消失。不强制卸载、不修复、格式化、提权、测试网络或上传助手。",
+    "匯流排資訊由裝置回報，可能無法讀取。僅涵蓋已掛載盤符，不含資料夾掛載點或未掛載裝置。唯讀標記是檔案系統宣告，不是寫入測試；未宣告不代表有寫入權限。呼叫者可用及總容量可能受配額影響，磁碟區總可用空間是另一項資料。退出須單獨確認並複核身分；Windows 可以拒絕。同一裝置上的其他磁碟區也可能消失。不強制卸載、不修復、格式化、提高權限、測試網路或上傳助手。",
+    "バス情報はデバイスからの報告で、取得できない場合があります。対象はマウント済みのドライブ文字のみで、フォルダーのマウントポイントや未マウントのデバイスは含みません。読み取り専用フラグはファイルシステムの宣言で、書き込みテストではありません。フラグがなくても権限を保証しません。呼び出し元の空き容量・総容量にはクォータが反映される場合があります。取り出しは別途確認と識別情報の再確認が必要で、Windows が拒否できます。同じデバイス上のほかのボリュームも消える場合があります。強制マウント解除、修復、フォーマット、管理者操作、ネットワークテスト、アシスタントへの送信は行いません。"
+  ],
+  "This is a moment-in-time sample, not a heat sensor or a diagnosis of the cause. CPU share is a percentage of all logical processors; processes that exit or deny access can be missing. Working sets may share memory. Only common pending-restart registry flags are checked; an unknown value is not a clean bill of health.": [
+    "此采样只反映瞬时情况，不是温度传感器或原因诊断。CPU 占比以所有逻辑处理器为总量；已退出或拒绝访问的进程可能遗漏。工作集可能共享内存。仅检查常见的待重启注册表标记；未知状态不代表没有问题。",
+    "此取樣只反映瞬間情況，不是溫度感測器或原因診斷。CPU 佔比以所有邏輯處理器為總量；已結束或拒絕存取的處理程序可能遺漏。工作集可能共用記憶體。僅檢查常見的待重新啟動登錄標記；未知狀態不代表沒有問題。",
+    "一時点のサンプルであり、温度センサーや原因診断ではありません。CPU 使用率はすべての論理プロセッサに対する割合です。終了したプロセスやアクセス拒否で一覧に含まれない場合があります。ワーキングセットには共有メモリが含まれ得ます。再起動待ちは一般的なレジストリフラグのみ確認し、不明な値は正常を意味しません。"
+  ],
+  "Review thresholds: physical memory or commit at least 90%; one process at least 25% of total CPU; system-drive free space below 10%; uptime at least 14 days or a readable pending-restart flag. Pagefile use alone is not evidence of a slowdown.": [
+    "提示阈值：物理内存或提交量至少 90%；单个进程至少使用总 CPU 的 25%；系统盘空闲低于 10%；运行至少 14 天或有可读的待重启标记。分页文件有使用量本身不证明电脑变慢。",
+    "提示門檻：實體記憶體或認可量至少 90%；單一處理程序至少使用總 CPU 的 25%；系統磁碟可用空間低於 10%；執行至少 14 天或有可讀的待重新啟動標記。分頁檔有使用量本身不證明電腦變慢。",
+    "確認基準：物理メモリまたはコミットが90%以上、1つのプロセスが全 CPU の25%以上、システムドライブの空きが10%未満、稼働14日以上または取得できた再起動待ちフラグ。ページファイルの使用だけでは動作が遅い証拠になりません。"
+  ],
+  "Browsing these areas does not scan. Checks start only from their button and only read; content comparisons require confirmation. Items are moved to the Recycle Bin only from a results window, when you select them, after a recheck and a confirmation, with Undo while that window is open. Window-close requests require selecting one eligible window and a separate confirmation. Drive eject requires naming the drive in a separate confirmation and a fresh identity check. No forced dismount, administrator command or settings change runs here. Settings buttons only open the named Windows Settings page. Optional assistant requests require a full preview and explicit Send.": [
+    "浏览分区不会扫描。检查仅在点击按钮后开始，内容比较需确认。仅在结果窗口中选择项目、重新检查并确认后才移入回收站，窗口打开期间可撤销。关闭窗口请求需选择符合条件的窗口并另行确认。弹出磁盘需在单独确认中指明磁盘并重新核对身份。不强制卸载、不执行管理员命令或更改设置。设置按钮仅打开指定的 Windows 设置页面。可选助手请求需完整预览并明确发送。",
+    "瀏覽分區不會掃描。檢查僅在點擊按鈕後開始，內容比較需確認。僅在結果視窗中選擇項目、重新檢查並確認後才移入資源回收筒，視窗開啟期間可復原。關閉視窗要求需選擇符合條件的視窗並另行確認。退出磁碟需在單獨確認中指明磁碟並重新核對身分。不強制卸載、不執行系統管理員命令或變更設定。設定按鈕僅開啟指定的 Windows 設定頁面。選用助手要求需完整預覽並明確傳送。",
+    "各領域を開いてもスキャンは行いません。ボタンからのみ確認を開始し、内容の比較には確認が必要です。結果画面で選択・再確認・承認した項目のみごみ箱に移し、その画面が開いている間は元に戻せます。ウィンドウを閉じる要求にも選択と別途確認が必要です。ドライブの取り出しは対象を明示した別の確認と識別情報の再確認が必要です。強制マウント解除、管理者コマンド、設定の変更は行いません。設定ボタンは指定の Windows 設定画面だけを開きます。アシスタントへの要求は全内容を確認して明示的に送信します。"
+  ],
+  "Run a five-second read-only check of busy processes, memory, commit, pagefile use, system-drive free space, uptime and common pending-restart flags. Plain-language findings link to the exact existing tools or Windows Update. This moment-in-time sample does not measure heat or prove the cause of a slowdown.": [
+    "5 秒只读检查繁忙进程、内存、提交量、分页文件、系统盘空闲、运行时间及常见待重启标记。直白的提示可打开对应现有工具或 Windows 更新。瞬时采样不测温度，也不证明变慢原因。",
+    "5 秒唯讀檢查忙碌處理程序、記憶體、認可量、分頁檔、系統磁碟可用空間、執行時間及常見待重新啟動標記。淺白的提示可開啟對應現有工具或 Windows 更新。瞬間取樣不測溫度，也不證明變慢原因。",
+    "プロセス、メモリ、コミット、ページファイル、システムドライブの空き、稼働時間、一般的な再起動待ちフラグを約5秒で読み取ります。わかりやすい説明から既存のツールや Windows Update を開けます。一時点のサンプルで、温度測定や原因の特定は行いません。"
+  ],
+  "Inspect mounted volumes, USB/SD and other reported buses, vendor, product and write protection. Eligible non-system devices can be ejected after confirmation and a fresh identity check; Windows vetoes are explained. Missing facts stay visible. Unmounted devices and actual file-write permission are not tested.": [
+    "检查已挂载卷、USB/SD 等报告的总线、厂商、产品及写保护。符合条件的非系统设备可在确认并复核身份后弹出，Windows 拒绝原因会用直白语言说明。缺失数据保持可见。不检查未挂载设备或实际文件写入权限。",
+    "檢查已掛載磁碟區、USB/SD 等回報的匯流排、廠商、產品及寫入保護。符合條件的非系統裝置可在確認並複核身分後退出，Windows 拒絕原因會以淺白語言說明。缺失資料保持可見。不檢查未掛載裝置或實際檔案寫入權限。",
+    "マウント済みボリューム、USB・SD などのバス、メーカー、製品、書き込み保護を確認します。条件を満たすシステム以外のデバイスは、承認と識別情報の再確認後に取り出せます。Windows が拒否した理由も表示します。取得できない項目も残します。未マウントのデバイスや実際のファイル書き込み権限は確認しません。"
+  ],
+  "SCSI": [
+    "SCSI",
+    "SCSI",
+    "SCSI"
+  ],
+  "ATAPI": [
+    "ATAPI",
+    "ATAPI",
+    "ATAPI"
+  ],
+  "ATA": [
+    "ATA",
+    "ATA",
+    "ATA"
+  ],
+  "IEEE 1394": [
+    "IEEE 1394",
+    "IEEE 1394",
+    "IEEE 1394"
+  ],
+  "SSA": [
+    "SSA",
+    "SSA",
+    "SSA"
+  ],
+  "Fibre Channel": [
+    "Fibre Channel",
+    "Fibre Channel",
+    "Fibre Channel"
+  ],
+  "USB": [
+    "USB",
+    "USB",
+    "USB"
+  ],
+  "RAID": [
+    "RAID",
+    "RAID",
+    "RAID"
+  ],
+  "iSCSI": [
+    "iSCSI",
+    "iSCSI",
+    "iSCSI"
+  ],
+  "SAS": [
+    "SAS",
+    "SAS",
+    "SAS"
+  ],
+  "SATA": [
+    "SATA",
+    "SATA",
+    "SATA"
+  ],
+  "SD": [
+    "SD",
+    "SD",
+    "SD"
+  ],
+  "MMC": [
+    "MMC",
+    "MMC",
+    "MMC"
+  ],
+  "Virtual": [
+    "虚拟",
+    "虛擬",
+    "仮想"
+  ],
+  "File-backed Virtual": [
+    "基于文件的虚拟设备",
+    "以檔案為基礎的虛擬裝置",
+    "ファイルベースの仮想デバイス"
+  ],
+  "Storage Spaces": [
+    "存储空间",
+    "儲存空間",
+    "記憶域スペース"
+  ],
+  "NVMe": [
+    "NVMe",
+    "NVMe",
+    "NVMe"
+  ],
+  "SCM": [
+    "SCM",
+    "SCM",
+    "SCM"
+  ],
+  "UFS": [
+    "UFS",
+    "UFS",
+    "UFS"
+  ],
+  "The system processor count is unavailable; CPU shares are unknown.": [
+    "无法读取系统处理器数量；CPU 占比未知。",
+    "無法讀取系統處理器數量；CPU 佔比未知。",
+    "システムのプロセッサ数を取得できないため、CPU 使用率は不明です。"
+  ],
+  "Vendor": [
+    "厂商",
+    "廠商",
+    "メーカー"
+  ],
+  "Product": [
+    "产品",
+    "產品",
+    "製品"
+  ],
+  "Removable": [
+    "可移动",
+    "可移動",
+    "取り外し可能"
+  ],
+  "Eject": [
+    "弹出",
+    "退出",
+    "取り出す"
+  ],
+  "This volume has multiple disk extents; eject is disabled.": [
+    "此卷包含多个磁盘区段；已禁用弹出。",
+    "此磁碟區包含多個磁碟區段；已停用退出。",
+    "このボリュームには複数のディスク領域があるため、取り出せません。"
   ]
 }
