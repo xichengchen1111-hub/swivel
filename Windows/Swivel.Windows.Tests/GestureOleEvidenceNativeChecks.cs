@@ -76,17 +76,16 @@ internal static class GestureOleEvidenceNativeChecks
             CheckNoProbe(check, threadId);
             releaseFake.Set(); Until(() => before.WaitOne(0), "before DoDragDrop");
             check(!GestureOleEvidence.IsActive(threadId), "Real source thread has no OLE evidence before DoDragDrop");
-            start.Set(); Until(() => feedback.WaitOne(0) || after.WaitOne(0), "DoDragDrop feedback or return");
-            // Leave OLE's loop running: a callback can precede acquisition of capture.
-            var observation = Stopwatch.StartNew();
+            start.Set();
+            // With no input OLE can acquire capture without calling GiveFeedback or QueryContinueDrag.
             Until(() => {
                 Observe(threadId, out IntPtr capture, out _);
-                return capture != IntPtr.Zero || after.WaitOne(0) || observation.ElapsedMilliseconds >= 500;
+                return capture != IntPtr.Zero || after.WaitOne(0);
             }, "DoDragDrop capture observation");
             string observed = Observe(threadId, out IntPtr hwndCapture, out string className);
             Console.WriteLine("OLE drag evidence: " + observed);
             // Check this thread itself, not an unrelated foreground drag accepted by IsActive.
-            check(feedback.WaitOne(0) && !after.WaitOne(0) && hwndCapture != IntPtr.Zero && className == "CLIPBRDWNDCLASS" && GestureOleEvidence.IsActive(threadId),
+            check(!after.WaitOne(0) && hwndCapture != IntPtr.Zero && className == "CLIPBRDWNDCLASS" && GestureOleEvidence.IsActive(threadId),
                 "Real STA DoDragDrop with CF_HDROP exposes the expected OLE capture class: " + observed);
             cancel.Set();
             Until(() => {
@@ -122,7 +121,11 @@ internal static class GestureOleEvidenceNativeChecks
     {
         // Queue only to the fixture's drag thread/windows, never inject physical input.
         Observe(thread, out IntPtr capture, out _);
-        if (capture != IntPtr.Zero) PostMessage(capture, 0x0200, IntPtr.Zero, IntPtr.Zero);
+        if (capture != IntPtr.Zero)
+        {
+            PostMessage(capture, 0x0100, new IntPtr(0x1B), IntPtr.Zero);
+            PostMessage(capture, 0x0200, IntPtr.Zero, IntPtr.Zero);
+        }
         else if (fixture != IntPtr.Zero) PostMessage(fixture, 0x0200, IntPtr.Zero, IntPtr.Zero);
         if (thread != 0) PostThreadMessage(thread, 0x0200, IntPtr.Zero, IntPtr.Zero);
     }

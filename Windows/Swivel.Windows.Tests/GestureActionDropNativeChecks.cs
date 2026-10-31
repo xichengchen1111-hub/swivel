@@ -37,7 +37,7 @@ internal static class GestureActionDropNativeChecks
             new[] { typeof(IDataObject), typeof(DragDropKeyStates), typeof(DragDropEffects), typeof(DependencyObject), typeof(Point) }, null)!
             .Invoke(new object[] { data, DragDropKeyStates.LeftMouseButton, DragDropEffects.Copy | DragDropEffects.Move, target.Content, point });
         args.RoutedEvent = method switch { "OnDragEnter" => DragDrop.DragEnterEvent, "OnDragOver" => DragDrop.DragOverEvent, "OnDragLeave" => DragDrop.DragLeaveEvent, _ => DragDrop.DropEvent };
-        typeof(GestureDropWindow).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, new object[] { target, args });
+        typeof(GestureDropWindow).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic, new[] { typeof(object), typeof(DragEventArgs) })!.Invoke(target, new object[] { target, args });
         return args;
     }
     internal static void Confirm(GestureDropWindow target, DataObject data)
