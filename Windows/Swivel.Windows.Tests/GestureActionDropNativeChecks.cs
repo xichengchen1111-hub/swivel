@@ -78,10 +78,15 @@ internal static class GestureActionDropNativeChecks
                 {
                     target.ShowAt(new(Guid.NewGuid(), 1, Stopwatch.GetTimestamp(), 300, 300, false));
                     var probe = target.Probe!;
+                    IntPtr probeHandle = probe.Handle;
+                    check(HwndSource.FromHwnd(probeHandle) is null, "The native probe has no WPF source competing for OLE registration");
+                    check(SendMessage(probeHandle, 0x0021, IntPtr.Zero, IntPtr.Zero) == new IntPtr(3),
+                        "The native probe returns MA_NOACTIVATE for mouse and hover activation");
                     if (loseCapture) evidence = false; else down = false;
                     typeof(GestureDropWindow).GetMethod("PollDrag", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, null);
                     check(!IsWindowVisible(probe.Handle), loseCapture ? "Capture loss immediately hides the hit-testable probe" : "Button up immediately hides the hit-testable probe");
                     Until(() => target.Completion.IsCompleted);
+                    check(!IsWindow(probeHandle), "Probe completion joins destruction of its registered HWND");
                     check(target.Probe is null && !target.IsVisible && target.Completion.IsCompletedSuccessfully, "Invalidated probe destruction is joined before session completion");
                 }
                 finally { Close(target); }
@@ -98,7 +103,10 @@ internal static class GestureActionDropNativeChecks
                     check(((Grid)target.Content).Children.Count == 0 && !target.ShowActivated, "Unconfirmed target renders no menu or controls");
                     Confirm(target, data);
                     target.UpdateLayout();
-                    long style = GetWindowLongPtr(new WindowInteropHelper(target).Handle, -20).ToInt64();
+                    IntPtr wheelHandle = new WindowInteropHelper(target).Handle;
+                    check(HwndSource.FromHwnd(wheelHandle) is not null && ((Grid)target.Content).AllowDrop,
+                        "The visible Wheel has a WPF source and WPF drag events as its only OLE owner");
+                    long style = GetWindowLongPtr(wheelHandle, -20).ToInt64();
                     check((style & 0x08000000L) != 0 && GetForegroundWindow() == foreground && !target.ShowActivated, "Confirmed Wheel is NOACTIVATE and preserves the drag source foreground");
                     var canvas = Find<Canvas>((DependencyObject)target.Content).Single();
                     var buttons = canvas.Children.OfType<Button>().Where(button => button.Tag is ToolAction).ToArray();
@@ -195,6 +203,8 @@ internal static class GestureActionDropNativeChecks
         public void DUnadvise(int connection) => throw new NotSupportedException();
         public int EnumDAdvise(out IEnumSTATDATA? enumerator) => throw new NotSupportedException();
     }
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] private static extern IntPtr SendMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindow(IntPtr hwnd);
     [DllImport("user32.dll")] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] private static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);

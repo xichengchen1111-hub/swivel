@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using System.Threading.Tasks;
-using System.Windows.Interop;
 using System.Windows.Threading;
 using Swivel.Core;
 
@@ -27,7 +26,8 @@ public interface IGestureOleDropTarget
 [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
 internal sealed class GestureDragProbe : IGestureOleDropTarget
 {
-    private readonly HwndSource source;
+    private readonly ProbeWindow source;
+    private readonly Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
     private readonly Func<bool> available;
     private readonly Action<string[]> confirm;
     private readonly Action cancel;
@@ -46,12 +46,9 @@ internal sealed class GestureDragProbe : IGestureOleDropTarget
         try
         {
             if (!available()) throw new OperationCanceledException();
-            source = new HwndSource(new HwndSourceParameters("Swivel file drag probe") {
-                WindowStyle = unchecked((int)0x80000000),
-                ExtendedWindowStyle = 0x08000000 | 0x00000080 | 0x00200000 | 0x00000008,
-                PositionX = request.PhysicalX - 12, PositionY = request.PhysicalY - 12, Width = 24, Height = 24
-            });
-            source.AddHook(Hook);
+            // HwndSource registers WPF's drop target even without an AllowDrop visual.
+            // A plain HWND leaves this IDropTarget as its only OLE owner.
+            source = new ProbeWindow(request);
             result = RegisterDragDrop(source.Handle, this);
             if (result < 0) Marshal.ThrowExceptionForHR(result);
             registered = true;
@@ -62,7 +59,7 @@ internal sealed class GestureDragProbe : IGestureOleDropTarget
         catch
         {
             if (registered && source is not null) RevokeDragDrop(source.Handle);
-            source?.Dispose(); if (initialized) { initialized = false; OleUninitialize(); }
+            source?.DestroyHandle(); if (initialized) { initialized = false; OleUninitialize(); }
             throw;
         }
     }
@@ -113,7 +110,7 @@ internal sealed class GestureDragProbe : IGestureOleDropTarget
         catch (Exception error)
         {
             Close();
-            try { source.Dispatcher.BeginInvoke(new Action(() => report(error))); } catch { /* Cleanup still completes below. */ }
+            try { dispatcher.BeginInvoke(new Action(() => report(error))); } catch { /* Cleanup still completes below. */ }
         }
         finally { Leave(); }
         // The probe itself never accepts a drop or promises a file operation.
@@ -140,7 +137,7 @@ internal sealed class GestureDragProbe : IGestureOleDropTarget
         queued = true;
         try
         {
-            source.Dispatcher.BeginInvoke(new Action(() => {
+            dispatcher.BeginInvoke(new Action(() => {
                 queued = false;
                 if (depth == 0) Cleanup(null);
             }));
@@ -153,15 +150,27 @@ internal sealed class GestureDragProbe : IGestureOleDropTarget
         cleaned = true;
         try { if (registered) { registered = false; Marshal.ThrowExceptionForHR(RevokeDragDrop(source.Handle)); } }
         catch (Exception error) { failure = failure is null ? error : new AggregateException(failure, error); }
-        try { source.RemoveHook(Hook); source.Dispose(); }
+        try { source.DestroyHandle(); }
         catch (Exception error) { failure = failure is null ? error : new AggregateException(failure, error); }
         finally { if (initialized) { initialized = false; OleUninitialize(); } }
         if (failure is null) done.TrySetResult(); else done.TrySetException(failure);
     }
-    private IntPtr Hook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    private sealed class ProbeWindow : System.Windows.Forms.NativeWindow
     {
-        if (message == 0x0021) { handled = true; return new IntPtr(3); }
-        return IntPtr.Zero;
+        internal ProbeWindow(WheelGestureRequest request)
+        {
+            CreateHandle(new System.Windows.Forms.CreateParams {
+                ClassName = "STATIC", Caption = "Swivel file drag probe",
+                Style = unchecked((int)0x80000000),
+                ExStyle = 0x08000000 | 0x00000080 | 0x00200000 | 0x00000008,
+                X = request.PhysicalX - 12, Y = request.PhysicalY - 12, Width = 24, Height = 24
+            });
+        }
+        protected override void WndProc(ref System.Windows.Forms.Message message)
+        {
+            if (message.Msg == 0x0021) { message.Result = new IntPtr(3); return; }
+            base.WndProc(ref message);
+        }
     }
     [DllImport("ole32.dll")] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] private static extern int OleInitialize(IntPtr reserved);
     [DllImport("ole32.dll")] [DefaultDllImportSearchPaths(DllImportSearchPath.System32)] private static extern void OleUninitialize();

@@ -29,6 +29,7 @@ internal sealed class GestureDropWindow : Window, IGestureDropTarget
     private GestureDragProbe? probe;
     internal GestureDragProbe? Probe => probe;
     private readonly MenuMotion motion;
+    // This HWND uses only WPF drag events; the separate native probe owns its IDropTarget.
     private readonly Grid root = new() { Background = Brushes.Transparent, AllowDrop = true };
     private readonly DispatcherTimer timer = new(DispatcherPriority.Input);
     private Canvas? canvas;
