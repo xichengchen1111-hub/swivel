@@ -391,6 +391,7 @@ public static partial class NativeFiles
     {
         if (GetFileType(handle) != 1) throw new UserError(LocalOnly);
         if (!GetFileInformationByHandle(handle, out var info)) ThrowLast();
+        if ((info.Attributes & ShelfReferences.CloudAttributes) != 0) throw new UserError(ShelfReferences.OnlineOnlyRefusal);
         if ((info.Attributes & UnsafeAttributes) != 0 || ((info.Attributes & 0x10) != 0) != directory)
             throw new UserError(LocalOnly);
     }

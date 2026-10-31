@@ -203,6 +203,7 @@ DoctorLabelChecks.Run(Check,Reject);
 PeInspectionChecks.Run(Check,Reject);
 AppCheckChecks.Run(Check,Reject);
 FilePreviewChecks.Run(Check,Reject);
+ShelfReferenceChecks.Run(Check,Reject);
 ImageBatchChecks.Run(Check);
 PresetLibraryChecks.Run(Check, Reject);
 MacQrLibraryChecks.Run(Check, Reject);

@@ -34,11 +34,12 @@ internal sealed class FloatingShelf : Window
         string previousStatus = status?.Text ?? "";
         status = UI.Text(previousStatus);
         Title = app.L("File Shelf"); var root = new DockPanel { Margin = new Thickness(18) };
-        var top = new StackPanel(); top.Children.Add(UI.Text(app.L("Drop files here. Select several and drag them out to copy. References last until Swivel quits.")));
+        var top = new StackPanel(); top.Children.Add(UI.Text(app.L("Drop files or folders here. Online-only items stay online. References last until Swivel quits.")));
         top.Children.Add(UI.Text(app.L("Actions use selected files, or all listed files when none are selected."),12));
         var topmost = new CheckBox { Content = app.L("Stay on top"), IsChecked = Topmost, Margin = new Thickness(0,4,0,10) }; topmost.Click += (_,_) => Topmost = topmost.IsChecked == true; top.Children.Add(topmost);
         var buttons = new WrapPanel(); top.Children.Add(buttons);
         buttons.Children.Add(UI.Button(app.L("Choose Files…"), () => app.Try(() => app.AddShelf(UI.Pick(this)))));
+        buttons.Children.Add(UI.Button(app.L("Choose Folders…"), () => app.Try(() => app.AddShelf(UI.PickShelfFolders(this)))));
         buttons.Children.Add(UI.Button(app.L("Remove Selected"), () => { foreach (string path in SelectedPaths) app.Shelf.Remove(path); }));
         buttons.Children.Add(UI.Button(app.L("Clear"), () => app.Shelf.Clear()));
         DockPanel.SetDock(top,Dock.Top); root.Children.Add(top);
@@ -46,12 +47,13 @@ internal sealed class FloatingShelf : Window
         void Action(string id,string title) => actions.Children.Add(UI.Button(app.L(title),async () => await app.RunActionAsync(new(id,title),Chosen(),this,text => status.Text = text)));
         Action("file.copy","Copy Files"); Action("file.paths","Copy Path"); Action("file.reveal","Show in Explorer");
         actions.Children.Add(UI.Button(app.L("Preview File"), async () => await app.PreviewShelfFileAsync(Chosen(), this, text => status.Text = text)));
+        actions.Children.Add(UI.Button(app.L("System Preview…"), async () => await app.PreviewShelfSystemAsync(Chosen(), this, text => status.Text = text)));
         if (app.Prefs.IsOn(Feature.Wheel)) actions.Children.Add(UI.Button(app.L("Open Wheel"),() => app.OpenPanel(true,Chosen())));
         if (app.Prefs.IsOn(Feature.QuickActions)) actions.Children.Add(UI.Button(app.L("Quick Actions"),() => app.OpenPanel(false,Chosen())));
         if (app.Prefs.IsOn(Feature.MyWheel)) actions.Children.Add(UI.Button(app.L("My Wheel"),() => app.OpenPanel(true,Chosen(),true)));
         actions.Children.Add(UI.Button(app.L("Cancel Operation"),app.CancelWork)); footer.Children.Add(status);
         DockPanel.SetDock(footer,Dock.Bottom); root.Children.Add(footer);
-        list = UI.FileList(app.Shelf); list.MaxHeight = double.PositiveInfinity; root.Children.Add(list); UI.CopyDrag(list,app); UI.DropFiles(root,app,app.AddShelf);
+        list = UI.ShelfList(app); list.MaxHeight = double.PositiveInfinity; root.Children.Add(list); UI.CopyDrag(list,app,shelfReferences: true); UI.DropFiles(root,app,app.AddShelf,shelfReferences: true);
         Content = root; RestoreSelection(selection);
     }
 }
