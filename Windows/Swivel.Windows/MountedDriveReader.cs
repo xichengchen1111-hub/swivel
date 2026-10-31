@@ -46,7 +46,7 @@ internal static class MountedDriveReader
                     if(GetDiskFreeSpaceEx(root,out ulong available,out ulong total,out ulong free))space=new(available,total,free);else spaceError=Error();
                     token.ThrowIfCancellationRequested();
                 }
-                drives.Add(new(letter,type,fs,flags,space,volumeError,spaceError));
+                drives.Add(DriveDeviceReader.Read(new(letter,type,fs,flags,space,volumeError,spaceError),token));
             }
         }
         finally

@@ -279,6 +279,17 @@ public sealed partial class App : Application
         owner.Closed += ownerClosed;
         try
         {
+            if(action.Id=="doctor.slow")
+            {
+                if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
+                workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();report(L("Sampling processes and memory for about five seconds…"));
+                var snapshot=await AwaitDoctorReadAsync(SlowMachineReader.SampleAsync(token),token);token.ThrowIfCancellationRequested();
+                var dialog=new SlowMachineDialog(this,snapshot);ShowOperationDialog(dialog,owner,token);token.ThrowIfCancellationRequested();
+                if(dialog.Requested==SlowAction.WindowsUpdate){WindowsSettings.Open(WindowsSettingsPage.WindowsUpdate);return;}
+                string? next=dialog.Requested switch{SlowAction.AppMemory=>"doctor.appmemory",SlowAction.UsageMonitor=>"doctor.monitor",SlowAction.CleanUp=>"doctor.cleanup",_=>null};
+                if(next is null){report(L("Read-only slowdown check closed. Nothing was changed."));return;}
+                action=WindowsDoctor.ResolveAction(next);
+            }
             if (action.Id == "shelf.systempreview") { await ShowShelfSystemPreviewAsync(files, owner, report, ownedWork); return; }
             if (shelfPreview)
             {
@@ -599,8 +610,8 @@ public sealed partial class App : Application
                 if(!Prefs.IsOn(Feature.Doctor))throw new UserError("Enable Windows Doctor in Settings first.");
                 workFeature=Feature.Doctor;token.ThrowIfCancellationRequested();report(L("Reading mounted-drive metadata…"));
                 var snapshot=await AwaitDoctorReadAsync(MountedDriveReader.ReadAsync(token),token);token.ThrowIfCancellationRequested();
-                ShowOperationDialog(new MountedDriveDialog(this,snapshot),owner,token);
-                report(token.IsCancellationRequested?L("Cancelled."):L("Drive inspection closed. No drive was changed or ejected."));return;
+                var dialog=new MountedDriveDialog(this,snapshot,token);try{ShowOperationDialog(dialog,owner,token);}finally{await dialog.FinishAsync();}
+                report(token.IsCancellationRequested?L("Cancelled."):L("Drive inspection closed. Any eject request already sent may still complete."));return;
             }
             if(action.Id=="doctor.appcheck")
             {
