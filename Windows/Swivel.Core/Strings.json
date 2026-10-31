@@ -5764,11 +5764,6 @@
     "原圖預覽",
     "元の画像のプレビュー"
   ],
-  "Original Windows QR relief scenes: Tree, Bouquet and Island, with Spring, Summer and Autumn palettes. The dark module squares and four-module white border are retained in the top projection. Lighting, viewing angle, screen resolution and dense codes can prevent scanning. Use the existing flat QR image for sharing or printing; this scene is not a scan guarantee or a 3D model export.": [
-    "原创 Windows 二维码浮雕场景：树木、花束和岛屿，搭配春、夏、秋配色。俯视投影保留深色模块方格和四模块白边。光照、视角、屏幕分辨率及密集码可能妨碍扫码。分享或打印请使用现有平面二维码；此场景不保证可扫码，也不导出三维模型。",
-    "原創 Windows QR 浮雕場景：樹木、花束和島嶼，搭配春、夏、秋配色。俯視投影保留深色模組方格和四模組白邊。光照、視角、螢幕解析度及密集碼可能妨礙掃碼。分享或列印請使用現有平面 QR 碼；此場景不保證可掃碼，也不匯出 3D 模型。",
-    "独自の Windows QR レリーフです。木・花束・島に春・夏・秋の配色を組み合わせます。真上の投影では暗いモジュールの正方形と 4 モジュールの白い余白を保持します。照明、角度、画面解像度、密度により読み取れない場合があります。共有や印刷には既存の平面 QR 画像を使ってください。読み取り保証や 3D モデル出力ではありません。"
-  ],
   "Original path to restore": [
     "要还原的原路径",
     "要還原的原路徑",
@@ -18608,5 +18603,10 @@
     "只读可执行文件路径证据，来源为 Run/RunOnce、Win32 服务、计划任务可执行动作、当前用户 App Paths 和 shell 打开命令（32/64 位视图）。仅 .exe 目标以严格的本地绝对路径（最多 240 个 UTF-16 单位）位于所选文件夹内才匹配；名称和参数不用于归属判定。仅 Run/RunOnce 和当前用户 App Paths/打开命令使用本进程环境展开变量。服务与任务的执行环境未知，路径含变量时保持未解析。缺少变量、歧义命令、8.3 短路径、相对路径和不支持的动作保持未解析。这不证明归属、目标存在或条目活跃。不更改注册表、服务或任务。",
     "唯讀可執行檔路徑證據，來源為 Run/RunOnce、Win32 服務、排程工作可執行動作、目前使用者 App Paths 與 shell 開啟命令（32/64 位元檢視）。僅 .exe 目標以嚴格的本機絕對路徑（最多 240 個 UTF-16 單位）位於所選資料夾內才符合；名稱與參數不用於歸屬判定。僅 Run/RunOnce 與目前使用者 App Paths/開啟命令使用本處理程序環境展開變數。服務與工作的執行環境未知，路徑含變數時保持未解析。缺少變數、歧義命令、8.3 短路徑、相對路徑與不支援的動作保持未解析。這不證明歸屬、目標存在或項目啟用。不變更登錄、服務或工作。",
     "Run/RunOnce、Win32 サービス、タスクの実行操作、現在のユーザーの App Paths とシェルの開くコマンド（32/64 ビット表示）から実行パスの証拠を読み取ります。選択フォルダー内の厳密なローカル絶対パス（UTF-16 で最大 240 単位）の .exe 対象のみが一致します。名前や引数で帰属を判定しません。Run/RunOnce と現在のユーザーの App Paths/開くコマンドのみ、このプロセスの環境で変数を展開します。サービスとタスクの実行環境は不明なため、変数を含むパスは未解決のままです。不明な変数、曖昧なコマンド、8.3 短縮パス、相対パス、未対応の操作は未解決です。所有、存在、有効状態の証明ではありません。レジストリ、サービス、タスクは変更しません。"
+  ],
+  "Voxel Tree, Bouquet and Island gardens turn into the code from above. Trunks, stems, paper, boats and filler foliage fade during the turn. Screen resolution, viewing angle and dense codes can prevent scanning. Use the flat QR image for copying, sharing and PNG export; the 3D view has not been verified for scanning.": [
+    "体素树木、花束和岛屿花园转到顶视时显出二维码。树干、花茎、包装纸、小船和填充枝叶会在转动时淡出。屏幕分辨率、观看角度和密集二维码可能导致无法扫描。复制、分享和导出 PNG 请使用平面二维码；三维视图尚未经扫码验证。",
+    "體素樹木、花束和島嶼花園轉到頂視時顯出 QR 碼。樹幹、花莖、包裝紙、小船和填充枝葉會在轉動時淡出。螢幕解析度、觀看角度和密集 QR 碼可能導致無法掃描。複製、分享和匯出 PNG 請使用平面 QR 碼；三維視圖尚未經掃碼驗證。",
+    "ボクセルの木・花束・島の庭は、真上から見ると QR コードになります。回転中に幹・茎・包装紙・小舟・補完の葉がフェードアウトします。画面の解像度、見る角度、密度の高いコードによっては読み取れません。コピー・共有・PNG 出力には平面の QR 画像を使用してください。3D 表示の読み取りは未検証です。"
   ]
 }
