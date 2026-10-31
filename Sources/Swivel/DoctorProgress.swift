@@ -153,21 +153,43 @@ final class DoctorProgressView: NSStackView {
     }
 }
 
+/// The broom's motion, independent of drawing and display refresh rate.
+struct DoctorBroomMotion {
+    static let period: CGFloat = 1.8
+    private var spring = Spring(0, response: 0.35, damping: 1)
+    private var phase: CGFloat = 0
+    private var remainder: CGFloat = 0
+    var value: CGFloat { spring.value }
+
+    mutating func step(_ dt: CGFloat) {
+        guard dt.isFinite, dt > 0 else { return }
+        let tick: CGFloat = 1 / 240
+        remainder += min(dt, 1 / 30)
+        while remainder >= tick - 1e-10 {
+            phase = (phase + tick * 2 * .pi / Self.period).truncatingRemainder(dividingBy: 2 * .pi)
+            // A continuously moving target avoids the long stationary tail of a settling spring at each end.
+            spring.target = sin(phase)
+            spring.step(tick)
+            remainder = max(0, remainder - tick)
+        }
+    }
+    mutating func reset() { self = Self() }
+}
+
 /// A small monochrome broom, drawn like a toolbar glyph. Gentle, damped sweeps use the app's frame driver.
 @MainActor
 private final class DoctorBroomView: NSView {
     private lazy var driver = FrameDriver(view: self)
-    private var sweep = Spring(-1, response: 1.1, damping: 1)
+    private var sweep = DoctorBroomMotion()
     private var active = false
     func setActive(_ active: Bool) {
         self.active = active
         guard active, !Motion.reduced, window?.isVisible == true else {
-            driver.stop(); sweep.snap(0); needsDisplay = true; return
+            driver.stop(); sweep.reset(); needsDisplay = true; return
         }
         driver.onFrame = { [weak self] dt in
             guard let self, self.active, !Motion.reduced, self.window?.isVisible == true,
                   self.window?.isMiniaturized == false else { return false }
-            if self.sweep.isSettled { self.sweep.target = self.sweep.target > 0 ? -1 : 1 }
             self.sweep.step(dt); self.needsDisplay = true
             return true
         }

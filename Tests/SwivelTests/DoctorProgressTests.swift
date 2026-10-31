@@ -86,3 +86,54 @@ extension DoctorProgressTests {
         #expect(await task.value)
     }
 }
+
+extension DoctorProgressTests {
+    @Test func broomKeepsMovingThroughEachTurn() {
+        var motion = DoctorBroomMotion()
+        let dt: CGFloat = 1 / 120
+        var previous = motion.value
+        var slowFrames = 0, longestPause = 0
+        for frame in 0..<1200 {
+            motion.step(dt)
+            let velocity = abs(motion.value - previous) / dt
+            previous = motion.value
+            if frame > 120, velocity < 0.1 {
+                slowFrames += 1; longestPause = max(longestPause, slowFrames)
+            } else { slowFrames = 0 }
+        }
+        #expect(CGFloat(longestPause) * dt < 0.2, "The broom must reverse without a visible rest at either end")
+    }
+}
+
+extension DoctorProgressTests {
+    @Test func broomMotionIsBoundedAndIndependentOfDisplayRate() {
+        func sample(_ fps: CGFloat) -> [CGFloat] {
+            var motion = DoctorBroomMotion()
+            var values: [CGFloat] = []
+            for frame in 1...Int(fps * 6) {
+                motion.step(1 / fps)
+                #expect(abs(motion.value) <= 1)
+                if frame % Int(fps / 30) == 0 { values.append(motion.value) }
+            }
+            motion.reset()
+            #expect(motion.value == 0)
+            return values
+        }
+        let low = sample(30), standard = sample(60), proMotion = sample(120)
+        #expect(zip(low, standard).allSatisfy { abs($0 - $1) < 0.000001 })
+        #expect(zip(low, proMotion).allSatisfy { abs($0 - $1) < 0.000001 })
+        #expect(low.max()! - low.min()! > 1.8)
+    }
+
+    @Test func broomRepeatsWithoutALoopSeam() {
+        var motion = DoctorBroomMotion()
+        let frames = Int((DoctorBroomMotion.period * 120).rounded())
+        for _ in 0..<(frames * 4) { motion.step(1 / 120) }
+        var previous: [CGFloat] = []
+        for _ in 0..<frames { motion.step(1 / 120); previous.append(motion.value) }
+        for index in 0..<frames {
+            motion.step(1 / 120)
+            #expect(abs(motion.value - previous[index]) < 0.000001)
+        }
+    }
+}

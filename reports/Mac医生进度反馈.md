@@ -28,3 +28,11 @@ Mac 医生所有主动等待入口都有原生 AppKit 进度反馈：各项检�
 - 完整 `./test.sh`：456 项、39 个套件；455 项通过，`PanelRecoveryTests.aLostRopeIsRebuiltByTheCheckAfterLowering` 的真实窗口可见性断言失败。之前 Doctor + PanelRecovery 的 69 项复跑全部通过；带完整离屏渲染的并发复跑仍可触发该窗口测试失败。没有修改、跳过或降低该断言，不能把全套报告为全绿。
 - `./build.sh` 成功，主 app 与 MCP helper 均通过 `codesign --verify --deep --strict`。本次修改的 Doctor 源码没有新增编译警告；构建仍有主线现存的其他文件警告。
 - 最后单独运行该晾衣绳测试：1 项通过（1.58 秒）；与四语言窗口渲染同时运行时可复现失败，记录保留在 `ui-layout-and-recovery.log` 与 `recovery-alone.log`。
+
+## 扫帚换向修正（2026-10-31）
+
+用户反馈动画卡顿。先将原来的 Spring 换向计算抽成实际绘制共用的 `DoctorBroomMotion`，回归测得每个末端存在 0.733 秒近乎静止，测试失败；原因是等到 `isSettled` 才改向。现在由连续的周期目标驱动弹簧跟随，以 1/240 秒固定步长推进，保留 FrameDriver、减少动态效果和生命周期停止规则。换向和周期接缝不重置运动速度；停止时仍恢复静止状态。
+
+`./test.sh --filter Doctor`：66 项全部通过。新增测试限制末端低速停留时间，检查 30/60/120 Hz 的相同轨迹、位移范围和周期接缝。未重跑全套、未重建发行安装包、未安装或推送。
+
+新版 50 fps、7.2 秒四周期循环预览由相同的运动计算和 AppKit 绘制导出，固定演示文字以便专看动作，原预览保留。位置逐周期一致性断言通过；GIF 延时使用可精确表示的 20ms，避免旧 25 fps 预览的低帧率观感。文件在 `build/doctor-progress/animation-smooth/`，诊断与测试日志也保存于该目录。
