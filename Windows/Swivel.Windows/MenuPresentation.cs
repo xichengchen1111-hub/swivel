@@ -41,6 +41,15 @@ internal sealed class MenuMotion : IDisposable
         button.DragEnter += (_,_) => Target(1.025); button.DragLeave += (_,_) => Target(1);
         button.Drop += (_,_) => Target(button.IsMouseOver ? 1.025 : 1);
     }
+    public void Hover(Button? hovered)
+    {
+        foreach (var item in items)
+        {
+            item.Spring.Target = Enabled && ReferenceEquals(item.Button, hovered) ? 1.025 : 1;
+            if (!Enabled) { item.Spring.Snap(); item.Scale.ScaleX = item.Scale.ScaleY = 1; }
+        }
+        if (Enabled) Wake();
+    }
     private void Wake()
     {
         if (listening) return; listening = true; last = Stopwatch.GetTimestamp(); CompositionTarget.Rendering += Frame;
@@ -64,9 +73,9 @@ internal sealed class MenuMotion : IDisposable
 
 internal static class MenuPresentation
 {
-    public static Canvas Build(App app,ToolAction[] actions,Action<ToolAction> run,Action<ToolAction,string[]> drop,Action close,MenuMotion motion)
+    public static Canvas Build(App app,ToolAction[] actions,Action<ToolAction> run,Action<ToolAction,string[]> drop,Action close,MenuMotion motion,bool gesture = false,MenuTemplate? templateOverride = null)
     {
-        var template = app.Prefs.MenuTemplate; var canvas = new Canvas { Width = 620, Height = 450 };
+        var template = templateOverride ?? app.Prefs.MenuTemplate; var canvas = new Canvas { Width = 620, Height = 450 };
         var palette = MenuColors.Active(app,template);
         var placements = MenuGeometry.Layout(template,actions.Length);
         if (template is MenuTemplate.Bookshelf or MenuTemplate.Clothesline)
@@ -81,7 +90,9 @@ internal static class MenuPresentation
             if (template == MenuTemplate.Notes) { button.Background = SystemColors.InfoBrush; button.Foreground = SystemColors.InfoTextBrush; }
             MenuColors.Apply(button,palette);
             Canvas.SetLeft(button,rect.X); Canvas.SetTop(button,rect.Y); motion.Attach(button,rect.Angle);
-            UI.DropFiles(button,app,paths => drop(action,paths)); canvas.Children.Add(button);
+            button.Tag = action;
+            if (!gesture) UI.DropFiles(button,app,paths => drop(action,paths));
+            canvas.Children.Add(button);
             if (template == MenuTemplate.Clothesline)
             {
                 var peg = new Rectangle { Width = 10,Height = 28,Fill = palette is null ? SystemColors.ControlDarkBrush : MenuColors.Brush(palette.Peg),IsHitTestVisible = false };

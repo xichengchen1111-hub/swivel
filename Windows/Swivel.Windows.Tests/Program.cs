@@ -143,6 +143,8 @@ internal static class Program
             Group("ImageArrivalWindowNativeChecks", () => ImageArrivalWindowNativeChecks.Run(Check,Reject));
             Group("ScreenshotCardNativeChecks", () => ScreenshotCardNativeChecks.Run(directory,Check,Reject));
             Group("WheelGestureNativeChecks", () => WheelGestureNativeChecks.Run(Check,Reject));
+            Group("GestureActionDropNativeChecks", () => GestureActionDropNativeChecks.Run(Check));
+            Group("GestureOleEvidenceNativeChecks", () => GestureOleEvidenceNativeChecks.Run(Check));
             Group("WheelGestureLiveChecks", () => WheelGestureLiveChecks.Run(Check,Reject));
             Group("WheelGestureWindowNativeChecks", () => WheelGestureWindowNativeChecks.Run(Check,Reject));
             Group("RenameChecks", () => RenameChecks.Run(directory, Check, Reject));

@@ -15,6 +15,7 @@ internal interface IWheelGestureSession
     Task Completion { get; }
     bool TryTakeRequest(out WheelGestureRequest? request);
     Task StopAsync();
+    void CheckHealth() { }
 }
 
 internal sealed class WheelGestureSession : IWheelGestureSession
@@ -35,6 +36,7 @@ internal sealed class WheelGestureSession : IWheelGestureSession
     private readonly WheelKeyboardHook hook;
     private readonly Thread thread;
     private WheelGestureEdges? edges;
+    private readonly WheelGestureHealth health = new();
     private WheelGestureIssue? callbackFault;
     private WheelGestureStatus status = WheelGestureStatus.Starting;
     private long revision;
@@ -105,6 +107,18 @@ internal sealed class WheelGestureSession : IWheelGestureSession
             }
         }
     }
+    public void CheckHealth()
+    {
+        if (Snapshot.Status != WheelGestureStatus.Running || edges is null) return;
+        try
+        {
+            int left = modifier switch { WheelGestureModifier.Control => 0xA2, WheelGestureModifier.Shift => 0xA0, _ => 0xA4 };
+            bool held = native.IsDown(left) || native.IsDown(left + 1);
+            if (health.Observe(Environment.TickCount64, edges.IsHeld, held))
+                CallbackFailed("The gesture hook may have stopped receiving modifier events. Restart Gesture Monitoring to try again.", null);
+        }
+        catch { CallbackFailed("Windows could not read the gesture pointer state.", null); }
+    }
     public Task Completion => complete.Task;
     public Task StopAsync() { RequestStop(); return complete.Task; }
     private void RequestStop()
@@ -127,7 +141,8 @@ internal sealed class WheelGestureSession : IWheelGestureSession
             bool down = native.IsDown(right ? 2 : 1);
             if (!requests.TryTake(Stopwatch.GetTimestamp(), Stopwatch.Frequency, down, right, out var candidate) ||
                 Volatile.Read(ref stopping) != 0) return false;
-            request = candidate; return true;
+            if (!native.PhysicalPoint(out int x, out int y)) { CallbackFailed("Windows could not read the gesture pointer state.", native.LastError); return false; }
+            request = candidate! with { PhysicalX = x, PhysicalY = y }; return true;
         }
         catch { CallbackFailed("Windows could not read the gesture pointer state.", null); return false; }
     }
@@ -209,7 +224,8 @@ internal sealed class WheelGestureSession : IWheelGestureSession
                         if (native.IsDown(right ? 2 : 1))
                         {
                             if (!native.PhysicalPoint(out int x, out int y)) CallbackFailed("Windows could not read the gesture pointer state.", native.LastError);
-                            else if (requests.Offer(Stopwatch.GetTimestamp(), x, y, right)) Wake();
+                            // Preserve the press's source thread; capture evidence is polled later on the UI thread.
+                            else if (requests.Offer(Stopwatch.GetTimestamp(), x, y, right, native.PointerThread(x, y))) Wake();
                         }
                     }
                 }
@@ -276,6 +292,7 @@ internal interface IWheelGestureNative
     bool PrimaryIsRight { get; }
     bool IsDown(int virtualKey);
     bool PhysicalPoint(out int x, out int y);
+    uint PointerThread(int x, int y);
     int LastError { get; }
     IntPtr Install(WheelKeyboardHook hook);
     bool Unhook(IntPtr hook);
@@ -294,6 +311,7 @@ internal sealed class WheelGestureNative : IWheelGestureNative
     {
         bool ok = GetPhysicalCursorPos(out var point); x = point.X; y = point.Y; return ok;
     }
+    public uint PointerThread(int x, int y) => GestureOleEvidence.ThreadAt(x, y);
     public IntPtr Install(WheelKeyboardHook hook) => SetWindowsHookEx(13, hook, GetModuleHandle(null), 0);
     public bool Unhook(IntPtr hook) => UnhookWindowsHookEx(hook);
     public IntPtr Forward(int code, IntPtr message, IntPtr data) => CallNextHookEx(IntPtr.Zero, code, message, data);

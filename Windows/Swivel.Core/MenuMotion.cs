@@ -7,6 +7,19 @@ public enum MenuTemplate { Wheel, List, Bookshelf, Notes, Clothesline }
 public sealed record MenuTile(double X,double Y,double Width,double Height,double Angle = 0);
 public static class MenuGeometry
 {
+    public static int HitTest(MenuTemplate template, int count, double x, double y)
+    {
+        if (!double.IsFinite(x) || !double.IsFinite(y)) return -1;
+        var tiles = Layout(template, count);
+        for (int i = tiles.Length - 1; i >= 0; i--)
+        {
+            var tile = tiles[i]; double dx = x - tile.X - tile.Width / 2, dy = y - tile.Y - tile.Height / 2;
+            double angle = -tile.Angle * Math.PI / 180;
+            double localX = dx * Math.Cos(angle) - dy * Math.Sin(angle), localY = dx * Math.Sin(angle) + dy * Math.Cos(angle);
+            if (Math.Abs(localX) <= tile.Width / 2 && Math.Abs(localY) <= tile.Height / 2) return i;
+        }
+        return -1;
+    }
     public static MenuTile[] Layout(MenuTemplate template,int count)
     {
         if (!Enum.IsDefined(template) || count is < 0 or > 8) throw new ArgumentOutOfRangeException(nameof(count));

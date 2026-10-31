@@ -57,6 +57,8 @@ public sealed class Prefs
     /// Clothesline's screenshot cards; off by default and omitted from saved settings while off.
     public bool ScreenshotCards { get; private set; }
     public void SetScreenshotCards(bool on) { if (ScreenshotCards == on) return; ScreenshotCards = on; Changed?.Invoke(); }
+    public bool ListenForWheelGesture { get; private set; }
+    public void SetListenForWheelGesture(bool on) { if (ListenForWheelGesture == on) return; ListenForWheelGesture = on; Changed?.Invoke(); }
     private readonly MenuPalette?[] palettes = new MenuPalette?[5];
     public MenuPalette? Palette(MenuTemplate template) => Enum.IsDefined(template) ? palettes[(int)template] : throw new ArgumentOutOfRangeException(nameof(template));
     public void SetPalette(MenuTemplate template,MenuPalette? palette)
@@ -108,7 +110,7 @@ public sealed class Prefs
     {
         if (presets.RemoveAll(x => x.Id == id) > 0) { customActions = customActions.Where(x => x != "preset." + id).ToArray(); Changed?.Invoke(); }
     }
-    public string Serialize() => JsonSerializer.Serialize(new Saved(2, Language, enabled.Select(x => x.ToString()).Order().ToArray(), presets.ToArray(), customActions, Shortcuts, apps.ToArray(), MenuTemplate, AnimateMenus, qrCodes.ToArray(),palettes.ToArray(),Assistant,RopeAtTopEdge ? true : null,ScreenshotCards ? true : null));
+    public string Serialize() => JsonSerializer.Serialize(new Saved(2, Language, enabled.Select(x => x.ToString()).Order().ToArray(), presets.ToArray(), customActions, Shortcuts, apps.ToArray(), MenuTemplate, AnimateMenus, qrCodes.ToArray(),palettes.ToArray(),Assistant,RopeAtTopEdge ? true : null,ScreenshotCards ? true : null,ListenForWheelGesture ? true : null));
     public static Prefs Parse(string json)
     {
         if (json.Length > MaxJsonLength) throw new FormatException("Invalid preferences.");
@@ -128,6 +130,7 @@ public sealed class Prefs
         if(saved.Assistant is not null)prefs.SaveAssistant(saved.Assistant);
         prefs.RopeAtTopEdge = saved.RopeAtTopEdge == true;
         prefs.ScreenshotCards = saved.ScreenshotCards == true;
+        prefs.ListenForWheelGesture = saved.ListenForWheelGesture == true;
         if (saved.Version == 2)
             foreach (var preset in saved.Presets!)
             {
@@ -162,7 +165,7 @@ public sealed class Prefs
         }
         return prefs;
     }
-    public sealed record Saved(int Version, string Language, string[] Enabled, ImagePreset[]? Presets = null, string[]? CustomActions = null, ShortcutSet? Shortcuts = null, AppRoute[]? Apps = null, MenuTemplate? Template = null, bool? AnimateMenus = null, QrEntry[]? QrCodes = null, MenuPalette?[]? Palettes = null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] AssistantSettings? Assistant=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] bool? RopeAtTopEdge=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] bool? ScreenshotCards=null);
+    public sealed record Saved(int Version, string Language, string[] Enabled, ImagePreset[]? Presets = null, string[]? CustomActions = null, ShortcutSet? Shortcuts = null, AppRoute[]? Apps = null, MenuTemplate? Template = null, bool? AnimateMenus = null, QrEntry[]? QrCodes = null, MenuPalette?[]? Palettes = null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] AssistantSettings? Assistant=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] bool? RopeAtTopEdge=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] bool? ScreenshotCards=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] bool? ListenForWheelGesture=null);
 }
 
 public sealed record ToolAction(string Id, string Title, Feature? Feature = null, bool ImageOnly = false, bool SingleFile = false, bool SrtOnly = false, string[]? Extensions = null, bool RequiresFiles = true, bool WebPage = false);

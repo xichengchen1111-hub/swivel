@@ -33,9 +33,10 @@ internal static class WheelGestureChecks
         }
         reject(() => new WheelGestureEdges((WheelGestureModifier)99), "Unknown modifier refused");
         Guid id = Guid.NewGuid(); var pending = new WheelGestureRequests(id);
-        check(pending.Offer(1000, -400, 200, false), "First display request fits");
+        check(pending.Offer(1000, -400, 200, false, 123), "First display request fits");
         for (int i = 0; i < 100; i++) check(!pending.Offer(1000 + i, 999, 999, true), "At most one pending display request, never an unbounded event queue");
         check(pending.TryTake(1500, 1000, true, false, out var first) && first!.SessionId == id && first.PhysicalX == -400 && first.PhysicalY == 200 && first.Timestamp == 1000, "500ms inclusive request retains physical negative-monitor coordinates");
+        check(first!.PointerThreadId == 123, "Request retains the thread under the pointer when the gesture was pressed");
         check(!pending.TryTake(1500, 1000, true, false, out _), "A request is delivered once");
         pending.Offer(2000, 0, 0, false);
         check(!pending.TryTake(2501, 1000, true, false, out _) && !pending.TryTake(2000, 1000, true, false, out _), "Stale requests are discarded, not postponed");

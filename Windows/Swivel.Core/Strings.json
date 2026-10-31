@@ -18608,5 +18608,60 @@
     "体素树木、花束和岛屿花园转到顶视时显出二维码。树干、花茎、包装纸、小船和填充枝叶会在转动时淡出。屏幕分辨率、观看角度和密集二维码可能导致无法扫描。复制、分享和导出 PNG 请使用平面二维码；三维视图尚未经扫码验证。",
     "體素樹木、花束和島嶼花園轉到頂視時顯出 QR 碼。樹幹、花莖、包裝紙、小船和填充枝葉會在轉動時淡出。螢幕解析度、觀看角度和密集 QR 碼可能導致無法掃描。複製、分享和匯出 PNG 請使用平面 QR 碼；三維視圖尚未經掃碼驗證。",
     "ボクセルの木・花束・島の庭は、真上から見ると QR コードになります。回転中に幹・茎・包装紙・小舟・補完の葉がフェードアウトします。画面の解像度、見る角度、密度の高いコードによっては読み取れません。コピー・共有・PNG 出力には平面の QR 画像を使用してください。3D 表示の読み取りは未検証です。"
+  ],
+  "Listen for the gesture whenever Wheel is on": [
+    "Wheel 开启时持续监听手势",
+    "Wheel 開啟時持續監聽手勢",
+    "Wheel がオンの間はジェスチャーを待ち受ける"
+  ],
+  "Restart Gesture Monitoring": [
+    "重新启动手势监听",
+    "重新啟動手勢監聽",
+    "ジェスチャーの監視を再起動"
+  ],
+  "The dropped action finished.": [
+    "拖放所选的动作已结束。",
+    "拖放所選的動作已結束。",
+    "ドロップしたアクションが終了しました。"
+  ],
+  "The dropped action is no longer available. Open Wheel and choose it again.": [
+    "拖放所选的动作已不可用。请打开 Wheel 后重新选择。",
+    "拖放所選的動作已無法使用。請開啟 Wheel 後重新選擇。",
+    "ドロップしたアクションは利用できなくなりました。Wheel を開いて選び直してください。"
+  ],
+  "Windows did not allow Swivel to take focus. Select its flashing window, or open Wheel from the tray and choose the action again.": [
+    "Windows 未允许 Swivel 获取焦点。请选择闪烁的窗口，或从托盘打开 Wheel 后重新选择动作。",
+    "Windows 未允許 Swivel 取得焦點。請選擇閃爍的視窗，或從系統匣開啟 Wheel 後重新選擇動作。",
+    "Windows が Swivel のフォーカス取得を許可しませんでした。点滅しているウィンドウを選ぶか、トレイから Wheel を開いてアクションを選び直してください。"
+  ],
+  "The gesture hook may have stopped receiving modifier events. Restart Gesture Monitoring to try again.": [
+    "手势 hook 可能已停止接收修饰键事件。请重新启动手势监听。",
+    "手勢 hook 可能已停止接收修飾鍵事件。請重新啟動手勢監聽。",
+    "ジェスチャーフックが修飾キーのイベントを受信していない可能性があります。ジェスチャーの監視を再起動してください。"
+  ],
+  "Start dragging files, then tap Ctrl, Shift or Alt. Wheel appears only after Windows confirms a file drag. Release on an action to run it; the hub or outside cancels. Hover Previous or Next to turn pages.": [
+    "先拖动文件，再轻按 Ctrl、Shift 或 Alt。Windows 确认文件拖动后才显示 Wheel。松开到动作上即可执行；松开到中心或外部则取消。悬停在上一页或下一页可翻页。",
+    "先拖動檔案，再輕按 Ctrl、Shift 或 Alt。Windows 確認檔案拖動後才顯示 Wheel。放到動作上即可執行；放到中心或外部則取消。停留在上一頁或下一頁可翻頁。",
+    "ファイルをドラッグしてから Ctrl、Shift、Alt のいずれかを押します。Windows がファイルのドラッグを確認した場合だけ Wheel が表示されます。アクションにドロップすると実行し、中央や外側ではキャンセルします。前へ・次へに重ねるとページを切り替えます。"
+  ],
+  "While listening, Swivel checks the selected modifier and primary mouse-button state. No typing is recorded, input is never blocked, and the clipboard is never read. Only the file list supplied by an OLE drag is read before a drop.": [
+    "监听期间，Swivel 检查所选修饰键与主鼠标键的状态。不记录键入内容，不阻止输入，不读取剪贴板。放下之前只读取 OLE 拖动提供的文件列表。",
+    "監聽期間，Swivel 檢查所選修飾鍵與主滑鼠鍵的狀態。不記錄鍵入內容，不阻止輸入，不讀取剪貼簿。放下之前只讀取 OLE 拖動提供的檔案清單。",
+    "待ち受け中は、選択した修飾キーと主マウスボタンの状態を確認します。入力内容は記録せず、入力を遮断せず、クリップボードも読みません。ドロップ前は OLE ドラッグが提供するファイル一覧だけを読みます。"
+  ],
+  "The invisible file-drag check lasts less than half a second. A confirmed Wheel takes no focus. Drop 1–100 local files directly on an action; file checks run after the drop. Linked, cloud, virtual and duplicate paths are refused. No file action runs without dropping on an item.": [
+    "不可见的文件拖动检测持续不到半秒。确认后显示的 Wheel 不获取焦点。将 1–100 个本地文件直接放到动作上，放下后才检查文件。链接、云端、虚拟和重复路径会被拒绝。未放到项目上不会执行文件动作。",
+    "不可見的檔案拖動偵測持續不到半秒。確認後顯示的 Wheel 不取得焦點。將 1–100 個本機檔案直接放到動作上，放下後才檢查檔案。連結、雲端、虛擬和重複路徑會被拒絕。未放到項目上不會執行檔案動作。",
+    "不可視のファイルドラッグ確認は半秒未満です。確認後の Wheel はフォーカスを取りません。1〜100 個のローカルファイルをアクションに直接ドロップすると、その後でファイルを検査します。リンク、クラウド、仮想、重複パスは拒否します。項目へのドロップなしでは実行しません。"
+  ],
+  "Windows can silently remove an input hook. A running status is not a health guarantee; a persistent modifier-state mismatch stops listening and reports a problem. Use Restart Gesture Monitoring if it stops responding. Elevated apps and remote sessions may limit drag-and-drop. Stop and Quit wait for cleanup.": [
+    "Windows 可能静默移除输入 hook。运行中不保证监听正常；持续的修饰键状态不一致会停止监听并报告问题。无响应时请重新启动手势监听。提权应用和远程会话可能限制拖放。停止和退出会等待清理完成。",
+    "Windows 可能無聲地移除輸入 hook。執行中不保證監聽正常；持續的修飾鍵狀態不一致會停止監聽並回報問題。無回應時請重新啟動手勢監聽。提升權限的應用程式和遠端工作階段可能限制拖放。停止和結束會等待清理完成。",
+    "Windows は通知なく入力フックを解除する場合があります。実行中の表示は正常動作の保証ではありません。修飾キーの状態不一致が続くと待ち受けを停止して問題を表示します。反応しない場合は監視を再起動してください。管理者権限のアプリやリモート接続ではドラッグが制限される場合があります。停止と終了は後処理を待ちます。"
+  ],
+  "Windows can silently remove an input hook. A running status is not a health guarantee; a persistent modifier-state mismatch stops listening and reports a problem. Use Restart Gesture Monitoring if it stops responding. Elevated apps and remote sessions may limit drag-and-drop. Stop and Quit wait for cleanup. Drags from apps that do not use system drag-and-drop are not recognised.": [
+    "Windows 可能静默移除输入钩子。正在运行不保证监听正常；修饰键状态持续不一致时会停止监听并报告问题。无响应时请使用“重新启动手势监听”。管理员应用和远程会话可能限制拖放。停止和退出会等待清理。不使用系统拖放的应用所发起的拖动无法识别。",
+    "Windows 可能靜默移除輸入掛鉤。正在執行不保證監聽正常；修飾鍵狀態持續不一致時會停止監聽並報告問題。無回應時請使用「重新啟動手勢監聽」。管理員應用程式和遠端工作階段可能限制拖放。停止和結束會等待清理。不使用系統拖放的應用程式所發起的拖動無法識別。",
+    "Windows は入力フックを通知なく削除する場合があります。実行中という表示は正常な監視を保証しません。修飾キーの状態の不一致が続くと監視を停止して問題を報告します。応答しない場合は「ジェスチャー監視を再起動」を使用してください。管理者権限のアプリやリモートセッションではドラッグ＆ドロップが制限される場合があります。停止と終了はクリーンアップを待ちます。システムのドラッグ＆ドロップを使用しないアプリからのドラッグは認識されません。"
   ]
 }
