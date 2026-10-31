@@ -29,7 +29,9 @@ internal static class WheelGestureNativeChecks
             check(session.Snapshot.Status == WheelGestureStatus.Running && native.Installs == 1, "Explicit Start creates one hook thread");
             reject(() => ((IList<WheelGestureIssue>)session.Snapshot.Issues).Clear(), "Native diagnostic snapshot is readonly");
             native.Send(0xA2, true);
+            native.PointerThreadId = 456;
             check(session.TryTakeRequest(out var request) && request!.PhysicalX == -1250 && request.PhysicalY == 40 && !request.PrimaryIsRight, "Hook request carries physical-screen coordinates and selected primary button");
+            check(request!.PointerThreadId == 123, "Delivery preserves the thread under the pointer at the gesture press, even if the window under it changes");
             native.Send(0xA2, true); native.Send(0xA3, true);
             check(!session.TryTakeRequest(out _), "Repeat and second modifier side do not create a request");
             native.Send(0xA2, false); native.Send(0xA3, false);
@@ -119,6 +121,7 @@ internal static class WheelGestureNativeChecks
         internal bool OwnWindow = true, InitialLeft, FailInstall, FailUnhook;
         internal volatile bool PrimaryDown = true, Right, FailNotify, FailPoint, FailForward, Entered, Exiting;
         internal int Installs, Unhooks, Forwards, Sends;
+        internal uint PointerThreadId = 123;
         internal Thread? HookThread;
         internal readonly ManualResetEventSlim BlockExit = new(true), InstallGate = new(true);
         public bool IsOwnWindow(IntPtr hwnd) => OwnWindow;
@@ -126,6 +129,7 @@ internal static class WheelGestureNativeChecks
         public bool PrimaryIsRight => Right;
         public bool IsDown(int key) => key is 1 or 2 ? PrimaryDown : InitialLeft && key is 0xA0 or 0xA2 or 0xA4;
         public bool PhysicalPoint(out int x, out int y) { x = -1250; y = 40; return !FailPoint; }
+        public uint PointerThread(int x, int y) => PointerThreadId;
         public int LastError => 5;
         public IntPtr Install(WheelKeyboardHook hook)
         {

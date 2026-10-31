@@ -95,6 +95,7 @@ public sealed partial class App : Application
         if (!hotkeys.Configure(Prefs)) Home.SetStatus(L("A shortcut is in use. Open the tool from the tray menu."));
         UpdateRope();
         _ = UpdateScreenshotCards();
+        _ = UpdateWheelGesture();
         if (failed) Home.SetStatus(L("Preferences could not be loaded. Defaults are in use; settings will be saved only when changed."));
     }
     private void SystemAppearanceChanged(object? sender,System.ComponentModel.PropertyChangedEventArgs args)
@@ -107,11 +108,11 @@ public sealed partial class App : Application
         try { SettingsStore.Save(Prefs); }
         catch { Home.SetStatus(L("Preferences could not be saved. Your choices apply only to this session.")); }
         if (!Prefs.IsOn(Feature.KeepAwake)) Try(() => Awake.Stop());
-        if (!Prefs.IsOn(Feature.Wheel)) wheelGesture?.Close();
         if (!Prefs.IsOn(Feature.Shelf)) floatingShelf?.Close(); else floatingShelf?.Refresh();
         if (!Prefs.IsOn(Feature.Clothesline)) { clothesline?.Close(); imageArrivals?.Close(); } else clothesline?.Refresh();
         UpdateRope();
         _ = UpdateScreenshotCards();
+        _ = UpdateWheelGesture();
         if (workFeature.HasValue && !Prefs.IsOn(workFeature.Value)) CancelWork();
         foreach (var panel in panels.ToArray())
         {
@@ -223,7 +224,14 @@ public sealed partial class App : Application
     {
         token.ThrowIfCancellationRequested();
         operationDialog = dialog;
-        try { dialog.Owner = owner; return dialog.ShowDialog() == true && !token.IsCancellationRequested; }
+        try
+        {
+            dialog.Owner = owner;
+            if (gestureAction) dialog.Loaded += (_, _) => {
+                if (!GestureFocus.BringForward(dialog)) { Home.SetStatus(L(GestureFocus.Refused)); ShowError(new UserError(GestureFocus.Refused)); }
+            };
+            return dialog.ShowDialog() == true && !token.IsCancellationRequested;
+        }
         finally { operationDialog = null; }
     }
     private async Task ShowDoctorOperationAsync(Window dialog,DoctorReportSnapshot snapshot,Window owner,CancellationToken token,DoctorLabelSet? labels=null)
@@ -259,8 +267,9 @@ public sealed partial class App : Application
         return RunActionAsync(new(id, "Preview File", SingleFile: true), files, owner, report, shelfPreview: true);
     }
 
-    public async Task RunActionAsync(ToolAction action, string[] files, Window owner, Action<string> report, QrEntry? qrEntry = null,string? assistantRequest=null,bool shelfPreview=false,bool screenshotCard=false)
+    public async Task RunActionAsync(ToolAction action, string[] files, Window owner, Action<string> report, QrEntry? qrEntry = null,string? assistantRequest=null,bool shelfPreview=false,bool screenshotCard=false, CancellationToken cancellationToken=default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         // Opening the independent watcher does not validate unrelated file input
         // or reserve the shared editor operation for a whole listening session.
         if (action.Id == "clothesline.watch") { if (!exiting) OpenImageArrivalCards(); return; }
@@ -279,6 +288,12 @@ public sealed partial class App : Application
         owner.Closed += ownerClosed;
         try
         {
+            using var cancellation = cancellationToken.Register(() => {
+                _ = Dispatcher.BeginInvoke(new Action(() => {
+                    if (ReferenceEquals(workCancellation, ownedWork)) CancelWork();
+                }));
+            });
+            cancellationToken.ThrowIfCancellationRequested();
             if (action.Id == "shelf.systempreview") { await ShowShelfSystemPreviewAsync(files, owner, report, ownedWork); return; }
             if (shelfPreview)
             {

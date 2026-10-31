@@ -55,7 +55,7 @@ internal static class WheelGestureWindowNativeChecks
         string[]? received = null; CancellationToken openToken = default; Func<bool>? stillCurrent = null;
         var openDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var services = new WheelGestureUiServices((_, _, _) => { starts++; return Task.FromResult<IWheelGestureSession>(session); }, _ => new IntPtr(42),
-            (paths, token, current) => { opens++; received = paths; openToken = token; stillCurrent = current; return openDone.Task; },
+            (action, paths, token, current) => { opens++; received = paths; openToken = token; stillCurrent = current; return openDone.Task; },
             (current, receive, report) => target = new Target(current, receive, report), () => enabled, () => busy);
         var window = new WheelGestureWindow(app, services);
         check(starts == 0 && Button(window, app, "Start Gesture Monitoring").IsEnabled && !Button(window, app, "Stop Gesture Monitoring").IsEnabled,
@@ -84,7 +84,7 @@ internal static class WheelGestureWindowNativeChecks
         var queuedSession = new Session(); Target? queuedTarget = null; int queuedOpens = 0;
         var queuedWindow = new WheelGestureWindow(app, services with { Start = (_, _, _) => Task.FromResult<IWheelGestureSession>(queuedSession),
             CreateTarget = (current, receive, report) => queuedTarget = new Target(current, receive, report),
-            OpenFiles = (_, _, _) => { queuedOpens++; return Task.CompletedTask; } });
+            OpenFiles = (_, _, _, _) => { queuedOpens++; return Task.CompletedTask; } });
         Click(queuedWindow, app, "Start Gesture Monitoring"); queuedSession.Offer(); Refresh(queuedWindow); queuedTarget!.Drop(new[] { @"C:\Fixture\one.png" });
         Task queuedFinish = queuedWindow.FinishAsync(); check(!queuedFinish.IsCompleted, "Finish waits even when acceptance is still queued on the dispatcher");
         Until(() => queuedFinish.IsCompleted); check(queuedOpens == 0, "Closing before the queued callback prevents any file check or late Wheel opening"); queuedWindow.Close(); Pump();
@@ -100,7 +100,7 @@ internal static class WheelGestureWindowNativeChecks
         var live = new Session(); Target? liveTarget = null; int liveOpens = 0;
         var liveWindow = new WheelGestureWindow(app, services with { Start = (_, _, _) => Task.FromResult<IWheelGestureSession>(live),
             CreateTarget = (current, receive, report) => liveTarget = new Target(current, receive, report),
-            OpenFiles = (_, _, _) => { liveOpens++; return Task.CompletedTask; } });
+            OpenFiles = (_, _, _, _) => { liveOpens++; return Task.CompletedTask; } });
         Click(liveWindow, app, "Start Gesture Monitoring"); live.Offer(); Refresh(liveWindow);
         var stale = liveTarget!; busy = true; typeof(App).GetMethod("NotifyWorkStateChanged", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null);
         check(stale.Closes == 1 && !stale.Available(), "Other app work immediately hides and invalidates the target");
@@ -108,6 +108,17 @@ internal static class WheelGestureWindowNativeChecks
         busy = false; live.Offer(); Refresh(liveWindow); enabled = false;
         liveTarget!.Drop(new[] { @"C:\Fixture\disabled.png" }); Pump(); check(liveOpens == 0, "Feature-off blocks a drop even before the window's close notification"); enabled = true;
         Finish(liveWindow);
+
+        var backgroundSession = new Session(); int backgroundStarts = 0;
+        var backgroundWindow = new WheelGestureWindow(app, services with { Start = (_, _, _) => { backgroundStarts++; return Task.FromResult<IWheelGestureSession>(backgroundSession); } });
+        backgroundWindow.ListenInBackground();
+        check(backgroundStarts == 1 && !backgroundWindow.IsVisible, "Opt-in startup listens without opening its control window");
+        backgroundWindow.ListenInBackground(); check(backgroundStarts == 1, "Repeated background start cannot install a second listener");
+        backgroundWindow.Show(); backgroundWindow.Close(); Pump();
+        check(!backgroundWindow.IsVisible && backgroundSession.Stops == 0 && backgroundSession.Snapshot.Status == WheelGestureStatus.Running,
+            "Closing the opt-in control window hides it and retains its single listener");
+        Finish(backgroundWindow);
+        check(backgroundSession.Stops == 1 && backgroundSession.Completion.IsCompletedSuccessfully, "Feature-off or quit finish joins the hidden background listener");
 
         var idle = new WheelGestureWindow(app, services); bool closed = false; idle.Closed += (_, _) => closed = true; idle.Show(); idle.Close(); Until(() => closed);
         check(idle.IsFinishing, "Synchronous idle cleanup defers final Close until WPF Closing returns");
@@ -121,24 +132,25 @@ internal static class WheelGestureWindowNativeChecks
         // The real popup creates only its own window, never a real drag or hook.
         // Its native checks run only on Windows, not in cross-compilation.
         IntPtr foreground = GetForegroundWindow();
-        var drop = new GestureDropWindow(app, () => true, _ => { }, _ => { });
+        var drop = new GestureDropWindow(app, () => true, (_, _) => { }, _ => { }, () => true, () => 0, () => true);
         check(!drop.ShowActivated && !drop.ShowInTaskbar && !drop.Focusable && drop.WindowStyle == WindowStyle.None,
             "The native gesture target requests no activation, taskbar item or keyboard focus");
         drop.ShowAt(new WheelGestureRequest(Guid.NewGuid(), 1, Stopwatch.GetTimestamp(), 100, 100, false));
-        long style = GetWindowLongPtr(new WindowInteropHelper(drop).Handle, -20).ToInt64();
-        check((style & 0x08000000L) != 0 && (style & 0x80L) != 0, "The drop HWND has NOACTIVATE and TOOLWINDOW styles");
+        long style = GetWindowLongPtr(drop.Probe!.Handle, -20).ToInt64();
+        check((style & 0x08000000L) != 0 && (style & 0x80L) != 0 && (style & 0x00200000L) != 0, "The drop HWND has NOACTIVATE and TOOLWINDOW styles");
         check(GetForegroundWindow() == foreground, "Showing and placing the drop target does not change the foreground window");
         object[] hookArguments = { IntPtr.Zero, 0x0021, IntPtr.Zero, IntPtr.Zero, false };
         object? hookResult = typeof(GestureDropWindow).GetMethod("Hook", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(drop, hookArguments);
         check(Equals(hookResult, new IntPtr(3)) && Equals(hookArguments[4], true), "Mouse and hover activation return MA_NOACTIVATE without consuming mouse input");
-        drop.Close(); Pump(); check(!drop.CanReceive, "A closed target can never receive a late drop");
+        GestureActionDropNativeChecks.Close(drop); check(!drop.CanReceive, "A closed target can never receive a late drop");
         foreach (bool formatProbe in new[] { true, false })
         {
             var reentrantSession = new Session(); GestureDropWindow? actualTarget = null; int fileCalls = 0;
             var control = new WheelGestureWindow(app, services with { Start = (_, _, _) => Task.FromResult<IWheelGestureSession>(reentrantSession),
-                CreateTarget = (current, receive, error) => actualTarget = new GestureDropWindow(app, current, receive, error),
-                OpenFiles = (_, _, _) => { fileCalls++; return Task.CompletedTask; } });
+                CreateTarget = (current, receive, error) => actualTarget = new GestureDropWindow(app, current, receive, error, () => true, () => 0, () => true),
+                OpenFiles = (_, _, _, _) => { fileCalls++; return Task.CompletedTask; } });
             Click(control, app, "Start Gesture Monitoring"); reentrantSession.Offer(); Refresh(control);
+            GestureActionDropNativeChecks.Confirm(actualTarget!, new DataObject(DataFormats.FileDrop, new[] { @"C:\Fixture\one.png" }));
             Task? joined = null;
             void Reenter()
             {
@@ -168,7 +180,7 @@ internal static class WheelGestureWindowNativeChecks
         }
         reject(() => GestureDropRules.Snapshot(new[] { @"C:\Fixture\a.png", @"C:\Fixture\A.png" }), "Case-only paths are explicitly rejected, never silently collapsed");
     }
-    private sealed class Target(Func<bool> current, Action<string[]> receive, Action<Exception> report) : IGestureDropTarget
+    private sealed class Target(Func<bool> current, Action<ToolAction, string[]> receive, Action<Exception> report) : IGestureDropTarget
     {
         private readonly TaskCompletionSource done = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Shows, Closes;
@@ -177,7 +189,7 @@ internal static class WheelGestureWindowNativeChecks
         public bool Available() => current();
         public void ShowAt(WheelGestureRequest request) => Shows++;
         public void Close() { Closes++; Closed?.Invoke(); done.TrySetResult(); }
-        public void Drop(string[] paths) { if (current()) receive(GestureDropRules.Snapshot(paths)); }
+        public void Drop(string[] paths) { if (current()) receive(new ToolAction("image.png", "PNG"), GestureDropRules.Snapshot(paths)); }
         public void Error(Exception error) => report(error);
     }
     private sealed class Session : IWheelGestureSession
@@ -189,7 +201,8 @@ internal static class WheelGestureWindowNativeChecks
         public int Stops;
         public WheelGestureSnapshot Snapshot => snapshot;
         public Task Completion => done.Task;
-        public void Offer() => request = new(snapshot.SessionId, 1, Stopwatch.GetTimestamp(), 100, 100, false);
+        private long sequence;
+        public void Offer() => request = new(snapshot.SessionId, ++sequence, Stopwatch.GetTimestamp(), 100, 100, false);
         public bool TryTakeRequest(out WheelGestureRequest? result) { result = request; request = null; return result is not null; }
         public Task StopAsync() { Stops++; snapshot = snapshot with { Revision = snapshot.Revision + 1, Status = WheelGestureStatus.Stopping }; if (AutoComplete) Complete(); return done.Task; }
         public void Complete() { snapshot = snapshot with { Revision = snapshot.Revision + 1, Status = WheelGestureStatus.Stopped }; done.TrySetResult(); }

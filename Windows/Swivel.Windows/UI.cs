@@ -462,7 +462,12 @@ public sealed class MainWindow : Window
             try { ClaudeExtension.Open(); SetStatus(NativeIdentity.HasPackage ? app.L("The extension was handed to the app that opens .mcpb files (normally Claude Desktop): choose Install there.") : app.L("The extension was handed to the app that opens .mcpb files (normally Claude Desktop): choose Install there, then choose this Swivel.exe in the extension's settings.")); }
             catch (UserError error) { SetStatus(app.L(error.Message)); }
         }));
+        page.Children.Add(UI.Text(app.L("Wheel"), 18));
         page.Children.Add(UI.Button(app.L("Wheel Drag Gesture…"), app.OpenWheelGesture));
+        var listen = new CheckBox { Content = app.L("Listen for the gesture whenever Wheel is on"), IsChecked = app.Prefs.ListenForWheelGesture, IsEnabled = app.Prefs.IsOn(Feature.Wheel), Margin = new Thickness(0, 8, 0, 0) };
+        listen.Click += (_, _) => app.Prefs.SetListenForWheelGesture(listen.IsChecked == true); page.Children.Add(listen);
+        page.Children.Add(UI.Text(app.L(WheelGestureNotices.Privacy), 12));
+        page.Children.Add(UI.Text(app.L(WheelGestureNotices.Limits), 12));
         page.Children.Add(UI.Button(app.L("Open Clothesline"),app.OpenClothesline));
         var ropeEdge = new CheckBox { Content = app.L("Show the rope when the pointer touches the top edge"), IsChecked = app.Prefs.RopeAtTopEdge, IsEnabled = app.Prefs.IsOn(Feature.Clothesline), Margin = new Thickness(0,8,0,0) };
         ropeEdge.Click += (_,_) => app.Prefs.SetRopeAtTopEdge(ropeEdge.IsChecked == true); page.Children.Add(ropeEdge);
