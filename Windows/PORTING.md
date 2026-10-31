@@ -1047,6 +1047,15 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.139 合并第十三轮：A04 文件架引用、F08 仍注册目标、E06 QR Garden 分层转场（Codex 编写）
+
+分支 `codex/win-a04-shelf`（a82b522）、`codex/win-f08-residue`（96163b9）、`codex/win-e06-garden`（b511e24）。Strings.json 三方 JSON 合并，无同键冲突；App.cs、Program.cs 自动合并。
+
+- A04：`ShelfReference` 区分文件、文件夹和仅在线引用。云端占位（RECALL_ON_OPEN 等属性、云重解析点）一律按仅在线处理，不打开内容。缩略图经 `IShellItemImageFactory` 只取缓存，查询期间持有路径句柄（审查 P2，已修）。取消要等当前 Shell 调用结束；固定路径需要遍历权限。遗留 P3：重复添加同一引用时，仅在线标签不立刻刷新。
+- F08：`RegisteredTargets` 只读汇总服务、计划任务和启动项的目标路径，按路径边界匹配残留文件夹。含未展开环境变量的路径、未解析条目和不完整的读取都阻止该批移入回收站（审查 P2，已修）。路径证据不证明归属；ARM32 视图未做。
+- E06：`QrGarden` 分地面、覆盖层、结构三层，`QrGardenMotion` 用弹簧驱动相机和淡出，减少动态效果时直接切换。v40 核心构建约 3.30 ms，面数上限 202,730，实测最大 177,155。审查无 P1/P2；断言合并后核心计数约降到 692,357，1,440 种组合仍全部检查，6 个变异都能被发现。
+- 测试结论：WPF 离屏 3D 的不透明面 alpha 是 254，与 Garden 无关的对照四边形也一样，因此检查接受 alpha≥254，对照每通道允许差 1 级，明暗阈值不变。“已有图标字节不变”的偶发失败来自文字首次渲染的边缘像素差异（B09 起就有），比较前先渲染一遍预热，比较仍逐字节。
+
 ## 0.138 合并 F09 检查程序为什么打不开；修复 PDF 库退出崩溃
 
 分支 `claude/win-f09-appcheck-7e4e3b` 压缩合并（含已撤销的临时诊断提交）。

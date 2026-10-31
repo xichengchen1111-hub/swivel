@@ -1327,6 +1327,14 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.139 — merged A04 Shelf references, F08 registered targets, E06 QR Garden layers (Codex) (2026-10-31)
+
+- Each branch passed its own Windows CI and independent review before merging: A04 41075859968 (1 P2 fixed), F08 41077252536 (1 P2 fixed), E06 41085588944 (passed twice; no P1/P2).
+- E06 runs measured independent WPF offscreen quads at BGRA (223,233,239,254), and every garden scene met its luma thresholds with alpha 254. The check now accepts alpha 254 and one-level rounding on controls; luma thresholds did not change.
+- The intermittent "Existing WPF icon bytes unchanged" failure (8 of 65,536 pixels, delta 8; a repeat of the current render differed, a repeat of the legacy render did not) was on the first render of a mark. Both icons are now rendered once before the byte-exact comparison. Two clean runs reduce the doubt but do not rule out a return.
+- After merging: Windows CI on the merged branch: see below.
+- Not tested: hand use on real Windows; Explorer drags of folders and online-only items; real OneDrive placeholders staying undownloaded; real services and tasks blocking a real leftover; how the garden turn looks and performs on a real GPU, at other DPIs or on ARM64; scanning a 3D render with a phone.
+
 ## Windows0.138 — merged F09 app check; fixed the PDF library's exit crash (2026-10-30)
 
 - Exit crash captured under cdb on the merged 0.137 code (run 41059327504): `ntdll!TppRaiseInvalidParameter` ← `d3d10warp!Task::ScheduleTask` ← `UMContext::FlushOnDestroyContext` ← `UMDevice::DestroyDevice` ← `d3d11` device release ← `Windows_Data_Pdf!CPdfStatics::~CPdfStatics` ← `dllmain_crt_process_detach` ← `LdrShutdownProcess`. Before the fix, 1 of 2 direct runs crashed without the app check code (41056535566).
