@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.140 合并第十四轮：A07 直接拖到动作、D04 Color 与 Sound、F09 驱动器身份与慢机诊断（Codex 编写）
+
+分支 `codex/win-a07-gesture`（45e0d0a）、`codex/win-d04-color`（aac6733）、`codex/win-f09-drives`（f55c083），另有只改文档的 `codex/win-progress-count`（f8a0d93，把 PROGRESS 的剩余表改为 23 项）。Strings.json 三方 JSON 合并，无同键冲突；App.cs 在 `RunActionAsync` 开头冲突，保留 A07 的取消注册并接上 F09 的 `doctor.slow`；Program.cs、Models.cs 自动合并。
+
+- A07：OLE 拖动期间，源线程 `GetGUIThreadInfo.hwndCapture` 的窗口类是 `CLIPBRDWNDCLASS`，CI 在真实 `DoDragDrop` 上证实。这是未公开细节，变化时失败关闭（不显示轮盘）。证据到手前只轮询（40 ms，最多 500 ms），不显示窗口：早期做法用隐藏探针窗口，会截获普通鼠标输入（审查 P2，已修）。WPF `AllowDrop` 已调用 `RegisterDragDrop`，所以每个 HWND 只有一个拖放目标所有者：探针是纯 Win32 窗口加自己的 `IDropTarget`，可见轮盘用 WPF 拖放事件（CI 曾因 `DRAGDROP_E_ALREADYREGISTERED` 失败，已修）。第二次审查指出 CI 无法证明同一次真实拖动的探针→轮盘→动作交接，这项仍未验证。
+- D04：`VideoColorSound` 放共享包络、循环计划和音量限幅。只有设了 Color 或画面淡入淡出才走逐帧路径，只裁剪或只变换的导出保持原样。复用 0.136 的逐帧编解码、0.132 的 MP4 第二音轨和 0.92 的语音压低。审查无 P1/P2。
+- F09：弹出用 `CM_Request_Device_EjectW` 并映射否决原因。卷的父链（`STORAGE\Volume → ROOT\volmgr`）到不了物理磁盘，所以按设备类型和编号经 `GUID_DEVINTERFACE_DISK` 映射到磁盘，再向上找可移除祖先（审查 P2，已修，修后未再审）；多区段卷禁用弹出。慢机诊断约 5 秒只读采样。
+
 ## 0.139 合并第十三轮：A04 文件架引用、F08 仍注册目标、E06 QR Garden 分层转场（Codex 编写）
 
 分支 `codex/win-a04-shelf`（a82b522）、`codex/win-f08-residue`（96163b9）、`codex/win-e06-garden`（b511e24）。Strings.json 三方 JSON 合并，无同键冲突；App.cs、Program.cs 自动合并。

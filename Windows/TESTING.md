@@ -1327,6 +1327,13 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.140 — merged A07 direct drop, D04 Color and Sound, F09 drive identity and slow machine (Codex) (2026-10-31)
+
+- Each branch passed its own Windows x64 CI and Codex review before merging: A07 41192723537 (core 694,660, native 74,148; 1 P2 fixed, then redesigned, second review no P1/P2), D04 41189717983 (core 692,618, native 74,081; no P1/P2), F09 41190335216 (core 692,792, native 74,097; 1 P2 fixed, CI passed, not re-reviewed).
+- A07 needed three CI runs. 41190807487 found `DRAGDROP_E_ALREADYREGISTERED`, a real defect. 41191820930 proved the `CLIPBRDWNDCLASS` capture class on a real `DoDragDrop`, and failed on fixture problems (no input to end the drag; an ambiguous `OnDragOver` reflection).
+- After merging: core 694,990 on Mac. MERGED_CI_RESULT
+- Not tested: hand use on real Windows; one real drag going probe → WPF wheel → action end to end; apps that do not use system drag and drop; real focus hand-off, mixed DPI and ARM64; the Trim Video UI, playback and sound quality; a real eject of real USB hardware (tests use a fake).
+
 ## Windows0.139 — merged A04 Shelf references, F08 registered targets, E06 QR Garden layers (Codex) (2026-10-31)
 
 - Each branch passed its own Windows CI and independent review before merging: A04 41075859968 (1 P2 fixed), F08 41077252536 (1 P2 fixed), E06 41085588944 (passed twice; no P1/P2).
