@@ -45,6 +45,7 @@ public sealed class SystemAudioDocument:IDisposable
         }
         catch{input.Dispose();throw;}
     }
+    internal Stream OpenPcm() => new MemoryStream(prepared, false);
     public byte[] Preview(CancellationToken token)
     {using var source=new MemoryStream(prepared,false);using var output=new MemoryStream();PcmWave.Export(source,output,new(0,Info.Seconds),token,preview:true);return output.ToArray();}
     public string Save(CancellationToken token)

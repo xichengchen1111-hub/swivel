@@ -60,6 +60,7 @@ public sealed class VideoTrimmer : IDisposable
             try { audio = clip.EmbeddedAudioTracks[0].GetAudioEncodingProperties(); } catch (Exception error) when (error is not OperationCanceledException) { }
             soundFormat = VideoEdit.SoundFormat(audio?.SampleRate ?? 0, audio?.ChannelCount ?? 0);
         }
+        if (!HasSound) soundFormat = (48000, 2);
         frameNumerator = video.FrameRate.Numerator; frameDenominator = video.FrameRate.Denominator; bitrate = video.Bitrate;
     }
 
@@ -111,7 +112,10 @@ public sealed class VideoTrimmer : IDisposable
     /// Refuses decoded or stretched sound beyond the existing PCM size/duration limits.
     public void CheckSound(VideoTrimPlan plan)
     {
-        if (plan.KeepSound && HasSound && (plan.Speed != 100 || plan.Noise is not null)) VideoEdit.CheckSound(plan.Length, plan.Speed, soundFormat.Rate, soundFormat.Channels);
+        if ((plan.KeepSound && HasSound && (plan.Speed != 100 || plan.Noise is not null || plan.Effects is not null)) || plan.Effects?.Music is not null)
+            VideoEdit.CheckSound(plan.Length, plan.Speed, soundFormat.Rate, soundFormat.Channels);
+        if (plan.Effects?.Music?.LowerDuringSpeech == true && plan.KeepSound && plan.Effects.Volume > 0 && plan.OutputLength > Transcribe.MaxSeconds * 1000L)
+            throw new UserError(Transcribe.TooLong);
     }
 
     /// The frame rate Windows reports (30 when it reports none), used to find frames.
@@ -190,21 +194,32 @@ public sealed class VideoTrimmer : IDisposable
         return cropped;
     }
 
+    internal static BitmapSource ColorPreview(BitmapSource frame, VideoColorSound settings, double time, double length, CancellationToken token)
+    {
+        var pixels = new byte[frame.PixelWidth * frame.PixelHeight * 4]; frame.CopyPixels(pixels, frame.PixelWidth * 4, 0);
+        var adjusted = settings.Apply(new PixelImage(frame.PixelWidth, frame.PixelHeight, pixels), time, length, token);
+        var result = BitmapSource.Create(adjusted.Width, adjusted.Height, 96, 96, PixelFormats.Bgra32, null, adjusted.Bgra, adjusted.Width * 4);
+        result.Freeze(); return result;
+    }
+
     /// Encodes the kept part and publishes `name trimmed.mp4`, or `name edited.mp4` when the
     /// picture or speed changed. Progress runs from 0 to 1.
     internal async Task<string> TrimAsync(VideoTrimPlan plan, Action<double>? progress, CancellationToken token)
     {
-        plan = VideoTrim.Plan(plan.Start, plan.End, Duration, plan.KeepSound, HasSound, plan.Picture, plan.Speed, plan.Noise, soundFormat.Rate);
+        plan = VideoTrim.Plan(plan.Start, plan.End, Duration, plan.KeepSound, HasSound, plan.Picture, plan.Speed, plan.Noise, soundFormat.Rate, plan.Effects);
         if (plan.Picture is not null && !PictureChanges) throw new UserError(NoPictureChanges);
         var geometry = plan.Picture is null ? null : VideoEdit.Geometry(Width, Height, plan.Picture);
         int width = geometry?.Width ?? Width, height = geometry?.Height ?? Height;
         if (plan.Speed != 100) VideoEdit.CheckRate(width, height, Fps, plan.Speed);
         // Sound processing runs separately after the picture; the picture's encoding gets 80% of the progress.
-        bool processSound = plan.KeepSound && HasSound && (plan.Speed != 100 || plan.Noise is not null);
+        bool processFrames = plan.Effects?.FrameChanges == true;
+        bool processSound = plan.KeepSound && HasSound && (plan.Speed != 100 || plan.Noise is not null || plan.Effects is not null) || plan.Effects?.Music is not null;
         CheckSound(plan);
-        Action<double>? pictureProgress = processSound && progress is not null ? value => progress(value * .8) : progress;
+        Action<double>? basePictureProgress = processSound && progress is not null ? value => progress(value * .8) : progress;
+        Action<double>? pictureProgress = processFrames ? value => basePictureProgress?.Invoke(value * .5) : basePictureProgress;
         string rendered = System.IO.Path.Combine(workspace, "trimmed.mp4");
         string decoded = System.IO.Path.Combine(workspace, "sound.wav"), stretched = System.IO.Path.Combine(workspace, "stretched.wav"), encoded = System.IO.Path.Combine(workspace, "sound.m4a");
+        using var music = plan.Effects?.Music is { } chosenMusic ? await SystemAudioDocument.OpenAsync(chosenMusic.Path, token).ConfigureAwait(false) : null;
         try
         {
             var clip = await NativeAsync.Join(MediaClip.CreateFromFileAsync(file), token).ConfigureAwait(false);
@@ -251,10 +266,16 @@ public sealed class VideoTrimmer : IDisposable
                     Mp4Retime.Apply(retime, plan.Speed);
                 }
                 catch (IOException) { throw new UserError(Failed); }
-            long soundLength = processSound ? await SoundAsync(plan, rendered, decoded, stretched, encoded, progress, token).ConfigureAwait(false) : 0;
+            string pictureFile = rendered;
+            if (processFrames)
+            {
+                pictureFile = System.IO.Path.Combine(workspace, "colored.mp4");
+                ColorFrames(rendered, pictureFile, width, height, plan, value => basePictureProgress?.Invoke(.5 + value * .5), token);
+            }
+            long soundLength = processSound ? await SoundAsync(plan, pictureFile, decoded, stretched, encoded, music, progress, token).ConfigureAwait(false) : 0;
             return NativeFiles.WriteBeside(input, System.IO.Path.GetFileNameWithoutExtension(input.Path) + (plan.Edited ? " edited" : " trimmed"), "mp4", stream =>
             {
-                using var source = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
+                using var source = new FileStream(pictureFile, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
                 if (source.Length == 0) throw new UserError(Failed);
                 if (processSound)
                 {
@@ -268,7 +289,7 @@ public sealed class VideoTrimmer : IDisposable
         }
         finally
         {
-            foreach (var temporary in new[] { rendered, decoded, stretched, encoded })
+            foreach (var temporary in new[] { rendered, decoded, stretched, encoded, System.IO.Path.Combine(workspace, "colored.mp4") })
                 try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
@@ -278,11 +299,11 @@ public sealed class VideoTrimmer : IDisposable
     /// stretched to exactly the retimed video's length with its pitch kept, then encoded as AAC.
     /// Any step Windows refuses stops the save with VideoEdit.SoundFailed rather than saving a
     /// video whose sound is missing or out of step.
-    private async Task<long> SoundAsync(VideoTrimPlan plan, string rendered, string decoded, string stretched, string encoded, Action<double>? progress, CancellationToken token)
+    private async Task<long> SoundAsync(VideoTrimPlan plan, string rendered, string decoded, string stretched, string encoded, SystemAudioDocument? music, Action<double>? progress, CancellationToken token)
     {
         var (rate, channels) = soundFormat;
         var folder = await NativeAsync.Join(StorageFolder.GetFolderFromPathAsync(workspace), token).ConfigureAwait(false);
-        await DecodeSoundAsync(plan, decoded, progress, token).ConfigureAwait(false);
+        if (plan.KeepSound && HasSound) await DecodeSoundAsync(plan, decoded, progress, token).ConfigureAwait(false);
 
         // A speed change stretches to the movie length. At 1× the cleaned PCM keeps
         // its samples, with AAC padding cut to the shorter of sound and picture.
@@ -291,22 +312,55 @@ public sealed class VideoTrimmer : IDisposable
         {
             ulong duration; uint timescale;
             using (var video = new FileStream(rendered, FileMode.Open, FileAccess.Read, FileShare.Read)) (duration, timescale) = Mp4AudioMux.Length(video);
-            using var input = new FileStream(decoded, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
-            var info = PcmWave.Read(input, token);
-            if (info.Rate != rate || info.Channels != channels || info.Bits != 16 || !VideoEdit.SoundMatches(info.Frames, rate, plan.Length)) throw new UserError(VideoEdit.SoundFailed);
-            input.Position = 0;
-            using var output = new FileStream(stretched, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1 << 16);
             frames = VideoEdit.SoundFrames(duration, timescale, rate);
-            using var cleaned = plan.Noise is null ? null : new FileStream(System.IO.Path.Combine(workspace, "cleaned-" + Guid.NewGuid().ToString("N") + ".wav"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1 << 16, FileOptions.DeleteOnClose);
-            frames = VideoEdit.PrepareSound(input, output, cleaned, plan.Noise, plan.Speed, frames, Fps, token);
+            if (!plan.KeepSound || !HasSound)
+            {
+                using var silence = new FileStream(stretched, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                VideoSound.Silence(silence, rate, channels, frames, token);
+            }
+            else
+            {
+                using var input = new FileStream(decoded, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
+                var info = PcmWave.Read(input, token);
+                if (info.Rate != rate || info.Channels != channels || info.Bits != 16 || !VideoEdit.SoundMatches(info.Frames, rate, plan.Length)) throw new UserError(VideoEdit.SoundFailed);
+                using var output = new FileStream(stretched, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1 << 16);
+                using var cleaned = plan.Noise is null ? null : new FileStream(System.IO.Path.Combine(workspace, "cleaned-" + Guid.NewGuid().ToString("N") + ".wav"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 1 << 16, FileOptions.DeleteOnClose);
+                long preparedFrames = VideoEdit.PrepareSound(input, output, cleaned, plan.Noise, plan.Speed, frames, Fps, token);
+                if (plan.Effects is null) frames = preparedFrames;
+            }
         }
         catch (IOException) { throw new UserError(VideoEdit.SoundFailed); }
         progress?.Invoke(.9);
         token.ThrowIfCancellationRequested();
 
+        string preparedSound = stretched;
+        string mixed = System.IO.Path.Combine(workspace, "mixed-" + Guid.NewGuid().ToString("N") + ".wav");
+        string backing = System.IO.Path.Combine(workspace, "music-" + Guid.NewGuid().ToString("N") + ".wav");
         try
         {
-            var source = await NativeAsync.Join(StorageFile.GetFileFromPathAsync(stretched), token).ConfigureAwait(false);
+            if (plan.Effects is { } settings)
+            {
+                WaveDucking? ducking = null;
+                if (settings.Music?.LowerDuringSpeech == true && plan.KeepSound && settings.Volume > 0)
+                {
+                    using var speech = await TranscribeDocument.OpenAsync(stretched, token).ConfigureAwait(false);
+                    var segments = speech.Run(null, null, token).Segments;
+                    ducking = new WaveDucking(Gain: .25, Speech: segments);
+                }
+                using var primary = new FileStream(stretched, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
+                if (music is not null)
+                {
+                    WaveMusicRatePlan.Create(music.Info, rate);
+                    using var inputMusic = music.OpenPcm();
+                    using var converted = new FileStream(backing, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                    WaveConverter.Export(inputMusic, converted, new WaveFormat(rate, music.Info.Channels, 16), token);
+                }
+                using var musicStream = music is null ? null : new FileStream(backing, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16);
+                using (var output = new FileStream(mixed, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 16))
+                    VideoSound.Export(primary, musicStream, output, frames, settings, ducking, token);
+                preparedSound = mixed;
+            }
+            var source = await NativeAsync.Join(StorageFile.GetFileFromPathAsync(preparedSound), token).ConfigureAwait(false);
             var target = await NativeAsync.Join(folder.CreateFileAsync(System.IO.Path.GetFileName(encoded), CreationCollisionOption.FailIfExists), token).ConfigureAwait(false);
             var m4a = MediaEncodingProfile.CreateM4a(AudioEncodingQuality.High);
             m4a.Audio.SampleRate = (uint)rate; m4a.Audio.ChannelCount = (uint)channels;
@@ -315,8 +369,52 @@ public sealed class VideoTrimmer : IDisposable
             await NativeAsync.Join(prepared.TranscodeAsync(), value => progress?.Invoke(.9 + Math.Clamp(value / 100, 0, 1) * .1), token).ConfigureAwait(false);
         }
         catch (Exception error) when (error is not OperationCanceledException and not UserError) { throw new UserError(VideoEdit.SoundFailed); }
+        finally
+        {
+            foreach (string path in new[] { mixed, backing })
+                try { File.Delete(path); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
         token.ThrowIfCancellationRequested();
         return frames;
+    }
+
+    // The precise cut/geometry pass above also normalizes rotation and HDR to today's SDR output.
+    // Only color/fades add this pass; trim and transform-only exports retain their original encoder path.
+    private void ColorFrames(string source, string target, int width, int height, VideoTrimPlan plan, Action<double>? progress, CancellationToken token)
+    {
+        ulong duration; uint timescale;
+        using (var movie = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read)) (duration, timescale) = Mp4AudioMux.Length(movie);
+        double length = duration / (double)timescale;
+        bool sideways = height > 2304;
+        int storedWidth = sideways ? height : width, storedHeight = sideways ? width : height;
+        try
+        {
+            using (var reader = new VideoFrameReader(source, width, height))
+            {
+                if (!reader.SquarePixels) throw new UserError(VideoUpscaler.NotSquare);
+                uint numerator = reader.RateNumerator, denominator = reader.RateDenominator;
+                if (numerator == 0 || denominator == 0) (numerator, denominator) = (30, 1);
+                using var writer = new VideoFrameWriter(target, storedWidth, storedHeight, numerator, denominator,
+                    (uint)Math.Clamp(width * (double)height * numerator / denominator * .1, 1_000_000, 100_000_000));
+                var buffer = new byte[width * height * 4];
+                long count = 0, step = (long)Math.Round(10_000_000.0 * denominator / numerator);
+                while (reader.Read(buffer, out long time, out long frameDuration, token))
+                {
+                    var image = plan.Effects!.Apply(new PixelImage(width, height, buffer), time / 10_000_000.0, length, token);
+                    if (sideways) image = VideoColorSound.StoreCounterclockwise(image, token);
+                    writer.Write(image.Bgra, time, frameDuration > 0 ? frameDuration : step);
+                    count++; progress?.Invoke(Math.Clamp(time / (length * 10_000_000), 0, 1));
+                }
+                if (count == 0) throw new UserError(Failed);
+                token.ThrowIfCancellationRequested(); writer.Finish();
+            }
+            if (sideways)
+            {
+                using var movie = new FileStream(target, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                Mp4Retime.DisplayClockwise(movie, storedWidth, storedHeight);
+            }
+        }
+        catch (UserError error) when (error.Message is VideoUpscaler.Failed or VideoUpscale.Unreadable or VideoEdit.CannotRetime) { throw new UserError(Failed); }
     }
 
     private async Task DecodeSoundAsync(VideoTrimPlan plan, string decoded, Action<double>? progress, CancellationToken token)

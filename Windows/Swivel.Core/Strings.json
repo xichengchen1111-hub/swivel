@@ -18663,5 +18663,105 @@
     "Windows 可能静默移除输入钩子。正在运行不保证监听正常；修饰键状态持续不一致时会停止监听并报告问题。无响应时请使用“重新启动手势监听”。管理员应用和远程会话可能限制拖放。停止和退出会等待清理。不使用系统拖放的应用所发起的拖动无法识别。",
     "Windows 可能靜默移除輸入掛鉤。正在執行不保證監聽正常；修飾鍵狀態持續不一致時會停止監聽並報告問題。無回應時請使用「重新啟動手勢監聽」。管理員應用程式和遠端工作階段可能限制拖放。停止和結束會等待清理。不使用系統拖放的應用程式所發起的拖動無法識別。",
     "Windows は入力フックを通知なく削除する場合があります。実行中という表示は正常な監視を保証しません。修飾キーの状態の不一致が続くと監視を停止して問題を報告します。応答しない場合は「ジェスチャー監視を再起動」を使用してください。管理者権限のアプリやリモートセッションではドラッグ＆ドロップが制限される場合があります。停止と終了はクリーンアップを待ちます。システムのドラッグ＆ドロップを使用しないアプリからのドラッグは認識されません。"
+  ],
+  "Look strength (%)": [
+    "风格强度 (%)",
+    "風格強度 (%)",
+    "ルックの強さ (%)"
+  ],
+  "Color preview at the middle of the kept part": [
+    "保留片段中间的颜色预览",
+    "保留片段中間的顏色預覽",
+    "残す範囲の中央の色プレビュー"
+  ],
+  "Color uses the same SDR adjustments as photos. HDR becomes SDR as in other video exports. Color and picture fades add a frame-by-frame encoding pass; the still preview uses the same adjustments before MP4 compression.": [
+    "颜色使用与照片相同的 SDR 调整。与其他视频导出一样，HDR 会转为 SDR。颜色与画面淡入淡出会增加一轮逐帧编码；静帧预览使用 MP4 压缩前的相同调整。",
+    "顏色使用與照片相同的 SDR 調整。與其他影片匯出一樣，HDR 會轉為 SDR。顏色與畫面淡入淡出會增加一輪逐幀編碼；靜幀預覽使用 MP4 壓縮前的相同調整。",
+    "色には写真と同じ SDR 調整を使用します。他の動画書き出しと同様に HDR は SDR になります。色と映像フェードはフレーム単位の再エンコードを追加します。静止画プレビューは MP4 圧縮前と同じ調整です。"
+  ],
+  "Original sound volume (%)": [
+    "原声音量 (%)",
+    "原聲音量 (%)",
+    "元の音声の音量 (%)"
+  ],
+  "Picture and sound fade in (seconds)": [
+    "画面与声音淡入（秒）",
+    "畫面與聲音淡入（秒）",
+    "映像と音声のフェードイン（秒）"
+  ],
+  "Picture and sound fade out (seconds)": [
+    "画面与声音淡出（秒）",
+    "畫面與聲音淡出（秒）",
+    "映像と音声のフェードアウト（秒）"
+  ],
+  "Fades share one envelope after cutting and changing speed, even when they overlap. Original volume above 100% and mixed peaks are clipped, never wrapped. Removing the original sound keeps the music.": [
+    "淡入淡出在裁剪和变速后共用一个包络，重叠时也一样。超过 100% 的原声音量及混音峰值会削波，不会溢出回绕。移除原声仍保留配乐。",
+    "淡入淡出在裁剪和變速後共用一個包絡，重疊時也一樣。超過 100% 的原聲音量及混音峰值會削波，不會溢位回繞。移除原聲仍保留配樂。",
+    "フェードはカットと速度変更後に同じ包絡を使用し、重なっても同様です。100% を超える元の音量やミックスのピークはクリップされ、折り返しません。元の音声を削除しても音楽は残ります。"
+  ],
+  "Background music": [
+    "背景音乐",
+    "背景音樂",
+    "BGM"
+  ],
+  "Music volume (%)": [
+    "配乐音量 (%)",
+    "配樂音量 (%)",
+    "音楽の音量 (%)"
+  ],
+  "Loop music to the end": [
+    "循环配乐至结尾",
+    "循環配樂至結尾",
+    "音楽を最後までループ"
+  ],
+  "Lower music only while someone speaks": [
+    "仅在说话时压低配乐",
+    "僅在說話時壓低配樂",
+    "話している間だけ音楽を下げる"
+  ],
+  "Choose Background Music…": [
+    "选择背景音乐…",
+    "選擇背景音樂…",
+    "BGM を選択…"
+  ],
+  "Remove Music": [
+    "移除配乐",
+    "移除配樂",
+    "音楽を削除"
+  ],
+  "Music starts at the cut's output start, loops or stops when it runs out, and is trimmed to the exact new length with an automatic final fade of up to 0.8 seconds. It is resampled to the video's sound rate. Input and prepared music are each limited to 128 MiB; processed video sound to 512 MiB and two hours. WAV, MP3, ADTS AAC, FLAC and audio-only M4A depend on installed Windows codecs.": [
+    "配乐从裁剪后输出的起点开始，播完后循环或停止，按新视频的精确长度截断，并在结尾自动淡出最多 0.8 秒。配乐重采样至视频音频的采样率。输入与准备后的配乐各限 128 MiB；处理后的视频声音限 512 MiB、两小时。WAV、MP3、ADTS AAC、FLAC 与纯音频 M4A 依赖已安装的 Windows 编解码器。",
+    "配樂從裁剪後輸出的起點開始，播完後循環或停止，按新影片的精確長度截斷，並在結尾自動淡出最多 0.8 秒。配樂重新取樣至影片音訊的取樣率。輸入與準備後的配樂各限 128 MiB；處理後的影片聲音限 512 MiB、兩小時。WAV、MP3、ADTS AAC、FLAC 與純音訊 M4A 依賴已安裝的 Windows 編解碼器。",
+    "音楽はカット後の出力の先頭から始まり、終わるとループまたは停止します。新しい長さに合わせ、最後に最大 0.8 秒の自動フェードを加えます。動画の音声レートに再サンプリングします。入力と準備後の音楽は各 128 MiB、処理した動画音声は 512 MiB・2 時間までです。WAV、MP3、ADTS AAC、FLAC、音声のみの M4A は Windows のコーデックに依存します。"
+  ],
+  "Speech lowering uses the bundled local Whisper model on the kept, speed-adjusted original sound during export (up to one hour). Music falls to 25% during speech. It can take time and can misidentify speech; no model is downloaded. Removing or muting the original disables lowering. Missing models or audio failures stop the export.": [
+    "语音压低会在导出时，用随附的本地 Whisper 模型分析裁剪并变速后的原声（最多一小时），说话时将配乐降至 25%。分析可能耗时或误判；不会下载模型。移除或静音原声会停用压低。模型缺失或音频处理失败会停止导出。",
+    "語音壓低會在匯出時，用隨附的本機 Whisper 模型分析裁剪並變速後的原聲（最多一小時），說話時將配樂降至 25%。分析可能耗時或誤判；不會下載模型。移除或靜音原聲會停用壓低。模型缺失或音訊處理失敗會停止匯出。",
+    "書き出し時に同梱のローカル Whisper モデルでカット・速度変更後の元の音声を分析します（最大 1 時間）。発話中は音楽を 25% に下げます。時間がかかる場合や誤認識があります。モデルはダウンロードしません。元の音声を削除またはミュートすると無効になります。モデル不足や音声処理の失敗時は書き出しを中止します。"
+  ],
+  "Audio (*.wav;*.mp3;*.aac;*.flac;*.m4a)|*.wav;*.mp3;*.aac;*.flac;*.m4a": [
+    "音频 (*.wav;*.mp3;*.aac;*.flac;*.m4a)|*.wav;*.mp3;*.aac;*.flac;*.m4a",
+    "音訊 (*.wav;*.mp3;*.aac;*.flac;*.m4a)|*.wav;*.mp3;*.aac;*.flac;*.m4a",
+    "音声 (*.wav;*.mp3;*.aac;*.flac;*.m4a)|*.wav;*.mp3;*.aac;*.flac;*.m4a"
+  ],
+  "When the picture, speed, color, fades, volume or music changes, it is saved as “name edited.mp4” instead.": [
+    "更改画面、速度、颜色、淡入淡出、音量或配乐时，保存为“名称 edited.mp4”。",
+    "更改畫面、速度、顏色、淡入淡出、音量或配樂時，儲存為「名稱 edited.mp4」。",
+    "映像、速度、色、フェード、音量、音楽を変更すると「名前 edited.mp4」として保存します。"
+  ],
+  "Sound": [
+    "声音",
+    "聲音",
+    "サウンド"
+  ],
+  "Choose picture/sound fades from 0–5 seconds, original volume from 0–200%, and music volume from 0–100%.": [
+    "请选择 0–5 秒的画面与声音淡入淡出、0–200% 的原声音量，以及 0–100% 的配乐音量。",
+    "請選擇 0–5 秒的畫面與聲音淡入淡出、0–200% 的原聲音量，以及 0–100% 的配樂音量。",
+    "映像・音声のフェードは 0–5 秒、元の音量は 0–200%、音楽の音量は 0–100% で指定してください。"
+  ],
+  "Noise reduction uses a noise-only sample within the kept part. It runs before speed changes; removing the sound disables it. Noise reduction itself adds no picture encoding.": [
+    "降噪使用保留片段中的纯噪声样本，在变速前运行；移除声音会停用降噪。降噪本身不增加画面编码。",
+    "降噪使用保留片段中的純噪聲樣本，在變速前執行；移除聲音會停用降噪。降噪本身不增加畫面編碼。",
+    "ノイズ除去は残す範囲内のノイズのみのサンプルを使い、速度変更前に実行します。音声を削除すると無効になります。ノイズ除去自体は映像の再エンコードを追加しません。"
   ]
 }
