@@ -1332,7 +1332,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 - Each branch passed its own Windows CI and independent review before merging: A04 41075859968 (1 P2 fixed), F08 41077252536 (1 P2 fixed), E06 41085588944 (passed twice; no P1/P2).
 - E06 runs measured independent WPF offscreen quads at BGRA (223,233,239,254), and every garden scene met its luma thresholds with alpha 254. The check now accepts alpha 254 and one-level rounding on controls; luma thresholds did not change.
 - The intermittent "Existing WPF icon bytes unchanged" failure (8 of 65,536 pixels, delta 8; a repeat of the current render differed, a repeat of the legacy render did not) was on the first render of a mark. Both icons are now rendered once before the byte-exact comparison. Two clean runs reduce the doubt but do not rule out a return.
-- After merging: Windows CI on the merged branch: see below.
+- After merging: Windows CI 41183530291 on the merged branch passed (x64; core 692,540, native 74,073). The core count fell and the native count rose because this round combined per-face core assertions and added garden render checks; the 1,440 core combinations are still checked.
 - Not tested: hand use on real Windows; Explorer drags of folders and online-only items; real OneDrive placeholders staying undownloaded; real services and tasks blocking a real leftover; how the garden turn looks and performs on a real GPU, at other DPIs or on ARM64; scanning a 3D render with a phone.
 
 ## Windows0.138 — merged F09 app check; fixed the PDF library's exit crash (2026-10-30)
