@@ -17,7 +17,10 @@ public sealed record RecordKey(RegistrationSource Source, string Key);
 /// An app whose reported name was in the installation records read earlier and is in none of
 /// the records now, and each of whose earlier records' own subkeys is gone, with the publishers
 /// reported for it earlier and those subkeys.
-public sealed record RemovedApp(string Name, IReadOnlyList<string> Publishers, IReadOnlyList<RecordKey> Keys);
+public sealed record RemovedApp(string Name, IReadOnlyList<string> Publishers, IReadOnlyList<RecordKey> Keys)
+{
+    public IReadOnlyList<string> InstallFolders { get; init; } = Array.Empty<string>();
+}
 /// Unconfirmed: apps missing from the records now whose own earlier subkeys could still be
 /// opened or could not be checked; they are not looked for, and their names and publishers
 /// count as still recorded.
@@ -28,18 +31,26 @@ public sealed record RemovedApps(IReadOnlyList<RemovedApp> Apps, IReadOnlyList<R
 /// A plain folder named exactly as a removed app, directly in a base folder or in a folder
 /// named exactly as one of its publishers there (Publisher is then that folder's name).
 public sealed record LeftoverFolder(RemovedApp App, LeftoverBase Base, string? Publisher, string Name, string Path);
-public sealed record LeftoverItem(LeftoverFolder Folder, AppCacheSize? Size);
+public sealed record LeftoverItem(LeftoverFolder Folder, AppCacheSize? Size)
+{
+    public FolderRegistrations? Registrations { get; init; }
+}
 public enum LeftoverBaseState { Read, NotFound, Unavailable }
 /// Partial: a limit stopped the listing. Unreadable: a publisher folder in it could not be read.
 public sealed record LeftoverBaseResult(LeftoverBase Base, string? Path, LeftoverBaseState State, string? Issue, bool Partial, bool Unreadable);
 public sealed record AppLeftoverResult(IReadOnlyList<RemovedApp> Removed, IReadOnlyList<RemovedApp> Unconfirmed, IReadOnlyList<LeftoverBaseResult> Bases, IReadOnlyList<LeftoverItem> Items,
-    IReadOnlyList<string> Skipped, bool FolderLimit, bool DiscoveryLimit, bool MeasureEntryLimit, bool MeasureTimeLimit, DateTimeOffset Recorded);
+    IReadOnlyList<string> Skipped, bool FolderLimit, bool DiscoveryLimit, bool MeasureEntryLimit, bool MeasureTimeLimit, DateTimeOffset Recorded)
+{
+    public RegisteredTargetSnapshot? RegistrationSnapshot { get; init; }
+    public IReadOnlyList<RemovedAppRegistrations> Registrations { get; init; } = Array.Empty<RemovedAppRegistrations>();
+}
+public sealed record RemovedAppRegistrations(string App, string? Folder);
 public sealed record AppLeftoverLimits(int DirectoryEntries = 4096, int DiscoveryEntries = 20000, int Folders = 256, int MeasureEntries = 100000, int MeasureSeconds = 30);
 
 public static class AppLeftovers
 {
     public const string Notice = "After you uninstall apps in Windows Settings, this looks for folders they may have left in your app data: a plain folder named exactly as an app that was in the installation records when that window opened and is in none of them now, directly in Local, Roaming or LocalLow app data or your own Programs folder, or in a folder there named exactly as that app's publisher. An app counts as removed only when each of its own earlier installation records can no longer be opened. A matching name does not prove that a folder belonged to the app: another app, a newer edition or a portable copy can use the same name, and the folder can hold saved games, documents or settings you still want. Names also used by an app that is still recorded or by its publisher, names that a recorded app's name begins with (\"Zoom\" while \"Zoom Workplace\" is recorded), and shared folders such as Microsoft, Packages, Programs and Temp are never listed. A publisher's own folder is never listed, only the app's folder inside it, and a publisher folder named as an app is not searched. Nothing is selected for you. Before each move the app must still be missing from the installation records, the folder must still be a plain local folder at the same place, on a fixed drive with a Recycle Bin, and no running program whose path Windows reports may be inside it (protected programs may report none, and short 8.3 paths are not matched). If a folder is too large for the Recycle Bin, Windows asks before deleting it permanently. Undo Move puts back the last moved folders while this window is open, unless something new is in their place. Afterwards, restore them from the Recycle Bin.";
-    public const string Limits = "Search: at most 4,096 entries per folder, 256 folders and 20,000 entries in all. Sizes: one shared metadata budget of 100,000 entries and about 30 soft seconds, shared fairly among the folders, with at most 20,000 entries and four levels below any one folder; an incomplete size is a lower bound. Sizes are logical bytes from directory records, not reclaimable space: links, cloud placeholders and system items inside are skipped. Apps from the Microsoft Store, other Windows users, other drives, registry entries, services and scheduled tasks are not looked at.";
+    public const string Limits = "Search: at most 4,096 entries per folder, 256 folders and 20,000 entries in all. Sizes: one shared metadata budget of 100,000 entries and about 30 soft seconds, shared fairly among the folders, with at most 20,000 entries and four levels below any one folder; an incomplete size is a lower bound. Sizes are logical bytes from directory records, not reclaimable space: links, cloud placeholders and system items inside are skipped. Apps from the Microsoft Store, other Windows users, other drives are not searched for folders. Registration targets are inspected separately under Still Registered Targets with their own limits.";
     public const string NotComplete = "The installation records could not all be read just now, so apps that are still installed cannot be told apart from removed ones. Nothing was searched. The list read earlier is kept: choose Find Leftovers again in a moment. If the installation records window itself reports a partial snapshot (for example an entry that cannot be read, or more than 1,024 entries in one view), this keeps happening and leftovers cannot be looked for on this PC.";
     public const string RecordedAgain = "Its app is in the installation records again, or they could not all be read or checked just now, so it was left alone.";
     public const string Unreadable = "This folder could not be read.";
@@ -76,7 +87,9 @@ public static class AppLeftovers
             bool gone = group.All(r => r.Key is not null && InstalledApps.ValidKey(r.Key)) && keys.All(k => recheck(k.Source, k.Key) == RecordKeyState.Gone);
             token.ThrowIfCancellationRequested();
             (gone ? apps : unconfirmed).Add(new(name, Array.AsReadOnly(group.Where(r => r.Publisher.State == RegistrationValueState.Present)
-                .Select(r => r.Publisher.Value!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()), Array.AsReadOnly(keys)));
+                .Select(r => r.Publisher.Value!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()), Array.AsReadOnly(keys))
+                { InstallFolders = Array.AsReadOnly(group.Where(r => r.InstallLocation?.State == RegistrationValueState.Present)
+                    .Select(r => RegisteredTargets.Folder(r.InstallLocation!.Value)).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray()) });
         }
         return new(apps.AsReadOnly(), unconfirmed.AsReadOnly());
     }

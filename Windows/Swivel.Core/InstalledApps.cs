@@ -10,7 +10,7 @@ using System.Threading;
 namespace Swivel.Core;
 
 public enum RegistrationSource { Machine64,Machine32,User64,User32 }
-public enum RegistrationField { Name,Version,Publisher }
+public enum RegistrationField { Name,Version,Publisher,InstallLocation }
 public enum RegistrationValueState { Present,Missing,Empty,Unavailable,Unsupported,TooLarge,Invalid,TimeLimit }
 public sealed record RegistrationText(string? Value,RegistrationValueState State)
 {
@@ -29,7 +29,10 @@ public interface IRegistrationRoot : IDisposable
 public interface IRegistrationEntry : IDisposable { RegistrationText Read(RegistrationField field); }
 [Flags] public enum RegistrationRootIssue { None=0,Missing=1,Unavailable=2,Limit=4,TimeLimit=8,Duplicates=16 }
 [Flags] public enum RegistrationEntryIssue { None=0,KeyInvalid=1,Unavailable=2,Duplicate=4,TimeLimit=8 }
-public sealed record InstalledAppRecord(RegistrationSource Source,int Ordinal,string? Key,RegistrationText Name,RegistrationText Version,RegistrationText Publisher,RegistrationEntryIssue Issues);
+public sealed record InstalledAppRecord(RegistrationSource Source,int Ordinal,string? Key,RegistrationText Name,RegistrationText Version,RegistrationText Publisher,RegistrationEntryIssue Issues)
+{
+    public RegistrationText? InstallLocation { get; init; }
+}
 public sealed record RegistrationRootResult(RegistrationSource Source,int Recorded,RegistrationRootIssue Issues);
 public sealed record InstalledAppsSnapshot(DateTimeOffset RecordedUtc,IReadOnlyList<InstalledAppRecord> Records,IReadOnlyList<RegistrationRootResult> Roots)
 {
@@ -40,14 +43,14 @@ public static class InstalledApps
     public const int MaxPerRoot=1024,MaxTextUnits=1024,MaxKeyUnits=255,MaxReportBytes=4*1024*1024;
     public static readonly TimeSpan SoftTimeLimit=TimeSpan.FromSeconds(10);
     public const string Scope="Explicit read-only traditional desktop installation records from four fixed current-user/machine registry views. Up to 1,024 entries per view, 1,024 UTF-16 units per text field and about 10 seconds. This is not a complete or simultaneous list of installed apps: registry data can change, be stale, duplicate or be supplied by any installer. A blocked system call can return after the soft time limit.";
-    public const string Limits="Only reported display name, version and publisher text is read. Environment variables are not expanded. No uninstall commands, install locations, executable files, folders, signatures, disk sizes, other users, Store/MSIX inventory or portable apps are inspected. Registry views can share entries or resolve through registry links; underlying key identity and link targets are not verified. Records are not merged and do not prove installation, architecture, publisher identity, app ownership or safe cleanup. ARM32-specific records may be absent.";
+    public const string Limits="The standard installation-record report includes reported display name, version and publisher text. InstallLocation text may be retained separately for explicit registration-target checks. Environment variables are not expanded. No uninstall commands, executable files, folders, signatures, disk sizes, other users, Store/MSIX inventory or portable apps are inspected. Registry views can share entries or resolve through registry links; underlying key identity and link targets are not verified. Records are not merged and do not prove installation, architecture, publisher identity, app ownership or safe cleanup. ARM32-specific records may be absent.";
     public const string Privacy="Reported names, versions and publishers appear in the lists and explicit copies. Complete registry subkey names are hidden by default; select Show Registry Subkey Names to include them in selected details and copies. No automatic refresh, report saving, network, elevation, uninstall, registry changes or file deletion. Copy Report is limited to 4 MiB of UTF-8 text; oversized copies are refused whole.";
     public const string Uninstall="To uninstall an app, use Open Installed Apps in Settings: Windows and the app's own uninstaller do the work, and Swivel never runs an uninstall command. Keep this window open meanwhile, then choose Find Leftovers of Apps Removed Since This List Was Read… to look for folders named exactly as the apps that are gone from the records.";
     public const string Packages="Store and MSIX apps are not in these records. Choose Read Store and MSIX Packages… to list the current user's packages separately; this list is kept and opens again afterwards.";
     public const string ReportLimit="The installation-record report exceeds 4 MiB of UTF-8 text. Copy one selected record instead.";
-    public static InstalledAppsSnapshot Scan(IInstalledAppsSource source,CancellationToken token)
-    {var clock=Stopwatch.StartNew();return ScanWithClock(source,()=>clock.Elapsed,token);}
-    public static InstalledAppsSnapshot ScanWithClock(IInstalledAppsSource source,Func<TimeSpan> elapsed,CancellationToken token)
+    public static InstalledAppsSnapshot Scan(IInstalledAppsSource source,CancellationToken token,bool includeLocations=false)
+    {var clock=Stopwatch.StartNew();return ScanWithClock(source,()=>clock.Elapsed,token,includeLocations);}
+    public static InstalledAppsSnapshot ScanWithClock(IInstalledAppsSource source,Func<TimeSpan> elapsed,CancellationToken token,bool includeLocations=false)
     {
         ArgumentNullException.ThrowIfNull(source);ArgumentNullException.ThrowIfNull(elapsed);token.ThrowIfCancellationRequested();
         var rows=new List<InstalledAppRecord>();var roots=new List<RegistrationRootResult>();bool timed=false;
@@ -68,7 +71,7 @@ public static class InstalledApps
                 if(key.Kind==RegistrationKeyKind.Unavailable){issue|=RegistrationRootIssue.Unavailable;break;}
                 RegistrationEntryIssue entryIssue=RegistrationEntryIssue.None;
                 string? name=key.Kind==RegistrationKeyKind.Item&&ValidKey(key.Name)?key.Name:null;
-                var unknown=RegistrationText.Unknown(RegistrationValueState.Unavailable);RegistrationText display=unknown,version=unknown,publisher=unknown;
+                var unknown=RegistrationText.Unknown(RegistrationValueState.Unavailable);RegistrationText display=unknown,version=unknown,publisher=unknown;RegistrationText? location=includeLocations?unknown:null;
                 if(name is null)entryIssue|=RegistrationEntryIssue.KeyInvalid;
                 else if(!seen.Add(name)){entryIssue|=RegistrationEntryIssue.Duplicate;issue|=RegistrationRootIssue.Duplicates;}
                 else if(Stop())
@@ -84,11 +87,11 @@ public static class InstalledApps
                             if(Stop()){entryIssue|=RegistrationEntryIssue.TimeLimit;return RegistrationText.Unknown(RegistrationValueState.TimeLimit);}
                             var value=entry.Read(field);token.ThrowIfCancellationRequested();return Validate(value);
                         }
-                        display=Read(RegistrationField.Name);version=Read(RegistrationField.Version);publisher=Read(RegistrationField.Publisher);
+                        display=Read(RegistrationField.Name);version=Read(RegistrationField.Version);publisher=Read(RegistrationField.Publisher);if(includeLocations)location=Read(RegistrationField.InstallLocation);
                     }
                 }
                 if(entryIssue.HasFlag(RegistrationEntryIssue.TimeLimit))issue|=RegistrationRootIssue.TimeLimit;
-                rows.Add(new(origin,index,name,display,version,publisher,entryIssue));recorded++;
+                rows.Add(new(origin,index,name,display,version,publisher,entryIssue){InstallLocation=location});recorded++;
                 if(index==MaxPerRoot-1)issue|=RegistrationRootIssue.Limit;
                 if(timed){issue|=RegistrationRootIssue.TimeLimit;break;}
             }

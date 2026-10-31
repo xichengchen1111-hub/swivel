@@ -8,13 +8,13 @@ using Swivel.Core;
 namespace Swivel.Windows;
 
 // Fixed local registry metadata only. No registry writes, MSI/WMI, commands,
-// environment expansion, install locations, file handles or network requests.
+// environment expansion, file handles or network requests. F08 can retain reported install locations.
 internal static class InstalledAppsReader
 {
     internal const string UninstallKey=@"Software\Microsoft\Windows\CurrentVersion\Uninstall";
     internal const uint Query=0x0001,Enumerate=0x0008,View64=0x0100,View32=0x0200;
     private const int Success=0,NotFound=2,MoreData=234,NoMore=259;
-    internal static InstalledAppsSnapshot Read(CancellationToken token)=>InstalledApps.Scan(new Source(),token);
+    internal static InstalledAppsSnapshot Read(CancellationToken token,bool includeLocations=false)=>InstalledApps.Scan(new Source(),token,includeLocations);
     private sealed class Source:IInstalledAppsSource
     {
         public RegistrationOpen Open(RegistrationSource source)
@@ -40,11 +40,11 @@ internal static class InstalledAppsReader
             return error==Success?RecordKeyState.Present:error==NotFound?RecordKeyState.Gone:RecordKeyState.Unknown;
         }
     }
-    private static uint View(RegistrationSource source)=>source switch{RegistrationSource.Machine64 or RegistrationSource.User64=>View64,RegistrationSource.Machine32 or RegistrationSource.User32=>View32,_=>throw new ArgumentOutOfRangeException(nameof(source))};
+    internal static uint View(RegistrationSource source)=>source switch{RegistrationSource.Machine64 or RegistrationSource.User64=>View64,RegistrationSource.Machine32 or RegistrationSource.User32=>View32,_=>throw new ArgumentOutOfRangeException(nameof(source))};
     // A predefined key is borrowed, never closed.
-    private static SafeRegistryHandle Predefined(RegistrationSource source)
+    internal static SafeRegistryHandle Predefined(RegistrationSource source)
         =>new(new IntPtr(unchecked((int)(source is RegistrationSource.Machine64 or RegistrationSource.Machine32?0x80000002u:0x80000001u))),ownsHandle:false);
-    private sealed class Root(SafeRegistryHandle handle,uint view):IRegistrationRoot
+    internal sealed class Root(SafeRegistryHandle handle,uint view):IRegistrationRoot
     {
         public RegistrationKey At(uint index)
         {
@@ -68,16 +68,20 @@ internal static class InstalledAppsReader
     {
         public RegistrationText Read(RegistrationField field)
         {
-            string name=field switch{RegistrationField.Name=>"DisplayName",RegistrationField.Version=>"DisplayVersion",RegistrationField.Publisher=>"Publisher",_=>throw new ArgumentOutOfRangeException(nameof(field))};
-            var data=new byte[(InstalledApps.MaxTextUnits+1)*2];uint bytes=(uint)data.Length,type;int result;
-            try{result=RegQueryValueExW(handle,name,IntPtr.Zero,out type,data,ref bytes);}
-            catch(Exception error)when(Unavailable(error)){return RegistrationText.Unknown(RegistrationValueState.Unavailable);}
-            if(result==NotFound)return RegistrationText.Unknown(RegistrationValueState.Missing);
-            if(result==MoreData)return RegistrationText.Unknown(RegistrationValueState.TooLarge); // Buffer undefined: never inspect.
-            if(result!=Success)return RegistrationText.Unknown(RegistrationValueState.Unavailable);
-            return Decode(type,data,bytes);
+            string name=field switch{RegistrationField.Name=>"DisplayName",RegistrationField.Version=>"DisplayVersion",RegistrationField.Publisher=>"Publisher",RegistrationField.InstallLocation=>"InstallLocation",_=>throw new ArgumentOutOfRangeException(nameof(field))};
+            return ReadText(handle,name);
         }
         public void Dispose()=>handle.Dispose();
+    }
+    internal static RegistrationText ReadText(SafeRegistryHandle handle,string name)
+    {
+        var data=new byte[(InstalledApps.MaxTextUnits+1)*2];uint bytes=(uint)data.Length,type;int result;
+        try{result=RegQueryValueExW(handle,name,IntPtr.Zero,out type,data,ref bytes);}
+        catch(Exception error)when(Unavailable(error)){return RegistrationText.Unknown(RegistrationValueState.Unavailable);}
+        if(result==NotFound)return RegistrationText.Unknown(RegistrationValueState.Missing);
+        if(result==MoreData)return RegistrationText.Unknown(RegistrationValueState.TooLarge);
+        if(result!=Success)return RegistrationText.Unknown(RegistrationValueState.Unavailable);
+        return Decode(type,data,bytes);
     }
     internal static RegistrationText Decode(uint type,byte[] data,uint bytes)
     {
@@ -90,7 +94,7 @@ internal static class InstalledAppsReader
         if(value.EndsWith('\0'))value=value[..^1]; // A terminator is optional; strip at most one.
         return InstalledApps.Validate(new(value,RegistrationValueState.Present));
     }
-    private static int OpenKey(SafeRegistryHandle parent,string key,uint access,out SafeRegistryHandle? owned)
+    internal static int OpenKey(SafeRegistryHandle parent,string key,uint access,out SafeRegistryHandle? owned)
     {
         owned=null;SafeRegistryHandle? result=null;int error;
         try{error=RegOpenKeyExW(parent,key,0,access,out result);}

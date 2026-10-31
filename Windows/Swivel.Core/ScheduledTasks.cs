@@ -6,9 +6,12 @@ using System.Threading;
 
 namespace Swivel.Core;
 
-public enum ScheduledTaskPhase { OpenService, OpenFolder, TaskCollection, TaskCount, TaskItem, Name, Path, State, Enabled, LastResult, FolderCollection, FolderCount, FolderItem, FolderPath, Cleanup, Validation, Limit }
+public enum ScheduledTaskPhase { OpenService, OpenFolder, TaskCollection, TaskCount, TaskItem, Name, Path, State, Enabled, LastResult, FolderCollection, FolderCount, FolderItem, FolderPath, Cleanup, Validation, Limit, Actions }
 public enum ScheduledTaskStopReason { Completed, FolderLimit, TaskLimit, TextLimit, TimeLimit }
-public sealed record ScheduledTaskRow(int RowIndex, string? Name, string? Path, int? State, bool? Enabled, uint? LastResult);
+public sealed record ScheduledTaskRow(int RowIndex, string? Name, string? Path, int? State, bool? Enabled, uint? LastResult)
+{
+    public IReadOnlyList<string?>? Executables { get; init; }
+}
 public sealed record ScheduledTaskIssue(int? RowIndex, string? NamespacePath, ScheduledTaskPhase Phase, uint? ErrorCode, string Reason);
 public sealed record ScheduledTaskFolder(string Path, int Depth, int? ReportedTasks, int AttemptedTasks, int? ReportedFolders, int AttemptedChildren, bool Complete);
 public sealed class ScheduledTaskSnapshot
@@ -31,10 +34,10 @@ public sealed class ScheduledTaskSnapshot
         if (rows.Length > ScheduledTasks.MaxTasks || roots.Length > ScheduledTasks.MaxFolders || problems.Length > ScheduledTasks.MaxIssues ||
             folderAttempts is < 0 or > ScheduledTasks.MaxFolders || taskAttempts is < 0 or > ScheduledTasks.MaxTasks ||
             retainedTextUnits is < 0 or > ScheduledTasks.MaxTextUnits || omittedIssues < 0 || !Enum.IsDefined(stopReason) || elapsed < TimeSpan.Zero ||
-            rows.Any(x => x.RowIndex < 1 || x.RowIndex > taskAttempts || x.Name?.Length > ScheduledTasks.MaxValueUnits || x.Path?.Length > ScheduledTasks.MaxValueUnits) ||
+            rows.Any(x => x.RowIndex < 1 || x.RowIndex > taskAttempts || x.Name?.Length > ScheduledTasks.MaxValueUnits || x.Path?.Length > ScheduledTasks.MaxValueUnits || x.Executables is { } commands && (commands.Count > 32 || commands.Any(c => c?.Length > ScheduledTasks.MaxValueUnits || c?.Contains('\0') == true))) ||
             rows.Select(x => x.RowIndex).Distinct().Count() != rows.Length || roots.Any(x => x.Path.Length > ScheduledTasks.MaxValueUnits || x.Depth is < 0 or > ScheduledTasks.MaxDepth) ||
             problems.Any(x => !Enum.IsDefined(x.Phase) || x.NamespacePath?.Length > ScheduledTasks.MaxValueUnits)) throw new ArgumentException("Invalid scheduled-task snapshot.");
-        Tasks = Array.AsReadOnly(rows); Folders = Array.AsReadOnly(roots); Issues = Array.AsReadOnly(problems);
+        Tasks = Array.AsReadOnly(rows.Select(row => row.Executables is null ? row : row with { Executables = Array.AsReadOnly(row.Executables.ToArray()) }).ToArray()); Folders = Array.AsReadOnly(roots); Issues = Array.AsReadOnly(problems);
         Captured = captured; Elapsed = elapsed; FolderAttempts = folderAttempts; TaskAttempts = taskAttempts;
         RetainedTextUnits = retainedTextUnits; OmittedIssues = omittedIssues; StopReason = stopReason;
     }
@@ -47,6 +50,7 @@ public interface IScheduledTaskChild : IDisposable { string Path(); }
 public interface IScheduledTaskItem : IDisposable
 {
     string Name(); string Path(); int State(); bool Enabled(); uint LastResult();
+    IReadOnlyList<string?> ExecutablePaths() => throw new NotSupportedException();
 }
 public sealed class ScheduledTaskLimitException : Exception { }
 public sealed class ScheduledTaskValueException : Exception { }
@@ -86,7 +90,7 @@ public static class ScheduledTasks
     public const string CleanupFailed = "A scheduled-task COM reference could not be released.";
     public static string Phase(ScheduledTaskPhase phase) => phase switch
     {
-        ScheduledTaskPhase.OpenService => "Task Scheduler connection", ScheduledTaskPhase.OpenFolder => "Task folder open",
+        ScheduledTaskPhase.Actions => "Task executable actions", ScheduledTaskPhase.OpenService => "Task Scheduler connection", ScheduledTaskPhase.OpenFolder => "Task folder open",
         ScheduledTaskPhase.TaskCollection => "Task collection", ScheduledTaskPhase.TaskCount => "Reported task count",
         ScheduledTaskPhase.TaskItem => "Task entry", ScheduledTaskPhase.Name => "Task name", ScheduledTaskPhase.Path => "Task namespace path",
         ScheduledTaskPhase.State => "Reported task state", ScheduledTaskPhase.Enabled => "Reported enabled flag", ScheduledTaskPhase.LastResult => "Raw last task result",
@@ -98,8 +102,8 @@ public static class ScheduledTasks
     public static string State(int raw) => raw switch { 0 => "Unknown (reported)", 1 => "Disabled (reported)", 2 => "Queued (reported)", 3 => "Ready (reported)", 4 => "Running (reported)", _ => "Unknown task state value" };
     public static ScheduledTaskSnapshot Scan(Func<ScheduledTaskAccess, IScheduledTaskSource> open, CancellationToken token)
     { var watch = Stopwatch.StartNew(); return ScanWithClock(open, () => watch.Elapsed, token); }
-    public static ScheduledTaskSnapshot ScanWithClock(Func<ScheduledTaskAccess, IScheduledTaskSource> open, Func<TimeSpan> elapsed, CancellationToken token)
-        => new ScanState(open, elapsed, token).Run();
+    public static ScheduledTaskSnapshot ScanWithClock(Func<ScheduledTaskAccess, IScheduledTaskSource> open, Func<TimeSpan> elapsed, CancellationToken token, bool includeActions = false)
+        => new ScanState(open, elapsed, token, includeActions).Run();
 
     private sealed class ScanState
     {
@@ -113,10 +117,11 @@ public static class ScheduledTasks
         private readonly HashSet<string> seenFolders = new(StringComparer.OrdinalIgnoreCase), seenTasks = new(StringComparer.OrdinalIgnoreCase);
         private int folderAttempts, taskAttempts, retained = 1, omitted;
         private long issueCount;
-        internal ScanState(Func<ScheduledTaskAccess, IScheduledTaskSource> open, Func<TimeSpan> elapsed, CancellationToken token)
+        private readonly bool includeActions;
+        internal ScanState(Func<ScheduledTaskAccess, IScheduledTaskSource> open, Func<TimeSpan> elapsed, CancellationToken token, bool includeActions)
         {
             this.open = open ?? throw new ArgumentNullException(nameof(open)); this.elapsed = elapsed ?? throw new ArgumentNullException(nameof(elapsed));
-            access = new(token, elapsed, Add);
+            access = new(token, elapsed, Add); this.includeActions = includeActions;
         }
         private void Add(ScheduledTaskIssue issue)
         { issueCount++; if (issues.Count < MaxIssues) issues.Add(issue); else if (omitted < int.MaxValue) omitted++; }
@@ -244,7 +249,7 @@ public static class ScheduledTasks
         { access.Checkpoint(); string value = get(); access.Checkpoint(); return Keep(value); }
         private void ReadTask(IScheduledTaskItems tasks, int index, int row, string path)
         {
-            IScheduledTaskItem? task = null; string? name = null, taskPath = null; int? state = null; bool? enabled = null; uint? result = null;
+            IScheduledTaskItem? task = null; string? name = null, taskPath = null; int? state = null; bool? enabled = null; uint? result = null; IReadOnlyList<string?>? executables = null;
             try
             {
                 access.Checkpoint(); task = tasks.At(index); access.Checkpoint();
@@ -265,11 +270,22 @@ public static class ScheduledTasks
                     catch (OperationCanceledException) { throw; }
                     catch (Exception error) { Problem(field, path, row, error); }
                 }
+                if (includeActions)
+                {
+                    try
+                    {
+                        access.Checkpoint(); var paths = task.ExecutablePaths(); access.Checkpoint();
+                        if (paths.Count > 32) throw new ScheduledTaskValueException();
+                        executables = Array.AsReadOnly(paths.Select(p => p is null ? null : Keep(p)).ToArray());
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception error) { Problem(ScheduledTaskPhase.Actions, path, row, error); }
+                }
                 if (taskPath != null && !seenTasks.Add(taskPath)) Problem(ScheduledTaskPhase.Validation, path, row, reason: "A repeated task path is retained as a separate historical row.");
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception error) { Problem(ScheduledTaskPhase.TaskItem, path, row, error); }
-            finally { Release(task, path, row); rows.Add(new(row, name, taskPath, state, enabled, result)); }
+            finally { Release(task, path, row); rows.Add(new(row, name, taskPath, state, enabled, result) { Executables = executables }); }
         }
     }
 }

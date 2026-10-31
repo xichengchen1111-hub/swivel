@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Text;
@@ -20,7 +21,14 @@ internal static class AppLeftoverReader
     {
         var after = InstalledAppsReader.Read(token); token.ThrowIfCancellationRequested();
         var removed = AppLeftovers.Removed(before, after, InstalledAppsReader.Recheck, token);
-        return AppLeftovers.Read(removed, after, root => Reported(root, token), path => NativeFiles.MetadataDirectory.Open(path), token);
+        var result = AppLeftovers.Read(removed, after, root => Reported(root, token), path => NativeFiles.MetadataDirectory.Open(path), token);
+        if (result.Items.Count == 0 && removed.Apps.Count == 0) return result;
+        var registered = RegisteredTargetReader.Read(token);
+        return result with { Items = Array.AsReadOnly(result.Items.Select(item => item with
+            { Registrations = RegisteredTargets.ForFolder(registered, item.Folder.Path, token) }).ToArray()),
+            RegistrationSnapshot = registered, Registrations = Array.AsReadOnly(removed.Apps.SelectMany(app => app.InstallFolders.Count == 0
+                ? new[] { new RemovedAppRegistrations(app.Name, null) }
+                : app.InstallFolders.Select(folder => new RemovedAppRegistrations(app.Name, folder))).ToArray()) };
     }
 
     /// For one batch of moves: reads the installation records once now and returns a check that
@@ -28,7 +36,12 @@ internal static class AppLeftoverReader
     internal static Action<LeftoverFolder> RecordsCheck()
     {
         var now = InstalledAppsReader.Read(CancellationToken.None);
-        return folder => AppLeftovers.StillRemoved(folder, now, InstalledAppsReader.Recheck);
+        return folder =>
+        {
+            AppLeftovers.StillRemoved(folder, now, InstalledAppsReader.Recheck);
+            // A fresh registration sample for every move; a batch snapshot must not authorize a later move.
+            RegisteredTargets.RequireTrash(RegisteredTargets.ForFolder(RegisteredTargetReader.Read(CancellationToken.None), folder.Path, CancellationToken.None));
+        };
     }
 
     private static string? Reported(LeftoverBase root, CancellationToken token)

@@ -17,7 +17,7 @@ internal static class StartupReader
         uint view=location.Source switch{RegistrationSource.Machine64 or RegistrationSource.User64=>0x0100u,RegistrationSource.Machine32 or RegistrationSource.User32=>0x0200u,_=>throw new ArgumentOutOfRangeException(nameof(location))};
         return(new IntPtr(unchecked((int)(machine?0x80000002u:0x80000001u))),Key(location.Once),0x0001|view);
     }
-    private sealed class Source:IStartupSource
+    internal sealed class Source:IStartupSource
     {
         public StartupOpen Open(StartupLocation location)
         {

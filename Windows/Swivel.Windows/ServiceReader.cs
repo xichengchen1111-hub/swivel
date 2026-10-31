@@ -51,6 +51,65 @@ internal static class ServiceReader
         }
         token.ThrowIfCancellationRequested();return new(rows,issues,DateTimeOffset.Now);
     }
+    // Reuse the status enumerator; query configuration only for an explicit F08 inspection.
+    internal static IReadOnlyList<RegisteredCommand> Commands(CancellationToken token,Func<bool> stop,List<string> issues)
+    {
+        token.ThrowIfCancellationRequested();
+        if(stop()){issues.Add(RegisteredTargets.Incomplete);return Array.Empty<RegisteredCommand>();}
+        var snapshot=Read(token);var rows=new List<RegisteredCommand>();
+        if(snapshot.Partial)issues.Add(RegisteredTargets.Incomplete);
+        IntPtr manager=IntPtr.Zero,buffer=IntPtr.Zero;
+        try
+        {
+            if(stop()){issues.Add(RegisteredTargets.Incomplete);return rows;}
+            manager=OpenSCManagerW(null,null,1);token.ThrowIfCancellationRequested();
+            if(manager==IntPtr.Zero){issues.Add(RegisteredTargets.Incomplete);return rows;}
+            buffer=Marshal.AllocHGlobal(ConfigBytes);
+            foreach(var service in snapshot.Services)
+            {
+                token.ThrowIfCancellationRequested();
+                if(stop()||rows.Count>=1024){issues.Add(RegisteredTargets.Incomplete);break;}
+                IntPtr handle=OpenServiceW(manager,service.Name,1);string? command=null;
+                try
+                {
+                    token.ThrowIfCancellationRequested();
+                    if(handle!=IntPtr.Zero&&!stop())
+                    {
+                        Marshal.Copy(new byte[ConfigBytes],0,buffer,ConfigBytes);
+                        bool ok=QueryServiceConfigW(handle,buffer,ConfigBytes,out _);token.ThrowIfCancellationRequested();
+                        if(ok)command=ConfigCommand(buffer);
+                    }
+                    if(command is null)issues.Add(RegisteredTargets.Incomplete);
+                    rows.Add(new("Services",service.Name,command));
+                }
+                finally { if(handle!=IntPtr.Zero&&!CloseServiceHandle(handle))issues.Add(RegisteredTargets.Incomplete); }
+            }
+        }
+        finally
+        {
+            try{if(buffer!=IntPtr.Zero)Marshal.FreeHGlobal(buffer);}
+            finally{if(manager!=IntPtr.Zero&&!CloseServiceHandle(manager))issues.Add(RegisteredTargets.Incomplete);}
+        }
+        token.ThrowIfCancellationRequested();return rows.AsReadOnly();
+    }
+    // QueryServiceConfigW documents an 8 KiB maximum: https://learn.microsoft.com/windows/win32/api/winsvc/nf-winsvc-queryserviceconfigw
+    internal const int ConfigBytes=8192;
+    internal static string? ConfigCommand(IntPtr buffer)
+    {
+        var config=Marshal.PtrToStructure<NativeConfig>(buffer);
+        ulong start=unchecked((ulong)buffer.ToInt64()),pointer=unchecked((ulong)config.Binary.ToInt64());
+        if(pointer<start||pointer-start<(ulong)Marshal.SizeOf<NativeConfig>()||pointer-start>=ConfigBytes||((pointer-start)&1)!=0)return null;
+        int available=(ConfigBytes-(int)(pointer-start))/2;
+        for(int i=0;i<Math.Min(available,RegisteredTargets.MaxCommand+1);i++)
+            if(Marshal.ReadInt16(config.Binary,i*2)==0)return Marshal.PtrToStringUni(config.Binary,i);
+        return null;
+    }
+    [StructLayout(LayoutKind.Sequential)]internal struct NativeConfig
+    {
+        public uint Type,Start,Error;public IntPtr Binary,Group;public uint Tag;public IntPtr Dependencies,Account,Display;
+    }
+    [DllImport("advapi32.dll",ExactSpelling=true,CharSet=CharSet.Unicode,SetLastError=true)][DefaultDllImportSearchPaths(DllImportSearchPath.System32)]private static extern IntPtr OpenServiceW(IntPtr manager,string name,uint access);
+    [DllImport("advapi32.dll",ExactSpelling=true,SetLastError=true)][DefaultDllImportSearchPaths(DllImportSearchPath.System32)][return:MarshalAs(UnmanagedType.Bool)]private static extern bool QueryServiceConfigW(IntPtr service,IntPtr config,uint bytes,out uint needed);
     private static string? ReadName(IntPtr buffer,int startOfStrings,IntPtr pointer)
     {
         ulong start=unchecked((ulong)buffer.ToInt64()),value=unchecked((ulong)pointer.ToInt64());

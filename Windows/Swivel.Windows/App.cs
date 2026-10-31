@@ -637,7 +637,7 @@ public sealed partial class App : Application
                 if (!Prefs.IsOn(Feature.Doctor)) throw new UserError("Enable Windows Doctor in Settings first.");
                 workFeature = Feature.Doctor; token.ThrowIfCancellationRequested();
                 report(L("Reading desktop installation records…"));
-                var installed = await AwaitDoctorReadAsync(Task.Run(() => InstalledAppsReader.Read(token), token),token);
+                var installed = await AwaitDoctorReadAsync(Task.Run(() => InstalledAppsReader.Read(token, true), token),token);
                 token.ThrowIfCancellationRequested();
                 // The list read first stays the comparison: after a failed or empty search, or Back
                 // from the review, the same records window opens again.
@@ -646,6 +646,18 @@ public sealed partial class App : Application
                 {
                     var records = new InstalledAppsDialog(this, installed);
                     await ShowDoctorOperationAsync(records,DoctorAssistantSummary.Installed(installed),owner,token,DoctorLabels.Installed(installed));
+                    if ((records.RegistrationApp is not null || records.RegistrationFolder is not null) && !token.IsCancellationRequested)
+                    {
+                        var registrationEvidence = await AwaitDoctorReadAsync(Task.Run(() =>
+                        {
+                            string? folder = records.RegistrationFolder ?? (records.RegistrationApp!.InstallLocation?.State == RegistrationValueState.Present ? RegisteredTargets.Folder(records.RegistrationApp.InstallLocation.Value) : null);
+                            return RegisteredTargets.ForFolder(RegisteredTargetReader.Read(token), folder, token);
+                        }, token), token);
+                        token.ThrowIfCancellationRequested();
+                        ShowOperationDialog(new RegisteredTargetsDialog(this, registrationEvidence), owner, token);
+                        if (token.IsCancellationRequested) break;
+                        continue;
+                    }
                     if (records.PackagesRequested && !token.IsCancellationRequested)
                     {
                         report(L("Reading the current user's Store and MSIX packages…"));

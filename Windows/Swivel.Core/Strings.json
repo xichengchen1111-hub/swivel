@@ -18478,5 +18478,135 @@
     "会话内保存文件和文件夹引用，包括仅联机的云项目；两个文件架窗口均可多选并拖出复制。内容预览使用现有图片、文档／文字和音频读取器，拒绝仅联机项目。可选的系统预览只读取 Shell 缓存缩略图（256 像素），无缓存时保留原引用。不枚举文件夹内容，不自动下载云项目，不在进程内加载预览处理程序。云重解析项目保守标为仅联机；因资源管理器可能预览内容，拒绝定位这些项目。非激活焦点和真实 Windows 验收仍待完成。",
     "工作階段內儲存檔案和資料夾參照，包括僅線上的雲端項目；兩個檔案架視窗均可多選並拖出複製。內容預覽使用現有圖片、文件／文字和音訊讀取器，拒絕僅線上項目。可選的系統預覽只讀取 Shell 快取縮圖（256 像素），無快取時保留原參照。不列舉資料夾內容，不自動下載雲端項目，不在處理程序內載入預覽處理常式。雲端重新剖析項目保守標為僅線上；因檔案總管可能預覽內容，拒絕定位這些項目。非啟用焦點和真實 Windows 驗收仍待完成。",
     "セッション内のファイルとフォルダー参照に対応し、オンラインのみのクラウド項目も両方のシェルフで複数選択してドラッグできます。内容のプレビューは既存の画像、文書／テキスト、音声リーダーを使用し、オンラインのみの項目は拒否します。任意のシステムプレビューは Shell のキャッシュ済みサムネイル（256 ピクセル）のみ取得し、キャッシュがなければ参照を保持します。フォルダーの内容列挙、クラウドの自動ダウンロード、プロセス内のプレビューハンドラーは使用しません。クラウド再解析項目は安全のためオンラインのみと表示し、エクスプローラーが内容をプレビューする可能性があるため場所の表示も拒否します。非アクティブのフォーカスと実際の Windows での検証は未完了です。"
+  ],
+  "Still Registered Targets": [
+    "仍注册的目标",
+    "仍註冊的目標",
+    "登録が残る対象"
+  ],
+  "Inspect Selected App Registrations…": [
+    "检查所选应用的注册项…",
+    "檢查所選應用程式的註冊項目…",
+    "選択したアプリの登録を調べる…"
+  ],
+  "Inspect Registrations in a Folder…": [
+    "检查文件夹内的注册目标…",
+    "檢查資料夾內的註冊目標…",
+    "フォルダー内の登録先を調べる…"
+  ],
+  "Task executable actions": [
+    "任务可执行文件动作",
+    "工作可執行檔動作",
+    "タスクの実行ファイル操作"
+  ],
+  "Run / RunOnce": [
+    "Run / RunOnce",
+    "Run / RunOnce",
+    "Run / RunOnce"
+  ],
+  "Current-user App Paths / open commands": [
+    "当前用户 App Paths / 打开命令",
+    "目前使用者 App Paths / 開啟命令",
+    "現在のユーザーの App Paths / 開くコマンド"
+  ],
+  "A registered target points inside this folder, or registration evidence is unresolved or incomplete. It cannot be moved to the Recycle Bin.": [
+    "有注册目标指向此文件夹，或注册证据无法解析或读取不完整。无法移入回收站。",
+    "有註冊目標指向此資料夾，或註冊證據無法解析或讀取不完整。無法移至資源回收筒。",
+    "登録先がこのフォルダー内にあるか、登録情報が未解決または不完全です。ごみ箱に移動できません。"
+  ],
+  "Registration source could not be read completely (access, value, row or soft time limit).": [
+    "注册来源未能完整读取（访问、值、条目数或软时间限制）。",
+    "註冊來源未能完整讀取（存取、值、項目數或軟時間限制）。",
+    "登録元を完全に読み取れませんでした（アクセス、値、件数、ソフト時間制限）。"
+  ],
+  "Run/RunOnce could not be read completely; access, value or scan limit.": [
+    "Run/RunOnce未能完整读取；访问、值或扫描限制。",
+    "Run/RunOnce未能完整讀取；存取、值或掃描限制。",
+    "Run/RunOnceを完全に読み取れませんでした。アクセス、値、走査制限があります。"
+  ],
+  "Service configurations could not be read completely; access, value or scan limit.": [
+    "服务配置未能完整读取；访问、值或扫描限制。",
+    "服務設定未能完整讀取；存取、值或掃描限制。",
+    "サービス構成を完全に読み取れませんでした。アクセス、値、走査制限があります。"
+  ],
+  "Scheduled-task actions could not be read completely; access, value or scan limit.": [
+    "计划任务动作未能完整读取；访问、值或扫描限制。",
+    "排程工作動作未能完整讀取；存取、值或掃描限制。",
+    "スケジュールタスクの操作を完全に読み取れませんでした。アクセス、値、走査制限があります。"
+  ],
+  "Current-user App Paths could not be read completely; access, value or scan limit.": [
+    "当前用户 App Paths未能完整读取；访问、值或扫描限制。",
+    "目前使用者 App Paths未能完整讀取；存取、值或掃描限制。",
+    "現在のユーザーの App Pathsを完全に読み取れませんでした。アクセス、値、走査制限があります。"
+  ],
+  "Current-user shell open commands could not be read completely; access, value or scan limit.": [
+    "当前用户 shell 打开命令未能完整读取；访问、值或扫描限制。",
+    "目前使用者 shell 開啟命令未能完整讀取；存取、值或掃描限制。",
+    "現在のユーザーのシェルの開くコマンドを完全に読み取れませんでした。アクセス、値、走査制限があります。"
+  ],
+  "No supported absolute install folder was reported. Choose a folder explicitly to inspect its registrations.": [
+    "未报告受支持的绝对安装目录。请明确选择文件夹以检查其注册目标。",
+    "未回報支援的絕對安裝目錄。請明確選擇資料夾以檢查其註冊目標。",
+    "対応する絶対パスのインストール先が報告されませんでした。フォルダーを選んで登録先を調べてください。"
+  ],
+  "The registration report exceeds 4 MiB of UTF-8 text. Choose a smaller scope.": [
+    "注册报告超过 4 MiB UTF-8 文本限制。请选择更小的范围。",
+    "註冊報告超過 4 MiB UTF-8 文字限制。請選擇較小的範圍。",
+    "登録レポートが UTF-8 テキストで 4 MiB を超えます。範囲を小さくしてください。"
+  ],
+  "Unresolved target; not guessed or attributed to this app": [
+    "目标未解析；未猜测或归属于此应用",
+    "目標未解析；未猜測或歸屬於此應用程式",
+    "対象は未解決です。このアプリへの推測や帰属判定は行いません"
+  ],
+  "Still registered: executable inside this folder": [
+    "仍有注册：可执行文件在此文件夹内",
+    "仍有註冊：可執行檔在此資料夾內",
+    "登録あり：実行ファイルがこのフォルダー内にあります"
+  ],
+  "No parsed executable matched; unreadable or uninspected registrations may remain.": [
+    "没有已解析的可执行文件匹配；仍可能存在无法读取或未检查的注册项。",
+    "沒有已解析的可執行檔符合；仍可能存在無法讀取或未檢查的註冊項目。",
+    "解析できた実行ファイルに一致はありません。読み取れない登録や未確認の登録が残っている可能性があります。"
+  ],
+  "One shared soft 10-second budget for registration sources; blocked calls and cleanup can take longer. Existing source caps apply, with at most 1,024 service configurations, 32 actions per task, 1,024 keys per registry location and 8,192 combined rows. Hidden tasks, silently permission-omitted services, other users and ARM32-specific views could not be read. Registry links and physical file identity are not resolved. No matches is not proof of no registrations. Unresolved entries or incomplete reads prevent offering a leftover folder for the Recycle Bin; a fresh check is required before every move.": [
+    "注册来源共用约 10 秒软时间预算；阻塞调用与清理可能更久。沿用各来源上限，最多 1,024 个服务配置、每任务 32 个动作、每注册表位置 1,024 个键及总计 8,192 行。隐藏任务、因权限被静默省略的服务、其他用户和 ARM32 专用视图无法读取。不解析注册表链接和物理文件身份。无匹配不证明无注册。未解析条目或不完整读取会阻止残留文件夹进入回收站；每次移动前重新检查。",
+    "註冊來源共用約 10 秒軟時間預算；阻塞呼叫與清理可能更久。沿用各來源上限，最多 1,024 個服務設定、每工作 32 個動作、每登錄位置 1,024 個機碼及合計 8,192 列。隱藏工作、因權限被靜默省略的服務、其他使用者與 ARM32 專用檢視無法讀取。不解析登錄連結及實體檔案身分。無符合不證明無註冊。未解析項目或不完整讀取會阻止殘留資料夾移至資源回收筒；每次移動前重新檢查。",
+    "登録元は約 10 秒のソフト時間枠を共有します。ブロック中の呼び出しや解放は長くかかる場合があります。各取得元の上限を適用し、サービス構成 1,024 件、タスクごとに 32 操作、登録場所ごとに 1,024 キー、合計 8,192 行までです。非表示タスク、権限で省略されたサービス、他のユーザー、ARM32 専用表示は読み取れません。レジストリリンクや物理ファイル ID は解決しません。一致なしは登録なしの証明ではありません。未解決または不完全な取得があると残留フォルダーはごみ箱に移動できず、移動ごとに再確認します。"
+  ],
+  "Search: at most 4,096 entries per folder, 256 folders and 20,000 entries in all. Sizes: one shared metadata budget of 100,000 entries and about 30 soft seconds, shared fairly among the folders, with at most 20,000 entries and four levels below any one folder; an incomplete size is a lower bound. Sizes are logical bytes from directory records, not reclaimable space: links, cloud placeholders and system items inside are skipped. Apps from the Microsoft Store, other Windows users, other drives are not searched for folders. Registration targets are inspected separately under Still Registered Targets with their own limits.": [
+    "搜索：每个文件夹最多 4,096 个条目，总计 256 个文件夹和 20,000 个条目。大小：共享 100,000 个元数据条目和约 30 秒软限制，在文件夹之间公平分配，单个文件夹向下四层、最多 20,000 条；不完整大小为下限。大小是逻辑字节数，不是可回收空间：跳过链接、云占位符和系统项。不搜索 Store 应用、其他用户或其他驱动器的文件夹。注册目标在“仍注册的目标”中另行检查，并有独立限制。",
+    "搜尋：每個資料夾最多 4,096 個項目，合計 256 個資料夾和 20,000 個項目。大小：共用 100,000 個中繼資料項目和約 30 秒軟限制，在資料夾之間公平分配，單一資料夾向下四層、最多 20,000 項；不完整大小為下限。大小是邏輯位元組數，不是可回收空間：略過連結、雲端預留位置及系統項目。不搜尋 Store 應用程式、其他使用者或其他磁碟機的資料夾。註冊目標在「仍註冊的目標」中另行檢查，並有獨立限制。",
+    "検索はフォルダーごとに最大 4,096 項目、全体で 256 フォルダー、20,000 項目です。サイズ測定はメタデータ 100,000 項目と約 30 秒のソフト制限を共有し、各フォルダー最大 20,000 項目、下位 4 階層まで公平に配分します。不完全なサイズは下限です。論理バイト数であり、解放できる容量ではありません。リンク、クラウドのプレースホルダー、システム項目を除外します。Store アプリ、他のユーザー、他のドライブのフォルダーは検索しません。登録先は「登録が残る対象」で別の上限に従って調べます。"
+  ],
+  "Services": [
+    "服务",
+    "服務",
+    "サービス"
+  ],
+  "Scheduled Tasks": [
+    "计划任务",
+    "排程工作",
+    "スケジュールタスク"
+  ],
+  "Inspect Removed App Registrations…": [
+    "检查已卸载应用的注册项…",
+    "檢查已解除安裝應用程式的註冊項目…",
+    "アンインストール後の登録を調べる…"
+  ],
+  "This inspection also retains bounded reported InstallLocation text in memory for selected-app and post-uninstall registration checks. It is not included in the installation-record report. A reported path does not prove ownership or existence; missing or unsupported locations stay unknown.": [
+    "本次检查还会在内存中保留有界的 InstallLocation 文本，用于所选应用及卸载后的注册目标检查。安装记录报告不包含此文本。报告路径不证明归属或存在；缺少或不支持的位置仍为未知。",
+    "本次檢查也會在記憶體中保留有上限的 InstallLocation 文字，用於所選應用程式及解除安裝後的註冊目標檢查。安裝記錄報告不包含此文字。回報路徑不證明歸屬或存在；缺少或不支援的位置仍為未知。",
+    "選択アプリとアンインストール後の登録確認用に、上限付きの InstallLocation テキストをメモリに保持します。インストール記録レポートには含まれません。報告されたパスは所有や存在の証明ではなく、不明・未対応の場所は不明のままです。"
+  ],
+  "The standard installation-record report includes reported display name, version and publisher text. InstallLocation text may be retained separately for explicit registration-target checks. Environment variables are not expanded. No uninstall commands, executable files, folders, signatures, disk sizes, other users, Store/MSIX inventory or portable apps are inspected. Registry views can share entries or resolve through registry links; underlying key identity and link targets are not verified. Records are not merged and do not prove installation, architecture, publisher identity, app ownership or safe cleanup. ARM32-specific records may be absent.": [
+    "标准安装记录报告包括报告的显示名称、版本和发布者。可另行保留 InstallLocation 文本，用于明确的注册目标检查。不展开环境变量。不检查卸载命令、可执行文件、文件夹、签名、磁盘大小、其他用户、Store/MSIX 清单或便携应用。注册表视图可能共享条目或经由注册表链接解析；不核验底层键身份及链接目标。不合并记录，也不证明安装、架构、发布者身份、应用归属或清理安全。可能缺少 ARM32 专用记录。",
+    "標準安裝記錄報告包括回報的顯示名稱、版本與發行者。可另行保留 InstallLocation 文字，用於明確的註冊目標檢查。不展開環境變數。不檢查解除安裝命令、可執行檔、資料夾、簽章、磁碟大小、其他使用者、Store/MSIX 清單或可攜式應用程式。登錄檢視可能共用項目或經由登錄連結解析；不核驗底層機碼身分與連結目標。不合併記錄，也不證明安裝、架構、發行者身分、應用程式歸屬或清理安全。可能缺少 ARM32 專用記錄。",
+    "標準インストール記録レポートには報告された表示名、バージョン、発行元が含まれます。明示的な登録先確認用に InstallLocation テキストを別に保持する場合があります。環境変数は展開しません。アンインストールコマンド、実行ファイル、フォルダー、署名、ディスクサイズ、他のユーザー、Store/MSIX 一覧、ポータブルアプリは調べません。表示間で項目が共有されたり、レジストリリンクを経由する場合があります。キーの同一性やリンク先は検証しません。記録を統合せず、インストール、アーキテクチャ、発行元の身元、所有、削除の安全性は証明しません。ARM32 専用記録は含まれない場合があります。"
+  ],
+  "Read-only executable-path evidence from Run/RunOnce, Win32 services, Task Scheduler executable actions, and current-user App Paths and shell open commands (32/64-bit views). Only .exe targets with strict absolute local paths (up to 240 UTF-16 units) inside the chosen folder match; names and arguments never establish ownership. Only Run/RunOnce and current-user App Paths/open commands expand variables using this process's environment. Service and task paths containing variables stay unresolved because their execution environment is unknown. Missing variables, ambiguous commands, short 8.3 paths, relative paths and unsupported actions stay unresolved. This does not prove ownership, that a target exists, or that an item is active. Nothing is changed in the registry, services or tasks.": [
+    "只读可执行文件路径证据，来源为 Run/RunOnce、Win32 服务、计划任务可执行动作、当前用户 App Paths 和 shell 打开命令（32/64 位视图）。仅 .exe 目标以严格的本地绝对路径（最多 240 个 UTF-16 单位）位于所选文件夹内才匹配；名称和参数不用于归属判定。仅 Run/RunOnce 和当前用户 App Paths/打开命令使用本进程环境展开变量。服务与任务的执行环境未知，路径含变量时保持未解析。缺少变量、歧义命令、8.3 短路径、相对路径和不支持的动作保持未解析。这不证明归属、目标存在或条目活跃。不更改注册表、服务或任务。",
+    "唯讀可執行檔路徑證據，來源為 Run/RunOnce、Win32 服務、排程工作可執行動作、目前使用者 App Paths 與 shell 開啟命令（32/64 位元檢視）。僅 .exe 目標以嚴格的本機絕對路徑（最多 240 個 UTF-16 單位）位於所選資料夾內才符合；名稱與參數不用於歸屬判定。僅 Run/RunOnce 與目前使用者 App Paths/開啟命令使用本處理程序環境展開變數。服務與工作的執行環境未知，路徑含變數時保持未解析。缺少變數、歧義命令、8.3 短路徑、相對路徑與不支援的動作保持未解析。這不證明歸屬、目標存在或項目啟用。不變更登錄、服務或工作。",
+    "Run/RunOnce、Win32 サービス、タスクの実行操作、現在のユーザーの App Paths とシェルの開くコマンド（32/64 ビット表示）から実行パスの証拠を読み取ります。選択フォルダー内の厳密なローカル絶対パス（UTF-16 で最大 240 単位）の .exe 対象のみが一致します。名前や引数で帰属を判定しません。Run/RunOnce と現在のユーザーの App Paths/開くコマンドのみ、このプロセスの環境で変数を展開します。サービスとタスクの実行環境は不明なため、変数を含むパスは未解決のままです。不明な変数、曖昧なコマンド、8.3 短縮パス、相対パス、未対応の操作は未解決です。所有、存在、有効状態の証明ではありません。レジストリ、サービス、タスクは変更しません。"
   ]
 }

@@ -25,6 +25,8 @@ internal sealed class InstalledAppsDialog:Window
     internal bool LeftoversRequested{get;private set;}
     /// Set when the window closed to read the current user's Store/MSIX packages.
     internal bool PackagesRequested{get;private set;}
+    internal InstalledAppRecord? RegistrationApp { get; private set; }
+    internal string? RegistrationFolder { get; private set; }
     internal string CurrentReport=>InstalledApps.Report(snapshot,IncludeKeys,app.L,default);
     internal string? SelectedReport=>tabs.SelectedIndex==0&&records.SelectedItem is RecordRow selected?InstalledApps.Header(snapshot,IncludeKeys,app.L)+Environment.NewLine+
         string.Join(Environment.NewLine,snapshot.Roots.Select(r=>InstalledApps.Origin(r.Source,app.L)+": "+r.Recorded.ToString(CultureInfo.InvariantCulture)+" · "+InstalledApps.RootStatus(r.Issues,app.L)))+Environment.NewLine+InstalledApps.Describe(snapshot.Records[selected.Index],IncludeKeys,app.L):null;
@@ -36,6 +38,16 @@ internal sealed class InstalledAppsDialog:Window
         footer.Children.Add(UI.Button(app.L("Open Installed Apps in Settings"),()=>app.Try(()=>WindowsSettings.Open(WindowsSettingsPage.Apps))));
         footer.Children.Add(UI.Button(app.L("Find Leftovers of Apps Removed Since This List Was Read…"),()=>{LeftoversRequested=true;DialogResult=true;}));
         footer.Children.Add(UI.Button(app.L("Read Store and MSIX Packages…"),()=>{PackagesRequested=true;DialogResult=true;}));
+        var registered = UI.Button(app.L("Inspect Selected App Registrations…"), () =>
+        {
+            if (records.SelectedItem is RecordRow selected) { RegistrationApp = snapshot.Records[selected.Index]; DialogResult = true; }
+        });
+        registered.IsEnabled = false; footer.Children.Add(registered);
+        footer.Children.Add(UI.Button(app.L("Inspect Registrations in a Folder…"), () => app.Try(() =>
+        {
+            var picker = new Microsoft.Win32.OpenFolderDialog { Title = app.L("Choose Folder to Inspect…"), Multiselect = false };
+            if (picker.ShowDialog(this) == true && IsVisible) { RegistrationFolder = picker.FolderName; DialogResult = true; }
+        })));
         footer.Children.Add(UI.Button(app.L("Copy Report"),()=>app.Try(()=>Clipboard.SetText(CurrentReport))));
         copySelected=UI.Button(app.L("Copy Selected Details"),()=>app.Try(()=>{if(SelectedReport is string text)Clipboard.SetText(text);}));copySelected.IsEnabled=false;footer.Children.Add(copySelected);
         var close=UI.Button(app.L("Close"),()=>DialogResult=false);close.IsCancel=true;footer.Children.Add(close);
@@ -44,6 +56,7 @@ internal sealed class InstalledAppsDialog:Window
         body.Children.Add(UI.Text(app.L(snapshot.Partial?"Installation-record snapshot is partial.":"All available registry views were enumerated within the limits."),14));
         body.Children.Add(UI.Text(string.Format(app.L("Recorded registry entries: {0} (not a count of unique installed apps)"),snapshot.Records.Count),14));
         foreach(string notice in new[]{InstalledApps.Scope,InstalledApps.Limits,InstalledApps.Privacy,InstalledApps.Uninstall,InstalledApps.Packages})body.Children.Add(UI.Text(app.L(notice),12));
+        body.Children.Add(UI.Text(app.L(RegisteredTargets.LocationNotice), 12));
         keys.Content=app.L("Show Registry Subkey Names");AutomationProperties.SetName(keys,app.L("Show Registry Subkey Names"));body.Children.Add(keys);
         body.Children.Add(UI.Text(app.L("List text may be shortened. Select a record for complete reported text and field status. Subkey names are never used as a fallback app name."),12));
         records.View=Columns(("Reported App Name","Name",250),("Reported Version","Version",140),("Reported Publisher","Publisher",250),("Registry View","Source",240));
@@ -54,7 +67,7 @@ internal sealed class InstalledAppsDialog:Window
         var recordBody=new StackPanel();recordBody.Children.Add(records);recordBody.Children.Add(UI.Text(app.L("Selected Installation Record"),13));recordBody.Children.Add(details);
         tabs.Items.Add(new TabItem{Header=app.L("Installation Records"),Content=recordBody});tabs.Items.Add(new TabItem{Header=app.L("Registry View Status"),Content=roots});tabs.SelectedIndex=0;body.Children.Add(tabs);
         if(snapshot.Records.Count==0)body.Children.Add(UI.Text(app.L("No installation records were returned. This does not prove that no apps are installed."),14));
-        void Refresh(){details.Text=records.SelectedItem is RecordRow row?InstalledApps.Describe(snapshot.Records[row.Index],IncludeKeys,app.L):app.L("Select a recorded entry to inspect its reported text and query status.");copySelected.IsEnabled=SelectedReport is not null;}
+        void Refresh(){registered.IsEnabled=tabs.SelectedIndex==0&&records.SelectedItem is RecordRow;details.Text=records.SelectedItem is RecordRow row?InstalledApps.Describe(snapshot.Records[row.Index],IncludeKeys,app.L):app.L("Select a recorded entry to inspect its reported text and query status.");copySelected.IsEnabled=SelectedReport is not null;}
         records.SelectionChanged+=(_,_)=>Refresh();tabs.SelectionChanged+=(_,e)=>{if(ReferenceEquals(e.Source,tabs))Refresh();};keys.Checked+=(_,_)=>Refresh();keys.Unchecked+=(_,_)=>Refresh();Refresh();
         SourceInitialized+=(_,_)=>FitWorkArea(Owner??this);DpiChanged+=(_,_)=>FitWorkArea(this);
     }

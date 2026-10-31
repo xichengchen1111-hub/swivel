@@ -126,6 +126,7 @@ StartupAppsChecks.Run(Check,Reject);
 CacheLocationChecks.Run(Check,Reject);
 AppCacheChecks.Run(Check,Reject);
 AppLeftoverChecks.Run(Check,Reject);
+RegisteredTargetChecks.Run(Check,Reject);
 DoctorNetworkChecks.Run(Check);
 NetworkTestChecks.Run(Check);
 FolderSizeChecks.Run(Check, Reject);
