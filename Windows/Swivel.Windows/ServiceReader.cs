@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Diagnostics;
 using Swivel.Core;
 
 namespace Swivel.Windows;
@@ -9,12 +10,12 @@ namespace Swivel.Windows;
 internal static class ServiceReader
 {
     private const int BufferBytes=256*1024;
-    internal static ServiceSnapshot Read(CancellationToken token)
+    internal static ServiceSnapshot Read(CancellationToken token,bool includeConfiguration=true)
     {
         token.ThrowIfCancellationRequested();IntPtr manager=IntPtr.Zero,buffer=IntPtr.Zero;var rows=new List<ServiceRecord>();var issues=new List<ServiceReadIssue>();
         try
         {
-            manager=OpenSCManagerW(null,null,4);uint openError=manager==IntPtr.Zero?unchecked((uint)Marshal.GetLastWin32Error()):0;
+            manager=OpenSCManagerW(null,null,includeConfiguration?5u:4u);uint openError=manager==IntPtr.Zero?unchecked((uint)Marshal.GetLastWin32Error()):0;
             token.ThrowIfCancellationRequested();
             if(manager==IntPtr.Zero)issues.Add(new(ServiceIssuePhase.Open,openError));
             else
@@ -38,9 +39,24 @@ internal static class ServiceReader
                             if(string.IsNullOrEmpty(name)||display is null){issues.Add(new(ServiceIssuePhase.InvalidRecord,Record:i+1));continue;}
                             if(!names.Add(name)){issues.Add(new(ServiceIssuePhase.DuplicateName,Record:i+1));continue;}
                             if(name.Length+display.Length>ServiceRecords.MaxNameUnits-copiedUnits){issues.Add(new(ServiceIssuePhase.NameBudget,Record:i+1));continue;}
-                            copiedUnits+=name.Length+display.Length;rows.Add(new(name,display,entry.Type,entry.State,entry.ProcessId));
+                            copiedUnits+=name.Length+display.Length;rows.Add(new(name,display,entry.Type,entry.State,entry.ProcessId){Win32ExitCode=entry.Win32Exit,ServiceExitCode=entry.ServiceExit});
                         }
                     }
+                }
+            }
+            if(includeConfiguration&&manager!=IntPtr.Zero)
+            {
+                var watch=Stopwatch.StartNew();int units=0;
+                for(int i=0;i<rows.Count;i++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if(watch.Elapsed>=ScheduledTasks.SoftTimeLimit)
+                    {issues.Add(new(ServiceIssuePhase.ConfigurationLimit,Record:i+1));break;}
+                    var configured=ReadConfiguration(manager,rows[i],token,()=>watch.Elapsed>=ScheduledTasks.SoftTimeLimit);
+                    int copied=ServiceSnapshot.Units(configured.Configuration);
+                    if(copied>ServiceRecords.MaxNameUnits-units)
+                    {issues.Add(new(ServiceIssuePhase.ConfigurationLimit,Record:i+1));break;}
+                    units+=copied;rows[i]=configured;
                 }
             }
         }
@@ -51,12 +67,98 @@ internal static class ServiceReader
         }
         token.ThrowIfCancellationRequested();return new(rows,issues,DateTimeOffset.Now);
     }
+    private static ServiceRecord ReadConfiguration(IntPtr manager,ServiceRecord row,CancellationToken token,Func<bool> stop)
+    {
+        var errors=new List<ServiceConfigurationError>();ServiceConfiguration? config=null;
+        IntPtr handle=OpenServiceW(manager,row.Name,5);uint error=handle==IntPtr.Zero?unchecked((uint)Marshal.GetLastWin32Error()):0;
+        IntPtr data=IntPtr.Zero;
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            if(handle==IntPtr.Zero)errors.Add(new("Service configuration",error));
+            else
+            {
+                data=Marshal.AllocHGlobal(ConfigBytes);
+                if(!Query(0,"Service configuration"))return row with{ConfigurationErrors=errors.AsReadOnly()};
+                var value=Marshal.PtrToStructure<NativeConfig>(data);
+                try
+                {
+                    string binary=ConfigText(data,value.Binary),account=ConfigText(data,value.Account);
+                    var dependencies=new List<string>();IntPtr cursor=value.Dependencies;
+                    if(cursor!=IntPtr.Zero)
+                    {
+                        for(int i=0;;i++)
+                        {
+                            token.ThrowIfCancellationRequested();string name=ConfigText(data,cursor);
+                            if(name.Length==0)break;
+                            if(i==64||name.Length>1024)throw new ScheduledTaskValueException();dependencies.Add(name);cursor=IntPtr.Add(cursor,(name.Length+1)*2);
+                        }
+                    }
+                    config=new(value.Start,account,binary,dependencies.AsReadOnly());
+                }
+                catch(ScheduledTaskValueException){errors.Add(new("Service configuration",13));}
+                if(config is not null)
+                {
+                    if(Query(3,"Delayed automatic start"))config=config with{DelayedAuto=Marshal.ReadInt32(data)!=0};
+                    if(Query(1,"Service description"))
+                    {
+                        try{config=config with{Description=ConfigText(data,Marshal.ReadIntPtr(data),true)};}
+                        catch(ScheduledTaskValueException){errors.Add(new("Service description",13));}
+                    }
+                    if(Query(2,"Service failure actions"))
+                    {
+                        try
+                        {
+                            var failure=Marshal.PtrToStructure<NativeFailure>(data);
+                            if(failure.Count>64||failure.Count>0&&!Inside(data,failure.Actions,checked((int)failure.Count*8),Marshal.SizeOf<NativeFailure>()))throw new ScheduledTaskValueException();
+                            var actions=new List<ServiceFailureAction>();for(int i=0;i<failure.Count;i++)actions.Add(new(unchecked((uint)Marshal.ReadInt32(failure.Actions,i*8)),unchecked((uint)Marshal.ReadInt32(failure.Actions,i*8+4))));
+                            config=config with{FailureResetSeconds=failure.Reset,FailureCommand=ConfigText(data,failure.Command,true),RebootMessage=ConfigText(data,failure.Reboot,true),FailureActions=actions.AsReadOnly()};
+                        }
+                        catch(ScheduledTaskValueException){errors.Add(new("Service failure actions",13));}
+                    }
+                }
+                bool Query(uint level,string field)
+                {
+                    token.ThrowIfCancellationRequested();if(stop()){errors.Add(new(field,1460));return false;}
+                    Marshal.Copy(new byte[ConfigBytes],0,data,ConfigBytes);
+                    bool ok=level==0?QueryServiceConfigW(handle,data,ConfigBytes,out _):QueryServiceConfig2W(handle,level,data,ConfigBytes,out _);
+                    uint code=ok?0:unchecked((uint)Marshal.GetLastWin32Error());token.ThrowIfCancellationRequested();
+                    if(!ok)errors.Add(new(field,code));return ok;
+                }
+            }
+        }
+        finally
+        {
+            if(data!=IntPtr.Zero)Marshal.FreeHGlobal(data);
+            if(handle!=IntPtr.Zero&&!CloseServiceHandle(handle))errors.Add(new("Service handle cleanup",unchecked((uint)Marshal.GetLastWin32Error())));
+        }
+        token.ThrowIfCancellationRequested();
+        var target=config is null?null:ConfigurationDiagnosis.ServiceTarget(config.Binary,Environment.GetFolderPath(Environment.SpecialFolder.Windows)).Path;
+        var state=stop()?ConfigurationPathState.Unknown:ConfigurationPathProbe.Read(target,token);
+        return row with{Configuration=config,ConfigurationErrors=errors.AsReadOnly(),BinaryState=state};
+    }
+    private static bool Inside(IntPtr buffer,IntPtr pointer,int bytes,int minimum=0)
+    {
+        ulong start=unchecked((ulong)buffer.ToInt64()),at=unchecked((ulong)pointer.ToInt64());
+        return at>=start&&at-start>=(ulong)minimum&&at-start<ConfigBytes&&((at-start)&1)==0&&(ulong)bytes<=(ulong)ConfigBytes-(at-start);
+    }
+    internal static string ConfigText(IntPtr buffer,IntPtr pointer,bool optional=false)
+    {
+        if(optional&&pointer==IntPtr.Zero)return "";
+        if(!Inside(buffer,pointer,2))throw new ScheduledTaskValueException();
+        int available=(ConfigBytes-(int)(pointer.ToInt64()-buffer.ToInt64()))/2;
+        for(int i=0;i<Math.Min(available,2049);i++)if(Marshal.ReadInt16(pointer,i*2)==0)return Marshal.PtrToStringUni(pointer,i)!;
+        throw new ScheduledTaskValueException();
+    }
+    [StructLayout(LayoutKind.Sequential)]private struct NativeFailure
+    {public uint Reset;public IntPtr Reboot,Command;public uint Count;public IntPtr Actions;}
+    [DllImport("advapi32.dll",ExactSpelling=true,SetLastError=true)][DefaultDllImportSearchPaths(DllImportSearchPath.System32)][return:MarshalAs(UnmanagedType.Bool)]private static extern bool QueryServiceConfig2W(IntPtr service,uint level,IntPtr config,uint bytes,out uint needed);
     // Reuse the status enumerator; query configuration only for an explicit F08 inspection.
     internal static IReadOnlyList<RegisteredCommand> Commands(CancellationToken token,Func<bool> stop,List<string> issues)
     {
         token.ThrowIfCancellationRequested();
         if(stop()){issues.Add(RegisteredTargets.Incomplete);return Array.Empty<RegisteredCommand>();}
-        var snapshot=Read(token);var rows=new List<RegisteredCommand>();
+        var snapshot=Read(token,false);var rows=new List<RegisteredCommand>();
         if(snapshot.Partial)issues.Add(RegisteredTargets.Incomplete);
         IntPtr manager=IntPtr.Zero,buffer=IntPtr.Zero;
         try

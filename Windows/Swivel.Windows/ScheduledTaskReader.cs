@@ -12,15 +12,40 @@ namespace Swivel.Windows;
 internal static class ScheduledTaskReader
 {
     internal static Task<ScheduledTaskSnapshot> ReadAsync(CancellationToken token)
-        => ReadAsync(token, new ScheduledTaskAutomation());
-    internal static Task<ScheduledTaskSnapshot> ReadAsync(CancellationToken token, IScheduledTaskAutomation automation, bool includeActions = false, Func<TimeSpan>? elapsed = null)
+        => ReadAsync(token, new ScheduledTaskAutomation(), includeConfiguration:true);
+    internal static Task<ScheduledTaskSnapshot> ReadAsync(CancellationToken token, IScheduledTaskAutomation automation, bool includeActions = false, Func<TimeSpan>? elapsed = null, bool includeConfiguration = false)
     {
         if (token.IsCancellationRequested) return Task.FromCanceled<ScheduledTaskSnapshot>(token);
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         ScheduledTaskSnapshot? result = null; Exception? failure = null;
         var worker = new Thread(() =>
         {
-            try { var watch = Stopwatch.StartNew(); result = ScheduledTasks.ScanWithClock(access => new Source(automation, access), elapsed ?? (() => watch.Elapsed), token, includeActions); }
+            try { var watch = Stopwatch.StartNew(); result = ScheduledTasks.ScanWithClock(access => new Source(automation, access), elapsed ?? (() => watch.Elapsed), token, includeActions, includeConfiguration);
+                if(includeConfiguration)
+                {
+                    var rows=new List<ScheduledTaskRow>();
+                    foreach(var row in result.Tasks)
+                    {
+                        token.ThrowIfCancellationRequested();var config=row.Configuration;
+                        if(config is not null)
+                        {
+                            var actions=new List<TaskActionConfiguration>();
+                            foreach(var action in config.Actions)
+                            {
+                                token.ThrowIfCancellationRequested();
+                                string? target=action.Type=="Exec"?ConfigurationDiagnosis.LocalTarget(action.Path,Environment.GetFolderPath(Environment.SpecialFolder.Windows)):null;
+                                actions.Add(action with{TargetState=(elapsed?.Invoke()??watch.Elapsed)>=ScheduledTasks.SoftTimeLimit?ConfigurationPathState.Unknown:ConfigurationPathProbe.Read(target,token)});
+                            }
+                            config=config with{Actions=actions.AsReadOnly()};
+                        }
+                        rows.Add(row with{Configuration=config});
+                    }
+                    TimeSpan finalElapsed=elapsed?.Invoke()??watch.Elapsed;
+                    var reason=finalElapsed>=ScheduledTasks.SoftTimeLimit&&result.StopReason==ScheduledTaskStopReason.Completed?ScheduledTaskStopReason.TimeLimit:result.StopReason;
+                    result=new(rows,result.Folders,result.Issues,result.Captured,finalElapsed,result.FolderAttempts,result.TaskAttempts,result.RetainedTextUnits,result.OmittedIssues,reason);
+                    if(automation is ScheduledTaskAutomation)result=TaskFailureHistoryReader.Read(result,elapsed??(()=>watch.Elapsed),token);
+                }
+            }
             catch (Exception error) { failure = error; }
             finally { ended.TrySetResult(); }
         }) { IsBackground = true, Name = "Swivel scheduled-task metadata" };
@@ -146,6 +171,8 @@ internal static class ScheduledTaskReader
             public int State() => source.Scalar<int>(owned, "State", path);
             public bool Enabled() => source.Scalar<bool>(owned, "Enabled", path);
             public uint LastResult() => unchecked((uint)source.Scalar<int>(owned, "LastTaskResult", path));
+            public string DefinitionXml() => source.Scalar<string>(owned,"Xml",path);
+            public DateTime NextRunTime() => source.Scalar<DateTime>(owned,"NextRunTime",path);
             public IReadOnlyList<string?> ExecutablePaths()
             {
                 using var definition = source.Call(owned, "Definition", true, Array.Empty<object?>(), path);
