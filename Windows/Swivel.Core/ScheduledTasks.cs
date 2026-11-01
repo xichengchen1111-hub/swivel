@@ -6,11 +6,14 @@ using System.Threading;
 
 namespace Swivel.Core;
 
-public enum ScheduledTaskPhase { OpenService, OpenFolder, TaskCollection, TaskCount, TaskItem, Name, Path, State, Enabled, LastResult, FolderCollection, FolderCount, FolderItem, FolderPath, Cleanup, Validation, Limit, Actions }
+public enum ScheduledTaskPhase { OpenService, OpenFolder, TaskCollection, TaskCount, TaskItem, Name, Path, State, Enabled, LastResult, FolderCollection, FolderCount, FolderItem, FolderPath, Cleanup, Validation, Limit, Actions, Configuration, NextRun, History }
 public enum ScheduledTaskStopReason { Completed, FolderLimit, TaskLimit, TextLimit, TimeLimit }
 public sealed record ScheduledTaskRow(int RowIndex, string? Name, string? Path, int? State, bool? Enabled, uint? LastResult)
 {
     public IReadOnlyList<string?>? Executables { get; init; }
+    public TaskConfiguration? Configuration { get; init; }
+    public DateTime? NextRun { get; init; }
+    public int? HistoricalFailureInstances { get; init; }
 }
 public sealed record ScheduledTaskIssue(int? RowIndex, string? NamespacePath, ScheduledTaskPhase Phase, uint? ErrorCode, string Reason);
 public sealed record ScheduledTaskFolder(string Path, int Depth, int? ReportedTasks, int AttemptedTasks, int? ReportedFolders, int AttemptedChildren, bool Complete);
@@ -34,10 +37,11 @@ public sealed class ScheduledTaskSnapshot
         if (rows.Length > ScheduledTasks.MaxTasks || roots.Length > ScheduledTasks.MaxFolders || problems.Length > ScheduledTasks.MaxIssues ||
             folderAttempts is < 0 or > ScheduledTasks.MaxFolders || taskAttempts is < 0 or > ScheduledTasks.MaxTasks ||
             retainedTextUnits is < 0 or > ScheduledTasks.MaxTextUnits || omittedIssues < 0 || !Enum.IsDefined(stopReason) || elapsed < TimeSpan.Zero ||
-            rows.Any(x => x.RowIndex < 1 || x.RowIndex > taskAttempts || x.Name?.Length > ScheduledTasks.MaxValueUnits || x.Path?.Length > ScheduledTasks.MaxValueUnits || x.Executables is { } commands && (commands.Count > 32 || commands.Any(c => c?.Length > ScheduledTasks.MaxValueUnits || c?.Contains('\0') == true))) ||
+            rows.Any(x => x.HistoricalFailureInstances is <0 or >200 || x.Configuration is {} config && !TaskConfiguration.Valid(config) || x.RowIndex < 1 || x.RowIndex > taskAttempts || x.Name?.Length > ScheduledTasks.MaxValueUnits || x.Path?.Length > ScheduledTasks.MaxValueUnits || x.Executables is { } commands && (commands.Count > 32 || commands.Any(c => c?.Length > ScheduledTasks.MaxValueUnits || c?.Contains('\0') == true))) ||
             rows.Select(x => x.RowIndex).Distinct().Count() != rows.Length || roots.Any(x => x.Path.Length > ScheduledTasks.MaxValueUnits || x.Depth is < 0 or > ScheduledTasks.MaxDepth) ||
             problems.Any(x => !Enum.IsDefined(x.Phase) || x.NamespacePath?.Length > ScheduledTasks.MaxValueUnits)) throw new ArgumentException("Invalid scheduled-task snapshot.");
-        Tasks = Array.AsReadOnly(rows.Select(row => row.Executables is null ? row : row with { Executables = Array.AsReadOnly(row.Executables.ToArray()) }).ToArray()); Folders = Array.AsReadOnly(roots); Issues = Array.AsReadOnly(problems);
+        if(rows.Sum(row=>(row.Name?.Length??0)+(row.Path?.Length??0)+(row.Executables?.Sum(p=>p?.Length??0)??0)+(row.Configuration is {} c?TaskConfiguration.Units(c):0))>ScheduledTasks.MaxTextUnits)throw new ArgumentException("Task configuration text limit.");
+        Tasks = Array.AsReadOnly(rows.Select(row => row with{Configuration=row.Configuration?.Freeze()}).Select(row => row.Executables is null ? row : row with { Executables = Array.AsReadOnly(row.Executables.ToArray()) }).ToArray()); Folders = Array.AsReadOnly(roots); Issues = Array.AsReadOnly(problems);
         Captured = captured; Elapsed = elapsed; FolderAttempts = folderAttempts; TaskAttempts = taskAttempts;
         RetainedTextUnits = retainedTextUnits; OmittedIssues = omittedIssues; StopReason = stopReason;
     }
@@ -50,6 +54,8 @@ public interface IScheduledTaskChild : IDisposable { string Path(); }
 public interface IScheduledTaskItem : IDisposable
 {
     string Name(); string Path(); int State(); bool Enabled(); uint LastResult();
+    string DefinitionXml() => throw new NotSupportedException();
+    DateTime NextRunTime() => throw new NotSupportedException();
     IReadOnlyList<string?> ExecutablePaths() => throw new NotSupportedException();
 }
 public sealed class ScheduledTaskLimitException : Exception { }
@@ -83,14 +89,14 @@ public static class ScheduledTasks
     public const int MaxFolders = 128, MaxTasks = 1024, MaxDepth = 4, MaxTextUnits = 256 * 1024, MaxValueUnits = 1024, MaxIssues = 256;
     public static readonly TimeSpan SoftTimeLimit = TimeSpan.FromSeconds(15);
     public const string Scope = "One explicit read-only sample of local Task Scheduler metadata readable with this process's current permissions. Hidden tasks are excluded. This is not a list of tasks owned only by you. Task names may contain private information; namespace paths are hidden by default. Only an explicit copy includes the currently shown details. Nothing is sent to an assistant.";
-    public const string Limits = "Up to 128 folder-entry attempts, 1,024 task-entry attempts including failures, four child levels and about 15 seconds. The shared name/path text budget is 262,144 UTF-16 units and 1,024 per value. Read text remains charged even if a later check rejects it. Windows may allocate collections or strings before these limits can be checked. Calls and cleanup can take longer; cancellation waits for completion. Permission omissions, concurrent changes and hidden tasks prevent a complete inventory. Only names, namespace paths, reported state, enabled flag and raw last-result codes are requested. Definitions, actions, scripts, triggers, principals and XML are not requested. Nothing is run, changed, enabled, disabled or deleted.";
+    public const string Limits = "Up to 128 folder-entry attempts, 1,024 task-entry attempts including failures, four child levels and about 15 seconds. The shared name/path/definition text budget is 262,144 UTF-16 units and 1,024 per value. Read text remains charged even if a later check rejects it. Windows may allocate collections or strings before these limits can be checked. Calls and cleanup can take longer; cancellation waits for completion. Permission omissions, concurrent changes and hidden tasks prevent a complete inventory. Names, namespace paths, reported state, enabled flag, last-result codes, next run time and bounded read-only XML definitions are requested. XML is not executed or loaded as a script. Trigger, principal and settings leaf values and action types are retained; executable actions also retain path, arguments and working folder. Non-executable action payloads are not inspected. Nothing is run, changed, enabled, disabled or deleted.";
     public const string ReadFailed = "Windows could not read this scheduled-task metadata field or collection.";
     public const string InvalidValue = "Windows returned an unexpected scheduled-task metadata value.";
     public const string NotRead = "This metadata was not retained because the scan limit was reached.";
     public const string CleanupFailed = "A scheduled-task COM reference could not be released.";
     public static string Phase(ScheduledTaskPhase phase) => phase switch
     {
-        ScheduledTaskPhase.Actions => "Task executable actions", ScheduledTaskPhase.OpenService => "Task Scheduler connection", ScheduledTaskPhase.OpenFolder => "Task folder open",
+        ScheduledTaskPhase.History => "Task action-result history", ScheduledTaskPhase.Configuration => "Task configuration", ScheduledTaskPhase.NextRun => "Next task run", ScheduledTaskPhase.Actions => "Task executable actions", ScheduledTaskPhase.OpenService => "Task Scheduler connection", ScheduledTaskPhase.OpenFolder => "Task folder open",
         ScheduledTaskPhase.TaskCollection => "Task collection", ScheduledTaskPhase.TaskCount => "Reported task count",
         ScheduledTaskPhase.TaskItem => "Task entry", ScheduledTaskPhase.Name => "Task name", ScheduledTaskPhase.Path => "Task namespace path",
         ScheduledTaskPhase.State => "Reported task state", ScheduledTaskPhase.Enabled => "Reported enabled flag", ScheduledTaskPhase.LastResult => "Raw last task result",
@@ -102,8 +108,8 @@ public static class ScheduledTasks
     public static string State(int raw) => raw switch { 0 => "Unknown (reported)", 1 => "Disabled (reported)", 2 => "Queued (reported)", 3 => "Ready (reported)", 4 => "Running (reported)", _ => "Unknown task state value" };
     public static ScheduledTaskSnapshot Scan(Func<ScheduledTaskAccess, IScheduledTaskSource> open, CancellationToken token)
     { var watch = Stopwatch.StartNew(); return ScanWithClock(open, () => watch.Elapsed, token); }
-    public static ScheduledTaskSnapshot ScanWithClock(Func<ScheduledTaskAccess, IScheduledTaskSource> open, Func<TimeSpan> elapsed, CancellationToken token, bool includeActions = false)
-        => new ScanState(open, elapsed, token, includeActions).Run();
+    public static ScheduledTaskSnapshot ScanWithClock(Func<ScheduledTaskAccess, IScheduledTaskSource> open, Func<TimeSpan> elapsed, CancellationToken token, bool includeActions = false, bool includeConfiguration = false)
+        => new ScanState(open, elapsed, token, includeActions, includeConfiguration).Run();
 
     private sealed class ScanState
     {
@@ -117,11 +123,11 @@ public static class ScheduledTasks
         private readonly HashSet<string> seenFolders = new(StringComparer.OrdinalIgnoreCase), seenTasks = new(StringComparer.OrdinalIgnoreCase);
         private int folderAttempts, taskAttempts, retained = 1, omitted;
         private long issueCount;
-        private readonly bool includeActions;
-        internal ScanState(Func<ScheduledTaskAccess, IScheduledTaskSource> open, Func<TimeSpan> elapsed, CancellationToken token, bool includeActions)
+        private readonly bool includeActions, includeConfiguration;
+        internal ScanState(Func<ScheduledTaskAccess, IScheduledTaskSource> open, Func<TimeSpan> elapsed, CancellationToken token, bool includeActions, bool includeConfiguration)
         {
             this.open = open ?? throw new ArgumentNullException(nameof(open)); this.elapsed = elapsed ?? throw new ArgumentNullException(nameof(elapsed));
-            access = new(token, elapsed, Add); this.includeActions = includeActions;
+            access = new(token, elapsed, Add); this.includeActions = includeActions; this.includeConfiguration = includeConfiguration;
         }
         private void Add(ScheduledTaskIssue issue)
         { issueCount++; if (issues.Count < MaxIssues) issues.Add(issue); else if (omitted < int.MaxValue) omitted++; }
@@ -249,7 +255,7 @@ public static class ScheduledTasks
         { access.Checkpoint(); string value = get(); access.Checkpoint(); return Keep(value); }
         private void ReadTask(IScheduledTaskItems tasks, int index, int row, string path)
         {
-            IScheduledTaskItem? task = null; string? name = null, taskPath = null; int? state = null; bool? enabled = null; uint? result = null; IReadOnlyList<string?>? executables = null;
+            IScheduledTaskItem? task = null; string? name = null, taskPath = null; int? state = null; bool? enabled = null; uint? result = null; IReadOnlyList<string?>? executables = null; TaskConfiguration? configuration=null; DateTime? nextRun=null;
             try
             {
                 access.Checkpoint(); task = tasks.At(index); access.Checkpoint();
@@ -270,6 +276,24 @@ public static class ScheduledTasks
                     catch (OperationCanceledException) { throw; }
                     catch (Exception error) { Problem(field, path, row, error); }
                 }
+                if (includeConfiguration)
+                {
+                    try
+                    {
+                        access.Checkpoint(); string xml=task.DefinitionXml(); access.Checkpoint();
+                        if(xml.Length>TaskConfiguration.MaxXmlUnits)throw new ScheduledTaskValueException();
+                        if(xml.Length>MaxTextUnits-retained){access.Limit(ScheduledTaskStopReason.TextLimit);throw new ScheduledTaskLimitException();}
+                        retained+=xml.Length; var parsed=TaskConfiguration.Parse(xml,access.Token);
+                        int extra=Math.Max(0,TaskConfiguration.Units(parsed)-xml.Length);
+                        if(extra>MaxTextUnits-retained){access.Limit(ScheduledTaskStopReason.TextLimit);throw new ScheduledTaskLimitException();}
+                        retained+=extra; configuration=parsed;
+                    }
+                    catch(OperationCanceledException){throw;}
+                    catch(Exception error){Problem(ScheduledTaskPhase.Configuration,path,row,error);}
+                    try{nextRun=Scalar(task.NextRunTime);}
+                    catch(OperationCanceledException){throw;}
+                    catch(Exception error){Problem(ScheduledTaskPhase.NextRun,path,row,error);}
+                }
                 if (includeActions)
                 {
                     try
@@ -285,7 +309,7 @@ public static class ScheduledTasks
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception error) { Problem(ScheduledTaskPhase.TaskItem, path, row, error); }
-            finally { Release(task, path, row); rows.Add(new(row, name, taskPath, state, enabled, result) { Executables = executables }); }
+            finally { Release(task, path, row); rows.Add(new(row, name, taskPath, state, enabled, result) { Executables = executables, Configuration=configuration, NextRun=nextRun }); }
         }
     }
 }

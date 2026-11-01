@@ -14,8 +14,8 @@ namespace Swivel.Windows;
 internal static class ScheduledTaskNotices
 {
     internal const string Intro = "Read-only local task metadata available with current permissions, not proof of task ownership or health. Task names remain visible and may contain private information.";
-    internal const string Meaning = "These are historical, non-atomic values reported by Task Scheduler. A readable task is not necessarily owned by you. State and last-result numbers are shown as raw values, not as a health, safety or success verdict. Enabled does not prove that a task ran, will run or is currently running. Missing values are not treated as false or zero.";
-    internal const string Privacy = "Task names are visible by default and can contain personal or application information. Task Scheduler namespace paths are hidden unless you choose to show them; they are not filesystem paths. The same choice applies to lists, details, issues and copied reports. Hiding paths does not anonymize task names. Nothing is sent automatically, and this snapshot is not included in assistant requests.";
+    internal const string Meaning = "These are historical, non-atomic values reported by Task Scheduler. A readable task is not necessarily owned by you. Raw states and last-result numbers are preserved with limited fixed-code explanations. Findings describe only the stated observations; one last result cannot prove repeated failures. Enabled does not prove that a task ran, will run or is currently running. Missing values are not treated as false or zero.";
+    internal const string Privacy = "Task names are visible by default and can contain personal or application information. Task Scheduler namespace paths, commands, arguments and definition values are hidden unless you choose to show them. Task Scheduler namespace paths are not filesystem paths. The same choice applies to lists, details, issues and copied reports. Hiding paths does not anonymize task names. Nothing is sent automatically, and this snapshot is not included in assistant requests.";
     internal const string Missing = "An empty or partial result does not prove that no scheduled tasks exist. Hidden tasks, inaccessible locations, limits and changes during collection can omit tasks or fields. This window does not run, edit, enable, disable, delete or open any task.";
     internal const string ReportLimit = "This scheduled-task copy exceeds the complete-report limit. Copy one selected item instead.";
 }
@@ -55,8 +55,8 @@ internal sealed class ScheduledTaskDialog : Window
         var body = new StackPanel();
         body.Children.Add(UI.Text(app.L(ScheduledTaskNotices.Intro), 12));
         body.Children.Add(UI.Text(Header(), 13));
-        paths = new CheckBox { Content = app.L("Show Task Scheduler Paths in This View and Copies"), IsChecked = false, Margin = new Thickness(0, 8, 0, 12) };
-        AutomationProperties.SetName(paths, app.L("Show Task Scheduler Paths in This View and Copies"));
+        paths = new CheckBox { Content = app.L(ConfigurationDetails.Reveal), IsChecked = false, Margin = new Thickness(0, 8, 0, 12) };
+        AutomationProperties.SetName(paths, app.L(ConfigurationDetails.Reveal));
         paths.Checked += (_, _) => { showPaths = true; Render(); };
         paths.Unchecked += (_, _) => { showPaths = false; Render(); }; body.Children.Add(paths);
         var tabs = new TabControl { Height = 345 };
@@ -89,7 +89,7 @@ internal sealed class ScheduledTaskDialog : Window
     }
     private IEnumerable<string> Notes()
     {
-        yield return ScheduledTasks.Scope; yield return ScheduledTasks.Limits; yield return ScheduledTaskNotices.Meaning;
+        yield return ConfigurationDiagnosis.Limits; yield return ScheduledTasks.Scope; yield return ScheduledTasks.Limits; yield return ScheduledTaskNotices.Meaning;
         yield return ScheduledTaskNotices.Privacy; yield return ScheduledTaskNotices.Missing;
     }
     private ListView[] Lists() => new[] { taskList, folderList, issueList };
@@ -135,7 +135,7 @@ internal sealed class ScheduledTaskDialog : Window
     private string Header() => string.Join("\n", new[] {
         app.L("Snapshot Recorded") + ": " + snapshot.Captured.ToLocalTime().ToString("g", CultureInfo.CurrentCulture),
         app.L(snapshot.Partial ? "Partial Scheduled Task Snapshot" : "No collection issue was recorded within the stated scope."),
-        string.Format(CultureInfo.CurrentCulture, app.L("Retained tasks: {0} · folder attempts: {1}/128 · task attempts: {2}/1024 · name/path text budget used: {3}/262144 · retained issues: {4}/256 · additional issues not retained: {5}"),
+        string.Format(CultureInfo.CurrentCulture, app.L("Retained tasks: {0} · folder attempts: {1}/128 · task attempts: {2}/1024 · text budget used: {3}/262144 · retained issues: {4}/256 · additional issues not retained: {5}"),
             tasks.Length, snapshot.FolderAttempts, snapshot.TaskAttempts, snapshot.RetainedTextUnits, issues.Length, snapshot.OmittedIssues),
         app.L("Collection End Reason") + ": " + app.L(EndReason(snapshot.StopReason)),
         string.Format(CultureInfo.CurrentCulture, app.L("Elapsed collection time: {0:N1} seconds. The time budget is soft."), snapshot.Elapsed.TotalSeconds)
@@ -144,7 +144,7 @@ internal sealed class ScheduledTaskDialog : Window
         ScheduledTaskStopReason.Completed => "Task collection ended within the stated scope.",
         ScheduledTaskStopReason.FolderLimit => "The folder-attempt limit was reached.",
         ScheduledTaskStopReason.TaskLimit => "The task-attempt limit was reached.",
-        ScheduledTaskStopReason.TextLimit => "The shared name/path size limit was reached.",
+        ScheduledTaskStopReason.TextLimit => "The shared task text limit was reached.",
         ScheduledTaskStopReason.TimeLimit => "The soft collection time limit was reached.",
         _ => "The collection end reason was not recognized."
     };
@@ -163,7 +163,7 @@ internal sealed class ScheduledTaskDialog : Window
             text.Append(value).Append(Environment.NewLine);
         }
         Line(app.L("Windows Doctor") + " · " + Title); Line(Header());
-        Line(app.L(showPaths ? "Task Scheduler paths are included in this report." : "Task Scheduler paths are hidden in this report."));
+        Line(app.L(showPaths ? "Configuration values and Task Scheduler paths are included in this report." : "Configuration values and Task Scheduler paths are hidden in this report."));
         foreach (string note in Notes()) Line(app.L(note));
         if (item is not null)
         {
@@ -198,7 +198,7 @@ internal sealed class ScheduledTaskDialog : Window
         public string Enabled => owner.Boolean(source.Enabled);
         public string LastResult => owner.Bits(source.LastResult);
         public override string Describe() => string.Join("\n", new[] { owner.Field("Task Record", Index), owner.Field("Task Name", Name), owner.Field("Task Scheduler Path", Path),
-            owner.Field("Raw Task State", State), owner.Field("Reported Enabled Value", Enabled), owner.Field("Raw Last Task Result", LastResult) });
+            owner.Field("Raw Task State", State), owner.Field("Reported Enabled Value", Enabled), owner.Field("Raw Last Task Result", LastResult), ConfigurationDetails.Task(source,owner.app.L,owner.showPaths) });
     }
     private sealed class FolderRow(ScheduledTaskDialog owner, ScheduledTaskFolder source, int index) : VisibleRow
     {

@@ -120,6 +120,7 @@ PowerPlanChecks.Run(Check,Reject);
 SleepCapabilityChecks.Run(Check,Reject);
 BatterySleepChecks.Run(Check,Reject);
 ServiceChecks.Run(Check,Reject);
+ConfigurationDiagnosisChecks.Run(Check,Reject);
 ScheduledTasksChecks.Run(Check,Reject);
 ScheduledTaskIntegrationChecks.Run(Check);
 CommonFolderChecks.Run(Check,Reject);

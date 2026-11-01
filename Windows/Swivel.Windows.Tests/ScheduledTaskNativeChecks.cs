@@ -22,6 +22,23 @@ internal static class ScheduledTaskNativeChecks
         check(ScheduledTaskAutomation.ClassId == new Guid("0F87369F-A4E5-4CFC-BD3E-73E6154572DD"), "Task Scheduler 2.0 system class ID is explicit");
         foreach (var method in typeof(ScheduledTaskAutomation).GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Where(x => x.GetCustomAttribute<DllImportAttribute>() != null))
             check(method.GetCustomAttribute<DllImportAttribute>()!.Value == "ole32.dll" && method.GetCustomAttribute<DefaultDllImportSearchPathsAttribute>()?.Paths == DllImportSearchPath.System32, "COM apartment imports are System32 restricted");
+        var configurationNative=new Fake();var configured=await ScheduledTaskReader.ReadAsync(default,configurationNative,includeConfiguration:true);
+        check(!configured.Partial&&configured.Tasks.Single().Configuration?.Actions.Single().Arguments=="SECRET_ARGUMENT"&&configured.Tasks.Single().NextRun==DateTime.UnixEpoch&&configurationNative.Balanced&&configurationNative.Thread is{IsAlive:false},"F09 XML and next-run read stays on joined COM worker with frozen bounded fields");
+        check(configurationNative.Calls.Any(x=>x=="Xml:True:0")&&configurationNative.Calls.Any(x=>x=="NextRunTime:True:0")&&!configurationNative.Calls.Any(x=>new[]{"Run","Stop","RegisterTask","RegisterTaskDefinition","DeleteTask"}.Contains(x.Split(':')[0])),"F09 requests read-only XML/time and never task mutations");
+        foreach(string member in new[]{"Xml","NextRunTime"})
+        {
+            var denied=new Fake{FailMember=member};var partial=await ScheduledTaskReader.ReadAsync(default,denied,includeConfiguration:true);
+            check(partial.Partial&&partial.Tasks.Count==1&&denied.Balanced&&denied.Thread is{IsAlive:false},"F09 permission denial stays per-field with joined cleanup: "+member);
+            var alias=new Fake{ReturnComFor=member};var rejected=await ScheduledTaskReader.ReadAsync(default,alias,includeConfiguration:true);
+            check(rejected.Partial&&alias.Balanced,"F09 unexpected XML/time COM scalar releases every acquisition: "+member);
+        }
+        for(int point=1;point<=configurationNative.Returns;point++)
+        {
+            using var cancel=new CancellationTokenSource();int at=point;
+            var cut=new Fake{AfterReturn=(n,_)=>{if(n==at)cancel.Cancel();}};
+            reject(()=>ScheduledTaskReader.ReadAsync(cancel.Token,cut,includeConfiguration:true).GetAwaiter().GetResult(),"F09 post-call configuration cancellation observed");
+            check(cut.Balanced&&cut.Thread is{IsAlive:false}&&cut.Initializes==cut.Uninitializes,"F09 configuration cancellation waits for all COM cleanup and true exit");
+        }
         var actionNative = new Fake(); var actionReport = await ScheduledTaskReader.ReadAsync(default, actionNative, true);
         check(!actionReport.Partial && actionReport.Tasks.Single().Executables!.Single() == @"C:\Apps\Foo\foo.exe" && actionNative.Balanced && actionNative.Thread is { IsAlive: false }, "F08 explicitly reads executable action paths on the same owning worker, releasing definitions/actions/items before join");
         check(!actionNative.Calls.Any(x => new[] { "Arguments", "WorkingDirectory", "Xml", "Run", "Stop", "Delete" }.Contains(x.Split(':')[0])), "Task registration evidence never asks for arguments/scripts or mutation methods");
@@ -136,6 +153,7 @@ internal static class ScheduledTaskNativeChecks
             object? result = member switch
             {
                 "Connect" => null, "GetFolder" => folder, "GetTasks" => tasks, "GetFolders" => folders,
+                "Xml"=>"<Task xmlns='http://schemas.microsoft.com/windows/2004/02/mit/task'><Triggers/><Actions><Exec><Command>%PRIVATE%\\a.exe</Command><Arguments>SECRET_ARGUMENT</Arguments></Exec></Actions></Task>", "NextRunTime"=>DateTime.UnixEpoch,
                 "Definition" => definition, "Actions" => actions, "Type" => 0,
                 "Count" => com.Kind == "tasks" ? RepeatedTasks : com.Kind == "actions" ? ActionCount : 0, "Item" => com.Kind == "actions" ? action : task,
                 "Name" => "Task", "Path" => com.Kind == "action" ? ActionPath : @"\Task", "State" => -7, "Enabled" => false, "LastTaskResult" => -1,

@@ -19533,5 +19533,435 @@
     "其他块（包括色彩配置文件和未知辅助块）仍会保留，可能包含私人信息。图像像素、文件名和文件系统信息也可能泄露细节。这不是完整的隐私清理。JPEG 和 TIFF 有各自的元数据工具。",
     "其他區塊（包括色彩描述檔與未知輔助區塊）仍會保留，可能包含私人資訊。影像像素、檔名與檔案系統資訊也可能洩漏細節。這不是完整的隱私清理。JPEG 與 TIFF 有各自的中繼資料工具。",
     "カラープロファイルや未知の補助チャンクを含む他のチャンクは保持され、個人情報が含まれる場合があります。画素、ファイル名、ファイルシステム情報にも詳細が残る可能性があります。完全なプライバシー除去ではありません。JPEG と TIFF にはそれぞれのメタデータツールがあります。"
+  ],
+  "A named service dependency reports Disabled startup.": [
+    "一个命名的服务依赖项报告为禁用启动。",
+    "一個具名的服務相依項目回報為停用啟動。",
+    "名前付きサービス依存先の起動設定は無効と報告されています。"
+  ],
+  "A named service dependency was not in this sample; it may be missing, unreadable or omitted.": [
+    "本次样本中没有某个命名服务依赖项；它可能不存在、不可读或被省略。",
+    "本次樣本中沒有某個具名服務相依項目；它可能不存在、無法讀取或被省略。",
+    "名前付きサービス依存先がこのサンプルにありません。存在しない、読み取れない、または省略された可能性があります。"
+  ],
+  "A task executable action target was not found during the read-only local path check.": [
+    "只读本地路径检查未找到某个任务可执行操作的目标。",
+    "唯讀本機路徑檢查未找到某個工作可執行動作的目標。",
+    "読み取り専用のローカルパス確認で、タスクの実行操作の対象が見つかりませんでした。"
+  ],
+  "Access was denied (reported result).": [
+    "访问被拒绝（报告的结果）。",
+    "存取遭拒（回報的結果）。",
+    "アクセスが拒否されました（報告された結果）。"
+  ],
+  "Action Arguments": [
+    "操作参数",
+    "動作引數",
+    "操作の引数"
+  ],
+  "Action Target": [
+    "操作目标",
+    "動作目標",
+    "操作の対象"
+  ],
+  "Action Target Check": [
+    "操作目标检查",
+    "動作目標檢查",
+    "操作対象の確認"
+  ],
+  "Action Type": [
+    "操作类型",
+    "動作類型",
+    "操作の種類"
+  ],
+  "Action Working Folder": [
+    "操作工作文件夹",
+    "動作工作資料夾",
+    "操作の作業フォルダー"
+  ],
+  "An instance is already running (reported result).": [
+    "已有实例正在运行（报告的结果）。",
+    "已有執行個體正在執行（回報的結果）。",
+    "インスタンスは既に実行中です（報告された結果）。"
+  ],
+  "At least two distinct task instances report non-zero action-completion results in the bounded history sample, and the last task result is non-zero. Application-defined codes may have other meanings; this does not prove every run failed.": [
+    "有界历史样本中，至少两个不同任务实例报告了非零操作完成结果，且最后任务结果非零。应用自定义代码可能有其他含义；这不能证明每次运行都失败。",
+    "有限歷程樣本中，至少兩個不同工作執行個體回報了非零動作完成結果，且最後工作結果非零。應用程式自訂代碼可能有其他含義；這不能證明每次執行都失敗。",
+    "制限付き履歴サンプルで、少なくとも2つの異なるタスクインスタンスがゼロ以外の操作完了結果を報告し、最終タスク結果もゼロ以外です。アプリ独自コードには別の意味がある場合があり、毎回の失敗を証明しません。"
+  ],
+  "Automatic": [
+    "自动",
+    "自動",
+    "自動"
+  ],
+  "Automatic-start service is not running and reports a non-zero exit code. This sample does not establish why.": [
+    "自动启动服务未在运行，并报告了非零退出代码。本次样本不能确定原因。",
+    "自動啟動服務未在執行，並回報了非零結束代碼。本次樣本無法確定原因。",
+    "自動起動サービスが実行中ではなく、ゼロ以外の終了コードを報告しています。このサンプルから原因は特定できません。"
+  ],
+  "Boot": [
+    "引导",
+    "開機載入",
+    "ブート"
+  ],
+  "Delayed automatic start": [
+    "延迟自动启动",
+    "延遲自動啟動",
+    "自動起動の遅延"
+  ],
+  "Dependencies": [
+    "依赖项",
+    "相依項目",
+    "依存関係"
+  ],
+  "Event trigger has no scheduled run time (reported status).": [
+    "事件触发器没有计划运行时间（报告的状态）。",
+    "事件觸發程序沒有排程執行時間（回報的狀態）。",
+    "イベントトリガーに予定実行時刻がありません（報告された状態）。"
+  ],
+  "Failure Command": [
+    "失败时的命令",
+    "失敗時的命令",
+    "失敗時のコマンド"
+  ],
+  "Failure Reset Seconds": [
+    "失败计数重置秒数",
+    "失敗計數重設秒數",
+    "失敗回数リセットまでの秒数"
+  ],
+  "Findings": [
+    "观察结果",
+    "觀察結果",
+    "確認結果"
+  ],
+  "Last Result Meaning": [
+    "最后结果的含义",
+    "最後結果的含義",
+    "最終結果の意味"
+  ],
+  "Logon failed (reported result).": [
+    "登录失败（报告的结果）。",
+    "登入失敗（回報的結果）。",
+    "ログオンに失敗しました（報告された結果）。"
+  ],
+  "Manual": [
+    "手动",
+    "手動",
+    "手動"
+  ],
+  "Missing (local metadata)": [
+    "未找到（本地元数据）",
+    "未找到（本機中繼資料）",
+    "見つかりません（ローカルメタデータ）"
+  ],
+  "Next task run": [
+    "下次任务运行",
+    "下次工作執行",
+    "タスクの次回実行"
+  ],
+  "No action": [
+    "无操作",
+    "無動作",
+    "操作なし"
+  ],
+  "No more runs are scheduled (reported status).": [
+    "没有后续计划运行（报告的状态）。",
+    "沒有後續排程執行（回報的狀態）。",
+    "これ以降の実行予定はありません（報告された状態）。"
+  ],
+  "Observed Non-zero Action-result Instances": [
+    "观察到非零操作结果的实例数",
+    "觀察到非零動作結果的執行個體數",
+    "ゼロ以外の操作結果が確認されたインスタンス数"
+  ],
+  "Partial Service Snapshot": [
+    "不完整的服务快照",
+    "不完整的服務快照",
+    "不完全なサービススナップショット"
+  ],
+  "Present (local metadata)": [
+    "存在（本地元数据）",
+    "存在（本機中繼資料）",
+    "存在します（ローカルメタデータ）"
+  ],
+  "Reboot Message": [
+    "重启提示",
+    "重新啟動訊息",
+    "再起動メッセージ"
+  ],
+  "Reported": [
+    "已报告",
+    "已回報",
+    "報告済み"
+  ],
+  "Restart computer": [
+    "重启计算机",
+    "重新啟動電腦",
+    "コンピューターを再起動"
+  ],
+  "Restart service": [
+    "重启服务",
+    "重新啟動服務",
+    "サービスを再起動"
+  ],
+  "Run command": [
+    "运行命令",
+    "執行命令",
+    "コマンドを実行"
+  ],
+  "Selected Service Configuration": [
+    "所选服务配置",
+    "所選服務設定",
+    "選択したサービスの構成"
+  ],
+  "Service Account": [
+    "服务账户",
+    "服務帳戶",
+    "サービスアカウント"
+  ],
+  "Service Binary Check": [
+    "服务二进制路径检查",
+    "服務二進位路徑檢查",
+    "サービスバイナリの確認"
+  ],
+  "Service Binary Command": [
+    "服务二进制命令",
+    "服務二進位命令",
+    "サービスバイナリのコマンド"
+  ],
+  "Service Configuration Limit Reached": [
+    "已达到服务配置限制",
+    "已達服務設定限制",
+    "サービス構成の上限に達しました"
+  ],
+  "Service Win32 Exit Code": [
+    "服务 Win32 退出代码",
+    "服務 Win32 結束代碼",
+    "サービスの Win32 終了コード"
+  ],
+  "Service configuration": [
+    "服务配置",
+    "服務設定",
+    "サービスの構成"
+  ],
+  "Service description": [
+    "服务描述",
+    "服務描述",
+    "サービスの説明"
+  ],
+  "Service failure actions": [
+    "服务失败操作",
+    "服務失敗動作",
+    "サービス失敗時の操作"
+  ],
+  "Service handle cleanup": [
+    "服务句柄清理",
+    "服務控制代碼清理",
+    "サービスハンドルの解放"
+  ],
+  "Service-specific Exit Code": [
+    "服务特定退出代码",
+    "服務特定結束代碼",
+    "サービス固有の終了コード"
+  ],
+  "Show Configuration Commands, Accounts and Paths in This View and Copies": [
+    "在此视图和复制内容中显示配置命令、账户及路径",
+    "在此檢視及複製內容中顯示設定命令、帳戶及路徑",
+    "この表示とコピーに構成のコマンド、アカウント、パスを表示"
+  ],
+  "Startup Type": [
+    "启动类型",
+    "啟動類型",
+    "起動の種類"
+  ],
+  "Task account information is not set (reported result).": [
+    "未设置任务账户信息（报告的结果）。",
+    "未設定工作帳戶資訊（回報的結果）。",
+    "タスクのアカウント情報が設定されていません（報告された結果）。"
+  ],
+  "Task action-result history": [
+    "任务操作结果历史",
+    "工作動作結果歷程",
+    "タスク操作結果の履歴"
+  ],
+  "Task configuration": [
+    "任务配置",
+    "工作設定",
+    "タスクの構成"
+  ],
+  "Task has no valid triggers (reported status).": [
+    "任务没有有效触发器（报告的状态）。",
+    "工作沒有有效觸發程序（回報的狀態）。",
+    "タスクに有効なトリガーがありません（報告された状態）。"
+  ],
+  "Task has not yet run (reported status).": [
+    "任务尚未运行（报告的状态）。",
+    "工作尚未執行（回報的狀態）。",
+    "タスクはまだ実行されていません（報告された状態）。"
+  ],
+  "Task is disabled (reported result).": [
+    "任务已禁用（报告的结果）。",
+    "工作已停用（回報的結果）。",
+    "タスクは無効です（報告された結果）。"
+  ],
+  "Task is disabled (reported status).": [
+    "任务已禁用（报告的状态）。",
+    "工作已停用（回報的狀態）。",
+    "タスクは無効です（報告された状態）。"
+  ],
+  "Task is not scheduled (reported status).": [
+    "任务未设定计划（报告的状态）。",
+    "工作未設定排程（回報的狀態）。",
+    "タスクはスケジュールされていません（報告された状態）。"
+  ],
+  "Task is ready (reported status).": [
+    "任务已就绪（报告的状态）。",
+    "工作已就緒（回報的狀態）。",
+    "タスクは準備完了です（報告された状態）。"
+  ],
+  "Task is running (reported status).": [
+    "任务正在运行（报告的状态）。",
+    "工作正在執行（回報的狀態）。",
+    "タスクは実行中です（報告された状態）。"
+  ],
+  "Task was terminated (reported status).": [
+    "任务已终止（报告的状态）。",
+    "工作已終止（回報的狀態）。",
+    "タスクは終了されました（報告された状態）。"
+  ],
+  "The configured service account is a user or managed account rather than a recognized built-in or virtual service account. This does not establish ownership or risk.": [
+    "配置的服务账户是用户或托管账户，而非已识别的内置或虚拟服务账户。这不代表归属或风险判断。",
+    "設定的服務帳戶是使用者或受管理帳戶，而非已識別的內建或虛擬服務帳戶。這不代表歸屬或風險判斷。",
+    "構成されたサービスアカウントは、既知の組み込みまたは仮想サービスアカウントではなく、ユーザーまたは管理アカウントです。所有権や危険性を判断するものではありません。"
+  ],
+  "The parsed service binary was not found during the read-only local path check.": [
+    "只读本地路径检查未找到解析出的服务二进制文件。",
+    "唯讀本機路徑檢查未找到解析出的服務二進位檔案。",
+    "読み取り専用のローカルパス確認で、解析されたサービスバイナリが見つかりませんでした。"
+  ],
+  "The unquoted service command contains spaces and may contain a spaced executable path. The executable target is ambiguous and was not probed.": [
+    "未加引号的服务命令含空格，可能包含带空格的可执行路径。目标不明确，因此未探测。",
+    "未加引號的服務命令含空格，可能包含帶空格的可執行路徑。目標不明確，因此未探測。",
+    "引用符のないサービスコマンドには空白があり、実行ファイルのパスにも空白が含まれる可能性があります。対象が曖昧なため確認していません。"
+  ],
+  "The service report exceeds the complete-report limit.": [
+    "服务报告超过了完整报告大小限制。",
+    "服務報告超過了完整報告大小限制。",
+    "サービスレポートが全体レポートのサイズ上限を超えています。"
+  ],
+  "The system could not find the file (reported result).": [
+    "系统找不到文件（报告的结果）。",
+    "系統找不到檔案（回報的結果）。",
+    "ファイルが見つかりませんでした（報告された結果）。"
+  ],
+  "The system could not find the path (reported result).": [
+    "系统找不到路径（报告的结果）。",
+    "系統找不到路徑（回報的結果）。",
+    "パスが見つかりませんでした（報告された結果）。"
+  ],
+  "The task action-result history event limit was reached.": [
+    "已达到任务操作结果历史事件数量限制。",
+    "已達工作動作結果歷程事件數量限制。",
+    "タスク操作結果の履歴イベント上限に達しました。"
+  ],
+  "The task is enabled but its readable definition contains no triggers. It can still be started on demand or by another task.": [
+    "任务已启用，但可读定义中没有触发器。它仍可按需或由其他任务启动。",
+    "工作已啟用，但可讀定義中沒有觸發程序。它仍可視需要或由其他工作啟動。",
+    "タスクは有効ですが、読み取り可能な定義にトリガーがありません。要求時や別のタスクから起動することは可能です。"
+  ],
+  "The task reports a non-zero last result outside the known informational status range. One result cannot establish repeated failures.": [
+    "任务报告的最后结果非零，且不在已知信息状态范围内。单次结果无法证明反复失败。",
+    "工作回報的最後結果非零，且不在已知資訊狀態範圍內。單次結果無法證明反覆失敗。",
+    "最終タスク結果はゼロ以外で、既知の情報状態範囲外です。1つの結果では繰り返しの失敗を証明できません。"
+  ],
+  "The task reports a zero result.": [
+    "任务报告结果为零。",
+    "工作回報結果為零。",
+    "タスクはゼロの結果を報告しています。"
+  ],
+  "The task reports that it is disabled.": [
+    "任务报告为禁用。",
+    "工作回報為停用。",
+    "タスクは無効と報告されています。"
+  ],
+  "Trigger Count": [
+    "触发器数量",
+    "觸發程序數量",
+    "トリガー数"
+  ],
+  "Triggers, Principal and Settings": [
+    "触发器、运行身份及设置",
+    "觸發程序、執行身分及設定",
+    "トリガー、実行主体、設定"
+  ],
+  "Unknown or not checked": [
+    "未知或未检查",
+    "未知或未檢查",
+    "不明または未確認"
+  ],
+  "Unrecognized or application-defined result; no meaning inferred.": [
+    "未识别或应用自定义结果；不推测含义。",
+    "未識別或應用程式自訂結果；不推測含義。",
+    "未認識またはアプリ独自の結果です。意味を推測しません。"
+  ],
+  "milliseconds": [
+    "毫秒",
+    "毫秒",
+    "ミリ秒"
+  ],
+  "The shared task text limit was reached.": [
+    "已达到任务共享文字限制。",
+    "已達工作共用文字限制。",
+    "共有タスクテキストの上限に達しました。"
+  ],
+  "Configuration values and Task Scheduler paths are included in this report.": [
+    "此报告包含配置值及任务计划程序路径。",
+    "此報告包含設定值及工作排程器路徑。",
+    "このレポートには構成値とタスクスケジューラのパスが含まれます。"
+  ],
+  "Configuration values and Task Scheduler paths are hidden in this report.": [
+    "此报告已隐藏配置值及任务计划程序路径。",
+    "此報告已隱藏設定值及工作排程器路徑。",
+    "このレポートでは構成値とタスクスケジューラのパスが非表示です。"
+  ],
+  "Retained tasks: {0} · folder attempts: {1}/128 · task attempts: {2}/1024 · text budget used: {3}/262144 · retained issues: {4}/256 · additional issues not retained: {5}": [
+    "保留任务：{0} · 文件夹尝试：{1}/128 · 任务尝试：{2}/1024 · 已用文字预算：{3}/262144 · 保留问题：{4}/256 · 未保留的额外问题：{5}",
+    "保留工作：{0} · 資料夾嘗試：{1}/128 · 工作嘗試：{2}/1024 · 已用文字預算：{3}/262144 · 保留問題：{4}/256 · 未保留的額外問題：{5}",
+    "保持タスク：{0} · フォルダー試行：{1}/128 · タスク試行：{2}/1024 · 使用テキスト予算：{3}/262144 · 保持した問題：{4}/256 · 未保持の追加問題：{5}"
+  ],
+  "Configuration is read only with current permissions. Commands, arguments, account names, paths, descriptions and definition values are hidden until revealed, including in copies. Names remain visible and may be private. File checks use only local fixed-drive metadata with held non-reparse ancestors; inaccessible, cloud, network, relative, ambiguous and unsupported paths stay unknown. Only SystemRoot is resolved using the Windows directory; other environment variables are not guessed. No PATH search, payload inspection or command execution. A single historical result cannot prove repeated failures; only up to 200 action-completion events from the last seven days are read without enabling logging. Distinct instance IDs with non-zero codes are counted, not assumed consecutive failures. Missing/disabled history, limits and log rotation can omit evidence. History text shares the scan budget. Definitions are limited to 64 Ki UTF-16 units, 32 triggers/actions, 256 leaf fields and XML depth 32. Results are non-atomic and are not trust, malware, ownership or removal advice. No service or task is changed and this snapshot is not sent to an assistant.": [
+    "仅用当前权限只读配置。命令、参数、账户、路径、描述及定义值默认在显示和复制中隐藏，直到主动显示。名称仍可见且可能私密。文件检查仅用固定本地盘元数据并持有非重解析祖先；不可访问、云端、网络、相对、不明确及不支持的路径均保持未知。只用 Windows 目录解析 SystemRoot，不猜测其他环境变量，不搜索 PATH、检查载荷或执行命令。单个历史结果无法证明反复失败；只读最近七天最多 200 个操作完成事件，不启用日志。统计带非零代码的不同实例，不推定连续失败。历史关闭、缺失、限制或日志轮转会遗漏证据，历史文字共用扫描预算。定义限 64 Ki UTF-16 单元、32 个触发器／操作、256 个叶字段及 XML 深度 32。结果非原子，不判断信任、恶意软件、归属或移除建议。不更改服务或任务，也不将此快照发送给助手。",
+    "僅用目前權限唯讀設定。命令、引數、帳戶、路徑、描述及定義值預設在顯示和複製中隱藏，直到主動顯示。名稱仍可見且可能私密。檔案檢查僅用固定本機磁碟中繼資料並持有非重新解析祖先；無法存取、雲端、網路、相對、不明確及不支援的路徑均保持未知。只用 Windows 目錄解析 SystemRoot，不猜測其他環境變數，不搜尋 PATH、檢查承載內容或執行命令。單個歷史結果無法證明反覆失敗；唯讀最近七天最多 200 個動作完成事件，不啟用日誌。統計帶非零代碼的不同執行個體，不推定連續失敗。歷程關閉、缺失、限制或日誌輪替會遺漏證據，歷程文字共用掃描預算。定義限 64 Ki UTF-16 單元、32 個觸發程序／動作、256 個葉欄位及 XML 深度 32。結果非不可分割，不判斷信任、惡意軟體、歸屬或移除建議。不變更服務或工作，也不將此快照傳送給助理。",
+    "現在の権限で構成を読み取るだけです。コマンド、引数、アカウント、パス、説明、定義値は、表示を選ぶまで表示とコピーで非表示です。名前は表示され、個人情報を含む場合があります。ファイル確認は固定ローカルディスクのメタデータのみを使い、再解析ではない親を保持します。アクセス不可、クラウド、ネットワーク、相対、曖昧、未対応のパスは不明のままです。Windows ディレクトリで SystemRoot のみを解決し、他の環境変数や PATH 検索、内容の検査、コマンド実行は行いません。単一結果では繰り返しの失敗を証明できません。ログを有効にせず、過去7日間の操作完了イベントを最大200件読み取り、ゼロ以外のコードを持つ異なるインスタンスを数えます。連続失敗とは判断しません。履歴の無効化、不在、上限、ローテーションで証拠を見落とす場合があります。履歴テキストは共有予算を使用します。定義は64 Ki UTF-16単位、トリガー／操作32個、末端フィールド256個、XML深度32までです。結果はアトミックではなく、信頼性、マルウェア、所有権、削除の判断ではありません。サービスやタスクを変更せず、このスナップショットをアシスタントに送りません。"
+  ],
+  "One explicit read-only local Windows service-control-manager sample, limited to Win32 services in any reported state. Driver services are excluded. Readable startup type, delayed start, account, binary command, dependencies, description and failure actions are requested without changing them. Names can identify private software; only an explicit Copy Report writes them to the clipboard. Nothing is sent to an assistant.": [
+    "一次显式、只读的本地 Windows 服务控制管理器样本，范围为所有报告状态的 Win32 服务，不含驱动服务。只请求可读的启动类型、延迟启动、账户、二进制命令、依赖、描述和失败操作，不作更改。名称可能识别私人软件；只有主动复制报告才写入剪贴板。不发送给助手。",
+    "一次明確、唯讀的本機 Windows 服務控制管理員樣本，範圍為所有回報狀態的 Win32 服務，不含驅動程式服務。只要求可讀的啟動類型、延遲啟動、帳戶、二進位命令、相依項目、描述及失敗動作，不作變更。名稱可能識別私人軟體；只有主動複製報告才寫入剪貼簿。不傳送給助理。",
+    "明示的な操作でローカル Windows サービス制御マネージャーを一度だけ読み取ります。報告された全状態の Win32 サービスが対象で、ドライバーは除外します。読み取り可能な起動種類、遅延、アカウント、バイナリコマンド、依存関係、説明、失敗時の操作を要求し、変更しません。名前で私的なソフトウェアを特定できる場合があります。明示的なレポートコピーだけがクリップボードに書き込みます。アシスタントに送信しません。"
+  ],
+  "One 256 KiB native enumeration buffer, at most 4,096 records and 1,024 UTF-16 units per name and 262,144 copied name units overall. Configuration adds a separate 262,144-unit text budget, 8 KiB per native buffer, 2,048 units per field, 1,024 per dependency, 64 dependencies/failure actions per service and about 15 seconds. More-data, malformed records and API or cleanup errors stay visible as partial results. Windows silently omits services for which this user lacks query-status access, so even a successful empty result is not a complete inventory. Names and reported state/PID are historical, not trust, ownership, enabled-startup, slowdown or safe-removal evidence. A stopped service is not necessarily disabled; PIDs can be reused and do not establish app groups. Calls may block and cancellation waits for cleanup. No service is started, stopped, disabled, deleted or reconfigured; no administrator command, file scan, network test or settings change is requested.": [
+    "使用一个 256 KiB 原生枚举缓冲区，最多 4,096 条、每个名称 1,024 个 UTF-16 单元，名称总计 262,144 单元。配置另有 262,144 单元预算，每个原生缓冲区 8 KiB、字段 2,048 单元、依赖名称 1,024 单元、每服务 64 个依赖／失败操作，约 15 秒软限。更多数据、畸形记录、API 和清理错误以不完整结果显示。Windows 会静默省略当前用户无状态查询权限的服务，即使成功的空结果也不是完整清单。名称、状态和 PID 是历史值，不代表信任、归属、启用启动、变慢原因或可安全移除。已停止不等于已禁用，PID 可复用且不证明应用分组。调用可能阻塞，取消等待清理。不启动、停止、禁用、删除或重新配置服务，不请求管理员命令、文件扫描、网络测试或设置更改。",
+    "使用一個 256 KiB 原生列舉緩衝區，最多 4,096 筆、每個名稱 1,024 個 UTF-16 單元，名稱總計 262,144 單元。設定另有 262,144 單元預算，每個原生緩衝區 8 KiB、欄位 2,048 單元、相依名稱 1,024 單元、每服務 64 個相依項目／失敗動作，約 15 秒軟限。更多資料、格式錯誤記錄、API 及清理錯誤以不完整結果顯示。Windows 會無提示省略目前使用者無狀態查詢權限的服務，即使成功的空結果也不是完整清單。名稱、狀態及 PID 是歷史值，不代表信任、歸屬、啟用啟動、變慢原因或可安全移除。已停止不等於已停用，PID 可重用且不證明應用程式分組。呼叫可能阻塞，取消等待清理。不啟動、停止、停用、刪除或重新設定服務，不要求管理員命令、檔案掃描、網路測試或設定變更。",
+    "列挙バッファーは256 KiB、最大4,096件、名前ごとに1,024 UTF-16単位、名前合計262,144単位です。構成は別途262,144単位、ネイティブバッファー8 KiB、フィールド2,048単位、依存名1,024単位、サービスごとに依存／失敗操作64個、約15秒のソフト上限です。追加データ、不正レコード、APIや解放のエラーは不完全な結果として表示します。状態照会権限のないサービスはWindowsが黙って省略するため、正常な空の結果も完全な一覧ではありません。名前、状態、PIDは過去の値で、信頼、所有権、自動起動の有効性、遅延原因、安全な削除の証拠ではありません。停止中と無効は異なり、PIDは再利用されアプリのグループを証明しません。呼び出しが停止する場合があり、キャンセルは解放を待ちます。サービスの起動、停止、無効化、削除、再構成、管理者コマンド、ファイルスキャン、ネットワークテスト、設定変更は行いません。"
+  ],
+  "Up to 128 folder-entry attempts, 1,024 task-entry attempts including failures, four child levels and about 15 seconds. The shared name/path/definition text budget is 262,144 UTF-16 units and 1,024 per value. Read text remains charged even if a later check rejects it. Windows may allocate collections or strings before these limits can be checked. Calls and cleanup can take longer; cancellation waits for completion. Permission omissions, concurrent changes and hidden tasks prevent a complete inventory. Names, namespace paths, reported state, enabled flag, last-result codes, next run time and bounded read-only XML definitions are requested. XML is not executed or loaded as a script. Trigger, principal and settings leaf values and action types are retained; executable actions also retain path, arguments and working folder. Non-executable action payloads are not inspected. Nothing is run, changed, enabled, disabled or deleted.": [
+    "最多尝试 128 个文件夹条目、1,024 个任务条目（含失败）、四层子文件夹，约 15 秒软限。名称／路径／定义共享 262,144 个 UTF-16 单元，普通值限 1,024 单元。已读取文字即使随后拒绝也计入预算。Windows 可能先分配集合或字符串再检查上限。调用及清理可更久，取消等待完成。权限省略、并发更改和隐藏任务使清单不完整。请求名称、命名空间路径、报告状态、启用标记、最后结果、下次运行时间及有界只读 XML 定义。XML 不被执行或作为脚本加载。保留触发器、运行身份、设置叶值及操作类型；可执行操作还保留路径、参数及工作文件夹。不检查非可执行操作载荷。不运行、更改、启用、禁用或删除任何任务。",
+    "最多嘗試 128 個資料夾項目、1,024 個工作項目（含失敗）、四層子資料夾，約 15 秒軟限。名稱／路徑／定義共用 262,144 個 UTF-16 單元，一般值限 1,024 單元。已讀取文字即使隨後拒絕也計入預算。Windows 可能先配置集合或字串再檢查上限。呼叫及清理可更久，取消等待完成。權限省略、並行變更和隱藏工作使清單不完整。要求名稱、命名空間路徑、回報狀態、啟用旗標、最後結果、下次執行時間及有限唯讀 XML 定義。XML 不被執行或作為指令碼載入。保留觸發程序、執行身分、設定葉值及動作類型；可執行動作還保留路徑、引數及工作資料夾。不檢查非可執行動作承載內容。不執行、變更、啟用、停用或刪除任何工作。",
+    "フォルダー項目128件、タスク項目1,024件（失敗を含む）、子フォルダー4階層、約15秒までです。名前／パス／定義の共有予算は262,144 UTF-16単位、通常の値は1,024単位までです。後で拒否されても読み取ったテキストは予算に含みます。Windowsが上限確認前にコレクションや文字列を確保する場合があります。呼び出しと解放には時間がかかる場合があり、キャンセルは完了を待ちます。権限、省略、同時変更、非表示タスクにより完全な一覧にはなりません。名前、名前空間パス、状態、有効フラグ、最終結果、次回実行時刻、制限付きの読み取り専用XML定義を取得します。XMLの実行やスクリプトとしての読み込みはしません。トリガー、実行主体、設定の末端値と操作種類を保持し、実行操作にはパス、引数、作業フォルダーも保持します。実行操作以外の内容は検査しません。タスクの実行、変更、有効化、無効化、削除はしません。"
+  ],
+  "Task names are visible by default and can contain personal or application information. Task Scheduler namespace paths, commands, arguments and definition values are hidden unless you choose to show them. Task Scheduler namespace paths are not filesystem paths. The same choice applies to lists, details, issues and copied reports. Hiding paths does not anonymize task names. Nothing is sent automatically, and this snapshot is not included in assistant requests.": [
+    "任务名称默认可见，可能包含个人或应用信息。任务计划程序命名空间路径、命令、参数和定义值在选择显示前隐藏。任务计划程序命名空间路径不是文件系统路径。相同选择适用于列表、详情、问题和复制报告。隐藏路径不会匿名化任务名称。不自动发送，此快照不包含在助手请求中。",
+    "工作名稱預設可見，可能包含個人或應用程式資訊。工作排程器命名空間路徑、命令、引數和定義值在選擇顯示前隱藏。工作排程器命名空間路徑不是檔案系統路徑。相同選擇適用於清單、詳細資料、問題及複製報告。隱藏路徑不會匿名化工作名稱。不自動傳送，此快照不包含在助理要求中。",
+    "タスク名は既定で表示され、個人やアプリの情報を含む場合があります。タスクスケジューラの名前空間パス、コマンド、引数、定義値は表示を選ぶまで非表示です。名前空間パスはファイルシステムのパスではありません。同じ選択が一覧、詳細、問題、レポートコピーに適用されます。パスを隠してもタスク名は匿名化されません。自動送信せず、このスナップショットはアシスタント要求に含まれません。"
+  ],
+  "These are historical, non-atomic values reported by Task Scheduler. A readable task is not necessarily owned by you. Raw states and last-result numbers are preserved with limited fixed-code explanations. Findings describe only the stated observations; one last result cannot prove repeated failures. Enabled does not prove that a task ran, will run or is currently running. Missing values are not treated as false or zero.": [
+    "这些是任务计划程序报告的历史、非原子值。可读取任务不一定属于您。保留原始状态和最后结果数字，并提供有限的固定代码解释。观察结果只描述所述现象；单个最后结果无法证明反复失败。已启用不证明任务运行过、将会运行或当前正在运行。缺失值不被当作 false 或零。",
+    "這些是工作排程器回報的歷史、非不可分割值。可讀取工作不一定屬於您。保留原始狀態和最後結果數字，並提供有限的固定代碼解釋。觀察結果只描述所述現象；單個最後結果無法證明反覆失敗。已啟用不證明工作執行過、將會執行或目前正在執行。缺失值不被當作 false 或零。",
+    "これらはタスクスケジューラが報告した過去の非アトミックな値です。読み取り可能なタスクがあなたの所有とは限りません。生の状態と最終結果番号を保持し、限定的な固定コードの説明を付けます。確認結果は記載の観察だけを示し、1つの最終結果で繰り返し失敗を証明できません。有効でも、過去、将来、現在の実行を証明しません。不明な値をfalseやゼロとは扱いません。"
+  ],
+  "Inspect Run/RunOnce records, raw StartupApproved values, startup apps with their observed Task Manager approval state, local service status and configuration, selected Startup-folder entries or bounded local scheduled-task configuration and plain findings. Commands, accounts, paths and definition values stay hidden until revealed. These do not prove effective enablement, trust, task ownership or leftover ownership. Disabling and removal are still planned.": [
+    "检查 Run/RunOnce、原始 StartupApproved、启动应用的任务管理器批准状态、本地服务状态与配置、选定启动文件夹条目，或有界本地计划任务配置及直白观察结果。命令、账户、路径和定义值默认隐藏。这些信息不证明实际启用、信任、任务归属或残留归属。禁用及移除仍待实现。",
+    "檢查 Run/RunOnce、原始 StartupApproved、啟動應用程式的工作管理員核准狀態、本機服務狀態與設定、選定啟動資料夾項目，或有限本機排程工作設定及易懂觀察結果。命令、帳戶、路徑和定義值預設隱藏。這些資訊不證明實際啟用、信任、工作歸屬或殘留歸屬。停用及移除仍待實作。",
+    "Run/RunOnce、StartupApprovedの生の値、スタートアップアプリのタスクマネージャー承認状態、ローカルサービスの状態と構成、選択したスタートアップフォルダー項目、または制限付きローカルタスクの構成と平易な確認結果を調べます。コマンド、アカウント、パス、定義値は表示を選ぶまで非表示です。有効性、信頼、タスクや残存物の所有権を証明しません。無効化と削除は今後の予定です。"
   ]
 }

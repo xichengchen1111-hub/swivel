@@ -9,6 +9,21 @@ internal static class ScheduledTasksChecks
 {
     internal static void Run(Action<bool, string> check, Action<Action, string> reject)
     {
+        const string definition="<Task xmlns='http://schemas.microsoft.com/windows/2004/02/mit/task'><Triggers/><Actions><Exec><Command>%PRIVATE%\\a.exe</Command><Arguments>SECRET</Arguments></Exec></Actions></Task>";
+        var configured=new Tree();configured.Root.Tasks.Add(new TaskData{Xml=definition});
+        var configResult=ScheduledTasks.ScanWithClock(_=>configured.Open(),()=>TimeSpan.Zero,default,includeConfiguration:true);
+        check(!configResult.Partial&&configResult.Tasks.Single().Configuration?.Actions.Single().Arguments=="SECRET"&&configured.Balanced&&configResult.RetainedTextUnits>=definition.Length,"Definition text charged to shared budget and frozen before source cleanup");
+        foreach(string phase in new[]{"Xml","NextRun"})
+        {
+            var deniedConfig=new Tree();deniedConfig.Root.Tasks.Add(new TaskData{Failure=phase,Xml=definition});
+            var partial=ScheduledTasks.ScanWithClock(_=>deniedConfig.Open(),()=>TimeSpan.Zero,default,includeConfiguration:true);
+            check(partial.Partial&&partial.Tasks.Count==1&&deniedConfig.Balanced&&partial.Issues.Any(i=>i.ErrorCode==0x80070005),"Configuration field denied leaves row and later fields readable: "+phase);
+            using var cancel=new CancellationTokenSource();var cut=new Tree();cut.Root.Tasks.Add(new TaskData{Xml=definition,AfterRead=p=>{if(p==phase)cancel.Cancel();}});
+            reject(()=>ScheduledTasks.ScanWithClock(_=>cut.Open(),()=>TimeSpan.Zero,cancel.Token,includeConfiguration:true),"Configuration post-return cancellation");check(cut.Balanced,"Configuration cancellation releases task/folders/source");
+        }
+        var manyDefinitions=new Tree();for(int n=0;n<20;n++)manyDefinitions.Root.Tasks.Add(new TaskData{Path="\\Task"+n,Xml=definition.Replace("SECRET",new string(' ',32000))});
+        var exhausted=ScheduledTasks.ScanWithClock(_=>manyDefinitions.Open(),()=>TimeSpan.Zero,default,includeConfiguration:true);
+        check(exhausted.Partial&&exhausted.StopReason==ScheduledTaskStopReason.TextLimit&&exhausted.RetainedTextUnits<=ScheduledTasks.MaxTextUnits&&manyDefinitions.Balanced,"Rejected definitions also consume shared text budget before later rows stop");
         var sample = new Tree(); sample.Root.Tasks.Add(new TaskData { Name = "Private task", Path = @"\Private task", State = -9, Enabled = false, Result = uint.MaxValue });
         var report = sample.Scan();
         var actions = new Tree(); actions.Root.Tasks.Add(new TaskData { Paths = new string?[] { @"C:\Apps\Foo\a.exe", null } });
@@ -99,6 +114,7 @@ internal static class ScheduledTasksChecks
     private static Exception Error() => new COMException("SECRET namespace path should never appear in the reason", unchecked((int)0x80070005));
     private sealed class TaskData
     {
+        internal string Xml="";
         internal IReadOnlyList<string?> Paths = Array.Empty<string?>();
         internal string Name = "Task", Path = @"\Task"; internal int State = 3; internal bool Enabled = true; internal uint Result = 0;
         internal string? Failure; internal Action<string>? AfterRead;
@@ -148,6 +164,8 @@ internal static class ScheduledTasksChecks
         {
             public string Name() => data.Read("Name", data.Name); public string Path() => data.Read("Path", data.Path);
             public IReadOnlyList<string?> ExecutablePaths() => data.Paths;
+            public string DefinitionXml()=>data.Read("Xml",data.Xml);
+            public DateTime NextRunTime()=>data.Read("NextRun",DateTime.UnixEpoch);
             public int State() => data.Read("State", data.State); public bool Enabled() => data.Read("Enabled", data.Enabled); public uint LastResult() => data.Read("LastResult", data.Result);
         }
     }
