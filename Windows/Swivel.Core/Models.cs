@@ -264,7 +264,7 @@ public static class Catalog
         ,new("presets.import", "Import Image Presets…", Core.Feature.ImagePresets, RequiresFiles: false)
         ,new("presets.export", "Export Image Presets…", Core.Feature.ImagePresets, RequiresFiles: false)
         ,new("qr.create", "Create QR Code", Core.Feature.QrCodes, RequiresFiles: false)
-        ,new("qr.readflat", "Read QR Image…", Core.Feature.QrCodes, RequiresFiles: false)
+        ,new("qr.readflat", "Read Codes from Image…", Core.Feature.QrCodes, RequiresFiles: false)
         ,new("qr.recoverflat", "Recover Flat QR Text…", Core.Feature.QrCodes, RequiresFiles: false)
         ,new("qr.import", "Import QR Library…", Core.Feature.QrCodes, RequiresFiles: false)
         ,new("qr.importMac", "Import Mac QR Library…", Core.Feature.QrCodes, RequiresFiles: false)

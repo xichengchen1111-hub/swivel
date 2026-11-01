@@ -22,6 +22,12 @@ public interface IMcpHost
     string Run(string action, string path, FileStamp expected, CancellationToken token);
     /// One QR code in an image (QrPhotoRead: exact flat rules first, then the photo reader); a UserError when none.
     QrReadResult ReadCode(string path, CancellationToken token);
+    /// All supported symbols in stable image order. Existing single-QR hosts retain their contract.
+    IReadOnlyList<ImageCodeResult> ReadCodes(string path, CancellationToken token)
+    {
+        var qr=ReadCode(path,token);
+        return new[]{new ImageCodeResult("QR",qr.Text,0,0,0,0,qr,qr.ClockwiseOrientationDegrees)};
+    }
     /// The installed Windows OCR language tags; empty when OCR cannot run here (no MSIX package
     /// identity, or no language installed).
     IReadOnlyList<string> TextLanguages { get; }
@@ -261,7 +267,7 @@ public sealed class McpSession
             Tool("inspect_files", "Inspect files", "Checks that paths are local regular files Swivel can read and lists the plan_action actions and other tools available for each (extract_text for images only where Windows OCR can run). Reads metadata only.", new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
             Tool("extract_text", "Extract text", "Returns the text of images (Windows OCR on this PC with an installed language; needs Swivel's MSIX package) and of plain-text, DOC, DOCX, ODT, RTF, static HTML or EPUB documents (body text only). Read-only; Swivel uses no network. A file's text over " + MaxFileText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " UTF-16 units, or text past " + MaxReplyText.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) + " in one reply, is refused rather than cut. Hosts may still shorten long tool replies, so ask for a few files at a time.",
                 new JsonObject { ["paths"] = Paths(), ["language"] = new JsonObject { ["type"] = "string", ["description"] = "Optional OCR language tag such as en-US or zh-Hans-CN, matched to the installed OCR languages ignoring case. Default: the user's Windows language settings. Ignored for documents." } }, new[] { "paths" }, true, false),
-            Tool("read_codes", "Read QR codes", "Reads one QR code per image: exact flat QR images first, then photos and screenshots of a dark-on-light Model 2 code (any rotation, mild perspective, moderate blur, noise and uneven light; up to 16 megapixels), using the code's error correction. When an image holds several codes only one is returned. Mirrored, light-on-dark, curved or heavily damaged codes, codes with covered corner squares, and barcodes are not read. \"photo\": true marks a code read by the photo reader, with corrected_bytes counting the encoded bytes error correction changed. Read-only.",
+            Tool("read_codes", "Read image codes", "Reads up to 16 QR or linear codes per image (16 megapixels maximum), in top-edge then left-edge order; separate symbols with identical text remain separate. Exact single flat QR fields are unchanged. Other QR codes use sampled geometry and error correction; photo:true and corrected_bytes describe that path. Linear formats: EAN-13, UPC-A, EAN-8, Code 128, Code 39 and ITF, at the four right-angle orientations. Quiet zones, checksums and multi-line agreement are required. Code 39 needs six payload characters plus Mod43 (omitted from value); ITF needs eight digits including Mod10 (retained). UPC-A is the leading-zero EAN-13 alias. Linear text is limited to 128 characters. Finder/scan/candidate/time limits may miss symbols; no Data Matrix, PDF417 or Aztec. Reply text is limited to 400000 UTF-16 units; excess codes are reported in not_read without truncation. Read-only; nothing is opened.",
                 new JsonObject { ["paths"] = Paths() }, new[] { "paths" }, true, false),
             Tool("plan_action", "Plan action", "Prepares one action for 1–100 files without writing anything. Returns a plan_id that apply_plan uses within one hour, once. Only actions that need no choices are offered; Swivel's editors and windows (crop, resize, adjust, annotate, redact, collage, ID photo, upscale, palette reduction, QR making), audio, video and subtitle editing, archives (ZIP, TAR and GZip of files, extraction of ZIP, TAR, GZip and 7z), PDF rendering to images and OCR to a file are not, and image presets are not offered here.",
                 new JsonObject { ["action"] = new JsonObject { ["type"] = "string", ["enum"] = new JsonArray(Actions.Select(a => (JsonNode)a.Id).ToArray()) }, ["paths"] = Paths() }, new[] { "action", "paths" }, true, false),
@@ -452,23 +458,38 @@ public sealed class McpSession
     {
         var paths = PathsArgument(arguments);
         if (paths.FirstOrDefault(p => !Catalog.IsImage(p)) is { } other) throw new McpToolError("read_codes takes PNG, JPEG, BMP, TIFF, GIF, TGA, PSD, WebP, HEIC, HEIF or AVIF images; " + other + " is not one.");
-        var codes = new JsonArray(); var unread = new JsonArray();
+        var codes = new JsonArray(); var unread = new JsonArray(); int total=0;
         foreach (string path in paths)
         {
             token.ThrowIfCancellationRequested();
             try
             {
                 host.Inspect(path);
-                var code = host.ReadCode(path, token);
+                var found = host.ReadCodes(path, token);
                 token.ThrowIfCancellationRequested();
-                if (!IsWellFormed(code.Text)) throw new McpToolError("The code's text is not valid Unicode.");
-                var entry = new JsonObject { ["path"] = path, ["type"] = "QR", ["value"] = code.Text, ["version"] = code.Version, ["correction"] = "LMQH"[(int)code.Correction].ToString() };
-                if (code.Photo) { entry["photo"] = true; entry["corrected_bytes"] = code.CorrectedCodewords; }
-                codes.Add(entry);
+                if(found.Count==0)throw new McpToolError(ImageCodeRead.NoCode);
+                if(found.Count>ImageCodeRead.MaxCodes)throw new McpToolError("The image reader exceeded the 16-code limit.");
+                foreach(var code in found)
+                {
+                    token.ThrowIfCancellationRequested();
+                    try
+                    {
+                        if (!IsWellFormed(code.Text)) throw new McpToolError("The code's text is not valid Unicode.");
+                        if(code.Text.Length>MaxReplyText-total)throw new McpToolError("The reply text limit was reached; ask for fewer images.");
+                        var entry = new JsonObject { ["path"] = path, ["type"] = code.Type, ["value"] = code.Text };
+                        if(code.Qr is{} qr)
+                        {
+                            entry["version"]=qr.Version;entry["correction"]="LMQH"[(int)qr.Correction].ToString();
+                            if(qr.Photo){entry["photo"]=true;entry["corrected_bytes"]=qr.CorrectedCodewords;}
+                        }
+                        total+=code.Text.Length;codes.Add(entry);
+                    }
+                    catch(McpToolError error){unread.Add(new JsonObject{["path"]=path,["error"]=error.Message});}
+                }
             }
             catch (Exception error) when (McpToolError.Expected(error) && error is not OperationCanceledException) { unread.Add(new JsonObject { ["path"] = path, ["error"] = error.Message }); }
         }
-        return new JsonObject { ["codes"] = codes, ["not_read"] = unread, ["note"] = "The text is what the code holds; it does not show who made the code or that a link is safe." };
+        return new JsonObject { ["codes"] = codes, ["not_read"] = unread, ["note"] = "Up to 16 supported codes per image, ordered by top edge then left edge. Finder, scan-line, candidate and time limits can miss codes; this is not proof every code was found. Code 39 requires Mod43 and six payload characters; ITF requires Mod10 and eight digits. The text is what the code holds; it does not show who made the code or that a link is safe." };
     }
 
     private JsonObject PlanAction(JsonObject arguments, CancellationToken token)

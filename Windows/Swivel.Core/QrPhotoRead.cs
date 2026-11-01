@@ -1,29 +1,37 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
 namespace Swivel.Core;
 
 /// The QR reader used by Read QR Image and the agent's read_codes: the strict flat reader first
-/// (its result is returned unchanged), then one bounded, original photo/screenshot attempt.
+/// (its result is returned unchanged), then bounded, original photo/screenshot candidates.
 /// Photo steps: grayscale, block-local threshold, 1:1:3:1:1 finder runs checked across and down,
 /// a few candidate finder triples, a version estimate from finder spacing (confirmed by version
 /// information from version 7), the lower-right alignment square for perspective when found
 /// (else a three-finder affine fit), grid sampling, then the shared format/RS/text decoder.
 public static class QrPhotoRead
 {
-    public const string Scope="Reading first tries exact flat QR images: square, at 0°, 90°, 180° or 270°, with an exact four-module white border and uniform whole-number pixel scaling, read without error correction. If that does not match, a photo reader looks for one dark-on-light Model 2 QR code anywhere in the image (up to 16 megapixels): any rotation, mild perspective (larger codes need a more head-on view), moderate blur, noise, uneven lighting and colored backgrounds. Flat images that fail the exact rules, such as smoothly resized or slightly damaged ones, are read this way too. It finds the three corner squares, uses the lower-right alignment square when it can, samples the grid and then uses the code's own error correction. Only one code is read per image; when several codes are present, which one is read is not defined. Mirrored, light-on-dark, curved, very small (under about 2 pixels per module) or heavily damaged codes, codes with covered corner squares, and barcodes are not supported. Numeric, alphanumeric, ASCII bytes and explicit UTF-8 ECI 26 only; other byte encodings, Kanji, FNC1 and structured append are not supported. Error correction can in rare cases accept a different valid message. This does not authenticate the text or its source.";
+    public const string Scope="Reading first tries exact flat QR images: square, at 0°, 90°, 180° or 270°, with an exact four-module white border and uniform whole-number pixel scaling, read without error correction. If that does not match, a photo reader looks for dark-on-light Model 2 QR codes anywhere in the image (up to 16 megapixels): any rotation, mild perspective (larger codes need a more head-on view), moderate blur, noise, uneven lighting and colored backgrounds. Flat images that fail the exact rules, such as smoothly resized or slightly damaged ones, are read this way too. It finds the three corner squares, uses the lower-right alignment square when it can, samples the grid and then uses the code's own error correction. Up to 16 QR codes are read independently, ordered by their top edge then left edge; identical text at separate positions remains separate. At most 64 finders and 256 triples are considered, with a ten-second soft search budget that may miss additional codes. Mirrored, light-on-dark, curved, very small (under about 2 pixels per module) or heavily damaged codes, and codes with covered corner squares are not supported. Numeric, alphanumeric, ASCII bytes and explicit UTF-8 ECI 26 only; other byte encodings, Kanji, FNC1 and structured append are not supported. Error correction can in rare cases accept a different valid message. This does not authenticate the text or its source.";
     public const string NoCode="No supported QR code was found. The image may contain no QR code, or one that is too small, blurred, curved, mirrored, light-on-dark, partly covered or damaged beyond its error correction, or text in an unsupported format.";
-    internal const int MaxCandidates=12,MaxTriples=16,MaxStoredCandidates=512;
+    internal const int MaxCandidates=64,MaxTriples=256,MaxStoredCandidates=512;
 
     public static QrReadResult Read(PixelImage image,CancellationToken token)
+        =>ReadAll(image,token).FirstOrDefault()?.Qr??throw new UserError(NoCode);
+
+    public static IReadOnlyList<ImageCodeResult> ReadAll(PixelImage image,CancellationToken token)
     {
         token.ThrowIfCancellationRequested();image.Validate();
-        try{return QrFlatRead.Read(image,token);}
+        try
+        {
+            var exact=QrFlatRead.Read(image,token);int border=4*exact.PixelScale;
+            return new[]{new ImageCodeResult("QR",exact.Text,border,border,image.Width-2*border,image.Height-2*border,exact,exact.ClockwiseOrientationDegrees)};
+        }
         catch(UserError error)when(error.Message==QrFlatRead.NoCode){}
         token.ThrowIfCancellationRequested();
-        return ReadPhoto(image,token)??throw new UserError(NoCode);
+        return ReadPhotos(image,token);
     }
 
     private sealed class Finder
@@ -32,19 +40,27 @@ public static class QrPhotoRead
     }
     private readonly record struct Point(double X,double Y);
 
-    internal static QrReadResult? ReadPhoto(PixelImage image,CancellationToken token)
+    private static IReadOnlyList<ImageCodeResult> ReadPhotos(PixelImage image,CancellationToken token)
     {
         int width=image.Width,height=image.Height;
-        if(width<21||height<21)return null;
+        if(width<21||height<21)return Array.Empty<ImageCodeResult>();
+        var watch=Stopwatch.StartNew();
         var dark=Binarize(Gray(image,token),width,height,token);
-        var finders=FindFinders(dark,width,height,token);
+        var finders=FindFinders(dark,width,height,watch,token);
+        var results=new List<ImageCodeResult>();var used=new HashSet<Point>();
         foreach(var (topLeft,topRight,bottomLeft) in Triples(finders,token))
         {
             token.ThrowIfCancellationRequested();
-            var result=TryTriple(dark,width,height,topLeft,topRight,bottomLeft,token);
-            if(result is not null)return result;
+            // A decoded symbol consumes its own three finders, never another symbol's payload.
+            if(used.Contains(topLeft)||used.Contains(topRight)||used.Contains(bottomLeft))continue;
+            if(watch.Elapsed.TotalSeconds>=10)break;
+            var result=TryTriple(dark,width,height,topLeft,topRight,bottomLeft,watch,token);
+            if(result is null)continue;
+            results.Add(result);used.Add(topLeft);used.Add(topRight);used.Add(bottomLeft);
+            if(results.Count==ImageCodeRead.MaxCodes)break;
         }
-        return null;
+        token.ThrowIfCancellationRequested();
+        return results.OrderBy(r=>r.Y).ThenBy(r=>r.X).ToArray();
     }
 
     // Alpha is composited over white, then integer luma (BT.601 weights).
@@ -119,12 +135,12 @@ public static class QrPhotoRead
         return Math.Abs(runs[0]-module)<v&&Math.Abs(runs[1]-module)<v&&Math.Abs(runs[2]-3*module)<3*v&&Math.Abs(runs[3]-module)<v&&Math.Abs(runs[4]-module)<v;
     }
 
-    private static List<Finder> FindFinders(byte[] dark,int width,int height,CancellationToken token)
+    private static List<Finder> FindFinders(byte[] dark,int width,int height,Stopwatch watch,CancellationToken token)
     {
         var found=new List<Finder>();Span<int> runs=stackalloc int[5];var starts=new List<int>();var lengths=new List<int>();
         for(int y=0;y<height;y++)
         {
-            token.ThrowIfCancellationRequested();starts.Clear();lengths.Clear();int row=y*width;
+            token.ThrowIfCancellationRequested();if(watch.Elapsed.TotalSeconds>=10)break;starts.Clear();lengths.Clear();int row=y*width;
             for(int x=0;x<width;)
             {
                 int start=x;byte color=dark[row+x];while(x<width&&dark[row+x]==color)x++;
@@ -206,14 +222,15 @@ public static class QrPhotoRead
             double cross=(p.X-tl.X)*(q.Y-tl.Y)-(p.Y-tl.Y)*(q.X-tl.X);
             var (tr,bl)=cross>0?(p,q):(q,p);
             // Perspective makes near finders larger, so module mismatch counts half; finders seen in
-            // few rows (often data-area look-alikes) rank lower.
+            // few rows (often data-area look-alikes) rank lower. Favor local squares over distant
+            // cross-code squares when a regular grid of codes has the same geometric score.
             int fewest=Math.Min(f[0].Count,Math.Min(f[1].Count,f[2].Count));
-            ranked.Add((aspect-1+right+(maxModule/minModule-1)/2+1.0/fewest,new(tl.X,tl.Y),new(tr.X,tr.Y),new(bl.X,bl.Y)));
+            ranked.Add((aspect-1+right+(maxModule/minModule-1)/2+1.0/fewest+Math.Max(s1,s2)/module*0.001,new(tl.X,tl.Y),new(tr.X,tr.Y),new(bl.X,bl.Y)));
         }
         foreach(var t in ranked.OrderBy(t=>t.Score).Take(MaxTriples))yield return (t.A,t.B,t.C);
     }
 
-    private static QrReadResult? TryTriple(byte[] dark,int width,int height,Point tl,Point tr,Point bl,CancellationToken token)
+    private static ImageCodeResult? TryTriple(byte[] dark,int width,int height,Point tl,Point tr,Point bl,Stopwatch watch,CancellationToken token)
     {
         double angle=Math.Atan2(tr.Y-tl.Y,tr.X-tl.X);
         // Finder runs across a turned square are longer by 1/cos of the turn folded into 0–45°.
@@ -235,12 +252,12 @@ public static class QrPhotoRead
             int dimension=first;
             for(int pass=0;pass<2;pass++)
             {
-                token.ThrowIfCancellationRequested();if(!tried.Add(dimension))break;
+                token.ThrowIfCancellationRequested();if(watch.Elapsed.TotalSeconds>=10)return null;if(!tried.Add(dimension))break;
                 int? confirmed=null;
                 foreach(bool alignment in new[]{true,false})
                 {
                     if(alignment&&dimension==21)continue;
-                    var transform=Fit(dark,width,height,tl,tr,bl,dimension,module,stretch,alignment,token);
+                    var transform=Fit(dark,width,height,tl,tr,bl,dimension,module,stretch,alignment,watch,token);
                     if(transform is null)continue;
                     var grid=Sample(dark,width,height,transform,dimension,token);
                     if(grid is null)continue;
@@ -254,7 +271,11 @@ public static class QrPhotoRead
                     var decoded=QrCode.ReadSampledGrid(grid,Math.Max(1,(int)Math.Round(module)),token);
                     if(decoded is null)continue;
                     int degrees=((int)Math.Round(angle*180/Math.PI)%360+360)%360;
-                    return decoded.Result with{ClockwiseOrientationDegrees=degrees,Photo=true,CorrectedCodewords=decoded.CorrectedCodewords,CorrectedBlocks=decoded.CorrectedBlocks};
+                    var result=decoded.Result with{ClockwiseOrientationDegrees=degrees,Photo=true,CorrectedCodewords=decoded.CorrectedCodewords,CorrectedBlocks=decoded.CorrectedBlocks};
+                    var bounds=new[]{Map(transform,0,0),Map(transform,dimension,0),Map(transform,0,dimension),Map(transform,dimension,dimension)};
+                    int x0=Math.Clamp((int)Math.Floor(bounds.Min(p=>p.X)),0,width-1),y0=Math.Clamp((int)Math.Floor(bounds.Min(p=>p.Y)),0,height-1);
+                    int x1=Math.Clamp((int)Math.Ceiling(bounds.Max(p=>p.X)),x0+1,width),y1=Math.Clamp((int)Math.Ceiling(bounds.Max(p=>p.Y)),y0+1,height);
+                    return new("QR",result.Text,x0,y0,x1-x0,y1-y0,result,degrees);
                 }
                 if(confirmed is null)break;dimension=confirmed.Value;
             }
@@ -266,7 +287,7 @@ public static class QrPhotoRead
 
     // Module coordinates → image: a projective fit through the finder centers and either the
     // detected lower-right alignment center or the affine fourth corner.
-    private static double[]? Fit(byte[] dark,int width,int height,Point tl,Point tr,Point bl,int dimension,double module,double stretch,bool alignment,CancellationToken token)
+    private static double[]? Fit(byte[] dark,int width,int height,Point tl,Point tr,Point bl,int dimension,double module,double stretch,bool alignment,Stopwatch watch,CancellationToken token)
     {
         double far=dimension-3.5;
         var source=new List<Point>{new(3.5,3.5),new(far,3.5),new(3.5,far)};var target=new List<Point>{tl,tr,bl};
@@ -274,7 +295,7 @@ public static class QrPhotoRead
         {
             double a=dimension-6.5;var affine=Solve(source.Append(new(far,far)).ToArray(),target.Append(new(tr.X+bl.X-tl.X,tr.Y+bl.Y-tl.Y)).ToArray());
             if(affine is null)return null;var guess=Map(affine,a,a);
-            var found=FindAlignment(dark,width,height,guess,Map(affine,a+1,a),Map(affine,a,a+1),module,stretch,Math.Max(7,dimension*0.12),token);
+            var found=FindAlignment(dark,width,height,guess,Map(affine,a+1,a),Map(affine,a,a+1),module,stretch,Math.Max(7,dimension*0.12),watch,token);
             if(found is null)return null;source.Add(new(a,a));target.Add(found.Value);
         }
         else{source.Add(new(far,far));target.Add(new(tr.X+bl.X-tl.X,tr.Y+bl.Y-tl.Y));}
@@ -284,10 +305,10 @@ public static class QrPhotoRead
     // Light-dark-light runs of about one module each, checked across and down; the candidate whose
     // surroundings best match the 5×5 alignment square (sampled along the fitted module axes) wins,
     // then the one nearest the guess.
-    private static Point? FindAlignment(byte[] dark,int width,int height,Point guess,Point right,Point down,double module,double stretch,double modules,CancellationToken token)
+    private static Point? FindAlignment(byte[] dark,int width,int height,Point guess,Point right,Point down,double module,double stretch,double modules,Stopwatch watch,CancellationToken token)
     {
         // The three-finder guess drifts further under perspective as codes get larger.
-        double expected=module*stretch;int radius=(int)Math.Ceiling(module*modules);
+        double expected=module*stretch;int maxRun=(int)Math.Ceiling(expected*1.7)+1;int radius=(int)Math.Ceiling(module*modules);
         double ux=right.X-guess.X,uy=right.Y-guess.Y,vx=down.X-guess.X,vy=down.Y-guess.Y;
         int Matches(double cx,double cy)
         {
@@ -309,15 +330,15 @@ public static class QrPhotoRead
             center=0;int px=(int)cx,py=(int)cy;if(px<0||py<0||px>=width||py>=height)return false;
             bool Dark(int i)=>horizontal?dark[py*width+i]==1:dark[i*width+px]==1;
             int limit=horizontal?width:height,origin=horizontal?px:py;if(!Dark(origin))return false;
-            int i=origin,mid=0;while(i>=0&&Dark(i)){mid++;i--;}int low=i+1,before=0;
-            while(i>=0&&!Dark(i)){before++;i--;}if(i<0)return false;
-            i=origin+1;while(i<limit&&Dark(i)){mid++;i++;}int high=i,after=0;
-            while(i<limit&&!Dark(i)){after++;i++;}if(i>=limit)return false;
+            int i=origin,mid=0;while(i>=0&&Dark(i)&&mid<=maxRun){mid++;i--;}if(mid>maxRun)return false;int low=i+1,before=0;
+            while(i>=0&&!Dark(i)&&before<=maxRun){before++;i--;}if(i<0||before>maxRun)return false;
+            i=origin+1;while(i<limit&&Dark(i)&&mid<=maxRun){mid++;i++;}if(mid>maxRun)return false;int high=i,after=0;
+            while(i<limit&&!Dark(i)&&after<=maxRun){after++;i++;}if(i>=limit||after>maxRun)return false;
             if(!Near(mid)||!Near(before)||!Near(after))return false;center=(low+high)/2.0;return true;
         }
         for(int y=y0;y<=y1;y++)
         {
-            token.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();if(watch.Elapsed.TotalSeconds>=10)return null;
             for(int x=x0;x<=x1;x++)
             {
                 if(dark[y*width+x]!=1||x>0&&dark[y*width+x-1]==1)continue;

@@ -111,6 +111,7 @@ internal static class Program
             Group("RetouchToolsChecks", () => RetouchToolsChecks.Run(directory, Check, Reject));
             Group("QrToolsChecks", () => QrToolsChecks.Run(directory, Check, Reject));
             Group("QrReadNativeChecks", () => QrReadNativeChecks.Run(directory,Check,Reject));
+            Group("MultiCodeReadNativeChecks", () => MultiCodeReadNativeChecks.Run(directory,Check,Reject));
             Group("QrRecoverySourceNativeChecks", () => QrRecoverySourceNativeChecks.Run(directory,Check,Reject));
             Group("QrRecoveryDialogNativeChecks", () => QrRecoveryDialogNativeChecks.Run(Check,Reject));
             Group("QrMacExportNativeChecks", () => QrMacExportNativeChecks.Run(directory,Check,Reject));
