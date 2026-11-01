@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Xml.Linq;
 using Swivel.Core;
 
 internal static class MetadataSelectionChecks
@@ -15,7 +16,7 @@ internal static class MetadataSelectionChecks
     private static readonly int[] Sizes={0,1,1,2,4,8,1,1,2,4,8,4,8};
     private static readonly string[] Groups={"Location","Camera and device","Dates","Author and copyright","Comments and descriptions","Software","Thumbnail","Maker note","XMP","IPTC","PNG text"};
     // A sparse independent fixture writer, never a production metadata writer.
-    internal static byte[] Tiff(bool little,bool image,int pages=1)
+    internal static byte[] Tiff(bool little,bool image,int pages=1,byte[]? thumbnail=null)
     {
         var b=new byte[24576];int data=12000;
         void S(int p,int n){if(little)BinaryPrimitives.WriteUInt16LittleEndian(b.AsSpan(p),(ushort)n);else BinaryPrimitives.WriteUInt16BigEndian(b.AsSpan(p),(ushort)n);}
@@ -39,7 +40,9 @@ internal static class MetadataSelectionChecks
         for(int page=0;page<pages;page++)
         {
             int root=16+page*2048,exif=512+page*2048,gps=768+page*2048,thumb=1024+page*2048;
-            var entries=new List<(int,int,uint,byte[])>{Text(270,"SEL_COMMENT_"+page),Text(271,"SEL_CAMERA_"+page),Text(272,"SEL_MODEL_"+page),(274,3,1,Short(6)),Text(305,"SEL_SOFTWARE_"+page),Text(306,"2026:11:01 01:02:0"+page),Text(315,"SEL_AUTHOR_"+page),(700,1,11,Encoding.ASCII.GetBytes("SEL_XMP___"+page)),Text(33432,"SEL_COPYRIGHT_"+page),(33723,7,12,Encoding.ASCII.GetBytes("SEL_IPTC___"+page)),(34665,4,1,Long(exif)),(34853,4,1,Long(gps))};
+            var xmp=Encoding.UTF8.GetBytes("<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\" xmlns:sel=\"urn:swivel:test\" sel:marker=\"SEL_XMP___"+page+"\"/></rdf:RDF></x:xmpmeta>");
+            var iptcText=Encoding.ASCII.GetBytes("SEL_IPTC___"+page);var iptc=new byte[]{0x1c,2,5,0,(byte)iptcText.Length}.Concat(iptcText).ToArray();
+            var entries=new List<(int,int,uint,byte[])>{Text(270,"SEL_COMMENT_"+page),Text(271,"SEL_CAMERA_"+page),Text(272,"SEL_MODEL_"+page),(274,3,1,Short(6)),Text(305,"SEL_SOFTWARE_"+page),Text(306,"2026:11:01 01:02:0"+page),Text(315,"SEL_AUTHOR_"+page),(700,1,(uint)xmp.Length,xmp),Text(33432,"SEL_COPYRIGHT_"+page),(33723,7,(uint)iptc.Length,iptc),(34665,4,1,Long(exif)),(34853,4,1,Long(gps))};
             if(image)
             {
                 int pixel=22000+page*64;new byte[]{11,(byte)(31+page),51,71,91,111}.CopyTo(b,pixel);
@@ -47,11 +50,11 @@ internal static class MetadataSelectionChecks
                 var icc=TiffMetadataChecks.Icc();entries.Add((34675,7,(uint)icc.Length,icc));
             }
             Ifd(root,image?(page+1<pages?root+2048:0):thumb,entries);
-            Ifd(exif,0,new[]{Text(36867,"2025:09:03 04:05:0"+page),(37500,7,11u,Encoding.ASCII.GetBytes("SEL_MAKER_"+page)),(37510,7,14u,Encoding.ASCII.GetBytes("SEL_USERCOM_"+page+"!")),Text(42033,"SEL_SERIAL_"+page)});
-            Ifd(gps,0,new[]{(0,1,4u,new byte[]{2,3,0,0}),(1,2,2u,new byte[]{78,0}),(27,7,13u,Encoding.ASCII.GetBytes("SEL_LOCATION"+page))});
+            Ifd(exif,0,new[]{Text(36867,"2025:09:03 04:05:0"+page),(37500,7,11u,Encoding.ASCII.GetBytes("SEL_MAKER_"+page)),(37510,7,22u,Encoding.ASCII.GetBytes("ASCII\0\0\0SEL_USERCOM_"+page+"!")),Text(42033,"SEL_SERIAL_"+page)});
+            Ifd(gps,0,new[]{(0,1,4u,new byte[]{2,3,0,0}),(1,2,2u,new byte[]{78,0}),(27,7,21u,Encoding.ASCII.GetBytes("ASCII\0\0\0SEL_LOCATION"+page))});
             if(!image)
             {
-                int payload=21000;var jpg=new byte[]{255,216}.Concat(Encoding.ASCII.GetBytes("SEL_THUMBNAIL_"+page)).Concat(new byte[]{255,217}).ToArray();jpg.CopyTo(b,payload);
+                int payload=21000;var jpg=thumbnail??new byte[]{255,216}.Concat(Encoding.ASCII.GetBytes("SEL_THUMBNAIL_"+page)).Concat(new byte[]{255,217}).ToArray();jpg.CopyTo(b,payload);
                 Ifd(thumb,0,new[]{(256,3,1u,Short(1)),(257,3,1u,Short(1)),(259,3,1u,Short(6)),(513,4,1u,Long(payload)),(514,4,1u,Long(jpg.Length))});
             }
         }
@@ -107,6 +110,10 @@ internal static class MetadataSelectionChecks
             foreach(bool little in new[]{true,false})foreach(string format in new[]{"jpeg","png","tiff"})
             {
                 var tiff=Tiff(little,format=="tiff",format=="tiff"?2:1);var before=ParseTiff(tiff,format=="tiff");
+                foreach(var packet in before.Values.Values.Where(v=>v.Tag==700))
+                    Check(XDocument.Parse(Encoding.UTF8.GetString(packet.Bytes)).Root?.Name==XName.Get("xmpmeta","adobe:ns:meta/"),format+" fixture has well-formed XMP for native readers");
+                foreach(var packet in before.Values.Values.Where(v=>v.Tag==33723))
+                    Check(packet.Bytes.AsSpan(0,3).SequenceEqual(new byte[]{0x1c,2,5})&&BinaryPrimitives.ReadUInt16BigEndian(packet.Bytes.AsSpan(3))==packet.Bytes.Length-5,format+" fixture has a complete IPTC dataset for native readers");
                 var entropy=new byte[]{1,2,255,0,3};var frame=JpegMetadataChecks.Frame();var scan=JpegMetadataChecks.Scan();var icc=JpegMetadataChecks.Icc(1,1);
                 var outerXmp=JpegMetadataChecks.Segment(0xe1,"http://ns.adobe.com/xap/1.0/\0OUTER_XMP_MARKER"u8.ToArray());var outerIptc=JpegMetadataChecks.Segment(0xed,"OUTER_IPTC_MARKER"u8.ToArray());
                 var exif=JpegMetadataChecks.Segment(0xe1,"Exif\0\0"u8.ToArray().Concat(tiff).ToArray());var comment=JpegMetadataChecks.Segment(0xfe,"OUTER_COMMENT_MARKER"u8.ToArray());
