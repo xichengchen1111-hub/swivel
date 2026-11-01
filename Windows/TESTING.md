@@ -1327,6 +1327,13 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.141 — merged E05 several codes and barcodes, C06 selective metadata, F09 service and task configuration (Codex) (2026-11-01)
+
+- Each branch passed its own Windows x64 CI and Codex review before merging: E05 41260817888 (core 695,283, native 74,211; no P1/P2), C06 41262218001 (core 697,563, native 76,761; no P1/P2), F09 41261015207 (core 695,172, native 74,666; 1 P2 fixed, CI passed, not re-reviewed).
+- C06 needed two CI runs. 41260975158 failed because real WIC rejected the sparse fixture while decoding the original; the fixture was corrected and WIC read-back of real outputs stays in the check.
+- After merging: core 698,038 on Mac. MERGED_CI_RESULT
+- Not tested: hand use on real Windows; real camera photos of codes and barcodes; the three windows' UI, DPI and Narrator; services and tasks on a real machine beyond the CI runner's own; WIC on metadata from real cameras; ARM64.
+
 ## Windows0.140 — merged A07 direct drop, D04 Color and Sound, F09 drive identity and slow machine (Codex) (2026-10-31)
 
 - Each branch passed its own Windows x64 CI and Codex review before merging: A07 41192723537 (core 694,660, native 74,148; 1 P2 fixed, then redesigned, second review no P1/P2), D04 41189717983 (core 692,618, native 74,081; no P1/P2), F09 41190335216 (core 692,792, native 74,097; 1 P2 fixed, CI passed, not re-reviewed).

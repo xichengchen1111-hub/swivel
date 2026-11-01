@@ -1047,6 +1047,14 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.141 合并第十五轮：E05 一图多码与常见条码、C06 选择性删除元数据、F09 服务与任务配置诊断（Codex 编写）
+
+分支 `codex/win-e05-multicode`（e50a110）、`codex/win-c06-selective`（f5e32f4）、`codex/win-f09-svcconfig`（7d4e4a0）。Strings.json 三方 JSON 合并，无同键冲突；测试 csproj 两边都保留；其余自动合并。三项都没有新 Action ID。
+
+- E05：Windows 没有适合静态图片的通用条码 API，解码器写在 Core。Code 39 和 ITF 校验弱，为防误报要求 Mod43/6 字符、Mod10/8 位，代价是不带校验的 Code 39 读不出。审查无 P1/P2。
+- C06：XMP/IPTC 整块删除，保留的块可能重复已删的 EXIF 值，所以尽力比对并提醒。真实 WIC 在解码原始夹具时拒收过不合法的 XMP/IPTC 和缩略图（CI 41260975158），修的是夹具。审查无 P1/P2，留下一个 P3：输出名后缀未翻译，与现有 ` metadata removed` 一致。
+- F09：SCM 和服务只用查询权限，单项拒绝访问只显示在该行。审查 P2 已修：带引号但无扩展名的路径 Windows 可能补 `.exe`，现在显示未知而不是程序缺失（修后未再审）。
+
 ## 0.140 合并第十四轮：A07 直接拖到动作、D04 Color 与 Sound、F09 驱动器身份与慢机诊断（Codex 编写）
 
 分支 `codex/win-a07-gesture`（45e0d0a）、`codex/win-d04-color`（aac6733）、`codex/win-f09-drives`（f55c083），另有只改文档的 `codex/win-progress-count`（f8a0d93，把 PROGRESS 的剩余表改为 23 项）。Strings.json 三方 JSON 合并，无同键冲突；App.cs 在 `RunActionAsync` 开头冲突，保留 A07 的取消注册并接上 F09 的 `doctor.slow`；Program.cs、Models.cs 自动合并。
