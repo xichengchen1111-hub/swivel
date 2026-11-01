@@ -9,6 +9,9 @@ internal static class ConfigurationDiagnosisChecks
     internal static void Run(Action<bool,string> check, Action<Action,string> reject)
     {
         check(ConfigurationDiagnosis.ServiceTarget("\"C:\\Program Files\\App\\a.exe\" -x", @"C:\Windows").Path == @"C:\Program Files\App\a.exe", "Quoted service executable excludes arguments");
+        foreach(string command in new[]{"\"C:\\Windows\\System32\\spoolsv\"", "\"C:\\Windows\\System32\\spoolsv\" -x", "\"C:\\App.exe\\spoolsv\"", "\"C:\\Program Files\\App\\spoolsv\"", "\"%SystemRoot%\\System32\\spoolsv\""})
+            check(ConfigurationDiagnosis.ServiceTarget(command,@"C:\Windows") is {Path:null,UnquotedSpaces:false},"Quoted extensionless service command stays unknown instead of probing an exact file");
+        check(ConfigurationDiagnosis.ServiceTarget("\"C:\\App\\service.com\" -x",@"C:\Windows").Path==@"C:\App\service.com","Quoted explicit extension remains an exact target");
         check(ConfigurationDiagnosis.ServiceTarget(@"C:\Windows\System32\svchost.exe -k netsvcs", @"C:\Windows").Path == @"C:\Windows\System32\svchost.exe", "svchost arguments never become a file target");
         check(ConfigurationDiagnosis.ServiceTarget(@"C:\Program Files\App\a.exe -x", @"C:\Windows") is { Path:null, UnquotedSpaces:true }, "Unquoted space path is visible but never guessed for probing");
         foreach(string path in new[]{@"\SystemRoot\System32\drivers\a.sys", @"%SystemRoot%\System32\drivers\a.sys", @"\??\C:\Windows\System32\drivers\a.sys"})

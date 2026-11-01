@@ -18,6 +18,11 @@ internal static class ConfigurationNativeChecks
         foreach(string path in new[]{@"\\server\share\file.exe",@"%PRIVATE%\file.exe",@"C:\..\file.exe"})check(ConfigurationPathProbe.Read(path,default)==ConfigurationPathState.Unknown,"Unsupported diagnostic path never probes a network, variable or traversal path");
         string file=Path.Combine(directory,"config-probe.exe");File.WriteAllText(file,"ordinary metadata fixture");
         check(ConfigurationPathProbe.Read(file,default)==ConfigurationPathState.Present&&ConfigurationPathProbe.Read(file+".missing",default)==ConfigurationPathState.Missing,"Attribute-only diagnostic distinguishes present and absent local files");
+        string command="\""+file[..^4]+"\" -x";
+        var state=ConfigurationPathProbe.Read(ConfigurationDiagnosis.ServiceTarget(command,Environment.GetFolderPath(Environment.SpecialFolder.Windows)).Path,default);
+        check(state==ConfigurationPathState.Unknown,"Quoted extensionless command stays unknown when only its .exe file exists");
+        var extensionlessService=new ServiceRecord("fixture","",0x10,4,0){Configuration=new(3,"LocalSystem",command,Array.Empty<string>()),BinaryState=state};
+        check(!ConfigurationDiagnosis.Services(extensionlessService,new[]{extensionlessService}).Contains(ConfigurationDiagnosis.BinaryMissing),"Extensionless command never produces a false binary-missing finding");
         check(File.ReadAllText(file)=="ordinary metadata fixture","Diagnostic probe leaves contents unchanged");
         IntPtr data=Marshal.AllocHGlobal(ServiceReader.ConfigBytes);
         try

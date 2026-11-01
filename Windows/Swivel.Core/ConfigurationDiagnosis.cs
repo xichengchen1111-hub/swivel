@@ -113,6 +113,8 @@ public static class ConfigurationDiagnosis
         {
             int end=text.IndexOf('"',1);if(end<0||end+1<text.Length&&!char.IsWhiteSpace(text[end+1]))return new(null);
             target=text[1..end];
+            // Windows may append .exe; an exact extensionless metadata probe cannot establish a missing binary.
+            if(!target[(target.LastIndexOf('\\')+1)..].Contains('.'))return new(null);
         }
         else
         {
