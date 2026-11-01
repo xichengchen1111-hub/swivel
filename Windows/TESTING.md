@@ -1331,7 +1331,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Each branch passed its own Windows x64 CI and Codex review before merging: E05 41260817888 (core 695,283, native 74,211; no P1/P2), C06 41262218001 (core 697,563, native 76,761; no P1/P2), F09 41261015207 (core 695,172, native 74,666; 1 P2 fixed, CI passed, not re-reviewed).
 - C06 needed two CI runs. 41260975158 failed because real WIC rejected the sparse fixture while decoding the original; the fixture was corrected and WIC read-back of real outputs stays in the check.
-- After merging: core 698,038 on Mac. MERGED_CI_RESULT
+- After merging: core 698,038 on Mac. Windows CI 41276501687 on the merged branch passed (x64; core 698,038, native 77,278).
 - Not tested: hand use on real Windows; real camera photos of codes and barcodes; the three windows' UI, DPI and Narrator; services and tasks on a real machine beyond the CI runner's own; WIC on metadata from real cameras; ARM64.
 
 ## Windows0.140 — merged A07 direct drop, D04 Color and Sound, F09 drive identity and slow machine (Codex) (2026-10-31)
