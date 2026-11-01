@@ -407,7 +407,7 @@ public sealed class MainWindow : Window
         page.Children.Add(UI.Text(app.L("Open a QR code to choose a garden template and season, then explore the original Windows 3D relief. Flat QR copying and PNG export stay available.")));
         if (!app.Prefs.IsOn(Feature.QrCodes)) { page.Children.Add(UI.Text(app.L("Enable QR & Barcodes in Settings first."))); return page; }
         page.Children.Add(UI.Button(app.L("Create QR Code"),async () => await app.RunActionAsync(new("qr.create","Create QR Code"),Array.Empty<string>(),this,SetStatus)));
-        page.Children.Add(UI.Button(app.L("Read QR Image…"),async()=>await app.RunActionAsync(new("qr.readflat","Read QR Image…"),Array.Empty<string>(),this,SetStatus)));
+        page.Children.Add(UI.Button(app.L("Read Codes from Image…"),async()=>await app.RunActionAsync(new("qr.readflat","Read Codes from Image…"),Array.Empty<string>(),this,SetStatus)));
         var backups=new WrapPanel();backups.Children.Add(UI.Button(app.L("Import QR Library…"),async()=>await app.RunActionAsync(new("qr.import","Import QR Library…"),Array.Empty<string>(),this,SetStatus)));backups.Children.Add(UI.Button(app.L("Export QR Library…"),async()=>await app.RunActionAsync(new("qr.export","Export QR Library…"),Array.Empty<string>(),this,SetStatus)));page.Children.Add(backups);
         page.Children.Add(UI.Button(app.L("Import Mac QR Library…"), async () => await app.RunActionAsync(new("qr.importMac", "Import Mac QR Library…"), Array.Empty<string>(), this, SetStatus)));
         page.Children.Add(UI.Button(app.L("Export QR Images for Mac…"), async () => await app.RunActionAsync(new("qr.exportMacImages", "Export QR Images for Mac…"), Array.Empty<string>(), this, SetStatus)));

@@ -19183,5 +19183,90 @@
     "此卷包含多个磁盘区段；已禁用弹出。",
     "此磁碟區包含多個磁碟區段；已停用退出。",
     "このボリュームには複数のディスク領域があるため、取り出せません。"
+  ],
+  "Read Codes from Image": [
+    "读取图片中的码",
+    "讀取圖片中的碼",
+    "画像内のコードを読み取る"
+  ],
+  "{0} codes read · top edge, then left edge · maximum 16": [
+    "已读取 {0} 个码 · 按上边缘、左边缘排序 · 最多 16 个",
+    "已讀取 {0} 個碼 · 依上緣、左緣排序 · 最多 16 個",
+    "{0} 個を読み取り · 上端、左端の順 · 最大 16 個"
+  ],
+  "Code {0} · {1}": [
+    "码 {0} · {1}",
+    "碼 {0} · {1}",
+    "コード {0} · {1}"
+  ],
+  "Orientation: {0}° clockwise · {1} characters": [
+    "方向：顺时针 {0}° · {1} 个字符",
+    "方向：順時針 {0}° · {1} 個字元",
+    "向き：時計回り {0}° · {1} 文字"
+  ],
+  "Decoded Code {0}": [
+    "已解码的码 {0}",
+    "已解碼的碼 {0}",
+    "読み取ったコード {0}"
+  ],
+  "Copy Code {0}": [
+    "复制码 {0}",
+    "複製碼 {0}",
+    "コード {0} をコピー"
+  ],
+  "QR": [
+    "二维码",
+    "QR 碼",
+    "QR コード"
+  ],
+  "EAN-13": [
+    "EAN-13",
+    "EAN-13",
+    "EAN-13"
+  ],
+  "UPC-A": [
+    "UPC-A",
+    "UPC-A",
+    "UPC-A"
+  ],
+  "EAN-8": [
+    "EAN-8",
+    "EAN-8",
+    "EAN-8"
+  ],
+  "Code 128": [
+    "Code 128",
+    "Code 128",
+    "Code 128"
+  ],
+  "Code 39": [
+    "Code 39",
+    "Code 39",
+    "Code 39"
+  ],
+  "ITF": [
+    "ITF",
+    "ITF",
+    "ITF"
+  ],
+  "No supported code was found. Try a clearer image with complete QR corner squares or complete barcode bars and quiet zones. Code 39 and ITF also need their check digits and minimum lengths.": [
+    "未找到支持的码。请使用更清晰的图片，保留二维码的全部定位方块，或条码的完整条纹与静区。Code 39 和 ITF 还需要校验位及最短长度。",
+    "找不到支援的碼。請使用更清晰的圖片，保留 QR 碼的全部定位方塊，或條碼的完整條紋與靜區。Code 39 和 ITF 還需要檢查碼及最短長度。",
+    "対応するコードが見つかりませんでした。QR の位置検出パターン全体、またはバーコードの全バーとクワイエットゾーンを含む、より鮮明な画像を試してください。Code 39 と ITF は検査桁と最小文字数も必要です。"
+  ],
+  "Reading first tries exact flat QR images: square, at 0°, 90°, 180° or 270°, with an exact four-module white border and uniform whole-number pixel scaling, read without error correction. If that does not match, a photo reader looks for dark-on-light Model 2 QR codes anywhere in the image (up to 16 megapixels): any rotation, mild perspective (larger codes need a more head-on view), moderate blur, noise, uneven lighting and colored backgrounds. Flat images that fail the exact rules, such as smoothly resized or slightly damaged ones, are read this way too. It finds the three corner squares, uses the lower-right alignment square when it can, samples the grid and then uses the code's own error correction. Up to 16 QR codes are read independently, ordered by their top edge then left edge; identical text at separate positions remains separate. At most 64 finders and 256 triples are considered, with a ten-second soft search budget that may miss additional codes. Mirrored, light-on-dark, curved, very small (under about 2 pixels per module) or heavily damaged codes, and codes with covered corner squares are not supported. Numeric, alphanumeric, ASCII bytes and explicit UTF-8 ECI 26 only; other byte encodings, Kanji, FNC1 and structured append are not supported. Error correction can in rare cases accept a different valid message. This does not authenticate the text or its source.": [
+    "先尝试精确的平面二维码：正方形、0°／90°／180°／270°、精确四模块白边、均匀整数倍像素缩放，无纠错读取。若不符合，照片读取器会在最大 1600 万像素的整张图片中查找深色码、浅色底的 Model 2 二维码：支持任意旋转、轻微透视（大码需要更正面的视角）、适度模糊、噪声、不均匀照明和彩色背景。不符合严格规则的平面图（如平滑缩放或轻微损坏）也走此路径。寻找三个定位方块，尽可能使用右下校正方块，采样网格后使用码本身的纠错。最多独立读取 16 个二维码，按上边缘、再按左边缘排序；不同位置的相同内容分别保留。最多考虑 64 个定位候选和 256 个三元组，搜索软时限十秒，可能遗漏其他码。不支持镜像、浅色码深色底、弯曲、过小（每模块约不足 2 像素）、严重损坏或定位方块被遮挡的码。只支持数字、字母数字、ASCII 字节和明确的 UTF-8 ECI 26；不支持其他字节编码、Kanji、FNC1 或结构追加。极少数情况下纠错可能接受另一条有效消息。结果不能验证文字或来源。",
+    "先嘗試精確的平面 QR 碼：正方形、0°／90°／180°／270°、精確四模組白邊、均勻整數倍像素縮放，無糾錯讀取。若不符合，照片讀取器會在最大 1600 萬像素的整張圖片中尋找深色碼、淺色底的 Model 2 QR 碼：支援任意旋轉、輕微透視（大碼需要更正面的視角）、適度模糊、雜訊、不均勻照明和彩色背景。不符合嚴格規則的平面圖（如平滑縮放或輕微損壞）也走此路徑。尋找三個定位方塊，儘可能使用右下校正方塊，取樣網格後使用碼本身的糾錯。最多獨立讀取 16 個 QR 碼，依上緣、再依左緣排序；不同位置的相同內容分別保留。最多考慮 64 個定位候選和 256 個三元組，搜尋軟時限十秒，可能遺漏其他碼。不支援鏡像、淺色碼深色底、彎曲、過小（每模組約不足 2 像素）、嚴重損壞或定位方塊被遮擋的碼。只支援數字、英數、ASCII 位元組和明確的 UTF-8 ECI 26；不支援其他位元組編碼、Kanji、FNC1 或結構附加。極少數情況下糾錯可能接受另一條有效訊息。結果不能驗證文字或來源。",
+    "まず厳密な平面 QR を試します。正方形、0°／90°／180°／270°、正確な 4 モジュールの白い余白、均一な整数倍ピクセルで、誤り訂正せずに読み取ります。一致しない場合、写真読み取りで最大 1600 万画素の画像内から明るい背景の暗い Model 2 QR を探します。任意の回転、軽い遠近変形（大きいコードほど正面が必要）、適度なぼけ、ノイズ、照明むら、色付き背景に対応します。滑らかに拡大縮小した画像や軽く損傷した平面画像もこの経路で読みます。3 つの位置検出パターンを見つけ、可能なら右下の補正パターンを使い、格子を標本化して QR 自身の誤り訂正を使います。最大 16 個を個別に読み、上端、左端の順に並べます。別の位置の同じ内容も保持します。位置候補は 64、三つ組は 256 まで、検索のソフト制限は 10 秒で、他のコードを見逃す場合があります。鏡像、反転色、湾曲、小さすぎるコード（約 2 ピクセル／モジュール未満）、大きな損傷、位置検出パターンの隠れには対応しません。数字、英数字、ASCII バイト、明示的な UTF-8 ECI 26 のみ対応し、他のバイト符号、漢字モード、FNC1、構造的連接は対象外です。まれに訂正で別の有効なメッセージを受理することがあります。文字や出所を認証するものではありません。"
+  ],
+  "Reads up to 16 codes per image (16 megapixels maximum), ordered by their top edge then left edge. Separate symbols with identical text remain separate results. Exact single QR images keep the strict flat result; other QR codes use the photo reader and error correction. Linear reading supports dark-on-light EAN-13, UPC-A, EAN-8, Code 128, Code 39 and ITF at 0°, 90°, 180° or 270°, with complete quiet zones, check digits and agreement across multiple scan lines. UPC-A is reported for EAN-13 with a leading zero. Code 39 requires a Mod-43 check character and at least six payload characters; the check character is not returned. ITF requires at least eight digits including its Mod-10 check digit, which is returned. Linear payloads are limited to 128 characters. Code 128 FNC1 becomes a group separator except at the start, where it is omitted; GS1 fields are not interpreted. FNC2/3/4 and extended Code 39 are not decoded. At most 512 scan lines per axis are sampled; very short bars may be missed and extremely close identical symbols may merge. Small, cropped, oblique, curved or heavily blurred symbols may be missed. Finder, scan-line, candidate and time budgets may omit additional codes; an empty result does not prove none exist. Data Matrix, PDF417 and Aztec are not supported. Nothing is opened automatically, and decoded text does not authenticate its source.": [
+    "每张图片最多读取 16 个码（图片最大 1600 万像素），按上边缘、再按左边缘排序。不同位置的相同内容会分别保留。单个精确二维码保持原有严格平面结果；其他二维码使用照片读取与纠错。线性条码支持深色条、浅色底的 EAN-13、UPC-A、EAN-8、Code 128、Code 39 和 ITF，方向为 0°、90°、180° 或 270°；需要完整静区、校验位及多条扫描线一致。前导零的 EAN-13 报为 UPC-A。Code 39 至少需要六个内容字符及 Mod-43 校验字符；返回内容不含校验字符。ITF 至少需要八位数字（含 Mod-10 校验位），返回内容保留校验位。线性内容最多 128 个字符。Code 128 的开头 FNC1 被省略，内部 FNC1 转为组分隔符；不解释 GS1 字段。不读取 FNC2/3/4 及扩展 Code 39。每个轴最多采样 512 条扫描线；过短的条纹可能遗漏，距离极近的相同码可能合并。过小、裁边、倾斜、弯曲或严重模糊的码可能遗漏。寻像、扫描线、候选及时间限制可能遗漏更多码；空结果不能证明没有码。不支持 Data Matrix、PDF417 和 Aztec。不会自动打开任何内容，解码文字也不能验证来源。",
+    "每張圖片最多讀取 16 個碼（圖片最大 1600 萬像素），依上緣、再依左緣排序。不同位置的相同內容會分別保留。單個精確 QR 碼維持原有嚴格平面結果；其他 QR 碼使用照片讀取與糾錯。線性條碼支援深色條、淺色底的 EAN-13、UPC-A、EAN-8、Code 128、Code 39 和 ITF，方向為 0°、90°、180° 或 270°；需要完整靜區、檢查碼及多條掃描線一致。前導零的 EAN-13 回報為 UPC-A。Code 39 至少需要六個內容字元及 Mod-43 檢查字元；傳回內容不含檢查字元。ITF 至少需要八位數字（含 Mod-10 檢查碼），傳回內容保留檢查碼。線性內容最多 128 個字元。Code 128 的開頭 FNC1 省略，內部 FNC1 轉為群組分隔字元；不解釋 GS1 欄位。不讀取 FNC2/3/4 及擴充 Code 39。每個軸最多取樣 512 條掃描線；過短的條紋可能遺漏，距離極近的相同碼可能合併。過小、裁邊、傾斜、彎曲或嚴重模糊的碼可能遺漏。尋像、掃描線、候選及時間限制可能遺漏更多碼；空結果不能證明沒有碼。不支援 Data Matrix、PDF417 和 Aztec。不會自動開啟任何內容，解碼文字也不能驗證來源。",
+    "画像ごとに最大 16 個のコードを読み取ります（最大 1600 万画素）。上端、左端の順に並べ、別の位置にある同じ内容も別々に保持します。単独の正確な QR は従来の厳密な平面結果を維持し、他の QR は写真読み取りと誤り訂正を使います。線形バーコードは明るい背景の暗い EAN-13、UPC-A、EAN-8、Code 128、Code 39、ITF を 0°、90°、180°、270° で読み取ります。完全なクワイエットゾーン、検査桁、複数走査線の一致が必要です。先頭がゼロの EAN-13 は UPC-A として返します。Code 39 は 6 文字以上の内容と Mod-43 検査文字が必要で、検査文字は返しません。ITF は Mod-10 検査桁を含む 8 桁以上が必要で、検査桁も返します。線形の内容は最大 128 文字です。Code 128 の先頭 FNC1 は省略し、内部 FNC1 はグループ区切りに変換します。GS1 フィールドは解釈しません。FNC2/3/4、拡張 Code 39 は対象外です。各軸最大 512 本の走査線を使うため、短いバーを見逃したり、非常に近い同じコードが一つにまとまる場合があります。小さい、切れている、斜め、湾曲、強いぼけのコードは見逃す場合があります。位置検出、走査線、候補数、時間の制限により他のコードも見逃す場合があり、空の結果はコードがない証明にはなりません。Data Matrix、PDF417、Aztec は対象外です。自動で何かを開くことはなく、読み取り文字は出所を認証しません。"
+  ],
+  "Read Codes from Image…": [
+    "读取图片中的码…",
+    "讀取圖片中的碼…",
+    "画像内のコードを読み取る…"
   ]
 }

@@ -103,6 +103,12 @@ public sealed class McpHost : IMcpHost
         using var document = QrReadDocument.Open(path, token);
         return document.Result;
     }
+    public IReadOnlyList<ImageCodeResult> ReadCodes(string path,CancellationToken token)
+    {
+        using var document=QrReadDocument.Open(path,token);
+        return document.Results;
+    }
+
 
     public IReadOnlyList<string> TextLanguages
     {

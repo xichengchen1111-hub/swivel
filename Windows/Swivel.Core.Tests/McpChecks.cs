@@ -81,6 +81,12 @@ internal static class McpChecks
             Codes.Add(path);
             return Texts.TryGetValue(path, out var text) ? new QrReadResult(text, 2, QrCorrection.Quartile, 3, 8) { Photo = path.Contains("photo"), CorrectedCodewords = path.Contains("photo") ? 5 : 0 } : throw new UserError(QrFlatRead.NoCode);
         }
+        public readonly Dictionary<string,IReadOnlyList<ImageCodeResult>> MultipleCodes=new(StringComparer.OrdinalIgnoreCase);
+        public IReadOnlyList<ImageCodeResult> ReadCodes(string path,CancellationToken token)
+        {
+            if(MultipleCodes.TryGetValue(path,out var found)){Codes.Add(path);return found;}
+            var qr=ReadCode(path,token);return new[]{new ImageCodeResult("QR",qr.Text,0,0,0,0,qr)};
+        }
         public string RecognizeText(string path, string? language, CancellationToken token) { Recognized.Add((path, language)); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("No OCR language."); }
         public string ReadDocumentText(string path, CancellationToken token) { Documents.Add(path); return Texts.TryGetValue(path, out var text) ? text : throw new UserError("Not a valid document."); }
         public readonly HashSet<string> Taken = new(StringComparer.OrdinalIgnoreCase); // folders and other names
@@ -590,6 +596,26 @@ internal static class McpChecks
         var photoCodes = (JsonArray)Body(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(snapshot, qr) }))["codes"]!;
         check((string?)photoCodes[0]!["value"] == "from a photo" && (bool)photoCodes[0]!["photo"]! && (int)photoCodes[0]!["corrected_bytes"]! == 5 && photoCodes[1]!["photo"] is null && photoCodes[1]!["corrected_bytes"] is null,
             "MCP read_codes marks photo-reader results with their corrected byte count and leaves exact flat results unchanged");
+        int multiChecks=0;
+        void MultiCheck(bool value,string message){check(value,message);multiChecks++;}
+        reader.MultipleCodes[snapshot]=new[]{new ImageCodeResult("QR","first",0,0,21,21,new QrReadResult("first",1,QrCorrection.Low,0,2)),new ImageCodeResult("EAN-13","5901234123457",80,0,100,60),new ImageCodeResult("QR","first",0,80,21,21,new QrReadResult("first",1,QrCorrection.Low,0,2))};
+        var several=Body(Call(reading,"read_codes",new JsonObject{["paths"]=Paths(snapshot,qr)}));
+        var many=(JsonArray)several["codes"]!;
+        MultiCheck(many.Count==4&&many.Select(c=>(string)c!["type"]!).SequenceEqual(new[]{"QR","EAN-13","QR","QR"}),"MCP emits every QR and barcode in host spatial order and file order");
+        MultiCheck((string?)many[0]!["value"]=="first"&&(string?)many[2]!["value"]=="first"&&many[1]!["version"] is null&&many[1]!["correction"] is null,"MCP preserves separate same-text symbols and adds no QR metadata to linear results");
+        MultiCheck(many[3]!.ToJsonString()==codes[0]!.ToJsonString()&&((JsonArray)several["not_read"]!).Count==0,"A single strict QR's existing JSON fields remain byte-for-byte compatible after multi-code reads");
+        reader.MultipleCodes[snapshot]=new[]{new ImageCodeResult("QR","bad\ud800",0,0,21,21),new ImageCodeResult("Code 39","VALID1",0,40,100,50)};
+        var oneBad=Body(Call(reading,"read_codes",new JsonObject{["paths"]=Paths(snapshot)}));
+        MultiCheck(((JsonArray)oneBad["codes"]!).Count==1&&(string?)oneBad["codes"]![0]!["type"]=="Code 39"&&((JsonArray)oneBad["not_read"]!).Count==1,"Invalid text in one MCP candidate does not hide another valid barcode");
+        reader.MultipleCodes[snapshot]=Array.Empty<ImageCodeResult>();
+        MultiCheck(((JsonArray)Body(Call(reading,"read_codes",new JsonObject{["paths"]=Paths(snapshot)}))["not_read"]!).Count==1,"MCP empty result is explicitly not read");
+        reader.MultipleCodes[snapshot]=Enumerable.Range(0,17).Select(i=>new ImageCodeResult("ITF","12345670",0,i*30,80,20)).ToArray();
+        MultiCheck(((JsonArray)Body(Call(reading,"read_codes",new JsonObject{["paths"]=Paths(snapshot)}))["codes"]!).Count==0,"MCP refuses a host result over the per-image count bound");
+        reader.MultipleCodes[snapshot]=new[]{new ImageCodeResult("QR",new string('x',McpSession.MaxReplyText),0,0,177,177)};
+        var codeBudget=Body(Call(reading,"read_codes",new JsonObject{["paths"]=Paths(snapshot,qr)}));
+        MultiCheck(((JsonArray)codeBudget["codes"]!).Count==1&&((string)codeBudget["codes"]![0]!["value"]!).Length==McpSession.MaxReplyText&&((JsonArray)codeBudget["not_read"]!).Count==1,"MCP code reply text is bounded without truncating a payload");
+        reader.MultipleCodes.Remove(snapshot);
+        Console.WriteLine($"Multi-code MCP checks: {multiChecks}");
         reader.Enabled = false;
         check(IsError(Call(reading, "read_codes", new JsonObject { ["paths"] = Paths(qr) })) && IsError(Call(reading, "extract_text", new JsonObject { ["paths"] = Paths(doc) })), "MCP read tools refuse while Agent Tools is off");
         reader.Enabled = true;
