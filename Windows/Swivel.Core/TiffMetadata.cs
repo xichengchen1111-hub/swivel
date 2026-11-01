@@ -42,6 +42,7 @@ public static class TiffMetadata
     private static readonly HashSet<int> Refused=new(){330,347,529,530,531,532,32995,32996,32997,32998};
     private static readonly int[] TypeSize={0,1,1,2,4,8,1,1,2,4,8,4,8};
 
+    internal static bool IsRenderingTag(int tag)=>tag!=274&&Kept.ContainsKey(tag);
     public static string TagName(int tag)=>Removed.TryGetValue(tag,out var a)?a:Kept.TryGetValue(tag,out var b)?b:tag>=32768?"Private tag":"Unknown tag";
 
     internal sealed record Entry(int Tag,int Type,uint Count,int ValueOffset,int ValueBytes);
@@ -100,6 +101,11 @@ public static class TiffMetadata
         private static long NewValueBytes(Entry e,Page page)=>IsOffsets(e.Tag)||IsCounts(e.Tag)?4L*page.Blocks.Length:e.ValueBytes;
         private static bool OutOfLine(Entry e)=>(IsOffsets(e.Tag)||IsCounts(e.Tag)?4L*e.Count:e.ValueBytes)>4;
 
+        public MetadataSelection Selective(CancellationToken token)
+        {
+            var selection=new MetadataSelection();var tree=new MetadataTiff(source,selection,"TIFF",token,pages);
+            return selection.Writer((output,ids,cancel)=>MetadataSelection.Copy(output,tree.Rebuild(ids,cancel),cancel));
+        }
         public void Write(Stream output,CancellationToken token)=>Write(output,false,token);
         public void Write(Stream output,bool keepOrientation,CancellationToken token)
         {

@@ -12,7 +12,7 @@ internal static class PngMetadataNotices
 {
     internal const string Scope="Remove all tEXt, zTXt, iTXt, eXIf and tIME chunks from this PNG. Compressed image data, palette, transparency and all other retained chunks stay byte-for-byte in their original order; the image is not recompressed.";
     internal const string Limits="Static SDR PNG only: source up to 32 MiB, 16 MP, 16,384 pixels per side and 4,096 chunks. CRC and container checks precede native validation of the cleaned snapshot. Animation, high precision, HDR signaling, recognized signatures/content credentials and unknown critical chunks are refused. Removed text and EXIF are not decoded or inflated.";
-    internal const string Retained="Other chunks, including color profiles and unknown ancillary chunks, are retained and may contain private information. Image pixels, the filename and file-system information can also reveal details. This is not complete privacy sanitization; selective tags, TIFF and broader metadata handling remain separate work. JPEG has a separate limited tool.";
+    internal const string Retained="Other chunks, including color profiles and unknown ancillary chunks, are retained and may contain private information. Image pixels, the filename and file-system information can also reveal details. This is not complete privacy sanitization. JPEG and TIFF have separate metadata tools.";
     internal const string Orientation="Removing EXIF also removes any stored orientation and may change how other apps rotate or mirror the image. Pixel samples are not rotated or rewritten. Review the saved copy in your target app.";
     internal const string Export="Save creates a new PNG beside the original without replacing it. Embedded retained chunk bytes are preserved; source file-system timestamps, attributes and alternate streams are not copied. No network, clipboard access or persistent history is used.";
     internal const string Downgrade="If this action is saved in My Wheel, Windows 0.42 and earlier may reject those settings and fall back to defaults. Keep a pre-upgrade settings backup before downgrading.";
@@ -23,6 +23,9 @@ internal sealed class PngMetadataDialog : Window
     internal bool KeepOrientation=>keep.IsChecked==true;
     private readonly CheckBox keep;
     private readonly RadioButton locationMode;
+    private readonly RadioButton selectiveMode;
+    private MetadataSelectionPanel? selectionPanel;
+    internal int[]? SelectedTags=>selectiveMode.IsChecked==true?selectionPanel?.SelectedIds:null;
     internal bool LocationOnly=>locationMode.IsChecked==true;
     internal PngMetadataDialog(App app,PngMetadataDocument document)
     {
@@ -31,14 +34,22 @@ internal sealed class PngMetadataDialog : Window
         keep=new CheckBox{Content=app.L("Keep orientation"),IsChecked=document.CanKeepOrientation,IsEnabled=document.CanKeepOrientation,Margin=new Thickness(0,4,0,8)};
         var allMode=new RadioButton{Content=app.L("Remove all metadata"),IsChecked=true,GroupName="MetadataMode",Margin=new Thickness(0,4,0,4)};
         locationMode=new RadioButton{Content=app.L("Remove location only"),IsEnabled=document.CanRemoveLocation,GroupName="MetadataMode",Margin=new Thickness(0,4,0,4)};
+        selectiveMode=new RadioButton{Content=app.L("Select metadata to remove"),IsEnabled=document.Selection is not null,GroupName="MetadataMode",Margin=new Thickness(0,4,0,4)};
         var summary=UI.Text("");footer.Children.Add(summary);
-        void Summarize()=>summary.Text=LocationOnly?string.Format(app.L("New location-only copy: {0:N0} bytes. Image data is unchanged."),document.LocationBytes):plan.RemovedCount==0?app.L("No matching PNG text, EXIF or time chunks were found. No copy was saved."):keep.IsChecked==true?string.Format(app.L("Remove {0:N0} chunk(s), {1:N0} bytes; add a {2:N0}-byte orientation-only eXIf chunk; new PNG: {3:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,PngMetadata.OrientationChunkLength,plan.OutputBytesKeeping(true)):string.Format(app.L("Remove {0:N0} chunk(s), {1:N0} bytes; new PNG: {2:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,plan.OutputBytes);
+        Button? save=null;
+        void Summarize()
+        {
+            if(save is not null)save.IsEnabled=selectiveMode.IsChecked==true?(selectionPanel?.SelectedIds.Length??0)>0:plan.RemovedCount>0;
+            summary.Text=selectiveMode.IsChecked==true?string.Format(app.L("Selective preview: {0:N0} tag(s) or block(s) will be removed; all unchecked rows stay."),selectionPanel?.SelectedIds.Length??0):LocationOnly?string.Format(app.L("New location-only copy: {0:N0} bytes. Image data is unchanged."),document.LocationBytes):plan.RemovedCount==0?app.L("No matching PNG text, EXIF or time chunks were found. No copy was saved."):keep.IsChecked==true?string.Format(app.L("Remove {0:N0} chunk(s), {1:N0} bytes; add a {2:N0}-byte orientation-only eXIf chunk; new PNG: {3:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,PngMetadata.OrientationChunkLength,plan.OutputBytesKeeping(true)):string.Format(app.L("Remove {0:N0} chunk(s), {1:N0} bytes; new PNG: {2:N0} bytes."),plan.RemovedCount,plan.RemovedBytes,plan.OutputBytes);
+        }
         Summarize();keep.Checked+=(_,_)=>Summarize();keep.Unchecked+=(_,_)=>Summarize();
-        var buttons=new WrapPanel();footer.Children.Add(buttons);var save=UI.Button(app.L("Save PNG Copy"),()=>DialogResult=true);save.IsEnabled=plan.RemovedCount>0;buttons.Children.Add(save);var cancel=UI.Button(app.L("Cancel"),()=>DialogResult=false);cancel.IsCancel=true;buttons.Children.Add(cancel);
+        var buttons=new WrapPanel();footer.Children.Add(buttons);save=UI.Button(app.L("Save PNG Copy"),()=>DialogResult=true);save.IsEnabled=plan.RemovedCount>0;buttons.Children.Add(save);var cancel=UI.Button(app.L("Cancel"),()=>DialogResult=false);cancel.IsCancel=true;buttons.Children.Add(cancel);
         var body=new StackPanel();root.Children.Add(UI.Scroll(body));Content=root;
         body.Children.Add(UI.Text(app.L("Source (JSON path)")));var path=new TextBox{Text=JsonSerializer.Serialize(document.Path),IsReadOnly=true,TextWrapping=TextWrapping.Wrap};AutomationProperties.SetName(path,app.L("Source (JSON path)"));body.Children.Add(path);
         body.Children.Add(UI.Text(string.Format(app.L("{0} × {1} pixels · source: {2:N0} bytes"),plan.Width,plan.Height,plan.SourceBytes)));
-        body.Children.Add(allMode);body.Children.Add(locationMode);
+        body.Children.Add(allMode);body.Children.Add(locationMode);body.Children.Add(selectiveMode);
+        if(document.Selection is null)body.Children.Add(UI.Text(app.L(document.SelectionUnavailableReason??MetadataSelection.Invalid),12));
+        var selectiveDetails=new StackPanel();body.Children.Add(selectiveDetails);selectiveDetails.Children.Add(UI.Text(app.L(PngMetadataNotices.Downgrade),12));
         if(!document.CanRemoveLocation)body.Children.Add(UI.Text(app.L(document.LocationUnavailableReason??ExifLocation.Invalid),12));
         var locationNotice=new StackPanel();body.Children.Add(locationNotice);
         foreach(string note in new[]{ExifLocation.Notice,ExifLocation.PngScope,ExifLocation.Export})locationNotice.Children.Add(UI.Text(app.L(note),12));
@@ -52,8 +63,16 @@ internal sealed class PngMetadataDialog : Window
         VirtualizingPanel.SetIsVirtualizing(list,true);VirtualizingPanel.SetVirtualizationMode(list,VirtualizationMode.Recycling);ScrollViewer.SetCanContentScroll(list,true);AutomationProperties.SetName(list,app.L("PNG Chunk Summary"));
         var grid=new GridView();foreach(var col in new[]{("Chunk Type","Type",110d),("Count","Count",85d),("Bytes (including framing)","Bytes",200d),("Result","Result",110d)})grid.Columns.Add(new GridViewColumn{Header=app.L(col.Item1),DisplayMemberBinding=new Binding(col.Item2),Width=col.Item3});list.View=grid;fullDetails.Children.Add(list);
         fullDetails.Children.Add(UI.Text(app.L(PngMetadataNotices.Downgrade),12));
-        void ModeChanged(){fullDetails.Visibility=LocationOnly?Visibility.Collapsed:Visibility.Visible;locationNotice.Visibility=LocationOnly?Visibility.Visible:Visibility.Collapsed;keep.IsEnabled=!LocationOnly&&document.CanKeepOrientation;Summarize();}
-        allMode.Checked+=(_,_)=>ModeChanged();locationMode.Checked+=(_,_)=>ModeChanged();ModeChanged();
+        void ModeChanged()
+        {
+            bool selective=selectiveMode.IsChecked==true;
+            if(selective&&selectionPanel is null&&document.Selection is not null)
+            {selectionPanel=new MetadataSelectionPanel(app,document.Selection);selectionPanel.Changed+=Summarize;selectiveDetails.Children.Add(selectionPanel);}
+            selectiveDetails.Visibility=selective?Visibility.Visible:Visibility.Collapsed;
+            fullDetails.Visibility=LocationOnly||selective?Visibility.Collapsed:Visibility.Visible;locationNotice.Visibility=LocationOnly?Visibility.Visible:Visibility.Collapsed;
+            keep.IsEnabled=!LocationOnly&&!selective&&document.CanKeepOrientation;Summarize();
+        }
+        allMode.Checked+=(_,_)=>ModeChanged();locationMode.Checked+=(_,_)=>ModeChanged();selectiveMode.Checked+=(_,_)=>ModeChanged();ModeChanged();
         SourceInitialized+=(_,_)=>WebRouteLayout.Fit(this,Owner??this);DpiChanged+=(_,_)=>WebRouteLayout.Fit(this,this);
     }
 }

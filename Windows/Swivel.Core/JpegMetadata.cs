@@ -58,6 +58,61 @@ public static class JpegMetadata
             if(locationExif is not null&&(locationExif.Length>65527||source.Length-item.Length+10L+locationExif.Length>MaxBytes)){locationExif=null;LocationUnavailableReason=ExifLocation.Invalid;}
             return this;
         }
+        public MetadataSelection Selective(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();var selection=new MetadataSelection();
+            var trees=new Dictionary<Piece,MetadataTiff>();var ids=new Dictionary<Piece,int>();var thumbnails=new HashSet<Piece>();int exifs=0;
+            foreach(var p in pieces)
+            {
+                token.ThrowIfCancellationRequested();
+                if(p.Marker==0xe1&&IsExif(p))
+                {
+                    if(++exifs>1)throw new UserError(MetadataSelection.Invalid);
+                    int at=PayloadAt(p)+6;trees[p]=new MetadataTiff(source.AsSpan(at,p.Offset+p.Length-at).ToArray(),selection,"JPEG/EXIF",token);continue;
+                }
+                if(p.Marker is 0xe1 or 0xed or 0xfe)
+                {
+                    int at=PayloadAt(p);string group=p.Marker==0xed?"IPTC":p.Marker==0xfe?"Comments and descriptions":IsXmp(p)?"XMP":"Other metadata";
+                    ids[p]=selection.Add(group,p.Marker==0xfe?"COM":p.Marker==0xed?"APP13":"APP1","JPEG/"+p.Offset,source.AsSpan(at,p.Offset+p.Length-at));
+                }
+                else if(p.Marker==0xe0)
+                {
+                    int at=PayloadAt(p);var value=source.AsSpan(at,p.Offset+p.Length-at);
+                    if(value.StartsWith("JFIF\0"u8)&&value.Length>=14&&(value[12]!=0||value[13]!=0))
+                    {
+                        if(value.Length!=14+3*value[12]*value[13])throw new UserError(MetadataSelection.Invalid);
+                        ids[p]=selection.Add("Thumbnail","Thumbnail","JPEG/JFIF",value[14..]);thumbnails.Add(p);
+                    }
+                    else if(value.StartsWith("JFXX\0"u8))ids[p]=selection.Add("Thumbnail","Thumbnail","JPEG/JFXX",value);
+                }
+            }
+            foreach(var group in pieces.Where(p=>p.Marker==-1||p.Marker==0xe2).GroupBy(p=>p.Marker))
+                selection.Add("Image and color",group.Key==-1?"Compressed scan data":"ICC profile","JPEG",source.AsSpan(group.First().Offset,group.First().Length),false);
+            return selection.Writer((output,removed,cancel)=>
+            {
+                var rebuilt=trees.ToDictionary(k=>k.Key,k=>k.Value.Rebuild(removed,cancel));
+                if(rebuilt.Values.Any(b=>b.Length>65527))throw new UserError(MetadataSelection.Invalid);
+                if(source.Length+rebuilt.Sum(k=>10L+k.Value.Length-k.Key.Length)>MaxBytes)throw new UserError(MetadataSelection.Invalid);
+                foreach(var p in pieces)
+                {
+                    cancel.ThrowIfCancellationRequested();
+                    if(rebuilt.TryGetValue(p,out var tiff))
+                    {
+                        var header=new byte[10];header[0]=255;header[1]=0xe1;BinaryPrimitives.WriteUInt16BigEndian(header.AsSpan(2),(ushort)(tiff.Length+8));"Exif\0\0"u8.CopyTo(header.AsSpan(4));output.Write(header);output.Write(tiff);continue;
+                    }
+                    if(ids.TryGetValue(p,out int id)&&removed.Contains(id))
+                    {
+                        if(thumbnails.Contains(p))
+                        {
+                            var jfif=source.AsSpan(PayloadAt(p),14).ToArray();jfif[12]=jfif[13]=0;
+                            output.Write(new byte[]{255,0xe0,0,16});output.Write(jfif);
+                        }
+                        continue;
+                    }
+                    for(int at=0;at<p.Length;){cancel.ThrowIfCancellationRequested();int n=Math.Min(65536,p.Length-at);output.Write(source.AsSpan(p.Offset+at,n));at+=n;}
+                }
+            });
+        }
         public void WriteLocationOnly(Stream output,CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(output);token.ThrowIfCancellationRequested();
