@@ -30,15 +30,25 @@ internal sealed class TiffMetadataDialog : Window
     private sealed record Row(string Tag,string Name,int Count,string Bytes,string Result);
     internal bool KeepOrientation=>keep.IsChecked==true;
     private readonly CheckBox keep;
+    private MetadataSelectionPanel? selectionPanel;
+    private readonly RadioButton selectiveMode;
+    internal int[]? SelectedTags=>selectiveMode.IsChecked==true?selectionPanel?.SelectedIds:null;
     internal TiffMetadataDialog(App app,TiffMetadataDocument document)
     {
         var plan=document.Plan;Title=app.L("Remove TIFF Metadata…");Width=850;Height=780;MinWidth=460;MinHeight=320;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var root=new DockPanel{Margin=new Thickness(20)};var footer=new StackPanel();DockPanel.SetDock(footer,Dock.Bottom);root.Children.Add(footer);
         keep=new CheckBox{Content=app.L("Keep orientation"),IsChecked=document.CanKeepOrientation,IsEnabled=document.CanKeepOrientation,Margin=new Thickness(0,4,0,8)};
+        var allMode=new RadioButton{Content=app.L("Remove all metadata"),IsChecked=true,GroupName="MetadataMode",Margin=new Thickness(0,4,0,4)};
+        selectiveMode=new RadioButton{Content=app.L("Select metadata to remove"),IsEnabled=document.Selection is not null,GroupName="MetadataMode",Margin=new Thickness(0,4,0,4)};
         var summary=UI.Text("");footer.Children.Add(summary);
         Button? save=null;
         void Summarize()
         {
+            if(selectiveMode.IsChecked==true)
+            {
+                int count=selectionPanel?.SelectedIds.Length??0;if(save is not null)save.IsEnabled=count>0;
+                summary.Text=string.Format(app.L("Selective preview: {0:N0} tag(s) or block(s) will be removed; all unchecked rows stay."),count);return;
+            }
             int removing=plan.RemovedCountKeeping(keep.IsChecked==true);if(save is not null)save.IsEnabled=removing>0;
             summary.Text=removing==0?app.L("No removable TIFF metadata tags were found. No copy was saved."):string.Format(app.L("Remove {0:N0} tag(s) from {1:N0} page(s); new TIFF: {2:N0} bytes."),removing,plan.PageCount,plan.OutputBytesKeeping(keep.IsChecked==true));
         }
@@ -48,14 +58,27 @@ internal sealed class TiffMetadataDialog : Window
         body.Children.Add(UI.Text(app.L("Source (JSON path)")));var path=new TextBox{Text=JsonSerializer.Serialize(document.Path),IsReadOnly=true,TextWrapping=TextWrapping.Wrap};AutomationProperties.SetName(path,app.L("Source (JSON path)"));body.Children.Add(path);
         body.Children.Add(UI.Text(string.Format(app.L("{0} × {1} pixels · source: {2:N0} bytes"),plan.Width,plan.Height,plan.SourceBytes)));
         body.Children.Add(UI.Text(string.Format(app.L("{0:N0} page(s) · {1} byte order · {2:N0} bytes of strip or tile data copied unchanged"),plan.PageCount,plan.LittleEndian?"II":"MM",plan.ImageDataBytes)));
-        body.Children.Add(UI.Text(TiffMetadataNotices.Status(app,plan.Orientation,document.CanKeepOrientation)));body.Children.Add(keep);body.Children.Add(UI.Text(app.L(TiffMetadataNotices.KeepTiff),12));
-        foreach(string note in new[]{TiffMetadataNotices.Scope,TiffMetadataNotices.Limits,TiffMetadataNotices.Retained})body.Children.Add(UI.Text(app.L(note),12));
-        var loss=UI.Text(app.L(TiffMetadataNotices.Orientation),12);body.Children.Add(loss);void Loss()=>loss.Visibility=keep.IsChecked==true?Visibility.Collapsed:Visibility.Visible;Loss();keep.Checked+=(_,_)=>Loss();keep.Unchecked+=(_,_)=>Loss();
-        body.Children.Add(UI.Text(app.L(TiffMetadataNotices.Export),12));
-        body.Children.Add(UI.Text(app.L("TIFF Tag Summary"),18));var list=new ListView{Height=240,ItemsSource=plan.Tags.Select(t=>new Row(t.Tag.ToString(),t.Name,t.Count,t.Bytes.ToString("N0"),app.L(t.Removed?"Remove":"Keep"))).ToArray()};
+        body.Children.Add(allMode);body.Children.Add(selectiveMode);
+        if(document.Selection is null)body.Children.Add(UI.Text(app.L(document.SelectionUnavailableReason??MetadataSelection.Invalid),12));
+        var selectiveDetails=new StackPanel();body.Children.Add(selectiveDetails);selectiveDetails.Children.Add(UI.Text(app.L(TiffMetadataNotices.Downgrade),12));
+        var fullDetails=new StackPanel();body.Children.Add(fullDetails);
+        fullDetails.Children.Add(UI.Text(TiffMetadataNotices.Status(app,plan.Orientation,document.CanKeepOrientation)));fullDetails.Children.Add(keep);fullDetails.Children.Add(UI.Text(app.L(TiffMetadataNotices.KeepTiff),12));
+        foreach(string note in new[]{TiffMetadataNotices.Scope,TiffMetadataNotices.Limits,TiffMetadataNotices.Retained})fullDetails.Children.Add(UI.Text(app.L(note),12));
+        var loss=UI.Text(app.L(TiffMetadataNotices.Orientation),12);fullDetails.Children.Add(loss);void Loss()=>loss.Visibility=keep.IsChecked==true?Visibility.Collapsed:Visibility.Visible;Loss();keep.Checked+=(_,_)=>Loss();keep.Unchecked+=(_,_)=>Loss();
+        fullDetails.Children.Add(UI.Text(app.L(TiffMetadataNotices.Export),12));
+        fullDetails.Children.Add(UI.Text(app.L("TIFF Tag Summary"),18));var list=new ListView{Height=240,ItemsSource=plan.Tags.Select(t=>new Row(t.Tag.ToString(),t.Name,t.Count,t.Bytes.ToString("N0"),app.L(t.Removed?"Remove":"Keep"))).ToArray()};
         VirtualizingPanel.SetIsVirtualizing(list,true);VirtualizingPanel.SetVirtualizationMode(list,VirtualizationMode.Recycling);ScrollViewer.SetCanContentScroll(list,true);AutomationProperties.SetName(list,app.L("TIFF Tag Summary"));
-        var grid=new GridView();foreach(var col in new[]{("Tag","Tag",70d),("Name","Name",190d),("Pages","Count",70d),("Declared value bytes","Bytes",160d),("Result","Result",110d)})grid.Columns.Add(new GridViewColumn{Header=app.L(col.Item1),DisplayMemberBinding=new Binding(col.Item2),Width=col.Item3});list.View=grid;body.Children.Add(list);
-        body.Children.Add(UI.Text(app.L(TiffMetadataNotices.Downgrade),12));
+        var grid=new GridView();foreach(var col in new[]{("Tag","Tag",70d),("Name","Name",190d),("Pages","Count",70d),("Declared value bytes","Bytes",160d),("Result","Result",110d)})grid.Columns.Add(new GridViewColumn{Header=app.L(col.Item1),DisplayMemberBinding=new Binding(col.Item2),Width=col.Item3});list.View=grid;fullDetails.Children.Add(list);
+        fullDetails.Children.Add(UI.Text(app.L(TiffMetadataNotices.Downgrade),12));
+        void ModeChanged()
+        {
+            bool selective=selectiveMode.IsChecked==true;
+            if(selective&&selectionPanel is null&&document.Selection is not null)
+            {selectionPanel=new MetadataSelectionPanel(app,document.Selection);selectionPanel.Changed+=Summarize;selectiveDetails.Children.Add(selectionPanel);}
+            selectiveDetails.Visibility=selective?Visibility.Visible:Visibility.Collapsed;fullDetails.Visibility=selective?Visibility.Collapsed:Visibility.Visible;
+            keep.IsEnabled=!selective&&document.CanKeepOrientation;Summarize();
+        }
+        allMode.Checked+=(_,_)=>ModeChanged();selectiveMode.Checked+=(_,_)=>ModeChanged();ModeChanged();
         SourceInitialized+=(_,_)=>WebRouteLayout.Fit(this,Owner??this);DpiChanged+=(_,_)=>WebRouteLayout.Fit(this,this);
     }
 }

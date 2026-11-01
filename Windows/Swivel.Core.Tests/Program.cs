@@ -164,6 +164,7 @@ TiffMetadataChecks.Run(Check, Reject);
 PdfStructureChecks.Run(Check, Reject);
 ExifOrientationChecks.Run(Check, Reject);
 ExifLocationChecks.Run(Check, Reject);
+MetadataSelectionChecks.Run(Check, Reject);
 MenuChecks.Run(Check, Reject);
 ClotheslineChecks.Run(Check, Reject);
 RopeMotionChecks.Run(Check, Reject);

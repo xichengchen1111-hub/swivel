@@ -15,6 +15,31 @@ internal sealed class TiffMetadataDocument : IDisposable
     private bool disposed;
     internal TiffMetadata.Plan Plan { get; }
     internal string Path => input.Path;
+    internal MetadataSelection? Selection { get; private set; }
+    internal string? SelectionUnavailableReason { get; private set; }
+    private void PrepareSelection(CancellationToken token)
+    {
+        try{Selection=Plan.Selective(token);}
+        catch(UserError error){SelectionUnavailableReason=error.Message;}
+    }
+    internal string SaveSelection(int[] removedIds,CancellationToken token)
+    {
+        ObjectDisposedException.ThrowIf(disposed,this);token.ThrowIfCancellationRequested();
+        if(Selection is null)throw new UserError(SelectionUnavailableReason??MetadataSelection.Invalid);
+        using var memory=new MemoryStream();Selection.Write(memory,removedIds,token);var bytes=memory.ToArray();
+        try
+        {
+            Validate(bytes,Plan,token);
+        }
+        catch(Exception error) when (error is UserError or System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException or IOException or OverflowException)
+        {throw new UserError("The selective copy could not be validated by the native decoder. No copy was saved.");}
+        string extension=System.IO.Path.GetExtension(Path).TrimStart('.').ToLowerInvariant();
+        return NativeFiles.WriteBeside(input,System.IO.Path.GetFileNameWithoutExtension(Path)+" selected metadata removed",extension,output=>
+        {
+            for(int at=0;at<bytes.Length;){token.ThrowIfCancellationRequested();int n=Math.Min(65536,bytes.Length-at);output.Write(bytes.AsSpan(at,n));at+=n;}
+            token.ThrowIfCancellationRequested();
+        },token);
+    }
     internal bool CanKeepOrientation => kept is not null;
     private TiffMetadataDocument(NativeFiles.Input input,TiffMetadata.Plan plan,byte[] cleaned,byte[]? kept)
     {this.input=input;Plan=plan;this.cleaned=cleaned;this.kept=kept;}
@@ -40,7 +65,8 @@ internal sealed class TiffMetadataDocument : IDisposable
                 try{Validate(kept,plan,token);}
                 catch(Exception error) when (error is UserError or System.Runtime.InteropServices.COMException or NotSupportedException or ArgumentException or InvalidOperationException or FileFormatException or OverflowException){kept=null;}
             }
-            token.ThrowIfCancellationRequested();return new(input,plan,cleaned,kept);
+            var document=new TiffMetadataDocument(input,plan,cleaned,kept);document.PrepareSelection(token);
+            token.ThrowIfCancellationRequested();return document;
         }
         catch{input.Dispose();throw;}
     }

@@ -19268,5 +19268,270 @@
     "读取图片中的码…",
     "讀取圖片中的碼…",
     "画像内のコードを読み取る…"
+  ],
+  "Camera and device": [
+    "相机与设备",
+    "相機與裝置",
+    "カメラとデバイス"
+  ],
+  "Dates": [
+    "日期",
+    "日期",
+    "日時"
+  ],
+  "Author and copyright": [
+    "作者与版权",
+    "作者與版權",
+    "作成者と著作権"
+  ],
+  "Comments and descriptions": [
+    "注释与描述",
+    "註解與描述",
+    "コメントと説明"
+  ],
+  "Software": [
+    "软件",
+    "軟體",
+    "ソフトウェア"
+  ],
+  "Maker note": [
+    "厂商注记",
+    "廠商註記",
+    "メーカー独自情報"
+  ],
+  "XMP": [
+    "XMP",
+    "XMP",
+    "XMP"
+  ],
+  "IPTC": [
+    "IPTC",
+    "IPTC",
+    "IPTC"
+  ],
+  "PNG text": [
+    "PNG 文字",
+    "PNG 文字",
+    "PNG テキスト"
+  ],
+  "Other metadata": [
+    "其他元数据",
+    "其他中繼資料",
+    "その他のメタデータ"
+  ],
+  "Image and color": [
+    "图像与色彩",
+    "影像與色彩",
+    "画像と色"
+  ],
+  "Orientation": [
+    "方向",
+    "方向",
+    "方向"
+  ],
+  "Make": [
+    "制造商",
+    "製造商",
+    "メーカー"
+  ],
+  "Model": [
+    "型号",
+    "型號",
+    "機種"
+  ],
+  "DateTime": [
+    "日期时间",
+    "日期時間",
+    "日時"
+  ],
+  "Artist": [
+    "作者",
+    "作者",
+    "作成者"
+  ],
+  "ImageDescription": [
+    "图像描述",
+    "影像描述",
+    "画像の説明"
+  ],
+  "MakerNote": [
+    "厂商注记",
+    "廠商註記",
+    "メーカー独自情報"
+  ],
+  "UserComment": [
+    "用户注释",
+    "使用者註解",
+    "ユーザーコメント"
+  ],
+  "DateTimeOriginal": [
+    "原始日期时间",
+    "原始日期時間",
+    "撮影日時"
+  ],
+  "DateTimeDigitized": [
+    "数字化日期时间",
+    "數位化日期時間",
+    "デジタル化日時"
+  ],
+  "Photoshop": [
+    "Photoshop",
+    "Photoshop",
+    "Photoshop"
+  ],
+  "COM": [
+    "COM",
+    "COM",
+    "COM"
+  ],
+  "APP13": [
+    "APP13",
+    "APP13",
+    "APP13"
+  ],
+  "APP1": [
+    "APP1",
+    "APP1",
+    "APP1"
+  ],
+  "ICC": [
+    "ICC",
+    "ICC",
+    "ICC"
+  ],
+  "profile": [
+    "配置文件",
+    "描述檔",
+    "プロファイル"
+  ],
+  "ICC profile": [
+    "ICC 配置文件",
+    "ICC 描述檔",
+    "ICC プロファイル"
+  ],
+  "Compressed": [
+    "压缩",
+    "壓縮",
+    "圧縮"
+  ],
+  "Select metadata to remove": [
+    "选择要移除的元数据",
+    "選取要移除的中繼資料",
+    "削除するメタデータを選択"
+  ],
+  "Metadata group": [
+    "元数据分组",
+    "中繼資料群組",
+    "メタデータのグループ"
+  ],
+  "Remove group": [
+    "移除此组",
+    "移除此群組",
+    "グループを削除"
+  ],
+  "Keep group": [
+    "保留此组",
+    "保留此群組",
+    "グループを保持"
+  ],
+  "Selective metadata preview": [
+    "选择性元数据预览",
+    "選擇性中繼資料預覽",
+    "選択したメタデータのプレビュー"
+  ],
+  "Tag / block": [
+    "标签／数据块",
+    "標籤／資料區塊",
+    "タグ／ブロック"
+  ],
+  "Directory / page": [
+    "目录／页面",
+    "目錄／頁面",
+    "ディレクトリ／ページ"
+  ],
+  "Value preview": [
+    "值预览",
+    "值預覽",
+    "値のプレビュー"
+  ],
+  "Selective preview: {0:N0} tag(s) or block(s) will be removed; all unchecked rows stay.": [
+    "选择预览：将移除 {0:N0} 个标签或数据块；所有未勾选行保留。",
+    "選擇預覽：將移除 {0:N0} 個標籤或資料區塊；所有未勾選列保留。",
+    "選択プレビュー：{0:N0} 個のタグまたはブロックを削除します。未選択の行はすべて保持します。"
+  ],
+  "Orientation is selected for removal. This may change rotation or mirroring in other apps; pixels are unchanged.": [
+    "已选择移除方向。这可能改变其他应用中的旋转或镜像显示；像素不变。",
+    "已選取移除方向。這可能改變其他應用程式中的旋轉或鏡像顯示；像素不變。",
+    "方向の削除を選択しています。他のアプリで回転や反転表示が変わる場合があります。画素は変わりません。"
+  ],
+  "Preview: ticked rows will be removed; unchecked rows stay. Value previews show at most 96 bytes (32 for binary values). Directory and tag identify each occurrence; structural image and color rows cannot be removed.": [
+    "预览：勾选行将移除，未勾选行保留。值预览最多显示 96 字节（二进制值为 32 字节）。目录和标签标明每个条目；图像与色彩结构行不可移除。",
+    "預覽：勾選列將移除，未勾選列保留。值預覽最多顯示 96 位元組（二進位值為 32 位元組）。目錄與標籤標明每個項目；影像與色彩結構列不可移除。",
+    "プレビュー：選択した行を削除し、未選択の行を保持します。値は最大 96 バイト（バイナリ値は 32 バイト）表示します。ディレクトリとタグで各項目を識別します。画像と色の構造行は削除できません。"
+  ],
+  "The selective copy could not be validated by the native decoder. No copy was saved.": [
+    "系统解码器无法验证选择性副本。未保存副本。",
+    "系統解碼器無法驗證選擇性副本。未儲存副本。",
+    "システムのデコーダーで選択したコピーを検証できませんでした。コピーは保存していません。"
+  ],
+  "tEXt": [
+    "tEXt",
+    "tEXt",
+    "tEXt"
+  ],
+  "zTXt": [
+    "zTXt",
+    "zTXt",
+    "zTXt"
+  ],
+  "iTXt": [
+    "iTXt",
+    "iTXt",
+    "iTXt"
+  ],
+  "tIME": [
+    "tIME",
+    "tIME",
+    "tIME"
+  ],
+  "IDAT": [
+    "IDAT",
+    "IDAT",
+    "IDAT"
+  ],
+  "iCCP": [
+    "iCCP",
+    "iCCP",
+    "iCCP"
+  ],
+  "Selective removal is unavailable: metadata has unsupported types, offsets, thumbnails, overlapping areas, duplicate tags, cycles or excessive entries. Full removal is still available.": [
+    "无法选择性移除：元数据含不支持的类型、偏移、缩略图、重叠区域、重复标签、循环或过多条目。仍可使用完整移除。",
+    "無法選擇性移除：中繼資料含不支援的類型、偏移、縮圖、重疊區域、重複標籤、循環或過多項目。仍可使用完整移除。",
+    "選択削除は利用できません。メタデータに未対応の型、オフセット、サムネイル、重複領域、重複タグ、循環、または過剰な項目があります。全削除は引き続き利用できます。"
+  ],
+  "Tick individual tags or whole blocks to remove. Unchecked metadata value bytes and ICC are kept byte-identical; TIFF storage offsets are rebuilt. Image pixels, strips and tiles are not rewritten. Orientation is kept unless explicitly ticked. XMP and IPTC (including Photoshop blocks) are selectable only as whole blocks. Value previews are bounded and escaped; opaque or compressed values are shown as bytes. This is not complete privacy sanitization.": [
+    "勾选要移除的单个标签或整个数据块。未勾选元数据的值字节和 ICC 原样保留；TIFF 存储偏移会重建。图像像素、条带和图块不会重写。除非明确勾选，否则保留方向。XMP 和 IPTC（包括 Photoshop 数据块）只能整体移除。值预览有长度限制并经过转义；不透明或压缩值显示为字节。这不是完整的隐私清理。",
+    "勾選要移除的個別標籤或整個資料區塊。未勾選中繼資料的值位元組與 ICC 原樣保留；TIFF 儲存偏移會重建。影像像素、條帶與圖塊不會重寫。除非明確勾選，否則保留方向。XMP 與 IPTC（包括 Photoshop 資料區塊）只能整體移除。值預覽有長度限制並經過跳脫；不透明或壓縮值顯示為位元組。這不是完整的隱私清理。",
+    "削除する個別タグまたはブロック全体を選択します。未選択のメタデータの値バイトと ICC はそのまま保持し、TIFF の格納オフセットは再構築します。画素、ストリップ、タイルは書き換えません。方向は明示的に選択した場合のみ削除します。XMP と IPTC（Photoshop ブロックを含む）はブロック全体でのみ削除できます。値のプレビューは長さを制限しエスケープします。不透明な値や圧縮値はバイトで表示します。完全なプライバシー除去ではありません。"
+  ],
+  "Best-effort warning: a retained XMP, IPTC, PNG text or opaque metadata block might repeat a removed value. Block contents are not exhaustively interpreted; remove the block too if needed. Retained MakerNote bytes are unchanged, but proprietary internal offsets may no longer be meaningful after relocation.": [
+    "尽力检查提示：保留的 XMP、IPTC、PNG 文字或不透明元数据块可能重复已移除的值。未详尽解析块内容；如有需要，请同时移除该块。保留的 MakerNote 字节不变，但重排后其私有内部偏移可能失效。",
+    "盡力檢查提示：保留的 XMP、IPTC、PNG 文字或不透明中繼資料區塊可能重複已移除的值。未詳盡解析區塊內容；如有需要，請同時移除該區塊。保留的 MakerNote 位元組不變，但重排後其私有內部偏移可能失效。",
+    "ベストエフォートの警告：保持する XMP、IPTC、PNG テキスト、不透明なメタデータブロックに削除した値が重複している可能性があります。内容を完全には解釈していません。必要に応じてブロックも削除してください。保持する MakerNote のバイトは不変ですが、再配置により独自の内部オフセットが無効になる場合があります。"
+  ],
+  "Select at least one metadata tag or block to remove. No copy was saved.": [
+    "请至少选择一个要移除的元数据标签或数据块。未保存副本。",
+    "請至少選取一個要移除的中繼資料標籤或資料區塊。未儲存副本。",
+    "削除するメタデータのタグまたはブロックを少なくとも一つ選択してください。コピーは保存していません。"
+  ],
+  "Removing Thumbnail removes its whole directory and embedded image, including its displayed child rows. Descriptive thumbnail tags can also be removed individually. A retained thumbnail may contain its own metadata.": [
+    "移除缩略图会删除其整个目录和内嵌图像，包括显示的子行。也可单独移除缩略图的描述标签。保留的缩略图可能包含自己的元数据。",
+    "移除縮圖會刪除其整個目錄與內嵌影像，包括顯示的子列。也可個別移除縮圖的描述標籤。保留的縮圖可能包含自己的中繼資料。",
+    "サムネイルを削除すると、表示される子行を含むディレクトリ全体と埋め込み画像を削除します。サムネイルの説明タグは個別にも削除できます。保持するサムネイルに独自のメタデータが含まれる場合があります。"
+  ],
+  "Other chunks, including color profiles and unknown ancillary chunks, are retained and may contain private information. Image pixels, the filename and file-system information can also reveal details. This is not complete privacy sanitization. JPEG and TIFF have separate metadata tools.": [
+    "其他块（包括色彩配置文件和未知辅助块）仍会保留，可能包含私人信息。图像像素、文件名和文件系统信息也可能泄露细节。这不是完整的隐私清理。JPEG 和 TIFF 有各自的元数据工具。",
+    "其他區塊（包括色彩描述檔與未知輔助區塊）仍會保留，可能包含私人資訊。影像像素、檔名與檔案系統資訊也可能洩漏細節。這不是完整的隱私清理。JPEG 與 TIFF 有各自的中繼資料工具。",
+    "カラープロファイルや未知の補助チャンクを含む他のチャンクは保持され、個人情報が含まれる場合があります。画素、ファイル名、ファイルシステム情報にも詳細が残る可能性があります。完全なプライバシー除去ではありません。JPEG と TIFF にはそれぞれのメタデータツールがあります。"
   ]
 }

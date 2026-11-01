@@ -59,6 +59,43 @@ public static class PngMetadata
 
             return this;
         }
+        public MetadataSelection Selective(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();var selection=new MetadataSelection();var trees=new Dictionary<Chunk,MetadataTiff>();var ids=new Dictionary<Chunk,int>();int exifs=0;
+            foreach(var c in chunks)
+            {
+                token.ThrowIfCancellationRequested();var value=source.AsSpan(c.Offset+8,c.Length-12);
+                if(c.Type=="eXIf")
+                {
+                    if(++exifs>1)throw new UserError(MetadataSelection.Invalid);
+                    trees[c]=new MetadataTiff(value.ToArray(),selection,"PNG/EXIF",token);continue;
+                }
+                if(c.Type is "tEXt" or "zTXt" or "iTXt" or "tIME")
+                {
+                    string group=c.Type=="tIME"?"Dates":value.StartsWith("XML:com.adobe.xmp\0"u8)||value.StartsWith("Raw profile type xmp\0"u8)?"XMP":
+                        value.StartsWith("Raw profile type iptc\0"u8)||value.StartsWith("Raw profile type 8bim\0"u8)?"IPTC":"PNG text";
+                    int zero=value.IndexOf((byte)0);string keyword=c.Type=="tIME"?"":System.Text.Json.JsonSerializer.Serialize(Encoding.Latin1.GetString(value[..Math.Clamp(zero,0,79)]));
+                    ids[c]=selection.Add(group,c.Type+" "+keyword,"PNG/"+c.Offset,value);
+                }
+                else if(c.Type is "IDAT" or "iCCP")
+                {
+                    if(!ids.Keys.Any(k=>k.Type==c.Type))ids[c]=selection.Add("Image and color",c.Type,"PNG",value,false);
+                }
+            }
+            return selection.Writer((output,removed,cancel)=>
+            {
+                var rebuilt=trees.ToDictionary(k=>k.Key,k=>ExifChunk(k.Value.Rebuild(removed,cancel),cancel));
+                if(source.Length+rebuilt.Sum(k=>(long)k.Value.Length-k.Key.Length)>MaxBytes)throw new UserError(MetadataSelection.Invalid);
+                output.Write(Signature);
+                foreach(var c in chunks)
+                {
+                    cancel.ThrowIfCancellationRequested();
+                    if(rebuilt.TryGetValue(c,out var exif)){MetadataSelection.Copy(output,exif,cancel);continue;}
+                    if(ids.TryGetValue(c,out int id)&&removed.Contains(id))continue;
+                    for(int at=0;at<c.Length;){cancel.ThrowIfCancellationRequested();int n=Math.Min(65536,c.Length-at);output.Write(source.AsSpan(c.Offset+at,n));at+=n;}
+                }
+            });
+        }
         public void WriteLocationOnly(Stream output,CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(output);token.ThrowIfCancellationRequested();
