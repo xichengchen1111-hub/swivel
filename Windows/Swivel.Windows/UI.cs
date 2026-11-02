@@ -237,6 +237,7 @@ public sealed class MainWindow : Window
         if (!app.Prefs.IsOn(Feature.ImagePresets)) { page.Children.Add(UI.Text(app.L("Enable Image Presets in Settings first."))); return page; }
         var backups = new WrapPanel();
         backups.Children.Add(UI.Button(app.L("Import Image Presets…"), async () => await app.RunActionAsync(new("presets.import", "Import Image Presets…"), Array.Empty<string>(), this, SetStatus)));
+        backups.Children.Add(UI.Button(app.L(MacPresetExport.Title), async () => await app.RunActionAsync(new("presets.exportMac", MacPresetExport.Title), Array.Empty<string>(), this, SetStatus)));
         backups.Children.Add(UI.Button(app.L("Export Image Presets…"), async () => await app.RunActionAsync(new("presets.export", "Export Image Presets…"), Array.Empty<string>(), this, SetStatus)));
         page.Children.Add(backups);
         page.Children.Add(UI.Button(app.L("New Preset…"), () => new PresetDialog(app) { Owner = this }.ShowDialog()));

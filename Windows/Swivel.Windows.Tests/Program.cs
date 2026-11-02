@@ -225,6 +225,7 @@ internal static class Program
             Group("GifPaletteNativeChecks", () => GifPaletteNativeChecks.Run(directory,Check,Reject));
             Group("QrGardenNativeChecks", () => QrGardenNativeChecks.Run(Check,Reject));
             Group("AssistantNativeChecks", () => AssistantNativeChecks.Run(Check,Reject));
+            Group("MacPresetExportNativeChecks", () => MacPresetExportNativeChecks.Run(directory,Check,Reject));
             Group("GifPresetNativeChecks", () => GifPresetNativeChecks.Run(directory,Check,Reject));
             Group("FloatWaveNativeChecks", () => FloatWaveNativeChecks.Run(directory,Check,Reject));
             Group("SystemAudioNativeChecks", () => SystemAudioNativeChecks.Run(directory,Check,Reject));

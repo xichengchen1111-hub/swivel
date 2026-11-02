@@ -19963,5 +19963,140 @@
     "检查 Run/RunOnce、原始 StartupApproved、启动应用的任务管理器批准状态、本地服务状态与配置、选定启动文件夹条目，或有界本地计划任务配置及直白观察结果。命令、账户、路径和定义值默认隐藏。这些信息不证明实际启用、信任、任务归属或残留归属。禁用及移除仍待实现。",
     "檢查 Run/RunOnce、原始 StartupApproved、啟動應用程式的工作管理員核准狀態、本機服務狀態與設定、選定啟動資料夾項目，或有限本機排程工作設定及易懂觀察結果。命令、帳戶、路徑和定義值預設隱藏。這些資訊不證明實際啟用、信任、工作歸屬或殘留歸屬。停用及移除仍待實作。",
     "Run/RunOnce、StartupApprovedの生の値、スタートアップアプリのタスクマネージャー承認状態、ローカルサービスの状態と構成、選択したスタートアップフォルダー項目、または制限付きローカルタスクの構成と平易な確認結果を調べます。コマンド、アカウント、パス、定義値は表示を選ぶまで非表示です。有効性、信頼、タスクや残存物の所有権を証明しません。無効化と削除は今後の予定です。"
+  ],
+  "Export for Mac…": [
+    "导出到 Mac…",
+    "匯出至 Mac…",
+    "Mac 用に書き出す…"
+  ],
+  "Review every row before exporting. This writes a Mac image preset JSON array, not a Windows backup. Windows settings and feature switches are unchanged. Only the rows marked for export will be written, with stable IDs.": [
+    "写出前请逐项核对。本操作生成 Mac 图片预设 JSON 数组，不是 Windows 备份；不会更改 Windows 设置或功能开关。只写出标为可导出的项，并保留稳定 ID。",
+    "寫入前請逐項核對。本操作產生 Mac 圖片預設 JSON 陣列，並非 Windows 備份；不會變更 Windows 設定或功能開關。只寫入標為可匯出的項目，並保留穩定 ID。",
+    "書き出す前に各項目を確認してください。Windows バックアップではなく Mac 画像プリセットの JSON 配列を作成します。Windows の設定や機能スイッチは変更せず、書き出し対象の項目だけを固定 ID で保存します。"
+  ],
+  "Installing this file REPLACES ALL image presets on the Mac. To keep the current Mac list, first export its imagePresets.v1 Data as the same JSON array and choose that file here. Kept Mac rows stay unchanged and first; conflicting Windows rows are not added. An omitted Mac list means only the compatible Windows rows will remain after installation.": [
+    "安装此文件会替换 Mac 上的全部图片预设。要保留当前 Mac 列表，请先将其 imagePresets.v1 Data 导出为同样的 JSON 数组，再在此选择该文件。Mac 项保持不变并排在前面；冲突的 Windows 项不会加入。未选择 Mac 列表时，安装后只保留兼容的 Windows 项。",
+    "安裝此檔案會取代 Mac 上的全部圖片預設。若要保留目前的 Mac 清單，請先將其 imagePresets.v1 Data 匯出為相同的 JSON 陣列，再於此選擇該檔案。Mac 項目保持不變並排在前面；衝突的 Windows 項目不會加入。未選擇 Mac 清單時，安裝後只保留相容的 Windows 項目。",
+    "このファイルを適用すると、Mac の画像プリセットがすべて置き換わります。現在の Mac リストを残すには、先に imagePresets.v1 Data を同じ JSON 配列として書き出し、ここで選択してください。Mac の項目は変更せず先頭に保持し、競合する Windows 項目は追加しません。Mac リストを選ばない場合、適用後に残るのは互換性のある Windows 項目のみです。"
+  ],
+  "Matching recipe values do not promise identical images: codecs, JPEG quality, resizing, color and input/pixel limits can differ. Windows removes metadata, so new Mac rows use stripMetadata=true. JPG maps to Mac jpeg. Photo adjustments and Auto, BMP, GIF and GIF post-processing limits cannot be transferred.": [
+    "配方数值相同不保证图片完全一致：编码器、JPEG 质量、缩放、色彩及输入/像素限制可能不同。Windows 会移除元数据，因此新增 Mac 项使用 stripMetadata=true。JPG 对应 Mac jpeg。照片调整与 Auto、BMP、GIF 及 GIF 后处理限制无法迁移。",
+    "配方數值相同不保證圖片完全一致：編碼器、JPEG 品質、縮放、色彩及輸入/像素限制可能不同。Windows 會移除中繼資料，因此新增 Mac 項目使用 stripMetadata=true。JPG 對應 Mac jpeg。照片調整與 Auto、BMP、GIF 及 GIF 後處理限制無法遷移。",
+    "レシピの値が同じでも画像の一致は保証されません。コーデック、JPEG 品質、拡大縮小、色、入力・画素数の制限は異なる場合があります。Windows はメタデータを削除するため、新しい Mac 項目は stripMetadata=true になります。JPG は Mac の jpeg に対応します。写真調整、Auto、BMP、GIF と GIF の後処理制限は移行できません。"
+  ],
+  "1. Quit Swivel on the Mac. Keep a backup of the Mac's current imagePresets.v1 Data before replacing it.\n2. Transfer the exported JSON to the Mac and name it swivel-mac-presets.json. In Terminal, change to the folder containing that file.\n3. Run this fixed command. It REPLACES ALL Mac image presets:": [
+    "1. 在 Mac 上退出 Swivel。替换前请备份 Mac 当前的 imagePresets.v1 Data。\n2. 将导出的 JSON 传到 Mac，并命名为 swivel-mac-presets.json。在终端中切换到此文件所在的文件夹。\n3. 运行下面的固定命令。它会替换 Mac 上的全部图片预设：",
+    "1. 在 Mac 上結束 Swivel。取代前請備份 Mac 目前的 imagePresets.v1 Data。\n2. 將匯出的 JSON 傳到 Mac，命名為 swivel-mac-presets.json。在終端機中切換至此檔案所在的資料夾。\n3. 執行下方固定指令。它會取代 Mac 上的全部圖片預設：",
+    "1. Mac で Swivel を終了します。置き換える前に現在の imagePresets.v1 Data をバックアップしてください。\n2. 書き出した JSON を Mac に転送し、swivel-mac-presets.json という名前にします。ターミナルでそのファイルのあるフォルダーに移動します。\n3. 次の固定コマンドを実行します。Mac の画像プリセットをすべて置き換えます："
+  ],
+  "4. Reopen Swivel and check Image Presets. Mac menu choices are not merged or rewritten. Swivel on Windows never executes this command.": [
+    "4. 重新打开 Swivel 并检查图片预设。Mac 菜单选项不会合并或改写。Windows 上的 Swivel 不会执行此命令。",
+    "4. 重新開啟 Swivel 並檢查圖片預設。Mac 選單選項不會合併或改寫。Windows 上的 Swivel 不會執行此指令。",
+    "4. Swivel を再度開き、画像プリセットを確認します。Mac のメニュー設定は統合も書き換えもしません。Windows の Swivel はこのコマンドを実行しません。"
+  ],
+  "Choose a valid Mac image preset JSON array (64 KB, up to 24 unique presets, names up to 60 UTF-16 units). Nothing was exported.": [
+    "请选择有效的 Mac 图片预设 JSON 数组（64 KB、最多 24 个唯一预设，名称最多 60 个 UTF-16 单元）。未导出任何内容。",
+    "請選擇有效的 Mac 圖片預設 JSON 陣列（64 KB、最多 24 個唯一預設，名稱最多 60 個 UTF-16 單元）。未匯出任何內容。",
+    "有効な Mac 画像プリセット JSON 配列を選択してください（64 KB、一意のプリセット 24 項目まで、名前は UTF-16 で 60 単位まで）。何も書き出していません。"
+  ],
+  "No presets can be exported. An empty replacement file will not be written.": [
+    "没有可导出的预设。不会写出空的替换文件。",
+    "沒有可匯出的預設。不會寫入空的取代檔案。",
+    "書き出せるプリセットがありません。空の置き換えファイルは作成しません。"
+  ],
+  "Mac supports JPEG, PNG, HEIC and TIFF presets. This Windows format is not exported.": [
+    "Mac 支持 JPEG、PNG、HEIC 和 TIFF 预设。此 Windows 格式不会导出。",
+    "Mac 支援 JPEG、PNG、HEIC 和 TIFF 預設。此 Windows 格式不會匯出。",
+    "Mac のプリセットは JPEG、PNG、HEIC、TIFF に対応します。この Windows 形式は書き出しません。"
+  ],
+  "Mac image presets cannot store photo adjustments or per-image Auto. This recipe is not exported.": [
+    "Mac 图片预设无法保存照片调整或逐图 Auto。不会导出此配方。",
+    "Mac 圖片預設無法儲存照片調整或逐圖 Auto。不會匯出此配方。",
+    "Mac の画像プリセットは写真調整や画像ごとの Auto を保存できません。このレシピは書き出しません。"
+  ],
+  "Mac requires a long edge of 0 or 64–16384 pixels. This recipe is not exported.": [
+    "Mac 的长边必须为 0 或 64–16384 像素。不会导出此配方。",
+    "Mac 的長邊必須為 0 或 64–16384 像素。不會匯出此配方。",
+    "Mac の長辺は 0 または 64～16384 ピクセルである必要があります。このレシピは書き出しません。"
+  ],
+  "The ID or case-insensitive name conflicts with a kept Mac row or an earlier Windows row. This row is not added.": [
+    "ID 或不区分大小写的名称与保留的 Mac 项或之前的 Windows 项冲突。不会加入此项。",
+    "ID 或不區分大小寫的名稱與保留的 Mac 項目或先前的 Windows 項目衝突。不會加入此項目。",
+    "ID または大文字と小文字を区別しない名前が、保持する Mac 項目または先行する Windows 項目と競合しています。この項目は追加しません。"
+  ],
+  "Adding this row would exceed the 24-preset or 64 KB export limit. This row is not added.": [
+    "加入此项会超过 24 个预设或 64 KB 的导出限制。不会加入此项。",
+    "加入此項目會超過 24 個預設或 64 KB 的匯出限制。不會加入此項目。",
+    "この項目を追加すると、プリセット 24 項目または 64 KB の書き出し上限を超えます。追加しません。"
+  ],
+  "Choose Mac Export Folder…": [
+    "选择 Mac 导出文件夹…",
+    "選擇 Mac 匯出資料夾…",
+    "Mac 用の書き出し先フォルダーを選択…"
+  ],
+  "Choose Mac List to Merge…": [
+    "选择要合并的 Mac 列表…",
+    "選擇要合併的 Mac 清單…",
+    "統合する Mac リストを選択…"
+  ],
+  "Copy Mac Install Steps": [
+    "复制 Mac 安装步骤",
+    "複製 Mac 安裝步驟",
+    "Mac 適用手順をコピー"
+  ],
+  "Mac Install Steps": [
+    "Mac 安装步骤",
+    "Mac 安裝步驟",
+    "Mac 適用手順"
+  ],
+  "No Mac list selected. Installation will keep only the exported Windows rows.": [
+    "未选择 Mac 列表。安装后只保留导出的 Windows 项。",
+    "未選擇 Mac 清單。安裝後只保留匯出的 Windows 項目。",
+    "Mac リストは未選択です。適用後は書き出した Windows 項目のみが残ります。"
+  ],
+  "Kept Mac list:": [
+    "保留的 Mac 列表：",
+    "保留的 Mac 清單：",
+    "保持する Mac リスト："
+  ],
+  "Presets to write: {0}. Refused Windows rows: {1}.": [
+    "将写出 {0} 个预设。拒绝 {1} 个 Windows 项。",
+    "將寫入 {0} 個預設。拒絕 {1} 個 Windows 項目。",
+    "書き出すプリセット：{0}。拒否した Windows 項目：{1}。"
+  ],
+  "Kept unchanged from Mac": [
+    "从 Mac 原样保留",
+    "從 Mac 原樣保留",
+    "Mac の項目を変更せず保持"
+  ],
+  "Recipe values preserved for Mac": [
+    "保留配方数值供 Mac 使用",
+    "保留配方數值供 Mac 使用",
+    "レシピの値を維持して Mac 用に保存"
+  ],
+  "Mac preset export saved.": [
+    "Mac 预设导出已保存。",
+    "Mac 預設匯出已儲存。",
+    "Mac 用プリセットを書き出しました。"
+  ],
+  "Exported JSON file": [
+    "导出的 JSON 文件",
+    "匯出的 JSON 檔案",
+    "書き出した JSON ファイル"
+  ],
+  "The name contains invalid Unicode and cannot be transferred without changing it. This row is not exported.": [
+    "名称包含无效 Unicode，无法原样迁移。不会导出此项。",
+    "名稱包含無效 Unicode，無法原樣遷移。不會匯出此項目。",
+    "名前に無効な Unicode が含まれるため、変更せずに移行できません。この項目は書き出しません。"
+  ],
+  "Export and optional Mac lists are limited to 64 KB and 24 total presets. Names must be non-blank and at most 60 UTF-16 units, a conservative bound for Swift's character count. Mac IDs must be non-blank and at most 128 UTF-16 units. IDs and names must be unique, including equivalent Unicode spellings; name conflicts ignore case.": [
+    "导出和可选的 Mac 列表限制为 64 KB、总计 24 项。名称不得为空白，最多 60 个 UTF-16 单元，这是对 Swift 字符数的保守限制。Mac ID 不得为空白且最多 128 个 UTF-16 单元。ID 和名称必须唯一，包括 Unicode 等价写法；名称冲突不区分大小写。",
+    "匯出及選用的 Mac 清單限制為 64 KB、總計 24 項。名稱不可空白，最多 60 個 UTF-16 單元，這是對 Swift 字元數的保守限制。Mac ID 不可空白且最多 128 個 UTF-16 單元。ID 和名稱必須唯一，包括 Unicode 等價寫法；名稱衝突不區分大小寫。",
+    "書き出しと任意の Mac リストは 64 KB、合計 24 項目までです。名前は空白のみを禁止し、Swift の文字数に対する保守的な上限として UTF-16 で 60 単位までとします。Mac ID は空白のみを禁止し、UTF-16 で 128 単位までです。ID と名前は Unicode の等価表現も含め一意である必要があります。名前の競合では大文字と小文字を区別しません。"
+  ],
+  "The name contains only separators, control or format characters and is blank on the Mac. This row is not exported.": [
+    "名称仅含分隔符、控制字符或格式字符，在 Mac 上视为空白。不会导出此项。",
+    "名稱僅含分隔符、控制字元或格式字元，在 Mac 上視為空白。不會匯出此項目。",
+    "名前が区切り文字、制御文字、書式文字のみで、Mac では空白と見なされます。この項目は書き出しません。"
   ]
 }
