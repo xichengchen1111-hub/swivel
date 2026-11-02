@@ -20098,5 +20098,140 @@
     "名称仅含分隔符、控制字符或格式字符，在 Mac 上视为空白。不会导出此项。",
     "名稱僅含分隔符、控制字元或格式字元，在 Mac 上視為空白。不會匯出此項目。",
     "名前が区切り文字、制御文字、書式文字のみで、Mac では空白と見なされます。この項目は書き出しません。"
+  ],
+  "Export full library for Mac": [
+    "为 Mac 导出完整库",
+    "為 Mac 匯出完整庫",
+    "Mac 用にライブラリ全体を書き出す"
+  ],
+  "Review every row before exporting a full Mac library. Names, exact content, groups, templates and seasons are retained. Mac renders all codes at M correction; Windows scene artwork differs. Refused and duplicate rows are listed and left out, never shortened.": [
+    "导出完整 Mac 库前请检查每一行。保留名称、原始内容、分组、模板和季节。Mac 全部使用 M 级纠错；Windows 场景造型不同。拒绝项和重复项会列出并省略，绝不截短。",
+    "匯出完整 Mac 庫前請檢查每一列。保留名稱、原始內容、群組、範本和季節。Mac 全部使用 M 級糾錯；Windows 場景造型不同。拒絕項和重複項會列出並省略，絕不截短。",
+    "Mac ライブラリ全体の書き出し前に各行を確認してください。名前、元の内容、グループ、テンプレート、季節を保持します。Mac の誤り訂正はすべて M です。Windows のシーンの外観は異なります。拒否項目と重複項目は一覧に表示し、省略します。切り詰めません。"
+  ],
+  "Quit Swivel on the Mac. Back up the current library first. Put the exported file at ~/Library/Application Support/Swivel/QRCodes/library-v1.json (create the QRCodes folder if needed). Rename a numbered export to library-v1.json. This replaces the Mac library file, including entries not in this export. Reopen Swivel and check the library.": [
+    "先退出 Mac 上的 Swivel，并备份当前库。将导出的文件放到 ~/Library/Application Support/Swivel/QRCodes/library-v1.json（必要时创建 QRCodes 文件夹）。若导出文件名带编号，请重命名为 library-v1.json。这会替换 Mac 库文件，包括本次导出中没有的条目。重新打开 Swivel 并检查库。",
+    "先結束 Mac 上的 Swivel，並備份目前的庫。將匯出的檔案放到 ~/Library/Application Support/Swivel/QRCodes/library-v1.json（必要時建立 QRCodes 資料夾）。若匯出檔名帶編號，請重新命名為 library-v1.json。這會取代 Mac 庫檔案，包括本次匯出中沒有的項目。重新開啟 Swivel 並檢查庫。",
+    "Mac の Swivel を終了し、現在のライブラリをバックアップしてください。書き出したファイルを ~/Library/Application Support/Swivel/QRCodes/library-v1.json に配置します（必要なら QRCodes フォルダーを作成）。番号付きのファイル名は library-v1.json に変更してください。Mac のライブラリファイルを置き換えるため、書き出しに含まれない項目は失われます。Swivel を開き直して確認してください。"
+  ],
+  "This JSON contains complete QR text in plaintext. Anyone who can read it can see private content. Nothing is uploaded. Existing export files are never replaced.": [
+    "此 JSON 包含完整的明文二维码内容。能读取文件的人都能看到私密内容。不会上传，也不会替换已有导出文件。",
+    "此 JSON 包含完整的明文 QR 碼內容。能讀取檔案的人都能看到私密內容。不會上傳，也不會取代既有匯出檔案。",
+    "この JSON は QR の全文を平文で含みます。ファイルを読める人は個人情報も閲覧できます。アップロードや既存の書き出しファイルの置き換えは行いません。"
+  ],
+  "Mac renders this code at M correction instead of its Windows L, Q or H level.": [
+    "Mac 将使用 M 级纠错绘制此码，而非 Windows 的 L、Q 或 H 级。",
+    "Mac 將使用 M 級糾錯繪製此碼，而非 Windows 的 L、Q 或 H 級。",
+    "Mac では Windows の L、Q、H の代わりに M の誤り訂正で描画します。"
+  ],
+  "The Windows identifier is not a UUID; a stable deterministic UUID is generated.": [
+    "Windows 标识符不是 UUID；将生成稳定且确定的 UUID。",
+    "Windows 識別碼不是 UUID；將產生穩定且確定的 UUID。",
+    "Windows の識別子が UUID ではないため、同じ入力から同じ UUID を生成します。"
+  ],
+  "This UUID is already in the output; a new deterministic UUID is used.": [
+    "输出中已有此 UUID；改用新的确定性 UUID。",
+    "輸出中已有此 UUID；改用新的確定性 UUID。",
+    "出力に同じ UUID があるため、新しい決定的な UUID を使用します。"
+  ],
+  "Not added: the same value and collection already exist (Mac Unicode-equivalent duplicate rule).": [
+    "不添加：已存在相同内容和分组（按 Mac 的 Unicode 规范等价去重规则）。",
+    "不新增：已存在相同內容和群組（依 Mac 的 Unicode 正規等價去重規則）。",
+    "追加しません。同じ内容とグループが存在します（Mac の Unicode 正規等価による重複判定）。"
+  ],
+  "Refused: invalid Unicode, empty content, blank name, unsupported scene or correction level, or missing identifier.": [
+    "拒绝：Unicode 无效、内容为空、名称空白、场景或纠错级别不支持，或缺少标识符。",
+    "拒絕：Unicode 無效、內容為空、名稱空白、場景或糾錯級別不支援，或缺少識別碼。",
+    "拒否：無効な Unicode、空の内容や名前、未対応のシーンや誤り訂正、または識別子の欠落です。"
+  ],
+  "Refused: the name exceeds the conservative Mac limit of 120 Unicode scalars.": [
+    "拒绝：名称超过保守的 Mac 上限（120 个 Unicode 标量）。",
+    "拒絕：名稱超過保守的 Mac 上限（120 個 Unicode 純量）。",
+    "拒否：名前が安全側の Mac 上限（Unicode スカラー 120 個）を超えています。"
+  ],
+  "Refused: the collection exceeds the conservative Mac limit of 80 Unicode scalars.": [
+    "拒绝：分组超过保守的 Mac 上限（80 个 Unicode 标量）。",
+    "拒絕：群組超過保守的 Mac 上限（80 個 Unicode 純量）。",
+    "拒否：グループが安全側の Mac 上限（Unicode スカラー 80 個）を超えています。"
+  ],
+  "Refused: content exceeds 2,000 UTF-8 bytes.": [
+    "拒绝：内容超过 2,000 个 UTF-8 字节。",
+    "拒絕：內容超過 2,000 個 UTF-8 位元組。",
+    "拒否：内容が UTF-8 で 2,000 バイトを超えています。"
+  ],
+  "The Mac merge source cannot be read safely (valid library JSON, up to 256 KiB and 128 rows required). Nothing was exported. Unknown fields or scenes, duplicate IDs and invalid rows are refused; conservative name and collection scalar limits apply.": [
+    "无法安全读取 Mac 合并源（须为有效的库 JSON，最多 256 KiB、128 条）。未导出任何内容。未知字段或场景、重复 ID、无效行均被拒绝；名称和分组采用保守的 Unicode 标量数上限。",
+    "無法安全讀取 Mac 合併來源（須為有效的庫 JSON，最多 256 KiB、128 項）。未匯出任何內容。未知欄位或場景、重複 ID、無效列均被拒絕；名稱和群組採保守的 Unicode 純量數上限。",
+    "Mac の結合元を安全に読み取れません（有効なライブラリ JSON、最大 256 KiB・128 項目）。何も書き出していません。不明なフィールドやシーン、重複 ID、無効な行は拒否します。名前とグループには安全側のスカラー数上限を適用します。"
+  ],
+  "Missing Mac scene fields use Summer and Tree defaults.": [
+    "Mac 场景字段缺失时使用夏季与树的默认值。",
+    "Mac 場景欄位缺失時使用夏季與樹的預設值。",
+    "Mac のシーン情報がない場合は夏と木の既定値を使います。"
+  ],
+  "No Mac source selected. This export contains only Windows entries and will replace the Mac library when installed. Choose the current Mac library to keep its entries.": [
+    "未选择 Mac 源文件。此导出仅含 Windows 条目，安装时会替换 Mac 库。要保留 Mac 条目，请选择当前 Mac 库。",
+    "未選取 Mac 來源檔案。此匯出僅含 Windows 項目，安裝時會取代 Mac 庫。要保留 Mac 項目，請選取目前的 Mac 庫。",
+    "Mac の結合元が未選択です。Windows の項目のみを書き出し、配置時に Mac のライブラリを置き換えます。Mac の項目を保持するには現在のライブラリを選んでください。"
+  ],
+  "Choose current Mac library to merge…": [
+    "选择当前 Mac 库以合并…",
+    "選取目前的 Mac 庫以合併…",
+    "結合する現在の Mac ライブラリを選択…"
+  ],
+  "Review full Mac library export": [
+    "检查完整 Mac 库导出",
+    "檢查完整 Mac 庫匯出",
+    "Mac ライブラリ全体の書き出しを確認"
+  ],
+  "The selected Mac library is kept first. Windows entries are added only when value and collection are new. The selected file is not modified.": [
+    "先保留所选 Mac 库。仅在内容与分组组合尚不存在时添加 Windows 条目。不修改所选文件。",
+    "先保留所選 Mac 庫。僅在內容與群組組合尚不存在時新增 Windows 項目。不修改所選檔案。",
+    "選択した Mac の項目を先頭に保持します。内容とグループの組み合わせが新しい Windows 項目だけを追加します。元のファイルは変更しません。"
+  ],
+  "Copy Mac install steps": [
+    "复制 Mac 安装步骤",
+    "複製 Mac 安裝步驟",
+    "Mac への配置手順をコピー"
+  ],
+  "Mac install steps": [
+    "Mac 安装步骤",
+    "Mac 安裝步驟",
+    "Mac への配置手順"
+  ],
+  "Output rows: {0}. Omitted rows: {1}.": [
+    "输出：{0} 条。省略：{1} 条。",
+    "輸出：{0} 項。省略：{1} 項。",
+    "出力：{0} 件。省略：{1} 件。"
+  ],
+  "Mac source": [
+    "Mac 来源",
+    "Mac 來源",
+    "Mac 由来"
+  ],
+  "Windows source": [
+    "Windows 来源",
+    "Windows 來源",
+    "Windows 由来"
+  ],
+  "Exact": [
+    "原样保留",
+    "原樣保留",
+    "そのまま保持"
+  ],
+  "Changed": [
+    "已调整",
+    "已調整",
+    "変更あり"
+  ],
+  "Full Mac QR library saved. Follow the install steps to replace the Mac library.": [
+    "完整 Mac 二维码库已保存。请按安装步骤替换 Mac 库。",
+    "完整 Mac QR 碼庫已儲存。請依安裝步驟取代 Mac 庫。",
+    "Mac 用 QR ライブラリ全体を保存しました。配置手順に従って Mac のライブラリを置き換えてください。"
+  ],
+  "No creation date is stored; created is set to 2001-01-01 00:00:00 UTC (Foundation seconds: 0).": [
+    "未存储创建日期；created 设为 2001-01-01 00:00:00 UTC（Foundation 秒数：0）。",
+    "未儲存建立日期；created 設為 2001-01-01 00:00:00 UTC（Foundation 秒數：0）。",
+    "作成日時が保存されていないため、created を 2001-01-01 00:00:00 UTC（Foundation 秒数：0）に設定します。"
   ]
 }

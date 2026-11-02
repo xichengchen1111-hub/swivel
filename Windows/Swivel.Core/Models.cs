@@ -270,6 +270,7 @@ public static class Catalog
         ,new("qr.import", "Import QR Library…", Core.Feature.QrCodes, RequiresFiles: false)
         ,new("qr.importMac", "Import Mac QR Library…", Core.Feature.QrCodes, RequiresFiles: false)
         ,new("qr.export", "Export QR Library…", Core.Feature.QrCodes, RequiresFiles: false)
+        ,new("qr.exportMacLibrary", QrMacLibraryExport.Title, Core.Feature.QrCodes, RequiresFiles: false)
         ,new("qr.exportMacImages", "Export QR Images for Mac…", Core.Feature.QrCodes, RequiresFiles: false)
         ,new("doctor.startupfolders", "Inspect Startup Folder Entries…", Core.Feature.Doctor, RequiresFiles: false)
         ,new("doctor.commonduplicates", "Compare Common Folders…", Core.Feature.Doctor, RequiresFiles: false)

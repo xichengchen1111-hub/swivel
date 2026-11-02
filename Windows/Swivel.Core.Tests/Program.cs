@@ -66,6 +66,7 @@ QrRotationChecks.Run(Check, Reject);
 QrDataRecoveryChecks.Run(Check, Reject);
 GifDitherChecks.Run(Check, Reject);
 QrMacExportChecks.Run(Check, Reject);
+QrMacLibraryExportChecks.Run(Check, Reject);
 ClotheslineGestureChecks.Run(Check, Reject);
 CommonSimilarityChecks.Run(Check, Reject);
 CloseWindowsChecks.Run(Check, Reject);

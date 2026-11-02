@@ -1,0 +1,29 @@
+[
+  {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "name": "\u540D\u79F0 1",
+    "value": "\u503C 1",
+    "collection": "\u7D44",
+    "season": "spring",
+    "template": "bouquet",
+    "created": 0
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000002",
+    "name": "\u540D\u79F0 2",
+    "value": "\u503C 2",
+    "collection": "\u7D44",
+    "season": "autumn",
+    "template": "island",
+    "created": 0
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000003",
+    "name": "\u540D\u79F0 3",
+    "value": "\u503C 3",
+    "collection": "\u7D44",
+    "season": "summer",
+    "template": "tree",
+    "created": 0
+  }
+]
