@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using Swivel.Core;
 
 internal static class MacPresetExportChecks
@@ -36,6 +37,20 @@ internal static class MacPresetExportChecks
         reject(() => MacPresetExport.Prepare(unsupported[..5]).Encode(), "All refused cannot create an empty replacement");
         reject(() => MacPresetExport.Prepare(Array.Empty<ImagePreset>()).Encode(), "Empty Windows library cannot create replacement");
         byte[] mac = Encoding.UTF8.GetBytes("[{\"id\":\"old\",\"name\":\"Mac HEIC\",\"nameKey\":null,\"longEdge\":16384,\"format\":\"heic\",\"quality\":77,\"stripMetadata\":false}]");
+        foreach (string blank in new[] { "\u200b", "\u2060", "\U000e0001", " \u200b\u2028\u2029\t", "", "\u00a0", "\u2028", "\t" })
+        {
+            var blankPlan = MacPresetExport.Prepare(new[] { presets[0] with { Name = blank }, presets[1] });
+            check(blankPlan.Count == 1 && !blankPlan.Rows[0].Exported && blankPlan.Rows[0].Issues.SequenceEqual(new[] { MacPresetExport.BlankName }) &&
+                blankPlan.Rows[1].Exported && Strings.Table.ContainsKey(blankPlan.Rows[0].Issues[0]), "Mac export refuses blank Unicode names per row with a translated reason and retains valid rows");
+            string blankMac = Encoding.UTF8.GetString(mac).Replace("\"Mac HEIC\"", JsonSerializer.Serialize(blank));
+            bool invalidSource = false;
+            try { _ = MacPresetExport.Prepare(presets, Encoding.UTF8.GetBytes(blankMac)); }
+            catch (UserError error) { invalidSource = error.Message == MacPresetExport.Invalid; }
+            check(invalidSource, "Mac merge refuses the whole source when a name contains only separators, controls or format characters");
+            string nonblankMac = Encoding.UTF8.GetString(mac).Replace("\"Mac HEIC\"", JsonSerializer.Serialize(blank + "A"));
+            check(MacPresetExport.Prepare(presets, Encoding.UTF8.GetBytes(nonblankMac)).Count == 4,
+                "Mac merge retains nonblank names containing separators, controls or format characters");
+        }
         var merge = MacPresetExport.Prepare(presets, mac);
         string merged = Encoding.UTF8.GetString(merge.Encode());
         check(merge.Count == 4 && merge.Rows[0].Kept && merged.StartsWith("[" + Encoding.UTF8.GetString(mac)[1..^1] + ",", StringComparison.Ordinal), "Mac merge preserves raw HEIC/metadata/long edge/nameKey-null row unchanged and first");
@@ -78,7 +93,7 @@ internal static class MacPresetExportChecks
                     var sample = presets[1] with { Recipe = new(format, edge, quality) };
                     check(PresetLibrary.Decode(MacPresetExport.Prepare(new[] { sample }).Encode()).Compatible.Single().Recipe == sample.Recipe, "Mac export all quality values and size/format boundaries roundtrip");
                 }
-        foreach (var note in new[] { MacPresetExport.Scope, MacPresetExport.Replace, MacPresetExport.Equivalence, MacPresetExport.Bounds, MacPresetExport.InstallStart, MacPresetExport.InstallEnd, MacPresetExport.Name, MacPresetExport.Invalid, MacPresetExport.Empty, MacPresetExport.Limit, MacPresetExport.Conflict })
+        foreach (var note in new[] { MacPresetExport.Scope, MacPresetExport.Replace, MacPresetExport.Equivalence, MacPresetExport.Bounds, MacPresetExport.InstallStart, MacPresetExport.InstallEnd, MacPresetExport.Name, MacPresetExport.BlankName, MacPresetExport.Invalid, MacPresetExport.Empty, MacPresetExport.Limit, MacPresetExport.Conflict })
             check(Strings.Table.ContainsKey(note) && Strings.Table[note].Length == 3, "Mac export note/error has all three translations");
         var prefs = new Prefs();
         var action = Catalog.Actions.Single(x => x.Id == "presets.exportMac");

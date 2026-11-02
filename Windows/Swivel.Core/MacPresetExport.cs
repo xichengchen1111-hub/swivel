@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -43,10 +44,14 @@ public static class MacPresetExport
     public const string Photo = "Mac image presets cannot store photo adjustments or per-image Auto. This recipe is not exported.";
     public const string Edge = "Mac requires a long edge of 0 or 64–16384 pixels. This recipe is not exported.";
     public const string Name = "The name contains invalid Unicode and cannot be transferred without changing it. This row is not exported.";
+    public const string BlankName = "The name contains only separators, control or format characters and is blank on the Mac. This row is not exported.";
     public const string Conflict = "The ID or case-insensitive name conflicts with a kept Mac row or an earlier Windows row. This row is not added.";
     public const string Limit = "Adding this row would exceed the 24-preset or 64 KB export limit. This row is not added.";
 
     private static string Key(string text) => text.Normalize(NormalizationForm.FormC);
+    private static bool IsBlankName(string name) => string.IsNullOrEmpty(name) || name.EnumerateRunes().All(rune =>
+        Rune.GetUnicodeCategory(rune) is UnicodeCategory.SpaceSeparator or UnicodeCategory.LineSeparator or
+            UnicodeCategory.ParagraphSeparator or UnicodeCategory.Control or UnicodeCategory.Format);
     private static byte[] ArrayBytes(IReadOnlyList<JsonElement> items)
     {
         using var stream = new MemoryStream();
@@ -61,7 +66,8 @@ public static class MacPresetExport
     public static MacPresetExportPlan Prepare(IReadOnlyList<ImagePreset> presets, ReadOnlyMemory<byte>? currentMac = null)
     {
         var snapshot = presets.ToArray();
-        _ = PresetLibrary.Encode(snapshot); // Reuse Windows validation; do not reinterpret unknown fields.
+        // Blank names are refused per row below; reuse Windows validation for the other rows.
+        _ = PresetLibrary.Encode(snapshot.Where(preset => preset is null || !IsBlankName(preset.Name)).ToArray());
         var rows = new List<MacPresetExportRow>(); var items = new List<JsonElement>();
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -81,7 +87,7 @@ public static class MacPresetExport
                     int edge = item.GetProperty("longEdge").GetInt32(), quality = item.GetProperty("quality").GetInt32();
                     bool strip = item.GetProperty("stripMetadata").GetBoolean();
                     // UTF-16 length is an upper bound on Swift grapheme count, independent of Unicode version.
-                    if (string.IsNullOrWhiteSpace(id) || id.Length > 128 || string.IsNullOrWhiteSpace(name) || name.Length > 60 ||
+                    if (string.IsNullOrWhiteSpace(id) || id.Length > 128 || IsBlankName(name) || name.Length > 60 ||
                         !ids.Add(Key(id)) || !names.Add(Key(name)) || (edge != 0 && edge is < 64 or > 16384) ||
                         quality is < 1 or > 100 || format is not ("jpeg" or "png" or "heic" or "tiff")) throw new JsonException();
                     items.Add(item.Clone());
@@ -97,6 +103,7 @@ public static class MacPresetExport
             if (recipe.Format is not ("jpg" or "png" or "tiff")) issues.Add(Format);
             if (recipe.Adjustments is not null || recipe.AutoPerImage) issues.Add(Photo);
             if (recipe.LongEdge != 0 && recipe.LongEdge < 64) issues.Add(Edge);
+            if (IsBlankName(preset.Name)) issues.Add(BlankName);
             string nameKey;
             try { nameKey = Key(preset.Name); }
             catch (ArgumentException) { nameKey = ""; issues.Add(Name); }
