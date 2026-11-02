@@ -1332,7 +1332,7 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 - Each branch passed its own Windows x64 CI and Codex review before merging: C07 41397279131 (core 699,066; no P1/P2 from the review, the supervisor added the blank-name rule, CI passed after it), E04 41397271945 (core 698,213; 1 P2 and 2 P3 fixed, CI passed, not re-reviewed), B09 41400310689 (core 699,125; 1 P2 and 1 P3 fixed, CI passed, not re-reviewed). The F09 fix 7d4e4a0 left unreviewed in 0.141 was re-reviewed statically: no P1/P2, no P3.
 - B09 needed three CI runs. 41397286814 measured a window that was never shown (width 0) and 41398836331 hardcoded 420x330 against the real 450x320 minimum; both were faults in the check, and the dialog did not change.
 - Mac format checks, on a Mac, without changing or building Mac code: the C07 and E04 fixtures decoded with a copy of the Mac structs (3 valid rows each); the C07 install command ran against a scratch defaults domain, since deleted.
-- After merging: MERGED_CI_RESULT
+- After merging: Real-Windows CI 41418084159 passed on 55a351f, core 700,328 and native 79,584 checks. It did not package (package=false).
 - Not tested: hand use on real Windows; loading the exported files in the real Mac Swivel; the three windows' UI, DPI and Narrator; folder icons in real Explorer, its icon cache and refresh; pictures from real cameras as folder icons; ARM64.
 
 ## Windows0.141 — merged E05 several codes and barcodes, C06 selective metadata, F09 service and task configuration (Codex) (2026-11-01)
