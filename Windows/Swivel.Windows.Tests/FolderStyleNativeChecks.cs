@@ -318,7 +318,7 @@ internal static class FolderStyleNativeChecks
     private static void DialogChecks(Action<bool, string> check)
     {
         if (Application.Current is not App app) throw new InvalidOperationException("Folder dialog checks need the validation App.");
-        var dialog = new FolderStyleDialog(app, new[] { (@"C:\Photos", FolderStyleState.None, (string?)null) });
+        string previousLanguage = app.Prefs.Language;
         try
         {
             static IEnumerable<DependencyObject> Children(DependencyObject parent)
@@ -327,19 +327,58 @@ internal static class FolderStyleNativeChecks
                 foreach (object child in LogicalTreeHelper.GetChildren(parent))
                     if (child is DependencyObject node) foreach (var item in Children(node)) yield return item;
             }
-            dialog.Measure(new Size(420, 330)); dialog.Arrange(new Rect(0, 0, 420, 330)); dialog.UpdateLayout();
-            var controls = Children(dialog).ToArray();
-            var picker = controls.OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == app.L("Folder surface"));
-            check(picker.Items.Count == FolderSurfaces.Names.Count && picker.MaxDropDownHeight <= 240,
-                "Dialog exposes every named material in a bounded scrollable picker");
-            check(picker.ActualWidth <= 340 && picker.ActualWidth > 0, "Material picker fits existing minimum window width");
-            check(controls.OfType<Button>().Any(b => b.Content is string text && text == app.L("Choose Picture…")) &&
-                controls.OfType<Button>().Any(b => b.Content is string text && text == app.L("Remove picture")), "Picture choose/remove controls available");
+            foreach (string language in new[] { "en", "zh-Hans", "zh-Hant", "ja" })
+            {
+                app.Prefs.SetLanguage(language);
+                var dialog = new FolderStyleDialog(app, new[] { (@"C:\Photos", FolderStyleState.None, (string?)null) });
+                try
+                {
+                    // An unshown Window is Collapsed: Measure/Arrange on it leaves its children unmeasured.
+                    // Show at the existing minimum so native chrome and the vertical scrollbar consume real space.
+                    dialog.Width = dialog.MinWidth; dialog.Height = dialog.MinHeight;
+                    dialog.ShowActivated = false; dialog.ShowInTaskbar = false;
+                    dialog.Show(); dialog.UpdateLayout();
+                    check(dialog.MinWidth == 420 && dialog.MinHeight == 330 && Math.Abs(dialog.ActualWidth - 420) < 0.01,
+                        $"Folder style uses existing minimum window size: {language}, width={dialog.ActualWidth:0.###}, minimum={dialog.MinWidth:0.###}×{dialog.MinHeight:0.###}");
+                    var controls = Children(dialog).ToArray();
+                    var picker = controls.OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == app.L("Folder surface"));
+                    var mode = controls.OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == app.L("Badge type"));
+                    var root = (DockPanel)dialog.Content;
+                    var scroll = root.Children.OfType<ScrollViewer>().Single();
+                    var body = (FrameworkElement)scroll.Content;
+                    var pictureButtons = new[] { "Choose Picture…", "Remove picture" }.Select(label =>
+                        controls.OfType<Button>().Single(b => Equals(b.Content, app.L(label)))).ToArray();
+                    check(picker.Items.Count == FolderSurfaces.Names.Count && picker.MaxDropDownHeight <= 240,
+                        "Dialog exposes every named material in a bounded scrollable picker: " + language);
+                    foreach (int badgeMode in new[] { 0, 1 })
+                    {
+                        mode.SelectedIndex = badgeMode;
+                        for (int i = 0; i < picker.Items.Count; i++)
+                        {
+                            picker.SelectedIndex = i; dialog.UpdateLayout();
+                            string context = $"{language}, badge={badgeMode}, material={i}";
+                            check(dialog.Chosen.Surface == (FolderSurface)i, "Material selection reaches preview and chosen style: " + context);
+                            check(picker.ActualWidth <= 340 && picker.ActualWidth > 0 && picker.IsMeasureValid && picker.IsArrangeValid,
+                                $"Material picker fits existing minimum window width: {context}, measured={picker.ActualWidth:0.###}, available={Math.Min(340, scroll.ViewportWidth):0.###}, viewport={scroll.ViewportWidth:0.###}");
+                            Fits(picker, "Material picker");
+                            foreach (var button in pictureButtons) Fits(button, "Picture button " + button.Content);
+
+                            void Fits(FrameworkElement element, string label)
+                            {
+                                double left = element.TranslatePoint(new Point(), body).X;
+                                double available = scroll.ViewportWidth - left;
+                                check(scroll.ViewportWidth > 0 && left >= 0 && element.ActualWidth > 0 && element.ActualWidth <= available + 0.01,
+                                    $"{label} stays inside the viewport: {context}, measured={element.ActualWidth:0.###}, available={available:0.###}, left={left:0.###}, viewport={scroll.ViewportWidth:0.###}");
+                            }
+                        }
+                    }
+                }
+                finally { dialog.Close(); dialog.FinishAsync().GetAwaiter().GetResult(); }
+            }
             foreach (string language in new[] { "zh-Hans", "zh-Hant", "ja" })
                 check(FolderSurfaces.Names.All(n => Strings.L(n, language) != n), "Every material name translated: " + language);
-            for (int i = 0; i < picker.Items.Count; i++) { picker.SelectedIndex = i; check(dialog.Chosen.Surface == (FolderSurface)i, "Material selection reaches preview and chosen style: " + i); }
         }
-        finally { dialog.Close(); dialog.FinishAsync().GetAwaiter().GetResult(); }
+        finally { app.Prefs.SetLanguage(previousLanguage); }
     }
 
 }
