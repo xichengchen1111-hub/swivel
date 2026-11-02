@@ -410,6 +410,7 @@ public sealed class MainWindow : Window
         page.Children.Add(UI.Button(app.L("Read Codes from Image…"),async()=>await app.RunActionAsync(new("qr.readflat","Read Codes from Image…"),Array.Empty<string>(),this,SetStatus)));
         var backups=new WrapPanel();backups.Children.Add(UI.Button(app.L("Import QR Library…"),async()=>await app.RunActionAsync(new("qr.import","Import QR Library…"),Array.Empty<string>(),this,SetStatus)));backups.Children.Add(UI.Button(app.L("Export QR Library…"),async()=>await app.RunActionAsync(new("qr.export","Export QR Library…"),Array.Empty<string>(),this,SetStatus)));page.Children.Add(backups);
         page.Children.Add(UI.Button(app.L("Import Mac QR Library…"), async () => await app.RunActionAsync(new("qr.importMac", "Import Mac QR Library…"), Array.Empty<string>(), this, SetStatus)));
+        page.Children.Add(UI.Button(app.L(QrMacLibraryExport.Title), async () => await app.RunActionAsync(new("qr.exportMacLibrary", QrMacLibraryExport.Title), Array.Empty<string>(), this, SetStatus)));
         page.Children.Add(UI.Button(app.L("Export QR Images for Mac…"), async () => await app.RunActionAsync(new("qr.exportMacImages", "Export QR Images for Mac…"), Array.Empty<string>(), this, SetStatus)));
         foreach(var group in app.Prefs.QrCodes.GroupBy(x=>x.Group).OrderBy(x=>x.Key,StringComparer.CurrentCulture))
         {

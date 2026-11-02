@@ -349,6 +349,46 @@ public sealed partial class App : Application
                 string output = await Task.Run(() => PresetLibraryFile.Save(snapshot, destination, token), token);
                 string presetStatus = L("Image preset backup saved."); report(presetStatus); Home.ShowResults(new[] { output }, presetStatus); return;
             }
+            if (action.Id == "qr.exportMacLibrary")
+            {
+                if (!Prefs.IsOn(Feature.QrCodes)) throw new UserError("Enable QR & Barcodes in Settings first.");
+                workFeature = Feature.QrCodes;
+                token.ThrowIfCancellationRequested();
+                var snapshot = Prefs.QrCodes.ToArray();
+                QrMacMergeFile? source = null;
+                try
+                {
+                    while (true)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        var plan = QrMacLibraryExport.Prepare(snapshot, source?.Bytes);
+                        var preview = new QrMacLibraryDialog(this, plan, source is not null);
+                        if (!ShowOperationDialog(preview, owner, token)) return;
+                        token.ThrowIfCancellationRequested();
+                        if (preview.ChooseMerge)
+                        {
+                            var picker = new Microsoft.Win32.OpenFileDialog { Title = L(QrMacLibraryDialog.Merge), Filter = L("QR libraries (*.json)|*.json"), Multiselect = false, CheckFileExists = true };
+                            if (picker.ShowDialog(owner) != true) continue;
+                            token.ThrowIfCancellationRequested();
+                            string path = picker.FileName;
+                            // A failed source read aborts this export, never falls back to Windows only.
+                            var next = await Task.Run(() => QrMacMergeFile.Open(path, token), token);
+                            source?.Dispose(); source = next;
+                            continue;
+                        }
+                        var folder = new Microsoft.Win32.OpenFolderDialog { Title = L("Choose QR Export Folder…") };
+                        if (folder.ShowDialog(owner) != true) return;
+                        token.ThrowIfCancellationRequested(); string destination = folder.FolderName;
+                        string output = await Task.Run(() => QrMacLibraryFiles.Save(plan, destination, token), token);
+                        string summary = L("Full Mac QR library saved. Follow the install steps to replace the Mac library.");
+                        report(summary); Home.ShowResults(new[] { output }, summary);
+                        if (!token.IsCancellationRequested && !exiting)
+                            ShowOperationDialog(new QrMacInstallDialog(this, output), owner, token);
+                        return;
+                    }
+                }
+                finally { source?.Dispose(); }
+            }
             if (action.Id == "qr.exportMacImages")
             {
                 if (!Prefs.IsOn(Feature.QrCodes)) throw new UserError("Enable QR & Barcodes in Settings first.");

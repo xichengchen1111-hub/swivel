@@ -85,7 +85,7 @@ internal static class QrChecks
         var sample = QrCode.Encode("test"); reject(() => sample.Raster(0),"QR zero scale refused"); reject(() => sample.Raster(33),"QR raster memory budget");
         var prefs = new Prefs(); check(!prefs.IsOn(Feature.QrCodes),"QR defaults off"); prefs.Set(Feature.Wheel,false);
         check(!Catalog.Available(prefs,Array.Empty<string>()).Any(x => x.Id == "qr.create"),"Disabled QR hidden without files"); prefs.Set(Feature.QrCodes,true);
-        check(Catalog.Available(prefs,Array.Empty<string>()).Select(x=>x.Id).Order().SequenceEqual(new[]{"qr.create","qr.export","qr.exportMacImages","qr.import","qr.importMac","qr.readflat","qr.recoverflat"}),"Typed QR available without files or Wheel");
+        check(Catalog.Available(prefs,Array.Empty<string>()).Select(x=>x.Id).Order().SequenceEqual(new[]{"qr.create","qr.export","qr.exportMacImages","qr.exportMacLibrary","qr.import","qr.importMac","qr.readflat","qr.recoverflat"}),"Typed QR available without files or Wheel");
         var entry = new QrEntry(Guid.NewGuid().ToString("N"),"Demo","你好 🦜"); prefs.SaveQr(entry); prefs.SaveQr(entry with { Name = "Changed", Text = "new text" });
         var loaded = Prefs.Parse(prefs.Serialize()); check(loaded.QrCodes.Count == 1 && loaded.QrCodes[0].Id == entry.Id && loaded.QrCodes[0].Text == "new text" && loaded.IsOn(Feature.QrCodes),"QR settings round trip and stable entry update");
         reject(() => prefs.SaveQr(new(Guid.NewGuid().ToString("N"),"changed","different")),"QR duplicate names refused");
