@@ -37,6 +37,7 @@ public static class FolderStyles
 {
     public const int MaxFolders = 20, MaxBadgeTextElements = 2, MaxBadgeUnits = 16, MaxIniBytes = 4096;
     public const int MaxEmojiUnits = 64;
+    public const int MaxIconBytes = 1024 * 1024;
     public const string IniName = "desktop.ini";
     public static readonly int[] IconSizes = { 16, 20, 24, 32, 40, 48, 64, 256 };
 
@@ -189,6 +190,9 @@ public static class FolderStyles
     public static byte[] Icon(IReadOnlyList<(int Size, byte[] Png)> images)
     {
         if (images.Count is < 1 or > 16) throw new ArgumentException("An icon needs 1–16 images.", nameof(images));
+        long total = 6 + 16L * images.Count;
+        foreach (var (_, png) in images) total += png.Length;
+        if (total > MaxIconBytes) throw new UserError("Folder icons are limited to 1 MB.");
         using var output = new MemoryStream();
         using var writer = new BinaryWriter(output);
         writer.Write((ushort)0); writer.Write((ushort)1); writer.Write((ushort)images.Count);
