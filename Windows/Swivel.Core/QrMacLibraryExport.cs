@@ -123,7 +123,10 @@ public static class QrMacLibraryExport
     {
         try
         {
-            if(name is null || value is null || collection is null || string.IsNullOrWhiteSpace(name) || value.Length==0) return InvalidRow;
+            if(name is null || value is null || collection is null || value.Length==0) return InvalidRow;
+            // Conservatively cover Foundation trimming, including format characters such as U+200B.
+            if(name.EnumerateRunes().All(r=>Rune.GetUnicodeCategory(r) is UnicodeCategory.SpaceSeparator or
+                UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator or UnicodeCategory.Control or UnicodeCategory.Format)) return InvalidRow;
             _=Utf8.GetByteCount(name); _=Utf8.GetByteCount(collection);
             int bytes=Utf8.GetByteCount(value);
             // Scalar counts are an upper bound on Swift's grapheme-cluster count,

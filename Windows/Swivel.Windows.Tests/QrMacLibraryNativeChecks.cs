@@ -59,6 +59,22 @@ internal static class QrMacLibraryNativeChecks
                     check(body.Children.OfType<TextBlock>().Any(x=>x.Text==app.L(QrMacLibraryExport.MissingDate)) && body.Children.OfType<TextBlock>().Any(x=>x.Text==app.L(QrMacLibraryExport.CorrectionChanged)),"Full Mac preview discloses date and level changes per row");
                 }
                 finally {preview.Close();}
+                var scenes=QrMacLibraryExport.Prepare(Enum.GetValues<QrGardenSeason>().SelectMany(season=>
+                    Enum.GetValues<QrGardenTemplate>().Select(template=>new QrEntry($"scene-{season}-{template}","Scene",$"{season}/{template}","",QrCorrection.Medium,template,season))).ToArray());
+                var scenePreview=new QrMacLibraryDialog(app,scenes,true);
+                try
+                {
+                    var scroll=((DockPanel)scenePreview.Content).Children.OfType<ScrollViewer>().Single();
+                    var body=(StackPanel)scroll.Content;
+                    foreach(var row in scenes.Rows)
+                    {
+                        var output=row.Output!;
+                        string scene=" · "+app.L("Garden Season")+": "+app.L(QrGarden.SeasonName(QrGarden.Season(output.Season)))+
+                            " · "+app.L("Garden Template")+": "+app.L(QrGarden.TemplateName(QrGarden.Template(output.Template)));
+                        check(body.Children.OfType<TextBlock>().Any(x=>x.Text.EndsWith(scene,StringComparison.Ordinal)),"Full Mac preview translates every season/template combination in each language");
+                    }
+                }
+                finally {scenePreview.Close();}
                 var empty=new QrMacLibraryDialog(app,QrMacLibraryExport.Prepare(Array.Empty<QrEntry>()),false);
                 try
                 {

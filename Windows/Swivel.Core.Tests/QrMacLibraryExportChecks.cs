@@ -27,6 +27,30 @@ internal static class QrMacLibraryExportChecks
         check(plan.Encode().SequenceEqual(QrMacLibraryExport.Prepare(entries).Encode()), "Repeated exports are deterministic");
         var invalid = QrMacLibraryExport.Prepare(new[]{Entry(1,new string('a',2001)), Entry(2) with {Name=new string('a',121)}, Entry(3) with {Group=new string('a',81)}, Entry(4,"\ud800"), Entry(5) with {Season=(QrGardenSeason)99}});
         check(invalid.Rows.All(x=>x.Output is null) && JsonDocument.Parse(invalid.Encode()).RootElement.GetArrayLength()==0,"Invalid rows are listed and omitted without truncation");
+        byte[] MacRow(string name,string value)=>JsonSerializer.SerializeToUtf8Bytes(new[]{new {
+            id="00000000-0000-0000-0000-000000000001",name,value,collection="組",season="spring",template="bouquet",created=0}});
+        string[] blankNames={""," ","\u00a0","\u2000","\u2028","\u2029","\0","\t\r\n","\u0085","\u200b","\u200d","\u2060","\ufeff","\u00ad"," \u200b\u0085\u2028\u2029\0"};
+        foreach(string name in blankNames)
+        {
+            var refused=QrMacLibraryExport.Prepare(new[]{Entry(1) with {Name=name}}).Rows.Single();
+            check(refused.Output is null && refused.Name==name && refused.Reasons.Contains(QrMacLibraryExport.InvalidRow),"Mac export lists a blank Unicode name as a refused Windows row with its reason");
+            bool rejected=false;
+            try { QrMacLibraryExport.Prepare(entries,MacRow(name,"payload")); }
+            catch(UserError error) { rejected=error.Message==QrMacLibraryExport.InvalidMerge; }
+            check(rejected,"A blank Unicode name refuses the whole Mac merge with its stated source error");
+        }
+        foreach(string name in new[]{"a","字","🦜"," \u200b字\u0085","e\u0301","\u0301"})
+        {
+            check(QrMacLibraryExport.Prepare(new[]{Entry(1) with {Name=name}}).Rows.Single().Output?.Name==name,"A name with a character outside the blank categories is retained exactly");
+            check(QrMacLibraryExport.Prepare(Array.Empty<QrEntry>(),MacRow(name,"payload")).Rows.Single().Output?.Name==name,"Mac merge preserves nonblank names without trimming");
+        }
+        foreach(string value in blankNames.Where(x=>x.Length>0))
+        {
+            check(QrMacLibraryExport.Prepare(new[]{Entry(1,value)}).Rows.Single().Output?.Value==value,"Mac export permits nonempty whitespace/control/format-only QR content exactly");
+            check(QrMacLibraryExport.Prepare(Array.Empty<QrEntry>(),MacRow("Name",value)).Rows.Single().Output?.Value==value,"Mac merge requires nonempty content, not a nonblank value");
+        }
+        check(QrMacLibraryExport.Prepare(new[]{Entry(1,"")}).Rows.Single().Reasons.Contains(QrMacLibraryExport.InvalidRow),"Empty Windows content is refused with its row reason");
+        reject(()=>QrMacLibraryExport.Prepare(entries,MacRow("Name","")),"Empty Mac content refuses the entire merge");
         var generated=QrMacLibraryExport.Prepare(new[]{Entry(1) with {Id="legacy-id"}});
         check(generated.Rows[0].Reasons.Contains(QrMacLibraryExport.GeneratedId) && generated.Encode().SequenceEqual(QrMacLibraryExport.Prepare(new[]{Entry(1) with {Id="legacy-id"}}).Encode()),"Legacy IDs receive stable deterministic UUIDs");
         var merge=QrMacLibraryExport.Prepare(new[]{Entry(1,"new"),Entry(2,"e\u0301"),Entry(3,"é") with {Group="different"}}, plan.Encode());
@@ -64,7 +88,9 @@ internal static class QrMacLibraryExportChecks
             Encoding.UTF8.GetString(plan.Encode()).Replace("\"created\": 0","\"created\": 0, \"extra\": 1"),
             Encoding.UTF8.GetString(plan.Encode()).Replace("00000000-0000-0000-0000-000000000002","00000000-0000-0000-0000-000000000001")})
             reject(()=>QrMacLibraryExport.Prepare(entries,Encoding.UTF8.GetBytes(bad)),"Malformed merge date/Unicode/scene/field/duplicate UUID refuses whole file");
-        reject(()=>QrMacLibraryExport.Prepare(entries,new byte[QrMacLibraryExport.MaxMergeBytes+1]),"Mac merge byte budget refuses whole file");
+        byte[] padded=Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(plan.Encode())+new string(' ',QrMacLibraryExport.MaxMergeBytes-plan.Encode().Length));
+        check(padded.Length==QrMacLibraryExport.MaxMergeBytes && QrMacLibraryExport.Prepare(Array.Empty<QrEntry>(),padded).Encode().SequenceEqual(plan.Encode()),"Valid Mac library JSON with trailing spaces is accepted exactly at 256 KiB");
+        reject(()=>QrMacLibraryExport.Prepare(entries,padded.Append((byte)' ').ToArray()),"Valid Mac library JSON one byte over 256 KiB refuses the whole merge");
         reject(()=>QrMacLibraryExport.Prepare(entries,new byte[]{91,34,0xff,34,93}),"Mac merge refuses malformed raw UTF8");
         var many=Enumerable.Range(1,32).Select(i=>Entry(i,"value "+i)).ToArray();
         check(JsonDocument.Parse(QrMacLibraryExport.Prepare(many).Encode()).RootElement.GetArrayLength()==32,"Full 32 entry Windows library exports completely");

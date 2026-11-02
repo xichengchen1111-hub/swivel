@@ -43,7 +43,8 @@ internal sealed class QrMacLibraryDialog : Window
             body.Children.Add(UI.Text(app.L(row.Output is null?"Not exported":row.Reasons.Count==0?"Exact":"Changed"),14));
             if(row.Output is { } output)
                 body.Children.Add(UI.Text("id: "+output.Id.ToString("D")+" · created: "+output.Created.ToString("R",CultureInfo.InvariantCulture)+
-                    " · "+app.L("Garden Season")+": "+output.Season+" · "+app.L("Garden Template")+": "+output.Template,12));
+                    " · "+app.L("Garden Season")+": "+app.L(QrGarden.SeasonName(QrGarden.Season(output.Season)))+
+                    " · "+app.L("Garden Template")+": "+app.L(QrGarden.TemplateName(QrGarden.Template(output.Template))),12));
             foreach(string reason in row.Reasons) body.Children.Add(UI.Text(app.L(reason),12));
         }
         root.Children.Add(UI.Scroll(body));Content=root;
