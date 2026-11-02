@@ -337,9 +337,13 @@ internal static class FolderStyleNativeChecks
                     // Show at the existing minimum so native chrome and the vertical scrollbar consume real space.
                     dialog.Width = dialog.MinWidth; dialog.Height = dialog.MinHeight;
                     dialog.ShowActivated = false; dialog.ShowInTaskbar = false;
-                    dialog.Show(); dialog.UpdateLayout();
-                    check(dialog.MinWidth == 420 && dialog.MinHeight == 330 && Math.Abs(dialog.ActualWidth - 420) < 0.01,
-                        $"Folder style uses existing minimum window size: {language}, width={dialog.ActualWidth:0.###}, minimum={dialog.MinWidth:0.###}×{dialog.MinHeight:0.###}");
+                    dialog.Show();
+                    // SourceInitialized fits the window to its work area and sets the effective minimum.
+                    dialog.Width = dialog.MinWidth; dialog.Height = dialog.MinHeight;
+                    dialog.UpdateLayout();
+                    check(dialog.MinWidth == 450 && dialog.MinHeight == 320 && Math.Abs(dialog.ActualWidth - dialog.MinWidth) < 0.01
+                        && Math.Abs(dialog.ActualHeight - dialog.MinHeight) < 0.01,
+                        $"Folder style uses existing minimum window size: {language}, size={dialog.ActualWidth:0.###}×{dialog.ActualHeight:0.###}, minimum={dialog.MinWidth:0.###}×{dialog.MinHeight:0.###}");
                     var controls = Children(dialog).ToArray();
                     var picker = controls.OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == app.L("Folder surface"));
                     var mode = controls.OfType<ComboBox>().Single(c => AutomationProperties.GetName(c) == app.L("Badge type"));
@@ -358,8 +362,9 @@ internal static class FolderStyleNativeChecks
                             picker.SelectedIndex = i; dialog.UpdateLayout();
                             string context = $"{language}, badge={badgeMode}, material={i}";
                             check(dialog.Chosen.Surface == (FolderSurface)i, "Material selection reaches preview and chosen style: " + context);
-                            check(picker.ActualWidth <= 340 && picker.ActualWidth > 0 && picker.IsMeasureValid && picker.IsArrangeValid,
-                                $"Material picker fits existing minimum window width: {context}, measured={picker.ActualWidth:0.###}, available={Math.Min(340, scroll.ViewportWidth):0.###}, viewport={scroll.ViewportWidth:0.###}");
+                            double pickerAvailable = scroll.ViewportWidth - picker.TranslatePoint(new Point(), body).X;
+                            check(picker.ActualWidth <= pickerAvailable + 0.01 && picker.ActualWidth > 0 && picker.IsMeasureValid && picker.IsArrangeValid,
+                                $"Material picker fits existing minimum window width: {context}, measured={picker.ActualWidth:0.###}, available={pickerAvailable:0.###}, viewport={scroll.ViewportWidth:0.###}");
                             Fits(picker, "Material picker");
                             foreach (var button in pictureButtons) Fits(button, "Picture button " + button.Content);
 
