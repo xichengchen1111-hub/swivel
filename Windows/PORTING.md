@@ -1047,6 +1047,15 @@ Request Window Close通过4096顶层窗口、64合格结果、约10s软界限的
 
 批次开始 `git fetch`，origin/main 仍为 Mac 1.12.9／`4166d5d`。把 0.93 的回收站流程抽成共享组件：`RecycleBinSession<T>`（确认列表、独立 STA 批次、最近一批撤销、批次中关窗推迟到结束、报告行）与 `NativeFiles.Recycle.cs`（通用 `Recycle(path, directory, check, owner)`、`RecycleProjectFolder`、新增 `RecycleFile`、`RestoreRecycled`）；错误文字改为不特指文件夹的“它”。Project Build Folders 改用该组件，行为不变。Large Files 窗口改为多选并加入 Move Selected to Recycle Bin…／Undo Move：`RecycleFile` 在持有父目录下不跟随重解析打开文件，拒绝重解析／离线／召回／系统／设备属性，长度须等于扫描记录、`nFileLinks == 1`（Mac 同样跳过硬链接）；移动后由持有句柄确认 `$Recycle.Bin` 路径或 DeletePending。筛选在批次中禁用，移走的文件离开列表与报告。限制：不比较内容（同大小的改动仍移动）；复核到移动之间同名替换的竞态与 0.93 相同；撤销仅限窗口打开期间最近一批。
 
+## 0.142 合并第十六轮：C07 预设导回 Mac、E04 完整二维码库导回 Mac、B09 文件夹图片与其余材质（Codex 编写）
+
+分支 `codex/win-c07-reverse`（7a73219）、`codex/win-e04-reverse`（3a57f1f）、`codex/win-b09-materials`（27b9197）。Strings.json 三方 JSON 合并，无同键冲突；其余自动合并。三项都没有新 Action ID。没有改动、构建或安装 Mac 代码。
+
+- C07：Mac 的 `Prefs.imagePresets` 过滤无效行，解码失败回到内置预设。没有导入界面，所以导出 JSON 加固定的 `defaults write ... imagePresets.v1 -data` 命令，安装替换全部预设；合并来源是用户另外导出的 Mac 列表。Foundation 的空白裁剪包含 U+200B，.NET 不含，全不可见字符的名称在 Mac 上会被丢弃，因此这种行在 Windows 就拒绝（监督者补充）。审查无 P1/P2。
+- E04：Mac 的 `load()` 只要有一行无效就拒绝整个 `library-v1.json`，所以导出前逐行校验。审查 P2 已修：全不可见字符的名称会让 Mac 拒绝整个库。另修 2 个 P3：256 KiB 上限检查用了无效 JSON、预览的季节和模板未翻译（修后未再审）。
+- B09：29 种表面全部是原创绘制，没有使用任何现成图案；已有表面的输出字节不变。审查 P2 已修：长图先缩小再裁切会严重失真，现在先按 11:6 居中裁切。P3 已修：Notebook 横线和另外 6 种表面的细线在小尺寸下消失（修后未再审）。
+- F09 修复 `7d4e4a0`（0.141 未再审）本轮静态复审：无 P1/P2、无可确认的 P3。
+
 ## 0.141 合并第十五轮：E05 一图多码与常见条码、C06 选择性删除元数据、F09 服务与任务配置诊断（Codex 编写）
 
 分支 `codex/win-e05-multicode`（e50a110）、`codex/win-c06-selective`（f5e32f4）、`codex/win-f09-svcconfig`（7d4e4a0）。Strings.json 三方 JSON 合并，无同键冲突；测试 csproj 两边都保留；其余自动合并。三项都没有新 Action ID。

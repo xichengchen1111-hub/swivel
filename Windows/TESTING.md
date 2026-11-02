@@ -1327,6 +1327,14 @@ Manual0.70(allpending): Startup/CommonStartupactualpaths/DoNotVerify-noCreate/re
 
 - Real-Windows CI 40329806063: core 4,519,728 and native 5,177 checks passed, including the real large-file Recycle Bin move and Undo. The first 0.94 run (40328690422) failed one stale check that still required the large-files window to have only Copy/Close buttons; the check now expects the confirmed Move and the disabled-until-used Undo.
 
+## Windows0.142 — merged C07 presets to Mac, E04 full QR library to Mac, B09 folder pictures and materials (Codex) (2026-11-02)
+
+- Each branch passed its own Windows x64 CI and Codex review before merging: C07 41397279131 (core 699,066; no P1/P2 from the review, the supervisor added the blank-name rule, CI passed after it), E04 41397271945 (core 698,213; 1 P2 and 2 P3 fixed, CI passed, not re-reviewed), B09 41400310689 (core 699,125; 1 P2 and 1 P3 fixed, CI passed, not re-reviewed). The F09 fix 7d4e4a0 left unreviewed in 0.141 was re-reviewed statically: no P1/P2, no P3.
+- B09 needed three CI runs. 41397286814 measured a window that was never shown (width 0) and 41398836331 hardcoded 420x330 against the real 450x320 minimum; both were faults in the check, and the dialog did not change.
+- Mac format checks, on a Mac, without changing or building Mac code: the C07 and E04 fixtures decoded with a copy of the Mac structs (3 valid rows each); the C07 install command ran against a scratch defaults domain, since deleted.
+- After merging: MERGED_CI_RESULT
+- Not tested: hand use on real Windows; loading the exported files in the real Mac Swivel; the three windows' UI, DPI and Narrator; folder icons in real Explorer, its icon cache and refresh; pictures from real cameras as folder icons; ARM64.
+
 ## Windows0.141 — merged E05 several codes and barcodes, C06 selective metadata, F09 service and task configuration (Codex) (2026-11-01)
 
 - Each branch passed its own Windows x64 CI and Codex review before merging: E05 41260817888 (core 695,283, native 74,211; no P1/P2), C06 41262218001 (core 697,563, native 76,761; no P1/P2), F09 41261015207 (core 695,172, native 74,666; 1 P2 fixed, CI passed, not re-reviewed).
