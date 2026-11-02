@@ -892,10 +892,14 @@ public sealed partial class App : Application
                     { return (f, FolderStyleState.Unavailable, error is UserError ? L(error.Message) : L("The operation could not finish. Check the file format, permissions, free space and whether another app is using the file.")); }
                 }).ToArray(), token);
                 token.ThrowIfCancellationRequested();
-                var dialog = new FolderStyleDialog(this, states);
-                if (!ShowOperationDialog(dialog, owner, token)) return;
-                var style = dialog.Chosen; bool restore = dialog.Restore;
-                byte[]? icon = restore ? null : FolderStyleIcons.Icon(style);
+                var dialog = new FolderStyleDialog(this, states, token);
+                bool accepted;
+                try { accepted = ShowOperationDialog(dialog, owner, token); }
+                finally { await dialog.FinishAsync(); }
+                token.ThrowIfCancellationRequested();
+                if (!accepted) return;
+                bool restore = dialog.Restore;
+                byte[]? icon = restore ? null : dialog.RenderedIcon!;
                 report(L("Processing…"));
                 var targets = states.Where(s => restore ? s.Item2 == FolderStyleState.Swivel : s.Item2 is FolderStyleState.None or FolderStyleState.Swivel).Select(s => s.f).ToArray();
                 var failures = new List<string>(); int changed = 0;

@@ -26,6 +26,7 @@ public static partial class NativeFiles
     public static void ApplyFolderStyle(string folder, byte[] icon, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        if (icon.Length > FolderStyles.MaxIconBytes) throw new UserError("Folder icons are limited to 1 MB.");
         using var held = HoldStyledFolder(folder);
         using var old = OpenIni(held.Handle, folder, true);
         SwivelFolderIni? previous = null;

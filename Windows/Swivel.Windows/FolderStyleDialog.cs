@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -17,23 +19,23 @@ namespace Swivel.Windows;
 /// Draws Swivel's original folder icon, with optional procedural surface and mark or emoji.
 internal static class FolderStyleIcons
 {
-    public static byte[] Icon(FolderStyle style)
-        => FolderStyles.Icon(FolderStyles.IconSizes.Select(size => (size, Png(style, size))).ToArray());
+    public static byte[] Icon(FolderStyle style, BitmapSource? picture = null)
+        => FolderStyles.Icon(FolderStyles.IconSizes.Select(size => (size, Png(style, size, picture))).ToArray());
 
-    public static BitmapSource Bitmap(FolderStyle style, int size)
+    public static BitmapSource Bitmap(FolderStyle style, int size, BitmapSource? picture = null)
     {
         style.Validate();
         var visual = new DrawingVisual();
-        using (var context = visual.RenderOpen()) Draw(context, style, size);
+        using (var context = visual.RenderOpen()) Draw(context, style, size, picture);
         var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(visual); bitmap.Freeze();
         return bitmap;
     }
 
-    private static byte[] Png(FolderStyle style, int size)
+    private static byte[] Png(FolderStyle style, int size, BitmapSource? picture)
     {
         var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(Bitmap(style, size)));
+        encoder.Frames.Add(BitmapFrame.Create(Bitmap(style, size, picture)));
         using var output = new MemoryStream();
         encoder.Save(output);
         return output.ToArray();
@@ -45,7 +47,7 @@ internal static class FolderStyleIcons
         return Color.FromRgb(Channel(16), Channel(8), Channel(0));
     }
 
-    private static void Draw(DrawingContext context, FolderStyle style, double s)
+    private static void Draw(DrawingContext context, FolderStyle style, double s, BitmapSource? picture)
     {
         uint rgb = FolderStyles.Colors[style.Color].Rgb;
         double corner = Math.Max(1, s * 0.06);
@@ -75,6 +77,19 @@ internal static class FolderStyleIcons
             context.DrawImage(overlay, new Rect(0, 0, s, s));
             context.Pop();
         }
+        if (picture is not null)
+        {
+            // Cover the face without stretching; all sizes use the same immutable snapshot.
+            double cover = Math.Max(s * 0.88 / picture.PixelWidth, s * 0.48 / picture.PixelHeight);
+            double width = picture.PixelWidth * cover, height = picture.PixelHeight * cover;
+            context.PushClip(front);
+            context.DrawImage(picture, new Rect((s - width) / 2, s * 0.60 - height / 2, width, height));
+            context.Pop();
+        }
+        // Preserve legacy icon bytes. New materials and pictures need a stable contrast backing.
+        if ((picture is not null || FolderSurfaces.IsMaterial(style.Surface)) &&
+            (style.Emoji.Length != 0 || style.Badge.Length != 0 && s >= 24))
+            context.DrawRoundedRectangle(Brushes.Black, null, new Rect(s * 0.10, s * 0.40, s * 0.80, s * 0.40), s * 0.04, s * 0.04);
         if (style.Emoji.Length != 0)
         {
             var emoji = new FormattedText(style.Emoji, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
@@ -102,24 +117,38 @@ internal static class FolderStyleIcons
 internal sealed class FolderStyleDialog : Window
 {
     public bool Restore { get; private set; }
+    public byte[]? RenderedIcon { get; private set; }
+    private BitmapSource? picture;
+    private readonly CancellationTokenSource pictureCancellation;
+    private Task pictureLoad = Task.CompletedTask;
+    private bool loadingPicture, pictureFailed, closed;
+
+    internal async Task FinishAsync()
+    {
+        pictureCancellation.Cancel();
+        try { await pictureLoad; }
+        finally { pictureCancellation.Dispose(); }
+    }
     public FolderStyle Chosen => new(color, emojiMode ? "" : badge.Text, emojiMode ? emoji.Text : "", surface);
     private bool emojiMode;
     private FolderSurface surface;
     private readonly TextBox emoji = new() { MaxLength = FolderStyles.MaxEmojiUnits, Width = 180, FontFamily = new FontFamily("Segoe UI Emoji"), FontSize = 20, HorizontalAlignment = HorizontalAlignment.Left };
     private int color;
     private readonly TextBox badge = new() { MaxLength = FolderStyles.MaxBadgeUnits, Width = 120, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 8) };
-    private readonly Image preview = new() { Width = 96, Height = 96, Margin = new Thickness(0, 4, 16, 8) };
+    private readonly Image preview = new() { Width = 96, Height = 96, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 16, 8) };
     private readonly TextBlock problem = UI.Text("", 12);
 
-    public FolderStyleDialog(App app, IReadOnlyList<(string Path, FolderStyleState State, string? Problem)> folders)
+    public FolderStyleDialog(App app, IReadOnlyList<(string Path, FolderStyleState State, string? Problem)> folders, CancellationToken token = default)
     {
+        pictureCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+        Closed += (_, _) => { closed = true; pictureCancellation.Cancel(); };
         Title = app.L("Change Folder Style…");
         MoveFilesLayout.Configure(this);
         var root = new DockPanel { Margin = new Thickness(20) };
         var buttons = new WrapPanel();
         var apply = UI.Button(app.L("Apply Style"), () =>
         {
-            try { if (emojiMode) FolderStyles.ValidateEmoji(emoji.Text); _ = FolderStyleIcons.Icon(Chosen); DialogResult = true; }
+            try { if (loadingPicture || pictureFailed || closed || pictureCancellation.IsCancellationRequested) return; if (emojiMode) FolderStyles.ValidateEmoji(emoji.Text); RenderedIcon = FolderStyleIcons.Icon(Chosen, picture); DialogResult = true; }
             catch (UserError error) { problem.Text = app.L(error.Message); }
         });
         var restore = UI.Button(app.L("Restore Default"), () => { Restore = true; DialogResult = true; });
@@ -138,9 +167,9 @@ internal sealed class FolderStyleDialog : Window
         top.Children.Add(UI.Text(app.L("If Explorer's Customize tab or a sync service later rewrites desktop.ini, it is no longer recognised as Swivel's and Restore Default leaves it alone; remove the style in Explorer's folder Properties instead."), 12));
         top.Children.Add(UI.Text(app.L("Restore Default removes exactly these two files and clears Read-only only if Swivel set it. Folders that already have their own desktop.ini are left unchanged. Explorer may need a moment, or a refresh, to show the change; sync services such as OneDrive also sync the two files."), 12));
         top.Children.Add(UI.Text(app.L("Swivel notifies Explorer after applying or restoring. Explorer's icon cache may still show the old icon until it refreshes."), 12));
-        var row = new WrapPanel();
+        var row = new StackPanel();
         row.Children.Add(preview);
-        var choices = new StackPanel { MaxWidth = 380 };
+        var choices = new StackPanel { MaxWidth = 380, HorizontalAlignment = HorizontalAlignment.Left };
         choices.Children.Add(UI.Text(app.L("Colour"), 14));
         var swatches = new WrapPanel { MaxWidth = 380 };
         var toggles = new List<ToggleButton>();
@@ -158,12 +187,11 @@ internal sealed class FolderStyleDialog : Window
         }
         choices.Children.Add(swatches);
         choices.Children.Add(UI.Text(app.L("Folder surface"), 14));
-        var surfaces = new ComboBox { Width = 240, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 8) };
-        string[] surfaceNames = { "Plain", "Linen", "Paper grain", "Wood stripes", "Dots", "Grid", "Gradient", "Brushed metal", "Stars" };
-        surfaces.ItemsSource = surfaceNames.Select(app.L).ToArray();
+        var surfaces = new ComboBox { MaxWidth = 300, HorizontalAlignment = HorizontalAlignment.Stretch, MaxDropDownHeight = 240, Margin = new Thickness(0, 0, 0, 8) };
+        surfaces.ItemsSource = FolderSurfaces.Names.Select(app.L).ToArray();
         surfaces.SelectedIndex = 0;
         AutomationProperties.SetName(surfaces, app.L("Folder surface"));
-        surfaces.SelectionChanged += (_, _) => { surface = (FolderSurface)surfaces.SelectedIndex; Update(); };
+        surfaces.SelectionChanged += (_, _) => { if (surfaces.SelectedIndex >= 0) { surface = (FolderSurface)surfaces.SelectedIndex; Update(); } };
         choices.Children.Add(surfaces);
         var mode = new ComboBox { Width = 240, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 8),
             ItemsSource = new[] { app.L("Text mark"), app.L("Emoji badge") }, SelectedIndex = 0 };
@@ -197,7 +225,55 @@ internal sealed class FolderStyleDialog : Window
             emojiControls.Visibility = emojiMode ? Visibility.Visible : Visibility.Collapsed;
             Update();
         };
+        choices.Children.Add(UI.Text(app.L("Folder picture"), 14));
+        var pictureStatus = UI.Text(app.L("No picture selected"), 12);
+        var pictureButtons = new WrapPanel();
+        var choosePicture = UI.Button(app.L("Choose Picture…"), () => { });
+        var removePicture = UI.Button(app.L("Remove picture"), () =>
+        {
+            picture = null; pictureFailed = false; pictureStatus.Text = app.L("No picture selected"); Update();
+        });
+        AutomationProperties.SetName(pictureStatus, app.L("Folder picture"));
+        AutomationProperties.SetLiveSetting(pictureStatus, AutomationLiveSetting.Polite);
+        choosePicture.Click += (_, _) =>
+        {
+            if (loadingPicture || closed || pictureCancellation.IsCancellationRequested) return;
+            var picker = new Microsoft.Win32.OpenFileDialog { Title = app.L("Choose Picture…"), Multiselect = false,
+                Filter = app.L("Local images|*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff;*.gif;*.tga;*.psd;*.webp;*.heic;*.heif;*.avif|All files|*.*") };
+            if (picker.ShowDialog(this) != true || closed || pictureCancellation.IsCancellationRequested) return;
+            picture = null; pictureFailed = false; loadingPicture = true; choosePicture.IsEnabled = removePicture.IsEnabled = false;
+            pictureStatus.Text = app.L("Loading picture…"); Update();
+            pictureLoad = LoadPictureAsync(picker.FileName);
+        };
+        pictureButtons.Children.Add(choosePicture); pictureButtons.Children.Add(removePicture);
+        choices.Children.Add(pictureButtons); choices.Children.Add(pictureStatus);
+        choices.Children.Add(UI.Text(app.L("Cover: centred and cropped to the folder face. Only the rendered icon is saved; the picture path and original image are not stored. Animated and unsupported images are refused."), 12));
         choices.Children.Add(problem);
+
+        async Task LoadPictureAsync(string path)
+        {
+            try
+            {
+                var loaded = await Task.Run(() => FolderStylePicture.Load(path, pictureCancellation.Token), pictureCancellation.Token);
+                if (closed || pictureCancellation.IsCancellationRequested) return;
+                picture = loaded; pictureStatus.Text = app.L("Picture selected");
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception error) when (error is not OutOfMemoryException)
+            {
+                if (!closed && !pictureCancellation.IsCancellationRequested)
+                {
+                    pictureFailed = true;
+                    pictureStatus.Text = app.L(error is UserError ? error.Message : FolderStylePicture.Unsupported);
+                }
+            }
+            finally
+            {
+                loadingPicture = false;
+                if (!closed && !pictureCancellation.IsCancellationRequested)
+                { choosePicture.IsEnabled = removePicture.IsEnabled = true; Update(); }
+            }
+        }
         row.Children.Add(choices);
         top.Children.Add(row);
         body.Children.Add(top);
@@ -223,10 +299,10 @@ internal sealed class FolderStyleDialog : Window
             {
                 if (emojiMode) FolderStyles.ValidateEmoji(emoji.Text);
                 Chosen.Validate();
-                preview.Source = FolderStyleIcons.Bitmap(Chosen, 96); problem.Text = "";
-                apply.IsEnabled = folders.Any(f => f.State is FolderStyleState.None or FolderStyleState.Swivel);
+                preview.Source = FolderStyleIcons.Bitmap(Chosen, 96, picture); problem.Text = "";
+                apply.IsEnabled = !loadingPicture && !pictureFailed && folders.Any(f => f.State is FolderStyleState.None or FolderStyleState.Swivel);
             }
-            catch (UserError error) { apply.IsEnabled = false; problem.Text = app.L(error.Message); preview.Source = FolderStyleIcons.Bitmap(new FolderStyle(color, Surface: surface), 96); }
+            catch (UserError error) { apply.IsEnabled = false; problem.Text = app.L(error.Message); preview.Source = FolderStyleIcons.Bitmap(new FolderStyle(color, Surface: surface), 96, picture); }
         }
     }
 }
