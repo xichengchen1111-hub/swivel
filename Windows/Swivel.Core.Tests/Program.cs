@@ -215,6 +215,7 @@ FilePreviewChecks.Run(Check,Reject);
 ShelfReferenceChecks.Run(Check,Reject);
 ImageBatchChecks.Run(Check);
 PresetLibraryChecks.Run(Check, Reject);
+MacPresetExportChecks.Run(Check, Reject);
 MacQrLibraryChecks.Run(Check, Reject);
 
 foreach (var pair in Strings.Table)

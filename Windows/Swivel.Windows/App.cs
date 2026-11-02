@@ -322,10 +322,11 @@ public sealed partial class App : Application
                 try{ShowOperationDialog(dialog,owner,token);}finally{await dialog.FinishAsync();}token.ThrowIfCancellationRequested();
                 if(dialog.SelectedId is not null){if(Prefs.Serialize()!=preferences){report(L("Settings changed while asking. Review a new request before selecting an action."));return;}panel.ApplyAssistantSuggestion(dialog.SelectedId,files,dialog.IncludeCustomSelected);}return;
             }
-            if (action.Id is "presets.import" or "presets.export")
+            if (action.Id is "presets.import" or "presets.export" or "presets.exportMac")
             {
                 if (!Prefs.IsOn(Feature.ImagePresets)) throw new UserError("Enable Image Presets in Settings first.");
                 workFeature = Feature.ImagePresets;
+                if (action.Id == "presets.exportMac") { await ExportPresetsForMacAsync(owner, report, token); return; }
                 if (action.Id == "presets.import")
                 {
                     var picker = new Microsoft.Win32.OpenFileDialog { Filter = L("Image preset libraries (*.json)|*.json"), Multiselect = false, CheckFileExists = true };

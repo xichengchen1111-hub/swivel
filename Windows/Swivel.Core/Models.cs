@@ -262,6 +262,7 @@ public static class Catalog
         new("clothesline.watch", "Image Arrival Cards…", Core.Feature.Clothesline, RequiresFiles: false)
         ,new("pdf.images", "Images to PDF…", Core.Feature.PdfPages, ImageOnly: true)
         ,new("presets.import", "Import Image Presets…", Core.Feature.ImagePresets, RequiresFiles: false)
+        ,new("presets.exportMac", MacPresetExport.Title, Core.Feature.ImagePresets, RequiresFiles: false)
         ,new("presets.export", "Export Image Presets…", Core.Feature.ImagePresets, RequiresFiles: false)
         ,new("qr.create", "Create QR Code", Core.Feature.QrCodes, RequiresFiles: false)
         ,new("qr.readflat", "Read Codes from Image…", Core.Feature.QrCodes, RequiresFiles: false)
