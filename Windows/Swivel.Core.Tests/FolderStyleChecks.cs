@@ -85,6 +85,36 @@ internal static class FolderStyleChecks
             check(FolderSurfaces.Pixels(FolderSurface.Plain, size, 123).All(b => b == 0), "Plain surface has no overlay");
             check(!FolderSurfaces.Pixels(FolderSurface.PaperGrain, size, 123).SequenceEqual(FolderSurfaces.Pixels(FolderSurface.PaperGrain, size, 124)), "Seed changes grain");
         }
+        // Inspect only the visible face: variation elsewhere cannot rescue a missing material.
+        foreach (int size in FolderStyles.IconSizes.Append(96))
+        {
+            foreach (FolderSurface surface in Enum.GetValues<FolderSurface>().Where(FolderSurfaces.IsMaterial))
+            {
+                byte[] pixels = FolderSurfaces.Pixels(surface, size);
+                var colors = new System.Collections.Generic.HashSet<uint>();
+                for (int y = (int)Math.Ceiling(size * 0.38); y < size * 0.82; y++)
+                for (int x = (int)Math.Ceiling(size * 0.08); x < size * 0.92; x++)
+                {
+                    int i = (y * size + x) * 4;
+                    colors.Add((uint)(pixels[i + 2] << 16 | pixels[i + 1] << 8 | pixels[i]));
+                }
+                check(colors.Count > 1, "Material face is not flat: " + surface + "/" + size);
+                uint[] features = surface switch
+                {
+                    FolderSurface.Notebook => new uint[] { 0x92B9CE, 0xCC8F8F }, // ruling and margin
+                    FolderSurface.Leather => new uint[] { 0xE1BB89 }, // stitching
+                    FolderSurface.NeonGrid => new uint[] { 0x4DE2E0, 0xF466D3 }, // grid and diagonal
+                    FolderSurface.Blueprint => new uint[] { 0x709BC8, 0xE1EFF5 }, // grid and drawing
+                    FolderSurface.Banknote => new uint[] { 0x486E51 }, // frame
+                    FolderSurface.FilmStrip => new uint[] { 0xE6DFCA }, // sprocket holes
+                    FolderSurface.Galaxy => new uint[] { 0xF7F3D8 }, // stars
+                    FolderSurface.EmojiPattern => new uint[] { 0xFFDB70, 0x4C433B }, // faces and expression
+                    _ => Array.Empty<uint>(),
+                };
+                foreach (uint feature in features)
+                    check(colors.Contains(feature), "Material defining feature survives: " + surface + "/" + size + "/" + feature.ToString("X6"));
+            }
+        }
         reject(() => FolderSurfaces.Pixels(FolderSurface.Linen, 0, 1), "Zero surface size refused");
         reject(() => FolderSurfaces.Pixels(FolderSurface.Linen, 257, 1), "Oversize surface refused");
 

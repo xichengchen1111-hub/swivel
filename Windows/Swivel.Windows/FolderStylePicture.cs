@@ -12,7 +12,8 @@ internal static class FolderStylePicture
     {
         token.ThrowIfCancellationRequested();
         // The shared loader rejects animation, unsafe local paths and oversized/unsupported input.
-        using var image = ImageTools.OpenTile(path, 512, 512, false, token);
+        // The face is 11:6. Exact-ratio bounds below 512 keep cover detail before downsampling.
+        using var image = ImageTools.OpenTile(path, 506, 276, true, token);
         token.ThrowIfCancellationRequested();
         return image.Bitmap;
     }

@@ -73,11 +73,15 @@ public static class FolderSurfaces
             uint Channel(int shift) => (uint)Math.Round(((a >> shift) & 255) * (1 - weight) + ((b >> shift) & 255) * weight);
             return Channel(16) << 16 | Channel(8) << 8 | Channel(0);
         }
+        // Keep thin strokes sampleable and repeated cells at least four pixels wide.
+        bool Line(double distance, double halfWidth) => Math.Abs(distance) <= Math.Max(halfWidth, 0.6 / size);
+        double divisions = Math.Min(8, size / 4);
+        int stitchSteps = Math.Min(64, size);
         for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
         {
             double u = (x + 0.5) / size, v = (y + 0.5) / size;
-            double tx = u * 8 - Math.Floor(u * 8) - 0.5, ty = v * 8 - Math.Floor(v * 8) - 0.5;
+            double tx = u * divisions - Math.Floor(u * divisions) - 0.5, ty = v * divisions - Math.Floor(v * divisions) - 0.5;
             uint noise = Noise(x, y), rgb;
             switch (surface)
             {
@@ -91,8 +95,8 @@ public static class FolderSurfaces
                     break;
                 case FolderSurface.Leather:
                     rgb = Mix(0x653E2Au, 0xB77E50u, (noise % 31) / 90.0);
-                    if ((u is > 0.09 and < 0.12 || u is > 0.88 and < 0.91) && (int)(v * 64) % 4 < 2 ||
-                        (v is > 0.39 and < 0.42 || v is > 0.78 and < 0.81) && (int)(u * 64) % 4 < 2) rgb = 0xE1BB89u;
+                    if ((Line(u - 0.105, 0.015) || Line(u - 0.895, 0.015)) && (int)(v * stitchSteps) % 4 < 2 ||
+                        (Line(v - 0.405, 0.015) || Line(v - 0.795, 0.015)) && (int)(u * stitchSteps) % 4 < 2) rgb = 0xE1BB89u;
                     break;
                 case FolderSurface.Denim:
                     rgb = Mix(0x204878u, 0x87A9C2u, ((x + 2 * y) % 5 == 0 ? 0.55 : 0.10) + (noise % 9) / 60.0);
@@ -110,13 +114,13 @@ public static class FolderSurfaces
                     if (v > 0.72 + 0.035 * Math.Sin(u * 18)) rgb = 0x594D86u;
                     break;
                 case FolderSurface.NeonGrid:
-                    rgb = Math.Abs(tx) > 0.43 || Math.Abs(ty) > 0.43 ? 0x4DE2E0u : 0x1B173Cu;
-                    if (Math.Abs(u + v - 1.1) < 0.02) rgb = 0xF466D3u;
+                    rgb = Line((0.5 - Math.Abs(tx)) / divisions, 0.07 / divisions) || Line((0.5 - Math.Abs(ty)) / divisions, 0.07 / divisions) ? 0x4DE2E0u : 0x1B173Cu;
+                    if (Line(u + v - 1.1, 0.02)) rgb = 0xF466D3u;
                     break;
                 case FolderSurface.Blueprint:
-                    rgb = Math.Abs(tx) > 0.46 || Math.Abs(ty) > 0.46 ? 0x709BC8u : 0x22568Fu;
-                    if (Math.Abs(Math.Sqrt(Math.Pow(u - 0.52, 2) + Math.Pow(v - 0.60, 2)) - 0.17) < 0.009 ||
-                        Math.Abs(u - 0.52) < 0.004 || Math.Abs(v - 0.60) < 0.004) rgb = 0xE1EFF5u;
+                    rgb = Line((0.5 - Math.Abs(tx)) / divisions, 0.04 / divisions) || Line((0.5 - Math.Abs(ty)) / divisions, 0.04 / divisions) ? 0x709BC8u : 0x22568Fu;
+                    if (Line(Math.Sqrt(Math.Pow(u - 0.52, 2) + Math.Pow(v - 0.60, 2)) - 0.17, 0.009) ||
+                        Line(u - 0.52, 0.004) || Line(v - 0.60, 0.004)) rgb = 0xE1EFF5u;
                     break;
                 case FolderSurface.RetroPoster:
                     rgb = ((int)((u + v * 0.55) * 9) % 3) switch { 0 => 0xE8C38Cu, 1 => 0xC45A40u, _ => 0x315C66u };
@@ -124,7 +128,7 @@ public static class FolderSurfaces
                     break;
                 case FolderSurface.Banknote:
                     rgb = Mix(0xA8C6A2u, 0x365F4Bu, Math.Pow(Math.Abs(Math.Sin(u * 93 + Math.Sin(v * 29) * 4)), 18) * 0.55);
-                    if (Math.Abs(u - 0.1) < 0.012 || Math.Abs(u - 0.9) < 0.012 || Math.Abs(v - 0.4) < 0.01 || Math.Abs(v - 0.8) < 0.01) rgb = 0x486E51u;
+                    if (Line(u - 0.1, 0.012) || Line(u - 0.9, 0.012) || Line(v - 0.4, 0.01) || Line(v - 0.8, 0.01)) rgb = 0x486E51u;
                     break;
                 case FolderSurface.FilmStrip:
                     rgb = 0x282D32u;
@@ -155,15 +159,18 @@ public static class FolderSurfaces
                     if (noise % 97 < 2) rgb = 0xF7F3D8u;
                     break;
                 case FolderSurface.Notebook:
-                    rgb = Math.Abs(ty) > 0.46 ? 0x92B9CEu : 0xF5EDD8u;
-                    if (Math.Abs(u - 0.20) < 0.008) rgb = 0xCC8F8Fu;
+                    rgb = Line((0.5 - Math.Abs(ty)) / divisions, 0.04 / divisions) ? 0x92B9CEu : 0xF5EDD8u;
+                    if (Line(u - 0.20, 0.008)) rgb = 0xCC8F8Fu;
                     break;
                 case FolderSurface.EmojiPattern:
                     rgb = 0x7DBEB3u;
-                    double radius = tx * tx + ty * ty;
+                    // Expressions need at least eight pixels per face, including eyes and smile.
+                    double faces = Math.Min(8, size / 8);
+                    double fx = u * faces % 1 - 0.5, fy = v * faces % 1 - 0.5;
+                    double radius = fx * fx + fy * fy;
                     if (radius < 0.15) rgb = 0xFFDB70u;
-                    bool eye = Math.Abs(Math.Abs(tx) - 0.13) < 0.055 && Math.Abs(ty + 0.1) < 0.06;
-                    bool smile = ty > 0.05 && Math.Abs(Math.Sqrt(tx * tx + Math.Pow(ty - 0.02, 2)) - 0.21) < 0.035;
+                    bool eye = Line((Math.Abs(fx) - 0.13) / faces, 0.055 / faces) && Line((fy + 0.1) / faces, 0.06 / faces);
+                    bool smile = fy > 0.05 && Line((Math.Sqrt(fx * fx + Math.Pow(fy - 0.02, 2)) - 0.21) / faces, 0.035 / faces);
                     if (radius < 0.15 && (eye || smile)) rgb = 0x4C433Bu;
                     break;
                 default: throw new ArgumentOutOfRangeException(nameof(surface));

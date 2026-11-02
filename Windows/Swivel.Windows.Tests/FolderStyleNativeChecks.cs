@@ -258,6 +258,37 @@ internal static class FolderStyleNativeChecks
             NativeFiles.RemoveFolderStyle(folder, default);
             check(Directory.GetFiles(folder).Select(Path.GetFileName).SequenceEqual(new[] { "keep.txt" }), "Picture restore leaves user files intact");
         }
+        foreach (bool portrait in new[] { true, false })
+        {
+            int width = portrait ? 800 : 16000, height = portrait ? 16000 : 800;
+            var crop = portrait ? new PixelCrop(0, 7782, 800, 436) : new PixelCrop(7267, 0, 1466, 799);
+            var bands = new byte[width * height * 4];
+            for (int y = 0; y < height; y++) for (int x = 0; x < width; x++)
+            {
+                int i = (y * width + x) * 4;
+                bool retained = x >= crop.X && x < crop.X + crop.Width && y >= crop.Y && y < crop.Y + crop.Height;
+                bands[i + (retained ? 1 : 2)] = 255;
+                // A gradient records which part of the centred source area survived scaling.
+                bands[i] = (byte)(255L * (portrait ? y - crop.Y : x - crop.X) / (portrait ? crop.Height : crop.Width));
+                bands[i + 3] = 255;
+            }
+            string extremePath = Path.Combine(root, portrait ? "picture-tall.png" : "picture-wide.png");
+            var extremeEncoder = new PngBitmapEncoder();
+            extremeEncoder.Frames.Add(BitmapFrame.Create(BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, bands, width * 4)));
+            using (var output = new FileStream(extremePath, FileMode.CreateNew)) extremeEncoder.Save(output);
+            var snapshot = FolderStylePicture.Load(extremePath, default);
+            check(snapshot.IsFrozen && snapshot.PixelWidth == 506 && snapshot.PixelHeight == 276,
+                "Extreme picture crops before bounding the frozen snapshot: " + portrait);
+            byte[] retainedPixels = Pixels(snapshot);
+            check(Enumerable.Range(0, snapshot.PixelWidth * snapshot.PixelHeight).All(i => retainedPixels[i * 4 + 1] == 255 && retainedPixels[i * 4 + 2] == 0),
+                "Extreme picture snapshot retains only the face crop, without outside bands: " + portrait);
+            int first = portrait ? (snapshot.PixelWidth / 2) * 4 : (snapshot.PixelHeight / 2 * snapshot.PixelWidth) * 4;
+            int last = portrait ? ((snapshot.PixelHeight - 1) * snapshot.PixelWidth + snapshot.PixelWidth / 2) * 4
+                : (snapshot.PixelHeight / 2 * snapshot.PixelWidth + snapshot.PixelWidth - 1) * 4;
+            check(retainedPixels[first] <= 2 && retainedPixels[last] >= 252,
+                "Extreme picture snapshot spans the complete centred source crop: " + portrait);
+            File.Delete(extremePath);
+        }
         string animated = Path.Combine(root, "picture-animated.gif");
         File.WriteAllBytes(animated, Convert.FromBase64String("R0lGODlhBAACAIEAAP8AAAD/AAAA/////yH5BAEAAAIALAAAAAAEAAIAAAIHBENxHMUQBQAsAAAAAAQAAgAAAgcEQ3EcxRAFADs="));
         bool refusedAnimation = false;
